@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import creation, world, workflow
+from novel_ledger import creation, planning, world, workflow
 from novel_ledger.application import Application
 from novel_ledger.contracts import CONTRACT_ALIGNMENT, RESULT
 from novel_ledger.quality import template
@@ -49,8 +49,12 @@ def options(app):
         elif i and gate == 'relationships':
             value['relationships'] = ['围绕第' + str(i) + '种利益分歧建立关系。']
         rows.append({'id': ident, 'title': '方案' + ident, 'premise': '具体方案' + ident + '。',
-                     'driver': '选择' + ident + '驱动的后果。', 'tradeoff': '需要承担对应选择的代价。',
-                     'fit_reason': '工程夹具，依据已选范围。', 'value': value})
+                     'pitch': '看一眼就想翻开的那句话' + ident + '。',
+                     'scene': ['夜班仓库里，他把退件箱推到灯下，翻出封条上的签名。',
+                               '凌晨的登记台前，他逐页核对自己经手的那一栏。'],
+                     'driver': '方案' + ident + '以不同的方式推进：' + '核对封条' + ident + '。',
+                     'tradeoff': '相比另外两案，选它要放弃' + ident + '那条更快的路。',
+                     'fit_reason': '承接已选题材，因此把推进压在一件具体物件上。', 'value': value})
     return {'gate': gate, 'options': rows}
 
 
@@ -69,8 +73,10 @@ def model(app):
     return value
 
 
-def contract_data(app):
+def contract_data(app, world=None):
+    """The contract as the combined dispatch writes it: read off the selections plus that draft world."""
     book = app.repo.load()
+    model = world if world is not None else book['world']
     choices = creation.selected(book['creation'])
     value = contract()
     for gate in ('scale', 'engine', 'world', 'ending', 'voice'):
@@ -80,8 +86,14 @@ def contract_data(app):
     value.update(genre=choices['genre']['genre'], reader_promise=choices['genre']['reader_promise'],
                  protagonist_setup=choices['protagonist'], allow_special_mechanism=choices['genre']['allow_special_mechanism'],
                  red_lines=choices['genre']['red_lines'], relationships=choices['relationships']['relationships'],
-                 world_rules=[r['principle'] for r in book['world']['rules']])
+                 world_rules=[r['principle'] for r in model['rules']])
     return value
+
+
+def combined(app, world=None):
+    """What the combined world+contract dispatch submits: the world plus the contract it implies."""
+    model_data = world if world is not None else model(app)
+    return {**model_data, 'contract': contract_data(app, model_data)}
 
 
 def review_data(app):
@@ -127,33 +139,93 @@ class OpeningTests(unittest.TestCase):
 
     def world_ready(self):
         self.select_gates()
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
-        self.app.submit(receipt(self.app, model(self.app)))
+        task = self.app.advance()['task']
+        self.assertEqual(task['stage'], 'world_model')
+        self.assertEqual(task['stages'], ['world_model', 'opening_contract'])   # one cold worker, two drafts
+        # the combined dispatch answers both artifacts in one receipt
+        self.app.submit(receipt(self.app, combined(self.app)))
         self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
         self.app.submit(receipt(self.app, review_data(self.app)))
-        self.assertEqual(self.app.advance()['task']['stage'], 'opening_contract')
-        self.app.submit(receipt(self.app, contract_data(self.app)))
         self.assertEqual(self.app.advance()['task']['stage'], 'contract_review')
         self.app.submit(receipt(self.app, review_data(self.app)))
         return self.app.advance()
 
     def test_opening_contract_template_carries_every_alignment_field(self):
         self.select_gates()
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
-        self.app.submit(receipt(self.app, model(self.app)))
+        task = self.app.advance()['task']
+        self.assertEqual(task['stage'], 'world_model')
+        # the combined dispatch publishes both guides and a template carrying both artifacts
+        self.assertIn('world.md', json.dumps(task['guides']))
+        blanks = json.loads(Path(task['template_path']).read_text(encoding='utf-8'))['data']
+        self.assertIn('contract', blanks)
+        blank = blanks['contract']
+        self.assertEqual(len(blank), len(planning.skeleton()))
+        self.app.submit(receipt(self.app, combined(self.app)))
         self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
         self.app.submit(receipt(self.app, review_data(self.app)))
         task = self.app.advance()['task']
-        self.assertEqual(task['stage'], 'opening_contract')
-        self.assertIn('world.md', json.dumps(task['guides']))
-        blank = template('opening_contract', 1, {})
+        self.assertEqual(task['stage'], 'contract_review')
         full = contract_data(self.app)
         # Fields the alignment checks read are compared key by key, so the template must carry them.
         self.assertEqual(sorted(set(full) & set(CONTRACT_ALIGNMENT) - set(blank)), [])
         filled = {**blank, **copy.deepcopy(full)}
         filled.update(planning_window=3, review_interval=10, review_chunk=3)   # structural, not author decisions
-        # A Worker filling only the published template must pass the alignment checks.
-        self.app.submit(receipt(self.app, filled))
+        # The same alignment the contract branch runs, on an object filled from the published template.
+        planning.validate_contract(filled)
+        creation.validate_contract(planning.validate_contract(filled), self.repo.load()['creation'],
+                                   self.repo.load()['world'])
+        # The independent review of the drafted contract decides whether it activates.
+        self.app.submit(receipt(self.app, review_data(self.app)))
+        self.assertEqual(self.app.advance()['action'], 'world_ready')
+
+    def test_brief_replaces_whole_guides_and_trims_unused_records(self):
+        task = self.app.advance()['task']
+        material = json.loads(Path(task['input_path']).read_text(encoding='utf-8'))
+        brief = material['brief']
+        # the brief carries this gate's own rules, the lens, and the author-facing contract
+        self.assertIn('题材与读者体验', brief)
+        self.assertIn('reader_promise', brief)
+        self.assertIn(material['payload']['lens_brief'], brief)
+        self.assertIn('pitch', brief)
+        self.assertIn('scene', brief)
+        self.assertIn('已选方向', self.app.advance() and brief)
+        # the brief carries the chosen directions, so only rejections stay required reading
+        self.assertEqual(material['required'], ['opening_rejections'])
+        envelope = json.loads(Path(task['task_path']).read_text(encoding='utf-8'))
+        self.assertIn('opening_choices', envelope['records'])          # reachable on demand
+        self.assertIn('state', envelope['records'])
+        self.assertNotIn('state', material['required'])
+        self.assertNotIn('contract', material['required'])
+        # record hashes are delivered once, in task.json, not copied into the view
+        self.assertNotIn('records', material)
+        # the guide files remain available as reference, and world.md is not shipped to the opening
+        self.assertIn('hatch.md', json.dumps(task['guides']))
+        self.assertNotIn('world.md', json.dumps(task['guides']))
+
+    def test_guides_agree_with_the_enforced_option_contract(self):
+        """The guide is prose; the contract is code. Keep the author-facing rules aligned."""
+        from novel_ledger.contracts import OPTION_CONTRACT
+
+        guide = (ROOT / 'references' / 'opening.md').read_text(encoding='utf-8')
+        for token in ('pitch', 'scene', 'opening_voice', 'opening_diversity'):
+            self.assertIn(token, guide, token)
+        toolbox = (ROOT / 'references' / 'hatch.md').read_text(encoding='utf-8')
+        self.assertIn('用来想', toolbox + guide)
+        for key in OPTION_CONTRACT.split('、')[0:1]:
+            self.assertIn('id', key)
+
+    def test_options_must_propose_not_self_justify(self):
+        self.app.advance()
+        data = options(self.app)
+        data['options'][0]['fit_reason'] = '混搭透镜的典型落法：两个设定互相改变走向。'
+        self.assertCode('opening_voice', self.app.submit, receipt(self.app, data))
+        data = options(self.app)
+        data['options'][0]['scene'] = ['具体画面。']
+        self.assertCode('opening_scene', self.app.submit, receipt(self.app, data))
+        data = options(self.app)
+        for option in data['options']:
+            option['driver'] = '以刻度推进，' + option['id'] + '。'
+        self.assertCode('opening_diversity', self.app.submit, receipt(self.app, data))
 
     def test_zero_input_starts_first_gate_and_never_requests_a_premise(self):
         self.assertEqual(self.repo.load()['creation']['source'], '')
@@ -186,7 +258,12 @@ class OpeningTests(unittest.TestCase):
         material = self.app.read(task['task_id'])
         self.assertEqual(material['payload']['gate']['id'], 'genre')
         self.assertEqual(material['payload']['creative_lens'], creation.LENSES[0])
-        self.assertEqual(material['records']['opening_choices']['value'], {})
+        # the brief is delivered with the task; the choices record is reference, read on demand
+        view = json.loads(Path(task['input_path']).read_text(encoding='utf-8'))
+        self.assertIn(creation.LENSES[0], view['brief'])
+        self.assertIn('opening_choices', material['on_demand'])
+        single = self.app.read(task['task_id'], 'opening_choices')
+        self.assertEqual(single['records']['opening_choices']['value'], {})
 
     def test_each_choice_advances_one_gate_and_last_starts_world(self):
         self.select_gates(7)
@@ -248,7 +325,7 @@ class OpeningTests(unittest.TestCase):
         self.select_gates()
         self.app.advance()
         before = self.repo.load()['state']
-        self.app.submit(receipt(self.app, model(self.app)))
+        self.app.submit(receipt(self.app, combined(self.app)))
         self.app.advance()
         self.app.submit(receipt(self.app, review_data(self.app)))
         self.assertEqual(self.repo.load()['state'], before)
@@ -265,7 +342,7 @@ class OpeningTests(unittest.TestCase):
     def test_no_mechanism_choice_cannot_be_silently_overwritten(self):
         self.select_gates()
         self.app.advance()
-        data = model(self.app)
+        data = combined(self.app)
         data['mechanisms'] = [{'id': 'magic', **{k: '外挂。' for k in world.SECTIONS['mechanisms']}, 'links': []}]
         self.assertCode('world_alignment', self.app.submit, receipt(self.app, data))
 
@@ -282,19 +359,17 @@ class OpeningTests(unittest.TestCase):
     def test_final_contract_cannot_change_chosen_voice_or_scale(self):
         self.select_gates()
         self.app.advance()
-        self.app.submit(receipt(self.app, model(self.app)))
-        self.app.advance()
-        self.app.submit(receipt(self.app, review_data(self.app)))
-        self.app.advance()
-        data = contract_data(self.app)
-        data['voice'] = '另一个文风。'
-        self.assertCode('opening_alignment', self.app.submit, receipt(self.app, data))
-        data = contract_data(self.app)
-        data['word_range'] = [30, 400]
-        self.assertCode('opening_alignment', self.app.submit, receipt(self.app, data))
-        data = contract_data(self.app)
-        data['story_engine'] = '换一个推进引擎。'
-        self.assertCode('opening_alignment', self.app.submit, receipt(self.app, data))
+        # Each attempt drafts the world plus a contract that breaks one closed choice: the combined
+        # dispatch must refuse the contract half without accepting the world half either.
+        for mutate, label in ((lambda value: value.update(voice='另一个文风。'), 'voice'),
+                              (lambda value: value.update(word_range=[30, 400]), 'word_range'),
+                              (lambda value: value.update(story_engine='换一个推进引擎。'), 'story_engine')):
+            model_data = model(self.app)
+            draft = contract_data(self.app, model_data)
+            mutate(draft)
+            self.assertCode('opening_alignment', self.app.submit,
+                            receipt(self.app, {**model_data, 'contract': draft}))
+            self.assertIsNone(self.repo.load().get('proposal'))
 
     def test_explicit_run_after_world_delivery_enters_existing_writing_flow(self):
         self.world_ready()

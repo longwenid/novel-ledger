@@ -42,7 +42,13 @@ board 哈希由主控从展示响应恢复，用户不需知道。选择绑定�
 
 ## 方案回执
 
-data={gate,options:[{id,title,premise,driver,tradeoff,fit_reason,value}]}，每门 2～3 个，不预填作者决定。
+data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,value}]}，每门 2～3 个，不预填作者决定。
+
+- `pitch` 一句能记住的话（≤40字），`scene` 2～3 个可落笔的具体画面（谁在哪、手上是什么、正要做什么），两者都是硬要求：作者要看到能直接开写的场面，而不是概念。
+- 透镜与方法**只用于构思，不得出现在给作者看的文本里**。`driver` 写这一版如何推进，`tradeoff` 写选它要放弃什么（与同组另外两案相比），`fit_reason` 写与已选方向的具体接口。写"某透镜落地/典型落法"会被 `opening_voice` 拒绝。
+- 同组方案的推进方式不得同构（例如三案都以"以…为刻度推进"起句），会被 `opening_diversity` 拒绝。
+
+必读材料只有拒绝记录：本门所需规则、本轮透镜与交付契约都写在任务材料的 `brief` 里；已选方向也在 brief 中，`opening_choices` 按需补读即可。
 
 | gate | value |
 |---|---|

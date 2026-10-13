@@ -77,22 +77,30 @@ def enforce(policy, stage, data):
 
 def enforcement_scope(stage):
     """Human-readable coverage for the dispatch material: which fields are inspected here."""
-    scope = contracts.ENFORCEMENT.get(stage)
-    if not scope:
-        return {'terms': [], 'names': [], 'note': '本阶段不检查字面约定。'}
-    return {'terms': list(scope.get('terms', ())), 'names': list(scope.get('names', ())),
-            'note': contracts.POLICY_NOTE}
+    stages = (stage,) if isinstance(stage, str) else tuple(stage)
+    terms, names, covered = [], [], []
+    for name in stages:
+        scope = contracts.ENFORCEMENT.get(name)
+        if not scope:
+            continue
+        covered.append(name)
+        terms.extend(field for field in scope.get('terms', ()) if field not in terms)
+        names.extend(field for field in scope.get('names', ()) if field not in names)
+    if not covered:
+        return {'terms': [], 'names': [], 'stages': [], 'note': '本阶段不检查字面约定。'}
+    return {'stages': covered, 'terms': terms, 'names': names, 'note': contracts.POLICY_NOTE}
 
 
 def policy_block(book, stage):
     """The active policy as task material: what applies, where it came from, and how it changes."""
+    stages = (stage,) if isinstance(stage, str) else tuple(stage)
     versions = book.get('lexical_policy') or []
     latest = versions[-1] if versions else {'version': 1, 'policy': resolve_policy({}), 'source': '内置默认'}
     resolved = resolve_policy(latest.get('policy', {}))
     return {'version': latest.get('version', 1), 'source': latest.get('source', ''),
             'forbidden_terms': resolved['forbidden_terms'],
             'forbidden_name_chars': resolved['forbidden_name_chars'],
-            'scope': enforcement_scope(stage),
+            'scope': enforcement_scope(stages),
             'editable': '作者改规则：novel.py lexical --file 规则.json --source 原话（逐版留档，开书阶段即生效）。'}
 
 

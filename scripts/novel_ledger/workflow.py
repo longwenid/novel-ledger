@@ -57,12 +57,19 @@ def choose(book, headers):
         if proposal.get('needs_repair'):
             stage = 'world_model' if proposal['scope'] == 'world' else 'book_plan' if proposal['scope'] == 'book' else 'volume_plan'
             return Job(stage, proposal['chapter'], scope=proposal['scope'], payload={'repair': True})
+        # A contract drafted together with the world waits for that world to be verified first:
+        # the alignment check reads the verified world, so reviewing it earlier would be empty.
+        if proposal['scope'] == 'contract' and proposal.get('after') == 'world' and not book.get('world'):
+            return {'action': 'settling_world'}
         stage = 'world_review' if proposal['scope'] == 'world' else 'contract_review' if proposal['scope'] == 'contract' else 'design_review'
         return Job(stage, proposal['chapter'], scope=proposal['scope'])
     if book.get('pending_contract'):
         return {'action': 'contract_ready'}
     if opening and opening['phase'] == 'world':
-        return Job('world_model', 1, 'world')
+        # One dispatch drafts both artifacts: the contract is a reading of the selections plus the
+        # world it just wrote, so splitting them into two cold workers only buys latency. The two
+        # verifications stay separate and in order.
+        return Job('world_model', 1, 'world', payload={'also': ('opening_contract',)})
     if opening and opening['phase'] == 'contract':
         return Job('opening_contract', 1, 'contract')
     if opening and opening['phase'] == 'ready' and book.get('opening_world_only') and not book.get('run_authorized'):
@@ -160,9 +167,21 @@ def apply(book, task, data, actor, sources):
     elif stage == 'world_model':
         opening = book['creation']
         planning.enforce(planning.policy_of(book), stage, data)
-        model = world.validate(data, creation.selected(opening), opening['selection_hash'])
+        # A combined dispatch returns one object holding both artifacts; each is validated by its
+        # own contract, so the world half is split off before world.validate sees it.
+        draft = {key: value for key, value in data.items() if key != 'contract'} \
+            if 'opening_contract' in (task.get('payload') or {}).get('also', ()) else data
+        model = world.validate(draft, creation.selected(opening), opening['selection_hash'])
         old = book['proposal'] or {}
         book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': model, 'producer': actor, 'attempts': old.get('attempts', 0)}
+        if 'opening_contract' in (task.get('payload') or {}).get('also', ()):  # combined dispatch
+            planning.enforce(planning.policy_of(book), 'opening_contract', data.get('contract'))
+            contract = planning.validate_contract(data.get('contract'))
+            creation.validate_contract(contract, opening, model)
+            planning.check_contract_names(contract, planning.policy_of(book))
+            book['contract_draft'] = {'scope': 'contract', 'chapter': 1, 'data': contract, 'producer': actor,
+                                      'after': 'world',
+                                      'source': '与已核验世界一并整理；完整选择版本 ' + opening['selection_hash']}
     elif stage == 'world_review':
         proposal = book['proposal']
         require(actor != proposal['producer'], 'review_independence', '世界模型须由独立核验者检查。')
@@ -170,7 +189,8 @@ def apply(book, task, data, actor, sources):
         if review['verdict'] == 'pass':
             book['world'] = proposal['data']
             book['world_review'] = {'receipt': review, 'producer': proposal['producer'], 'reviewer': actor}
-            book['proposal'] = None
+            book['proposal'] = book.get('contract_draft') or None
+            book.pop('contract_draft', None)
             book['creation']['phase'] = 'contract'
         else:
             proposal['attempts'] += 1

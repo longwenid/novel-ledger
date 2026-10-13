@@ -69,7 +69,8 @@ def chapter_review(data, sources, obligations):
     return facts, reader
 
 
-def template(stage, chapter, sources, obligations=()):
+def template(stage, chapter, sources, obligations=(), extra=()):
+    """The blank result for a stage. `extra` carries stages a combined dispatch also answers."""
     def review(ids, obs=(), challenges=()):
         return {'verdict': '', 'checks': [dict(id=ident, result='', reason='', evidence=[],
                 **({'challenge': {'risk': '', 'disposition': '', 'reason': '', 'evidence': {}}} if ident in challenges else {})) for ident in ids],
@@ -85,7 +86,12 @@ def template(stage, chapter, sources, obligations=()):
     if stage == 'opening_options':
         return {'gate': '', 'options': []}
     if stage == 'world_model':
-        return {'selection_hash': '', 'premise': '', 'story_capacity': '', **{k: [] for k in SECTIONS}}
+        skeleton = {'selection_hash': '', 'premise': '', 'story_capacity': '', **{k: [] for k in SECTIONS}}
+        if extra and 'opening_contract' in extra:
+            # One dispatch drafts the world and the contract it implies: the contract is a reading
+            # of selections plus that world, so it belongs in the same cold session.
+            return {**skeleton, 'contract': planning.skeleton()}
+        return skeleton
     if stage == 'opening_contract':
         return planning.skeleton()
     if stage in ('scope_review', 'scope_synthesis'):

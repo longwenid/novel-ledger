@@ -126,6 +126,13 @@ ENFORCEMENT = {
 }
 POLICY_NOTE = ('本块是当前生效的项目字面约定：只覆盖上方 scope 列出的字段，越出范围的玩法不受检查；'
                '违反会以 literal_policy 拒绝并给出 found 列表。作者改规则用 lexical 命令保存原话，规则逐版留档。')
+# The author-facing delivery contract for a proposed option: proposals, not arguments. The lens
+# shapes how an option is found; it never appears in what the author reads.
+OPTION_CONTRACT = ('每个方案给 id、title 短标题、pitch 一句能记住的话（≤40字，不得出现透镜名或方法词）、'
+                   'scene 2～3 个可落笔的具体画面（谁、在哪、什么东西、正要做什么，每条≥12字）、'
+                   'premise 具体内容、driver 这一版如何推进（只写故事动作）、'
+                   'tradeoff 选它要放弃什么（与同组另外两案相比的代价）、'
+                   'fit_reason 与已选方向的具体接口（承接哪条选择、因此改变了什么）、value 按本门字段。')
 
 
 def _placeholder(row):

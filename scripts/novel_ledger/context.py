@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import json
 from .contracts import FACT_CHECKS, TASK, dump
-from . import creation, world
+from . import briefs, creation, world
 from .planning import policy_block, volume_for
 from .workflow import node_map
 
@@ -23,6 +23,40 @@ def scoped_state(state, participants):
     return view
 
 
+def _brief(book, job):
+    """The one page this dispatch needs, generated here instead of shipping whole guides."""
+    previous = []
+    for row in (book.get('creation') or {}).get('selections', []):
+        gate = row['gate']
+        title = next((name for ident, name in creation.GATES if ident == gate), gate)
+        previous.append((title, _selection_line(row['option'])))
+    payload = job.payload or {}
+    if job.stage == 'opening_options':
+        return briefs.opening_options(payload.get('gate', {}), payload.get('lens_brief', ''), previous)
+    if job.stage == 'world_model':
+        return briefs.world_model(previous=previous)
+    return None
+
+
+def _selection_line(option):
+    """One compact line per closed choice: the direction, not a copy of the record.
+
+    The worker needs to know which way the book is already committed; the exact values live in
+    opening_choices/opening_basis and are checked by `creation.validate_contract` at the contract
+    stage, so repeating every field here would double the material for no added signal.
+    """
+    value = option.get('value', {})
+    gist = ''
+    for key in ('reader_promise', 'ending', 'story_engine', 'world_premise', 'identity'):
+        if isinstance(value.get(key), str) and value[key].strip():
+            gist = value[key].strip()
+            break
+    line = option.get('title', '')
+    if gist:
+        line += '：' + (gist[:60] + '…' if len(gist) > 60 else gist)
+    return line
+
+
 def build(repo, book, job):
     records, required, prose = {}, [], []
     def add(name, value, needed=True):
@@ -31,14 +65,20 @@ def build(repo, book, job):
             required.append(name)
     stage, chapter = job.stage, job.chapter
     plan = book['plans'].get(str(chapter))
-    add('contract', book['contract'])
+    # A worker needs the material its stage decides on, and nothing else: the opening reads the
+    # closed choices, not a contract that does not exist yet or a state that is still empty.
+    opening_stage = stage in ('opening_options', 'world_model', 'world_review', 'opening_contract', 'contract_review')
+    add('contract', book['contract'], not opening_stage)
     participants = plan['participants'] if plan else list(book['state']['entities'])
-    add('state', scoped_state(book['state'], participants))
+    add('state', scoped_state(book['state'], participants), not opening_stage)
     add('complete_state', book['state'], False)
     if book.get('creation'):
-        add('opening_basis', {'selection_hash': book['creation'].get('selection_hash'), 'source': book['creation']['source']},
-            stage in ('opening_options', 'world_model', 'world_review', 'opening_contract', 'contract_review'))
-        add('opening_choices', creation.selected(book['creation']), stage in ('opening_options', 'world_model', 'world_review', 'opening_contract', 'contract_review'))
+        # The brief already names every chosen direction in full, so the choices record is reference
+        # material rather than required reading; rejections stay required because a worker must not
+        # re-propose a group the author already refused.
+        chosen = stage in ('world_model', 'world_review', 'opening_contract', 'contract_review')
+        add('opening_basis', {'selection_hash': book['creation'].get('selection_hash'), 'source': book['creation']['source']}, chosen)
+        add('opening_choices', creation.selected(book['creation']), chosen)
         if stage == 'opening_options':
             add('opening_rejections', [r for r in book['creation']['rejections'] if r['gate'] == job.payload['gate']['id']])
     if book.get('world'):
@@ -105,10 +145,14 @@ def build(repo, book, job):
     if book.get('prior_candidate') and book['prior_candidate']['chapter'] == chapter:
         add('prior_candidate', book['prior_candidate'], stage in ('repair', 'redesign', 'chapter_review'))
     add('historical_index', [{'chapter': r['n'], 'prose_hash': r['prose'], 'summary': r['summary']} for r in repo.headers(book['branch'])], False)
-    return {'schema': TASK, 'stage': stage, 'chapter': chapter, 'scope': job.scope,
+    brief = _brief(book, job)
+    task = {'schema': TASK, 'stage': stage, 'chapter': chapter, 'scope': job.scope,
             'first': job.first, 'last': job.last, 'payload': payload, 'branch': book['branch'],
             'revision': book['revision'], 'records': records, 'required': required,
             # The active lexical policy travels with the task material, together with the fields
-            # this stage actually inspects, so a worker never has to guess either one.
-            'policy': policy_block(book, stage),
+            # this dispatch actually inspects, so a worker never has to guess either one.
+            'policy': policy_block(book, [stage, *tuple(payload.get('also', ()))]),
             'prose': prose, 'blind': stage in ('chapter_review', 'scope_review'), 'obligations': obligations}
+    if brief:
+        task['brief'] = brief
+    return task

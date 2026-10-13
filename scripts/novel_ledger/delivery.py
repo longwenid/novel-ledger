@@ -66,10 +66,17 @@ def materialize(repo, task, entry):
                              'preflight': command + ['preflight', '--file', str(base / 'result.json')],
                              'read': command + ['read', '--task', task['id']]}}
     reference_dir = Path(entry).parent.parent / 'references'
+    # Guides are optional reference material per stage; the dispatch's own brief carries what the
+    # task needs, so whole documents are not shipped on every round.
     guides = {'opening_options': ('opening.md', 'hatch.md'), 'opening_contract': ('opening.md', 'world.md'),
               'world_model': ('world.md',), 'world_review': ('world.md',), 'volume_plan': ('hatch.md',)}
-    if work['stage'] in guides:
-        envelope['guides'] = [str(reference_dir / name) for name in guides[work['stage']]]
+    also = tuple((work['payload'] or {}).get('also', ()))
+    names = list(guides.get(work['stage'], ()))
+    for extra_stage in also:
+        names.extend(name for name in guides.get(extra_stage, ()) if name not in names)
+    if names:
+        envelope['guides'] = [str(reference_dir / name) for name in names]
+    envelope['stages'] = [work['stage'], *also]
     if locked:
         first_path = base / 'first-read.json'
         if not first_path.exists():
@@ -80,7 +87,10 @@ def materialize(repo, task, entry):
         # A blind task hands out no formal material; any earlier render is retired here.
         retire(base)
     else:
-        view = {'task_id': task['id'], 'input_hash': task['input_hash'], **work,
+        # The view carries the task's own material; record hashes live in task.json alone, so the
+        # same map is not delivered twice.
+        view = {'task_id': task['id'], 'input_hash': task['input_hash'],
+                **{key: value for key, value in work.items() if key != 'records'},
                 'first_read': task['first_read'], 'first_read_hash': task['first_read_hash']}
         json_write(base / 'input.json', view)
         template_path = base / 'result.template.json'
@@ -89,7 +99,8 @@ def materialize(repo, task, entry):
         if not form_is_current(template_path, task):
             result = {'schema': RESULT, 'task_id': task['id'], 'input_hash': task['input_hash'],
                       'session': task['reviewer'] or '',
-                      'data': template(work['stage'], work['chapter'], {r['chapter']: '' for r in work['prose']}, work['obligations'])}
+                      'data': template(work['stage'], work['chapter'], {r['chapter']: '' for r in work['prose']},
+                                       work['obligations'], also)}
             json_write(template_path, result)
         envelope.update(input_path=str(base / 'input.json'), template_path=str(template_path), records=work['records'], required=work['required'])
     json_write(base / 'task.json', envelope)

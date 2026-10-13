@@ -359,11 +359,15 @@ class RuntimeTests(unittest.TestCase):
         board = creation.offer(state, {
             'gate': 'genre',
             'options': [
-                {'id': 'A', 'title': '夜班退件', 'premise': '他把入账记录摊在桌上。', 'driver': '核对来源。',
-                 'tradeoff': '得罪主管。', 'fit_reason': '贴合夜班题材。',
+                {'id': 'A', 'title': '夜班退件', 'premise': '他把入账记录摊在桌上。', 'driver': '核对封条与签字。',
+                 'pitch': '一箱退件，一张签错的封条。',
+                 'scene': ['夜班仓库里，他把退件箱推到灯下核对封条。', '凌晨的登记台前，他逐页翻自己经手的那栏。'],
+                 'tradeoff': '相比另两案，选它要放弃更快的升级节奏。', 'fit_reason': '承接夜班题材，落在具体物件上。',
                  'value': {'genre': '都市生活', 'reader_promise': '查清责任。', 'red_lines': [], 'allow_special_mechanism': False}},
-                {'id': 'B', 'title': '另一条路', 'premise': '换一种推进。', 'driver': '换一个对手。',
-                 'tradeoff': '换一种代价。', 'fit_reason': '同样贴合题材。',
+                {'id': 'B', 'title': '另一条路', 'premise': '换一种推进。', 'driver': '从对手的账目往回查。',
+                 'pitch': '他先查对手，再查自己。',
+                 'scene': ['白天的主管办公室里，他盯着对方的签字栏。', '雨夜的码头，他等一个送货人开口。'],
+                 'tradeoff': '相比另两案，选它要放弃更稳的开局。', 'fit_reason': '承接夜班题材，把压力放在对手线上。',
                  'value': {'genre': '都市生活', 'reader_promise': '换一个承诺。', 'red_lines': [], 'allow_special_mechanism': False}},
             ]})
         self.assertEqual(board['board']['options'][0]['title'], '夜班退件')      # offer() alone stores what it got

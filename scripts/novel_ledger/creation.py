@@ -43,6 +43,54 @@ def current(state):
     return {'id': ident, 'title': title, 'number': state['cursor'] + 1, 'total': len(GATES)}
 
 
+VALUE_RULES = {
+    'genre': 'genre 题材、reader_promise 读者承诺、red_lines 禁区数组、allow_special_mechanism 布尔',
+    'scale': 'word_range=[总汉字下限,上限]、chapter_min/chapter_max/chapter_aim、volume_count',
+    'protagonist': 'id、name、identity 身份、desire 欲望、limit 底线',
+    'engine': 'story_engine 持续推进的动力、opposition 主要对抗',
+    'relationships': 'relationships 具体关系数组，独行方案可为空数组',
+    'world': 'world_premise 世界前提、mechanism={mode:none或bounded, principle, cost, limits:数组}',
+    'ending': 'ending 工作终局与成立方向',
+    'voice': 'voice 文风、style_traits 表达要点数组',
+}
+# The delivery contract for one option: proposals, not arguments. The lens shapes how the option is
+# found; it must not appear in what the author reads.
+OPTION_CONTRACT = (
+    '每个方案给：id、title 短标题、pitch 一句能记住的话（≤40字，不得出现透镜名或方法词）、'
+    'scene 2～3 个可落笔的具体画面（谁、在哪、什么东西、正要做什么，每条≥12字）、'
+    'premise 具体内容、driver 这一版如何推进（只写故事动作，不要写"某透镜落地"这类自评）、'
+    'tradeoff 选它要放弃什么（与同组另外两案相比的代价，不要写品类通用缺点）、'
+    'fit_reason 与已选方向的具体接口（承接哪条选择、因此改变了什么）、value 按本门字段。'
+)
+LENS_WORDS = ('透镜', '落地要求', '典型落法', '混搭', '倒置', '代价递进', '认知差', '规则推演', '闭环')
+
+
+def _reject_lens_language(option):
+    text = ' '.join(str(option.get(key, '')) for key in ('pitch', 'premise', 'driver', 'tradeoff', 'fit_reason'))
+    self_reference = [word for word in LENS_WORDS if word in text]
+    require(not self_reference, 'opening_voice', '方案文本不得自述创意方法；透镜只用于构思，不写给作者看。',
+            {'found': self_reference, 'recover': '把"某透镜落地"改成这一版具体怎么推进。'})
+
+
+def _check_scenes(option):
+    scenes = option.get('scene')
+    require(isinstance(scenes, list) and len(scenes) >= 2 and all(text(s) and len(s.strip()) >= 12 for s in scenes),
+            'opening_scene', '每个方案至少给 2 个可落笔的具体画面（每条≥12字）：作者要看到能直接开写的场面。',
+            {'recover': '写清谁在哪、手上是什么、正要做什么，不要给概念或口号。'})
+
+
+def _check_driver_shape(options):
+    """Three lengths of the same idea are not three options: the openings must not share a shape."""
+    heads = []
+    for option in options:
+        driver = str(option.get('driver', '')).strip()
+        head = driver[:6]
+        heads.append(head)
+    require(len(set(heads)) == len(heads), 'opening_diversity',
+            '同组方案的推进方式开头雷同（例如都以"以…为刻度推进"起句），属于换个说法的同一个方案。',
+            {'heads': heads, 'recover': '让三案的推进机制在结构上不同，而不是量级不同。'})
+
+
 def validate_value(gate, value, choices):
     require(isinstance(value, dict), 'opening_option', '每个方案须有结构化 value。')
     if gate == 'genre':
@@ -86,7 +134,11 @@ def offer(state, data):
     for option in options:
         require(isinstance(option, dict) and all(text(option.get(k)) for k in ('id', 'title', 'premise', 'driver', 'tradeoff', 'fit_reason')),
                 'opening_option', '方案需要标识、标题、具体内容、推进差异、代价和与已有选择的关联。')
+        require(text(option.get('pitch')), 'opening_option', '方案需要 pitch：一句能记住的话（≤40字）。')
+        _reject_lens_language(option)
+        _check_scenes(option)
         validate_value(gate['id'], option.get('value'), selected(state))
+    _check_driver_shape(options)
     require(all(len({o[k] for o in options}) == len(options) for k in ('id', 'title', 'premise', 'driver')),
             'opening_diversity', '方案应有实质差异，不能只换标签或措辞。')
     state = copy.deepcopy(state)
@@ -97,6 +149,16 @@ def offer(state, data):
     return state
 
 
+def rejection_record(state, reason):
+    """What a rejection has to carry forward: which directions the author already refused.
+
+    The full board stays in `history` for audit; shipping it back on every later round would make the
+    task material grow with every 换组, and a worker only needs to avoid repeating refused ideas.
+    """
+    board = state['board'] or {}
+    return {'gate': current(state)['id'], 'round': state['round'], 'reason': reason,
+            'titles': [o.get('title', '') for o in board.get('options', [])],
+            'pitches': [o.get('pitch', '') for o in board.get('options', [])]}
 def board_matches(state, board_hash):
     require(state['phase'] == 'choosing' and state['board'] is not None and state['board']['hash'] == board_hash
             and state['board']['basis'] == basis(state), 'opening_version', '请选择当前展示的一组方案；旧选项不能套到新一门。')
@@ -121,7 +183,7 @@ def regroup(state, board_hash, reason):
     require(text(reason), 'author_source', '保存换组要求；可以是用户只说的“换一组”。')
     board_matches(state, board_hash)
     state = copy.deepcopy(state)
-    state['rejections'].append({'gate': current(state)['id'], 'board': state['board'], 'reason': reason})
+    state['rejections'].append(rejection_record(state, reason))
     state['history'].append({'action': 'regroup', 'gate': current(state)['id'], 'reason': reason})
     state.update(board=None, round=state['round'] + 1)
     return state
@@ -147,7 +209,10 @@ def view(state):
 def validate_contract(contract, state, world):
     """Every CONTRACT_ALIGNMENT field is decided by a closed choice, derived, or authored here."""
     choices = selected(state)
-    require(state['phase'] in ('contract', 'ready') and len(choices) == len(GATES), 'opening_incomplete', '全部选择和世界核验完成后才能形成约定。')
+    # 'world' is the phase right after the last gate: every choice is closed, so a contract may be
+    # formed then too — a combined dispatch drafts the world and that contract in one session.
+    require(state['phase'] in ('world', 'contract', 'ready') and len(choices) == len(GATES),
+            'opening_incomplete', '全部选择和世界核验完成后才能形成约定。')
     expected = {**choices['scale'], **choices['engine'], **choices['world'], **choices['ending'], **choices['voice'],
                 'reader_promise': choices['genre']['reader_promise'], 'genre': choices['genre']['genre'],
                 'protagonist_setup': choices['protagonist'], 'allow_special_mechanism': choices['genre']['allow_special_mechanism'],
