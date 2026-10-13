@@ -240,14 +240,17 @@ class RuntimeTests(unittest.TestCase):
     def test_lexical_override_is_versioned_and_applies_from_the_opening_stage(self):
         self.assertEqual(self.app.advance()['task']['stage'], 'book_plan')
         with self.assertRaises(Error) as caught:
-            self.app.set_lexical({'forbidden_name_chars': []}, '')
+            self.app.set_lexical({'forbidden_name_chars': ['砚']}, '')
         self.assertEqual(caught.exception.code, 'author_source')
         with self.assertRaises(Error) as caught:
             self.app.set_lexical({'unknown_rule': []}, '作者改规则。')
         self.assertEqual(caught.exception.code, 'lexical_policy')
+        # a project rule the author adds, then lifts: both versions stay on record
+        self.app.set_lexical({'forbidden_name_chars': ['砚']}, '作者要求人物名不得用砚字。')
+        self.assertEqual(planning.policy_of(self.repo.load())['forbidden_name_chars'], ['砚'])
         self.app.set_lexical({'forbidden_name_chars': []}, '作者允许主角名用砚字。')
         versions = self.repo.load()['lexical_policy']
-        self.assertEqual([v['version'] for v in versions], [1, 2])
+        self.assertEqual([v['version'] for v in versions], [1, 2, 3])
         self.assertEqual(planning.policy_of(self.repo.load())['forbidden_name_chars'], [])
         self.assertEqual(planning.policy_of(self.repo.load())['forbidden_terms'], ['账本', '入账', '回执'])
         raw = contract()
@@ -310,7 +313,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(policy['version'], 1)
         self.assertEqual(policy['source'], '内置默认')
         self.assertEqual(policy['forbidden_terms'], ['账本', '入账', '回执'])
-        self.assertEqual(policy['forbidden_name_chars'], ['砚'])
+        self.assertEqual(policy['forbidden_name_chars'], [])
         self.assertEqual(policy['scope']['terms'], list(ENFORCEMENT[material['stage']]['terms']))
         self.assertIn('prose', ENFORCEMENT['write']['terms'])
         self.assertIn('lexical', policy['editable'])
@@ -320,35 +323,33 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn('opening_options', ENFORCEMENT)
 
     def test_plan_stage_honours_an_author_name_override(self):
-        """A plan's new entity is a name: it must be judged by the project policy, not the default."""
-        book = self.repo.load()
-        book['lexical_policy'].append({'version': 2, 'policy': {'forbidden_name_chars': []},
-                                       'source': '作者允许主角名用砚字。'})
-        self.repo.save(book)
-        drive(self.app, until='plan')
-        task = self.repo.pending()
-        work = task['input']
-        self.assertEqual(work['policy']['version'], 2)
-        self.assertEqual(work['policy']['forbidden_name_chars'], [])
-        plan = {'plans': [dict(chapter=work['first'], goal='核对封条。', obstacle='主管阻拦。', choice='查记录。',
-                               cost='得罪同事。', change='拿到签字。', ending='追问来源。',
-                               node_ids=['volume:v1'], participants=['shen'],
-                               new_entities=[{'id': 'yan', 'name': '沈砚', 'kind': 'person'}])]}
-        self.app.submit({**response(self.app), 'data': plan})
-        stored = self.repo.load()['plans'][str(work['first'])]
-        self.assertEqual(stored['new_entities'][0]['name'], '沈砚')
-
-    def test_plan_stage_still_rejects_a_default_forbidden_name(self):
+        """A plan's new entity is a name: it must be judged by the active project policy."""
+        self.app.set_lexical({'forbidden_name_chars': ['砚']}, '作者要求人物名不得用砚字。')
         drive(self.app, until='plan')
         work = self.repo.pending()['input']
-        plan = {'plans': [dict(chapter=work['first'], goal='核对封条。', obstacle='主管阻拦。', choice='查记录。',
-                               cost='得罪同事。', change='拿到签字。', ending='追问来源。',
-                               node_ids=['volume:v1'], participants=['shen'],
-                               new_entities=[{'id': 'yan', 'name': '沈砚', 'kind': 'person'}])]}
+        self.assertEqual(work['policy']['forbidden_name_chars'], ['砚'])
+        self.assertEqual(work['policy']['scope']['names'], ['new_entities'])
+        blocked = {'plans': [dict(chapter=work['first'], goal='核对封条。', obstacle='主管阻拦。', choice='查记录。',
+                                  cost='得罪同事。', change='拿到签字。', ending='追问来源。',
+                                  node_ids=['volume:v1'], participants=['shen'],
+                                  new_entities=[{'id': 'yan', 'name': '沈砚', 'kind': 'person'}])]}
         with self.assertRaises(Error) as caught:
-            self.app.submit({**response(self.app), 'data': plan})
+            self.app.submit({**response(self.app), 'data': blocked})
         self.assertEqual(caught.exception.code, 'literal_policy')
         self.assertIn('砚', json.dumps(caught.exception.details, ensure_ascii=False))
+        # the author lifts the rule; the next plan is judged by the new version, not the old one
+        self.app.set_lexical({'forbidden_name_chars': []}, '作者允许人物名用砚字。')
+        self.app.advance()
+        work = self.repo.pending()['input']
+        self.assertEqual(work['policy']['version'], 3)
+        self.assertEqual(work['policy']['forbidden_name_chars'], [])
+        allowed = {'plans': [dict(chapter=work['first'], goal='核对封条。', obstacle='主管阻拦。', choice='查记录。',
+                                  cost='得罪同事。', change='拿到签字。', ending='追问来源。',
+                                  node_ids=['volume:v1'], participants=['shen'],
+                                  new_entities=[{'id': 'yan', 'name': '沈砚', 'kind': 'person'}])]}
+        self.app.submit({**response(self.app), 'data': allowed})
+        stored = self.repo.load()['plans'][str(work['first'])]
+        self.assertEqual(stored['new_entities'][0]['name'], '沈砚')
 
     def test_opening_option_text_is_checked_not_only_the_name(self):
         """The dispatch declares the whole option; the machine must inspect the whole option."""
@@ -613,9 +614,12 @@ class DomainTests(unittest.TestCase):
         raw = contract()
         raw['entities'][0]['name'] = '沈砚'
         raw['protagonist_setup']['name'] = '沈砚'
+        # the built-in default bans no character, so a name is only rejected when the author says so
+        self.assertEqual(workflow.new_book(raw)['contract']['entities'][0]['name'], '沈砚')
         with self.assertRaises(Error) as caught:
-            workflow.new_book(raw)
+            planning.check_contract_names(raw, planning.resolve_policy({'forbidden_name_chars': ['砚']}))
         self.assertEqual(caught.exception.code, 'literal_policy')
+        self.assertIn('砚', json.dumps(caught.exception.details, ensure_ascii=False))
         raw['unknown_field'] = '旧版本残留字段'
         with self.assertRaises(Error) as caught:
             workflow.new_book(raw)

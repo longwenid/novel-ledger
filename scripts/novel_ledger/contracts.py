@@ -22,7 +22,9 @@ REPAIRS = 2
 REDESIGNS = 1
 TIME_MARKERS = tuple('日天夜晨早晚午时年月春夏秋冬晓暮昏宵旬翌昨今明') + ('星期', '分钟', '秒钟')
 DEFAULT_TERMS = ['账本', '入账', '回执']
-DEFAULT_NAME_CHARS = ['砚']
+# No character is banned by default: naming is the author's decision, so the name rule starts empty
+# and the author fills it through `lexical` when a project needs one.
+DEFAULT_NAME_CHARS = []
 # Work-directory artifacts the controller may regenerate; everything else in a task directory
 # is authored by a Worker and is never rewritten behind its back.
 FORM_ARTIFACTS = ('input.json', 'result.template.json')

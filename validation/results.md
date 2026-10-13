@@ -4,7 +4,7 @@
 
 ## 实际验证
 
-- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q`：84 项测试全部通过。耗时随宿主机变化（记录本次沙箱环境约 18 秒，早前一次为 2.4 秒），不作为性能指标。
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q`：83 项测试全部通过。耗时随宿主机变化（记录本次沙箱环境约 18 秒，早前一次为 2.4 秒），不作为性能指标。
 - 技能 quick_validate：通过（Windows 控制台需 `PYTHONUTF8=1`，见 [验证](references/validation.md)）。全部 Python 文件通过 Python 3.9 语法解析，本地文档链接与示例约定校验通过。
 - 合成工程流实际经过准备开书、全书与卷设计核验、滚动章计划、人物档案、正文候选、首读冻结、独立两类章审、章节提交、范围块审、综合复核、完本快照和 HTML 导出。
 - 实际修订流覆盖保留正式分支、重写后缀、范围复核、合并、撤销、恢复原目标及保留已消耗额度。改约先独立审查，保留父稿、未解决问题和修复额度。
@@ -19,11 +19,11 @@
 - 约定形状唯一权威：contracts.CONTRACT_FIELDS 派生交付模板、结构校验与对齐核验；未知字段直接拒绝，对齐表与字段表不一致时报 alignment_schema。测试覆盖模板覆盖全部对齐字段、未知字段拒绝、模板填满后可提交。
 - 数据所有权：work 目录区分主控可重建件与 Worker 拥有的表单，重跑 advance 保留 Worker 已填内容，取消任务回收表单。测试覆盖表单保留、陈旧表单替换、取消后回收。
 - 角色分离：read/recall/first-read 需要 NOVEL_TASK_ID，主控身份按 role_boundary 拒绝；测试用真实子进程验证三种身份访问同一任务的结果。
-- 字面规则：项目级 book.lexical_policy 版本记录，`lexical` 命令写入并留原话，开书阶段即生效；约定里出现 lexical_policy 视为未知字段。测试覆盖版本追加、非法键拒绝、重复规则拒绝、开书阶段覆盖后砚字主角可通过。
+- 字面规则：项目级 book.lexical_policy 版本记录，`lexical` 命令写入并留原话，开书阶段即生效；约定里出现 lexical_policy 视为未知字段。内置默认只禁系统词汇，**人名禁字默认为空**（起名属作者决定，需要限制时按书设定）。测试改为自建规则再验证机制：设置禁字后新建人物被拒、作者解除后同一名字通过，不依赖任何具体默认值。
 - 数据库版本升至 novel-ledger/2，旧库在打开时按 schema 显式拒绝，不隐式升级。
 - 完整约定三个入口按项目状态判定：`init --contract`（项目未开始）、`opening --file`（`init` 后未派发门任务，导入后清除逐门选择）、`recontract --file`（已派门任务或已有约定）。派过门任务后 `opening --file` 明确拒绝而不是静默忽略。测试覆盖三条路径，并覆盖"尚无约定时 export/audit 给出 contract 错误而不是崩溃"（该崩溃在重构前即存在，本次一并修掉）。
 - 架构图一致性由测试守护：`docs/architecture.mmd`、README 中的 mermaid 块与 references/architecture.md 的真源逐字一致，防止文档复制后漂移。
-- 字面约定的执行范围只声明一处：`contracts.ENFORCEMENT` 按阶段列出被检查的字段（terms 查禁词、names 查禁字），检查循环 `planning.enforce` 与任务材料里的 `policy.scope` 都由它生成，派工说明因此不可能承诺程序不做的检查。同时在派工材料里交付当前生效版本、来源与修改入口。测试覆盖：各阶段范围声明非空、选项全文（含 premise 等非 name 字段）真实被检查、计划阶段新建人物名遵循项目策略而非内置默认（此处曾因 `validate_plans` 未穿透 policy 导致作者覆盖失效，已修）、默认禁字仍会被拒。CLI 现在把 stdout/stderr 固定为 UTF-8，调用方按 UTF-8 解析不会因宿主 locale（如 GBK 管道）拿到乱码路径。
+- 字面约定的执行范围只声明一处：`contracts.ENFORCEMENT` 按阶段列出被检查的字段（terms 查禁词、names 查禁字），检查循环 `planning.enforce` 与任务材料里的 `policy.scope` 都由它生成，派工说明因此不可能承诺程序不做的检查。同时在派工材料里交付当前生效版本、来源与修改入口。测试覆盖：各阶段范围声明非空、选项全文（含 premise 等非 name 字段）真实被检查、计划阶段新建人物名遵循项目策略而非内置默认（此处曾因 `validate_plans` 未穿透 policy 导致作者覆盖失效，已修）、作者设定的禁字会被拒且解除后放行。CLI 现在把 stdout/stderr 固定为 UTF-8，调用方按 UTF-8 解析不会因宿主 locale（如 GBK 管道）拿到乱码路径。
 - 脑暴方法集中为数据：`contracts.LENSES`（八个设定生成方法）与 `contracts.VOLUME_TURNS`（五个卷级转折方法），任务 payload 的 `lens_brief` 带方法全文，方案任务与卷设计任务附 [创意工具箱](references/hatch.md)。测试覆盖方法唯一性、brief 组成与 round 顺延。
 - 全书视图 `book.html`（`html` 命令）：单文件、无外部请求、看设定与读正文两种模式，覆盖约定、逐门选择、世界模型、设计与节点、章计划、人物档案、事实账本、章审记录与账本核验，并把已提交正文按章渲染。测试覆盖各内容面齐备、自包含、HTML 转义、空书不崩、容器嵌套正确、重复生成内容一致；`export` 显式拒绝覆盖 `book.html`。
 
