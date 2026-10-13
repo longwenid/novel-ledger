@@ -34,6 +34,8 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 使用执行认领时附 execution_claim。preflight 完整校验后回滚，checked 不等于入库；submit 才更新。相同已提交结果幂等，不同结果拒绝。拒绝不计修复额度，真实短稿提交计实际执笔轮次并保留稿件。
 
+`check` 是给 Worker 的格式自检：把候选回执从标准输入管道进去（`check` 无需 `--file`，也可省略 task_id），它按与 submit 相同的校验运行但**不提交、不消耗额度**，并直接报告缺哪个字段或哪个枚举不对；会话取自身份进程或任务自身。它的存在是为了让执行者**不必读引擎源码确认格式**——源码不是任务材料，读它会显著推高上下文成本。
+
 | 阶段 | data |
 |---|---|
 | opening_options | 当前门 gate 与 2～3 个 options，详见 [逐门开书](opening.md) |

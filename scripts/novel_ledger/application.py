@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import copy
+import json
+import os
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -127,6 +130,33 @@ class Application:
                 self.repo.record('first_read', {'task': task['id'], 'hash': digest(first)})
             task = self.repo.task(task['id'])
         return {'sealed': True, 'task': delivery.materialize(self.repo, task, self.entry)}
+
+    def check(self, task_id=None, file=None):
+        """Dry-run a candidate receipt without submitting it, and without needing its task identity.
+
+        A worker can ask "would this be accepted, and if not which field is wrong" against the current
+        pending task, so it never has to read the engine's source to learn the format. Nothing is
+        committed: the task comes straight from the repository and the receipt is only previewed.
+        """
+        task = self.repo.task(task_id) if task_id else self.repo.pending()
+        require(task is not None, 'task', '项目当前没有在途任务可供试算。',
+                {'recover': '先由主控 advance 派工，再对返回的 task_id 运行 check。'})
+        require(task['status'] == 'pending', 'stale_task', '该任务已结束，不能用它试算。')
+        payload = json.loads(Path(file).read_text(encoding='utf-8')) if file else json.load(sys.stdin)
+        require(isinstance(payload, dict), 'schema', '待检回执须为 JSON 对象。')
+        require(payload.get('schema') == RESULT, 'schema', '回执缺 schema=' + RESULT + '。')
+        require(payload.get('input_hash') == task['input_hash'], 'input_version', 'input_hash 与当前任务不符。',
+                {'expected': task['input_hash'], 'got': payload.get('input_hash')})
+        require(payload.get('task_id'), 'result', '回执缺 task_id。')
+        # A candidate is often missing the session line while being drafted. Identify the caller from
+        # the environment when it is there, and otherwise preview under the task's own reader; the
+        # lease and session rules stay enforced for anything that actually commits.
+        session = payload.get('session') or os.environ.get('NOVEL_SESSION') or task['reviewer'] or 'check-preview'
+        if os.environ.get('NOVEL_SESSION'):
+            require(session == os.environ['NOVEL_SESSION'], 'session', '试算身份与会话不符。')
+        self._session(task, session, check_lease=False)
+        preview = self.submit({**payload, 'session': session}, preview=True)
+        return {'accepted': True, 'checked': True, 'session_used': session, **preview}
 
     def submit(self, result, preview=False):
         require(isinstance(result, dict) and result.get('schema') == RESULT, 'schema', '回执协议无效。')

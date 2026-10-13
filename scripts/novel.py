@@ -13,10 +13,10 @@ from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book, preparing_book
 from novel_ledger import bookpage, delivery, host
 
-PUBLIC = {'init', 'status', 'advance', 'submit', 'preflight', 'first-read', 'claim', 'run', 'renew', 'approve',
+PUBLIC = {'init', 'status', 'advance', 'submit', 'preflight', 'check', 'first-read', 'claim', 'run', 'renew', 'approve',
           'pause', 'resume', 'revise', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
 SEALED = {'read', 'recall', 'audit', 'export', 'html'}
-WORKER = {'status', 'read', 'recall', 'submit', 'preflight', 'first-read'}
+WORKER = {'status', 'read', 'recall', 'submit', 'preflight', 'check', 'first-read'}
 # Prose, frozen records and the first read belong to a dispatched task; the controller role never executes them.
 WORKER_ONLY = {'read', 'recall', 'first-read'}
 
@@ -43,6 +43,9 @@ def parser():
             sub.add_argument('--source', default='')
         if command in ('submit', 'preflight', 'first-read', 'recontract', 'opening', 'lexical'):
             sub.add_argument('--file', required=True)
+        if command == 'check':
+            sub.add_argument('--file')
+            sub.add_argument('--task')
         if command in ('approve', 'recontract', 'opening', 'choose', 'lexical'):
             sub.add_argument('--source', required=True)
         if command == 'choose':
@@ -142,6 +145,10 @@ def dispatch(args):
                 require(result.get('task_id') == os.environ['NOVEL_TASK_ID'] and result.get('session') == os.environ.get('NOVEL_SESSION'),
                         'worker_boundary', '回执不能改投其他任务或会话。')
             return app.seal(result) if command == 'first-read' else app.submit(result, command == 'preflight')
+        if command == 'check':
+            # Same validation as submit, but the receipt may omit task identity and may be piped in:
+            # a worker learns which field is wrong without reading the engine's source.
+            return app.check(getattr(args, 'task', None), args.file)
         if command == 'read':
             return app.read(args.task, args.record)
         if command == 'recall':

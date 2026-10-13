@@ -589,6 +589,27 @@ class RuntimeTests(unittest.TestCase):
         entry = envelope['commands']['submit'][1]
         self.assertTrue(Path(entry).is_file(), entry)
 
+    def test_check_command_reports_the_offending_field_without_committing(self):
+        """A worker must be able to learn the format from `check`, not from reading the engine source."""
+        command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project)]
+        task = self.app.advance()['task']
+        pending = self.repo.pending()['id']
+        blank = json.loads(Path(task['template_path']).read_text(encoding='utf-8'))
+        malformed = subprocess.run(command + ['check'], input=json.dumps(blank), text=True, capture_output=True,
+                                   encoding='utf-8', errors='replace')
+        self.assertEqual(malformed.returncode, 2)
+        body = json.loads(malformed.stdout)
+        self.assertEqual(body['error'], 'design')
+        self.assertIn('intent', body['message'])
+        self.assertEqual(self.repo.pending()['id'], pending)          # nothing was committed
+        self.assertEqual(self.repo.task(pending)['status'], 'pending')
+        # a missing input_hash is reported as such, with the expected value
+        blank.pop('input_hash', None)
+        wrong = subprocess.run(command + ['check'], input=json.dumps(blank), text=True, capture_output=True,
+                               encoding='utf-8', errors='replace')
+        self.assertEqual(json.loads(wrong.stdout)['error'], 'input_version')
+        self.assertTrue(json.loads(wrong.stdout)['details']['expected'])
+
     def test_export_and_audit_refuse_a_project_without_a_contract(self):
         unstarted = Path(self.temp.name) / 'unstarted'
         subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(unstarted), 'init'],

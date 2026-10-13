@@ -34,6 +34,11 @@ def opening_options(gate, lens_brief, previous=()):
     lines.append('')
     lines.append('路径自检：task.json 的 commands/guides 由当前安装渲染。先确认其中的解释器与脚本存在再执行；'
                  '若不存在，回报主控重新 advance 刷新任务视图，不要自行改写命令，也不要假定某条路径失效。')
+    lines.append('')
+    lines.append('格式自检：写回执前用 `check` 试算（把候选 JSON 从标准输入管道进去，如 '
+                 '`python CLI --project PROJECT check < 候选.json`）。它按提交同一套校验运行但不入库，'
+                 '会直接告诉你缺哪个字段、哪个枚举不对。**不要为了确认格式去读引擎源码**——那会白花上下文，'
+                 'check 的回答就是权威。')
     return '\n'.join(lines)
 
 

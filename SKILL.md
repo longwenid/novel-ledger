@@ -13,7 +13,7 @@ ROOT 为本技能目录，PROJECT 为独立小说目录。入口 `python3 ROOT/s
 - 懒人开书：读 [逐门开书](references/opening.md)。无需一句话、题材或大纲，init 后系统先给当前门的 2～3 个方案；用户逐门选择。换组与方案同质化时读 [创意工具箱](references/hatch.md)。最后一门结束自动进入 [丰富世界模型](references/world.md) 创建和独立核验。
 - 已有完整设定或反馈：读 [创作与写审](references/craft.md)。完整约定用 init --contract；已有要求直接采用，反馈与作者原话保存，不重复开选择题。
 - 续写、无人值守或恢复：读 [运行](references/runtime.md)。advance 返回任务；委派真实 Worker，确认实际提交，再 advance --after 接续。沿用当前模型设置，不编造持续后台能力。
-- 填写任务或处理拒绝：读 [协议](references/protocol.md)。使用当前模板和冻结任务身份，拒绝自带修正出口；不查旧 pass 猜字段。
+- 填写任务或处理拒绝：读 [协议](references/protocol.md)。使用当前模板和冻结任务身份，拒绝自带修正出口；不查旧 pass 猜字段。格式不确定时用 `check` 试算（标准输入管道），**不要读引擎源码确认格式**——源码不是任务材料，读它会显著推高上下文成本。
 - 改引擎或扩展能力：先读 [架构](references/architecture.md)，运行行为与依赖守护测试。文学评估读 [验证](references/validation.md)。
 
 ## 执行边界
