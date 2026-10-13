@@ -31,6 +31,9 @@ def opening_options(gate, lens_brief, previous=()):
     lines.extend(['## 交付契约', OPTION_CONTRACT])
     lines.append('')
     lines.append('完整方法表与选项格式见 guides 里的文件；本简报已含本门所需规则，不必为格式再读全文。')
+    lines.append('')
+    lines.append('路径自检：task.json 的 commands/guides 由当前安装渲染。先确认其中的解释器与脚本存在再执行；'
+                 '若不存在，回报主控重新 advance 刷新任务视图，不要自行改写命令，也不要假定某条路径失效。')
     return '\n'.join(lines)
 
 

@@ -77,6 +77,12 @@ def materialize(repo, task, entry):
     if names:
         envelope['guides'] = [str(reference_dir / name) for name in names]
     envelope['stages'] = [work['stage'], *also]
+    # The commands below are rendered from this process, so they work as long as this installation
+    # does. Say so, and say what to do when it has moved: a stale path is refreshed by another
+    # `advance`, never by rewriting the command by hand.
+    envelope['note'] = ('commands 用当前安装的真实路径生成：' + command[0] + ' + ' + str(entry) +
+                        '。若技能目录已移动导致路径不存在，回主控再执行一次 advance 刷新任务视图，'
+                        '不要手改命令，也不要凭印象判定路径失效（宿主可用目录联接映射同一份安装）。')
     if locked:
         first_path = base / 'first-read.json'
         if not first_path.exists():

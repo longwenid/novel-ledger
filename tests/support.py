@@ -16,7 +16,7 @@ def contract(chapters=2, volumes=1):
             'protagonist_setup': {'id': 'shen', 'name': '沈桐', 'identity': '夜班工人',
                                   'desire': '查清责任。', 'limit': '不牵连无关同事。'},
             'world_rules': ['夜班退件必须登记负责人。'],
-            'chapter_min': 12, 'chapter_max': 200, 'chapter_aim': 60, 'word_range': [12 * chapters, 200 * chapters],
+            'chapter_min': 12, 'chapter_max': 90, 'chapter_aim': 60, 'word_range': [12 * chapters, 200 * chapters],
             'volumes': [{'id': 'v' + str(i + 1), 'purpose': '查明来源并面对后果。', 'end': (i + 1) * chapters // volumes} for i in range(volumes)],
             'entities': [{'id': 'shen', 'name': '沈桐', 'kind': 'person'}],
             'initial_resources': [{'holder': 'shen', 'asset': '车费', 'unit': '元', 'quantity': '4'}]}

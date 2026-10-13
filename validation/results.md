@@ -4,7 +4,7 @@
 
 ## 实际验证
 
-- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q`：86 项测试全部通过。耗时随宿主机变化（记录本次沙箱环境约 18 秒，早前一次为 2.4 秒），不作为性能指标。
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q`：88 项测试全部通过。耗时随宿主机变化（记录本次沙箱环境约 18 秒，早前一次为 2.4 秒），不作为性能指标。
 - 技能 quick_validate：通过（Windows 控制台需 `PYTHONUTF8=1`，见 [验证](references/validation.md)）。全部 Python 文件通过 Python 3.9 语法解析，本地文档链接与示例约定校验通过。
 - 合成工程流实际经过准备开书、全书与卷设计核验、滚动章计划、人物档案、正文候选、首读冻结、独立两类章审、章节提交、范围块审、综合复核、完本快照和 HTML 导出。
 - 实际修订流覆盖保留正式分支、重写后缀、范围复核、合并、撤销、恢复原目标及保留已消耗额度。改约先独立审查，保留父稿、未解决问题和修复额度。
@@ -27,6 +27,8 @@
 - 脑暴方法集中为数据：`contracts.LENSES`（八个设定生成方法）与 `contracts.VOLUME_TURNS`（五个卷级转折方法），任务 payload 的 `lens_brief` 带方法全文，方案任务与卷设计任务附 [创意工具箱](references/hatch.md)。测试覆盖方法唯一性、brief 组成与 round 顺延。
 - 开书方案的交付契约改为"交提案，不交论证"：`pitch`（一句能记住的话）与 `scene`（2～3 个可落笔的具体画面）成为硬要求；`driver/tradeoff/fit_reason` 不得自述创意方法（`opening_voice`），同组推进方式不得同构（`opening_diversity`）。起因是实测旧契约让方案普遍以"某透镜落地"自证，作者读到的是论证而非提案。
 - 派工材料按需投递：`brief` 由 briefs.py 现生成（本门字段规则 + 本轮透镜 + 交付契约），整篇 guides 降为可选参考；开书必读只剩拒绝记录，且 `opening_rejections` 从整块板子改为只留被否的标题与一句话；记录哈希只在 task.json 出现一次。实测同一门交付从约 20.1 KB 降到约 6.7 KB（-67%），随后精简已选方向行后，第 8 门重新派工为 brief 831 B + input.json 4.0 KB。
+- 约定篇幅必须写得完：由真实的会话导出发现问题——47 章 × 章幅上限 2600 与总上限 110000 冲突（每章平均最多 2340），但旧校验只看渐近极限（`last*chapter_min <= 上限`）而放行，作者不得不靠人工核验两轮才发现。现在校验每章平均可用区间 `[ceil(下限/last), floor(上限/last)]`：为空报错，`chapter_aim` 与 `chapter_max` 越界各自报错，details 带 `per_chapter_range` 与可执行修正建议（降章幅或上调卷末章号）。仓库自带的 assets/contract.example.json 也据此从 chapter_max 6000 调整为 4400。已激活的旧约定不受影响：`_audit` 只用契约自身的章幅上下限，不重跑 `planning.validate_contract`。
+- 路径判定：commands/guides 由当前安装渲染（解释器取自身份进程、脚本取自身份文件），envelope 增加 `note` 说明这一点，brief 增加"路径自检"一行。起因是同一份会话导出中，主控把 `.dsh`（指向 `.zcode` 的 junction）误判为"任务里记录的 `.zcode` 路径已失效"，在全部 6 个子智能体提示里要求"一律忽略 task.json 的 commands/guides"；实测该项目 19 个 task.json 里的命令全部可执行、且与当前安装是同一文件。`role_boundary` 的恢复指引也改为可执行（把命令交给被派任务，主控用 status 核对）。
 - 全书视图 `book.html`（`html` 命令）：单文件、无外部请求、看设定与读正文两种模式，覆盖约定、逐门选择、世界模型、设计与节点、章计划、人物档案、事实账本、章审记录与账本核验，并把已提交正文按章渲染。测试覆盖各内容面齐备、自包含、HTML 转义、空书不崩、容器嵌套正确、重复生成内容一致；`export` 显式拒绝覆盖 `book.html`。
 
 自动交付 world.html 与 world.json，正文任务在用户运行授权后进入。开书方案、人物方向及世界记录保持在独立纯模块中，完整依赖图仍无环。

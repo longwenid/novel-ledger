@@ -15,6 +15,10 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance
 
 advance 返回 task_ready 时读 task.task_path。commands 为 argv 数组，按数组执行，不拼 shell 字符串。派真实新 Worker，填真实 session。需要执行认领时宿主调用 `claim --task ID --session ID`，首读与提交附 execution_claim。
 
+### 路径与失效判定
+
+commands/guides 由**当前安装**渲染（解释器取自身份进程，脚本取自身份文件），并用目录联接（junction/symlink）映射时两条路径实为同一份安装。派工前先确认命令里的解释器与脚本存在，再交给 Worker；**不要凭路径字面判断某条命令失效**——先文件系统核实。技能目录确实移动过时，回主控再执行一次 `advance` 刷新任务视图即可重建命令，不要手改命令、也不要在派工提示里让 Worker"忽略 task.json 的 commands/guides"（那会让 Worker 用错身份或漏读必读记录）。
+
 初始审稿信封只有冻结正文和首读模板；完整读 prose_files，填写 first_read_path 并执行 first_read 命令，沿返回 task_path 读解锁模板，同一模型会话继续核验。submit 返回 worker_boundary=finished 后 Worker 结束。
 
 主控核实实际提交后 `advance --after ID`。未提交返回 wait_for_submit，旧回调返回 resync；不能凭口头完成派下章。await_author 给准确 prose_hash；已获得该版本认可时 `approve --prose-hash HASH --source 原话`，沿原目标继续。

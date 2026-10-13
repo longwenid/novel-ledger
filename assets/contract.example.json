@@ -19,8 +19,8 @@
   },
   "world_rules": ["台上的戏须有戏箱中的折子为据。", "擅演禁戏的班社可能被逐出本县。"],
   "chapter_min": 2500,
-  "chapter_max": 6000,
-  "chapter_aim": 3500,
+  "chapter_max": 4400,
+  "chapter_aim": 3400,
   "word_range": [1500000, 2200000],
   "volumes": [
     {"id": "v1", "purpose": "从师父遗物中发现禁戏名录的出入，找到残页。", "end": 200},

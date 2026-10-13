@@ -97,9 +97,12 @@ def parser():
 def role_guard(args):
     """A dispatched worker and the controller are different roles; prose is worker-only."""
     if args.command in WORKER_ONLY:
-        require(os.environ.get('NOVEL_TASK_ID'), 'role_boundary',
+        task = os.environ.get('NOVEL_TASK_ID')
+        require(task, 'role_boundary',
                 '正文与冻结资料只经派工任务读取；主控不直接读取正文。',
-                {'recover': '由被派 Worker 携带 NOVEL_TASK_ID 读取本任务资料。'})
+                {'recover': '把这条命令交给被派的任务执行（它带 NOVEL_TASK_ID 与 NOVEL_SESSION）；'
+                            '主控要核对进度用 status，要补资料用 read --record 交由该任务完成。'})
+        require(getattr(args, 'task', task) == task, 'worker_boundary', 'Worker 只能访问自己的任务。')
 
 
 def worker_guard(app, args):
@@ -107,7 +110,6 @@ def worker_guard(app, args):
     if not ident:
         return
     require(args.command in WORKER, 'worker_boundary', 'Worker 不能执行主控或作者命令。')
-    require(getattr(args, 'task', ident) == ident, 'worker_boundary', 'Worker 只能访问自己的任务。')
     task = app.repo.task(ident)
     if args.command not in ('submit', 'preflight'):
         app._live(task)

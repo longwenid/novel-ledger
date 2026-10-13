@@ -36,7 +36,7 @@ ROOT 为本技能目录，PROJECT 为独立小说目录。入口 `python3 ROOT/s
 
 advance → 按 task_path 派 Worker → Worker 阅读本任务，必要时冻结首读 → 填 result.template.json → submit → Worker 结束 → 主控 advance --after 最后任务 ID。
 
-委派只给角色、task_path、一句背景和提交状态要求；技能明确授权在该创作流程中使用子 agent。不要复述整个信封。宿主会话身份填 session；实际使用执行认领时填 execution_claim。短状态、进程启动或口头“完成”不替代数据库内真实提交。
+委派只给角色、task_path、一句背景和提交状态要求；技能明确授权在该创作流程中使用子 agent。不要复述整个信封，也不要改写信封里的 commands/guides——它们由当前安装渲染，移动过就重新 advance 刷新，不要凭路径字面断定失效。宿主会话身份填 session；实际使用执行认领时填 execution_claim。短状态、进程启动或口头“完成”不替代数据库内真实提交。
 
 长范围核验由新审稿者逐块读完整章节，再派独立综合核验者阅读全部块报告、逐章证据和必要原文；不能复制块 pass 充当综合判断。到 ready_to_complete 后还须 complete 验收，再交付绝对路径：`html` 给全书视图（看设定 + 读正文），`export` 给纯文本或简化 HTML。
 
