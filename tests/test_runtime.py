@@ -2,6 +2,7 @@ import ast
 import copy
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -542,6 +543,15 @@ class DomainTests(unittest.TestCase):
             workflow.new_book(raw)
         self.assertEqual(caught.exception.code, 'contract')
         self.assertIn('未知约定字段', caught.exception.message)
+
+    def test_architecture_diagram_products_match_their_source(self):
+        def block(text):
+            match = re.search(r'```mermaid\n(.*?)```', text, re.S)
+            return (match.group(1) if match else text).strip()
+
+        source = block((ROOT / 'references' / 'architecture.md').read_text(encoding='utf-8'))
+        self.assertEqual(block((ROOT / 'docs' / 'architecture.mmd').read_text(encoding='utf-8')), source)
+        self.assertIn(source, (ROOT / 'README.md').read_text(encoding='utf-8'))
 
     def test_all_imports_including_deferred_are_acyclic_and_domains_have_no_io(self):
         graph = {}

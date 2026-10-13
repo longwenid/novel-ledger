@@ -4,7 +4,7 @@
 
 ## 实际验证
 
-- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q`：70 项测试全部通过。耗时随宿主机变化（记录本次沙箱环境约 16 秒，早前一次为 2.4 秒），不作为性能指标。
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q`：71 项测试全部通过。耗时随宿主机变化（记录本次沙箱环境约 15 秒，早前一次为 2.4 秒），不作为性能指标。
 - 技能 quick_validate：通过（Windows 控制台需 `PYTHONUTF8=1`，见 [验证](references/validation.md)）。全部 Python 文件通过 Python 3.9 语法解析，本地文档链接与示例约定校验通过。
 - 合成工程流实际经过准备开书、全书与卷设计核验、滚动章计划、人物档案、正文候选、首读冻结、独立两类章审、章节提交、范围块审、综合复核、完本快照和 HTML 导出。
 - 实际修订流覆盖保留正式分支、重写后缀、范围复核、合并、撤销、恢复原目标及保留已消耗额度。改约先独立审查，保留父稿、未解决问题和修复额度。
@@ -22,6 +22,7 @@
 - 字面规则：项目级 book.lexical_policy 版本记录，`lexical` 命令写入并留原话，开书阶段即生效；约定里出现 lexical_policy 视为未知字段。测试覆盖版本追加、非法键拒绝、重复规则拒绝、开书阶段覆盖后砚字主角可通过。
 - 数据库版本升至 novel-ledger/2，旧库在打开时按 schema 显式拒绝，不隐式升级。
 - 完整约定三个入口按项目状态判定：`init --contract`（项目未开始）、`opening --file`（`init` 后未派发门任务，导入后清除逐门选择）、`recontract --file`（已派门任务或已有约定）。派过门任务后 `opening --file` 明确拒绝而不是静默忽略。测试覆盖三条路径，并覆盖"尚无约定时 export/audit 给出 contract 错误而不是崩溃"（该崩溃在重构前即存在，本次一并修掉）。
+- 架构图一致性由测试守护：`docs/architecture.mmd`、README 中的 mermaid 块与 references/architecture.md 的真源逐字一致，防止文档复制后漂移。
 
 自动交付 world.html 与 world.json，正文任务在用户运行授权后进入。开书方案、人物方向及世界记录保持在独立纯模块中，完整依赖图仍无环。
 
