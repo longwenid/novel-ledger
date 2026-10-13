@@ -1,0 +1,18 @@
+flowchart TD
+    CLI[命令入口] --> APP[应用编排]
+    CLI --> SQL[SQLite 适配器]
+    CLI --> HOST[宿主进程适配器]
+    APP --> WF[纯流程决策]
+    APP --> CTX[上下文查询]
+    APP --> VIEW[任务与导出视图]
+    WF --> OPEN[逐门选择]
+    WF --> WORLD[世界规则]
+    WF --> PLAN[规划规则]
+    WF --> QA[质量规则]
+    WF --> FACT[事实规则]
+    PLAN --> FACT
+    QA --> FACT
+    PLAN --> C[共享数据契约]
+    FACT --> C
+    SQL --> C
+    HOST --> C

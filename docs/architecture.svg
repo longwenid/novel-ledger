@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="640" viewBox="0 0 920 640">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#868e96"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="920" height="640" fill="#ffffff"/>
+  <text x="460" y="26" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="16" font-weight="600" fill="#212529">novel-ledger 架构：依赖方向</text>
+  <text x="460" y="46" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="12" fill="#868e96">箭头为主要源码依赖；共享契约只含协议、错误、值工具和少量类型</text>
+
+  <!-- CLI 入口 -->
+  <rect x="390" y="70" width="140" height="40" rx="8" fill="#343a40"/>
+  <text x="460" y="95" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#f8f9fa">命令入口</text>
+
+  <!-- 应用编排 / 适配器 -->
+  <rect x="390" y="180" width="140" height="40" rx="8" fill="#e7f5ff" stroke="#1971c2" stroke-width="1.5"/>
+  <text x="460" y="205" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#1864ab">应用编排</text>
+  <rect x="70" y="180" width="140" height="40" rx="8" fill="#fff4e6" stroke="#e8590c" stroke-width="1.5"/>
+  <text x="140" y="205" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#d9480f">SQLite 适配器</text>
+  <rect x="710" y="180" width="140" height="40" rx="8" fill="#fff4e6" stroke="#e8590c" stroke-width="1.5"/>
+  <text x="780" y="205" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#d9480f">宿主进程适配器</text>
+
+  <!-- 流程决策 / 上下文 / 视图 -->
+  <rect x="390" y="295" width="140" height="40" rx="8" fill="#e7f5ff" stroke="#1971c2" stroke-width="1.5"/>
+  <text x="460" y="320" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#1864ab">纯流程决策</text>
+  <rect x="145" y="295" width="140" height="40" rx="8" fill="#fff9db" stroke="#f08c00" stroke-width="1.5"/>
+  <text x="215" y="320" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#e67700">上下文查询</text>
+  <rect x="635" y="295" width="140" height="40" rx="8" fill="#fff9db" stroke="#f08c00" stroke-width="1.5"/>
+  <text x="705" y="320" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#e67700">任务与导出视图</text>
+
+  <!-- 领域规则 -->
+  <rect x="50" y="420" width="140" height="40" rx="8" fill="#ebfbee" stroke="#2f9e44" stroke-width="1.5"/>
+  <text x="120" y="445" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#2b8a3e">逐门选择</text>
+  <rect x="205" y="420" width="140" height="40" rx="8" fill="#ebfbee" stroke="#2f9e44" stroke-width="1.5"/>
+  <text x="275" y="445" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#2b8a3e">世界规则</text>
+  <rect x="360" y="420" width="140" height="40" rx="8" fill="#ebfbee" stroke="#2f9e44" stroke-width="1.5"/>
+  <text x="430" y="445" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#2b8a3e">规划规则</text>
+  <rect x="515" y="420" width="140" height="40" rx="8" fill="#ebfbee" stroke="#2f9e44" stroke-width="1.5"/>
+  <text x="585" y="445" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#2b8a3e">事实规则</text>
+  <rect x="670" y="420" width="140" height="40" rx="8" fill="#ebfbee" stroke="#2f9e44" stroke-width="1.5"/>
+  <text x="740" y="445" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#2b8a3e">质量规则</text>
+
+  <!-- 共享数据契约 -->
+  <rect x="310" y="550" width="300" height="40" rx="8" fill="#f3f0ff" stroke="#6741d9" stroke-width="1.5"/>
+  <text x="460" y="575" text-anchor="middle" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif" font-size="15" fill="#5f3dc4">共享数据契约</text>
+
+  <!-- 连线 -->
+  <g fill="none" stroke="#868e96" stroke-width="1.6">
+    <path d="M460,110 L460,174" marker-end="url(#arrow)"/>
+    <path d="M390,90 L140,90 L140,174" marker-end="url(#arrow)"/>
+    <path d="M530,90 L780,90 L780,174" marker-end="url(#arrow)"/>
+    <path d="M460,220 L460,289" marker-end="url(#arrow)"/>
+    <path d="M390,200 L215,200 L215,289" marker-end="url(#arrow)"/>
+    <path d="M530,200 L705,200 L705,289" marker-end="url(#arrow)"/>
+    <path d="M460,335 L460,360"/>
+    <path d="M120,360 L740,360"/>
+    <path d="M120,360 L120,414" marker-end="url(#arrow)"/>
+    <path d="M275,360 L275,414" marker-end="url(#arrow)"/>
+    <path d="M430,360 L430,414" marker-end="url(#arrow)"/>
+    <path d="M585,360 L585,414" marker-end="url(#arrow)"/>
+    <path d="M740,360 L740,414" marker-end="url(#arrow)"/>
+    <path d="M500,440 L509,440" marker-end="url(#arrow)"/>
+    <path d="M670,440 L661,440" marker-end="url(#arrow)"/>
+    <path d="M430,460 L430,544" marker-end="url(#arrow)"/>
+    <path d="M585,460 L585,544" marker-end="url(#arrow)"/>
+    <path d="M140,220 L140,270 L40,270 L40,570 L302,570" marker-end="url(#arrow)"/>
+    <path d="M780,220 L780,270 L880,270 L880,570 L618,570" marker-end="url(#arrow)"/>
+  </g>
+</svg>

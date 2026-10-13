@@ -1,0 +1,42 @@
+{
+  "title": "第三折",
+  "genre": "戏曲班社",
+  "reader_promise": "小人物用有限的手段查明一出禁戏的下落，并在同伴之间争取信任。",
+  "ending": "禁戏来龙去脉公开，班社保住行头与台口，主角和同伴承担顶演的代价。",
+  "world_premise": "本县禁戏多年，班社靠台口与人情维持生计。",
+  "story_engine": "从师父遗物中查禁戏名录的出入，用排演把真相逼到台前。",
+  "opposition": "县里主管怕旧事翻出牵动自己的位置。",
+  "voice": "以排演、交涉、具体选择和后果呈现班社人情。",
+  "allow_special_mechanism": false,
+  "style_traits": ["对白有立场。", "少用重复解释。"],
+  "relationships": ["师徒情分与台口利益互相牵扯。", "同班师兄弟各有一份想保住的东西。"],
+  "protagonist_setup": {
+    "id": "shen",
+    "name": "沈桐",
+    "identity": "班社的年轻顶演",
+    "desire": "守住师父留下的戏班。",
+    "limit": "不出卖同班的生计。"
+  },
+  "world_rules": ["台上的戏须有戏箱中的折子为据。", "擅演禁戏的班社可能被逐出本县。"],
+  "chapter_min": 2500,
+  "chapter_max": 6000,
+  "chapter_aim": 3500,
+  "word_range": [1500000, 2200000],
+  "volumes": [
+    {"id": "v1", "purpose": "从师父遗物中发现禁戏名录的出入，找到残页。", "end": 200},
+    {"id": "v2", "purpose": "把残页排成一场戏，公开师门旧事并承担后果。", "end": 500}
+  ],
+  "planning_window": 3,
+  "review_interval": 10,
+  "review_chunk": 3,
+  "entities": [
+    {"id": "shen", "name": "沈桐", "kind": "person", "aliases": ["小桐"]},
+    {"id": "bai", "name": "白鹭", "kind": "person"},
+    {"id": "master", "name": "程班主任", "kind": "person"}
+  ],
+  "initial_facts": [{"entity": "master", "key": "alive", "value": false}],
+  "initial_resources": [{"holder": "shen", "asset": "散银", "unit": "两", "quantity": "3"}],
+  "places": [{"id": "backstage", "name": "后台"}],
+  "placements": {"shen": "backstage"},
+  "arcs": ["沈桐从只想保住班社，到愿意承担顶演的后果。"]
+}

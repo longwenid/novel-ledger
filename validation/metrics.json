@@ -1,0 +1,29 @@
+{
+  "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
+  "novel_ledger": {
+    "modules": 12,
+    "runtime_lines_including_cli": 2447,
+    "cycles_including_deferred_imports": [],
+    "dependency_edges": 34
+  },
+  "context": [
+    {
+      "unreferenced_future_nodes": 10,
+      "required_record_bytes": 2494,
+      "full_book_design_bytes": 2749,
+      "complete_optional_source_preserved": true
+    },
+    {
+      "unreferenced_future_nodes": 100,
+      "required_record_bytes": 2494,
+      "full_book_design_bytes": 24619,
+      "complete_optional_source_preserved": true
+    },
+    {
+      "unreferenced_future_nodes": 1000,
+      "required_record_bytes": 2494,
+      "full_book_design_bytes": 244219,
+      "complete_optional_source_preserved": true
+    }
+  ]
+}
