@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import math
+from . import contracts
 from .contracts import (CONTRACT_ALIGNMENT, CONTRACT_FIELDS, CONTRACT_KEYS, DEFAULT_NAME_CHARS, DEFAULT_TERMS,
                         POLICY_FIELDS, contract_errors, contract_skeleton, require, text)
 from .facts import entity, seed
@@ -36,6 +37,65 @@ def check_text(value, policy, names=False):
             {'found': [w for w in words if w in value], 'recover': '修改当前候选；作者明确改规则时走 lexical 命令保存原话。'})
 
 
+def _walk(node, path=''):
+    """Yield (path, text) for every string in a nested result payload."""
+    if isinstance(node, str):
+        yield path, node
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            yield from _walk(value, path + '.' + str(key) if path else str(key))
+    elif isinstance(node, list):
+        for item in node:
+            yield from _walk(item, path)
+
+
+def enforce(policy, stage, data):
+    """Enforce the rules declared for this stage, and nothing else.
+
+    contracts.ENFORCEMENT is the single declaration of coverage: the same table drives this loop
+    and the `policy` block handed to the worker, so declared and enforced scope cannot drift.
+    """
+    scope = contracts.ENFORCEMENT.get(stage)
+    if not scope:
+        return
+    resolved = resolve_policy(policy)
+    hits = {}
+    for path, value in _walk(data):
+        field = path.rsplit('.', 1)[-1] if path else ''
+        if field in scope.get('terms', ()) or path.split('.')[0] in scope.get('terms', ()):
+            found = [w for w in resolved['forbidden_terms'] if w in value]
+            if found:
+                hits.setdefault('forbidden_terms', []).append({'field': path, 'found': found})
+        if field in scope.get('names', ()):
+            found = [w for w in resolved['forbidden_name_chars'] if w in value]
+            if found:
+                hits.setdefault('forbidden_name_chars', []).append({'field': path, 'found': found})
+    require(not hits, 'literal_policy', '内容违反作者当前字面约定（' + stage + '）。',
+            {'violations': hits, 'stage': stage,
+             'recover': '按 literal_policy 修正上述字段后重提；作者改规则用 lexical 命令保存原话。'})
+
+
+def enforcement_scope(stage):
+    """Human-readable coverage for the dispatch material: which fields are inspected here."""
+    scope = contracts.ENFORCEMENT.get(stage)
+    if not scope:
+        return {'terms': [], 'names': [], 'note': '本阶段不检查字面约定。'}
+    return {'terms': list(scope.get('terms', ())), 'names': list(scope.get('names', ())),
+            'note': contracts.POLICY_NOTE}
+
+
+def policy_block(book, stage):
+    """The active policy as task material: what applies, where it came from, and how it changes."""
+    versions = book.get('lexical_policy') or []
+    latest = versions[-1] if versions else {'version': 1, 'policy': resolve_policy({}), 'source': '内置默认'}
+    resolved = resolve_policy(latest.get('policy', {}))
+    return {'version': latest.get('version', 1), 'source': latest.get('source', ''),
+            'forbidden_terms': resolved['forbidden_terms'],
+            'forbidden_name_chars': resolved['forbidden_name_chars'],
+            'scope': enforcement_scope(stage),
+            'editable': '作者改规则：novel.py lexical --file 规则.json --source 原话（逐版留档，开书阶段即生效）。'}
+
+
 def skeleton():
     """Blank contract-shaped object: the delivery template for the opening contract stage."""
     return contract_skeleton()
@@ -44,6 +104,13 @@ def skeleton():
 def check_contract_names(contract, policy):
     """Name rules are enforced at every gate that can introduce an entity name."""
     for item in contract.get('entities', []):
+        for name in [item.get('name', '')] + list(item.get('aliases', [])):
+            check_text(name, policy, names=True)
+
+
+def validate_plan_names(plan, policy):
+    """New entities declared by a chapter plan are names too, so the project policy applies."""
+    for item in plan.get('new_entities', []):
         for name in [item.get('name', '')] + list(item.get('aliases', [])):
             check_text(name, policy, names=True)
 
@@ -118,7 +185,7 @@ def validate_design(data, known=()):
     return copy.deepcopy(data)
 
 
-def validate_plans(data, first, last, known_nodes, state, contract, world=None):
+def validate_plans(data, first, last, known_nodes, state, contract, world=None, policy=None):
     plans = data.get('plans') if isinstance(data, dict) else None
     require(isinstance(plans, list) and [p.get('chapter') for p in plans if isinstance(p, dict)] == list(range(first, last + 1)),
             'plan', '章计划须恰好覆盖本次窗口，按章号排列。')
@@ -130,10 +197,9 @@ def validate_plans(data, first, last, known_nodes, state, contract, world=None):
         require(isinstance(participants, list) and participants and all(text(p) for p in participants)
                 and len(participants) == len(set(participants)), 'plan', 'participants 须为非空、不重复实体 ID。')
         require(isinstance(plan.get('new_entities', []), list), 'plan', 'new_entities 须为实体数组。')
+        validate_plan_names(plan, policy if policy is not None else resolve_policy({}))
         for item in plan.get('new_entities', []):
             entity(temporary, item)
-            for name in [item['name']] + item.get('aliases', []):
-                check_text(name, contract, names=True)
         require(all(p in temporary['entities'] for p in participants), 'plan', '参与人须为既有实体或本窗口声明的候选实体。')
         if world:
             refs = plan.get('world_refs')

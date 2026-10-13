@@ -155,17 +155,12 @@ def apply(book, task, data, actor, sources):
     stage, chapter = task['stage'], task['chapter']
     row = None
     if stage == 'opening_options':
+        planning.enforce(planning.policy_of(book), stage, data)
         book['creation'] = creation.offer(book['creation'], data)
-        if book['creation']['board']['gate']['id'] == 'protagonist':
-            policy = planning.policy_of(book)
-            for option in book['creation']['board']['options']:
-                planning.check_text(option['value']['name'], policy, names=True)
     elif stage == 'world_model':
         opening = book['creation']
+        planning.enforce(planning.policy_of(book), stage, data)
         model = world.validate(data, creation.selected(opening), opening['selection_hash'])
-        policy = planning.policy_of(book)
-        for character in model['characters']:
-            planning.check_text(character['name'], policy, names=True)
         old = book['proposal'] or {}
         book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': model, 'producer': actor, 'attempts': old.get('attempts', 0)}
     elif stage == 'world_review':
@@ -187,11 +182,13 @@ def apply(book, task, data, actor, sources):
     elif stage == 'opening_contract':
         contract = planning.validate_contract(data)
         creation.validate_contract(contract, book['creation'], book['world'])
+        planning.enforce(planning.policy_of(book), stage, contract)
         planning.check_contract_names(contract, planning.policy_of(book))
         book['proposal'] = {'scope': 'contract', 'chapter': 1, 'data': contract, 'producer': actor,
                             'source': '用户逐门选择；完整选择版本 ' + book['creation']['selection_hash']}
     elif stage in ('book_plan', 'volume_plan'):
         known = node_map(book)
+        planning.enforce(planning.policy_of(book), stage, data)
         design = planning.validate_design(data, known)
         old = book['proposal'] or {}
         book['proposal'] = {'scope': task['scope'], 'chapter': chapter, 'data': design, 'producer': actor, 'attempts': old.get('attempts', 0)}
@@ -221,17 +218,20 @@ def apply(book, task, data, actor, sources):
             book.update(status='paused', pause_reason='改约未通过；旧约定和稿件完整保留。')
             proposal['findings'] = review['findings']
     elif stage == 'plan':
-        plans = planning.validate_plans(data, task['first'], task['last'], node_map(book), book['state'], book['contract'], book.get('world'))
+        planning.enforce(planning.policy_of(book), stage, data)
+        plans = planning.validate_plans(data, task['first'], task['last'], node_map(book), book['state'], book['contract'],
+                                        book.get('world'), planning.policy_of(book))
         for plan in plans:
             book['plans'][str(plan['chapter'])] = plan
     elif stage == 'profiles':
+        planning.enforce(planning.policy_of(book), stage, data)
         profiles = planning.validate_profiles(data, task['payload']['entities'])
         for profile in profiles:
             book['profiles'][profile['entity']] = profile
     elif stage in ('write', 'repair', 'redesign'):
         require(all(text(data.get(k)) for k in ('title', 'prose', 'summary', 'self_check')), 'draft', '执笔需要 title/prose/summary/具体 self_check。')
         require('events' not in data and 'candidate_events' not in data, 'writer_events', '事实由独立审稿者从正文重建。')
-        planning.check_text(data['title'] + '\n' + data['prose'], planning.policy_of(book))
+        planning.enforce(planning.policy_of(book), stage, data)
         spend(book, chapter, stage)
         old = book['draft'] or {}
         draft = {'chapter': chapter, 'title': data['title'], 'prose': data['prose'], 'producer': actor,

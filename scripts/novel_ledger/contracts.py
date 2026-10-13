@@ -104,6 +104,26 @@ CONTRACT_KEYS = tuple(row['key'] for row in CONTRACT_FIELDS)
 CONTRACT_ALIGNMENT = tuple(row['key'] for row in CONTRACT_FIELDS if row['alignment'])
 CHARACTERS = ('name', 'role', 'desire', 'limit', 'knowledge_boundary')
 POLICY_FIELDS = ('forbidden_terms', 'forbidden_name_chars')
+# Where the author's lexical rules are enforced, declared per task stage. One table, used both to
+# run the check and to tell a worker exactly which of its fields are inspected, so a dispatch
+# instruction can never claim coverage the program does not perform.
+#   terms: fields whose text must avoid the forbidden terms
+#   names: fields whose text must avoid the forbidden name characters
+ENFORCEMENT = {
+    'opening_options': {'terms': ('title', 'premise', 'driver', 'tradeoff', 'fit_reason', 'value'),
+                        'names': ('value.name',)},
+    'world_model': {'names': ('characters.name',)},
+    'book_plan': {'terms': ('intent', 'ending_conditions', 'nodes')},
+    'volume_plan': {'terms': ('intent', 'ending_conditions', 'nodes')},
+    'plan': {'terms': ('plans',), 'names': ('new_entities',)},
+    'profiles': {'terms': ('profiles',)},
+    'write': {'terms': ('title', 'prose')},
+    'repair': {'terms': ('title', 'prose')},
+    'redesign': {'terms': ('title', 'prose')},
+    'opening_contract': {'terms': ('title',)},
+}
+POLICY_NOTE = ('本块是当前生效的项目字面约定：只覆盖上方 scope 列出的字段，越出范围的玩法不受检查；'
+               '违反会以 literal_policy 拒绝并给出 found 列表。作者改规则用 lexical 命令保存原话，规则逐版留档。')
 
 
 def _placeholder(row):

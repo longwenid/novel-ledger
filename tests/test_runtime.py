@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger.application import Application
-from novel_ledger.contracts import Error, FACT_CHECKS, RESULT, digest, dump
+from novel_ledger.contracts import ENFORCEMENT, Error, FACT_CHECKS, RESULT, digest, dump
 from novel_ledger import delivery, facts, host, planning, workflow
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import contract, drive, response
@@ -301,6 +301,77 @@ class RuntimeTests(unittest.TestCase):
         owner = self.finish()
         self.assertCode('word_target', self.app.complete, owner)
         self.assertEqual(self.repo.load()['contract']['word_range'], [390, 400])
+
+    def test_lexical_enforcement_scope_is_declared_and_exercised(self):
+        """The declared coverage and the enforced coverage come from one table, at every stage."""
+        handle = self.app.advance()['task']
+        material = self.repo.task(handle['task_id'])['input']
+        policy = material['policy']
+        self.assertEqual(policy['version'], 1)
+        self.assertEqual(policy['source'], '内置默认')
+        self.assertEqual(policy['forbidden_terms'], ['账本', '入账', '回执'])
+        self.assertEqual(policy['forbidden_name_chars'], ['砚'])
+        self.assertEqual(policy['scope']['terms'], list(ENFORCEMENT[material['stage']]['terms']))
+        self.assertIn('prose', ENFORCEMENT['write']['terms'])
+        self.assertIn('lexical', policy['editable'])
+        # every stage that declares coverage really runs it
+        for stage, scope in ENFORCEMENT.items():
+            self.assertTrue(scope.get('terms') or scope.get('names'), stage)
+        self.assertIn('opening_options', ENFORCEMENT)
+
+    def test_plan_stage_honours_an_author_name_override(self):
+        """A plan's new entity is a name: it must be judged by the project policy, not the default."""
+        book = self.repo.load()
+        book['lexical_policy'].append({'version': 2, 'policy': {'forbidden_name_chars': []},
+                                       'source': '作者允许主角名用砚字。'})
+        self.repo.save(book)
+        drive(self.app, until='plan')
+        task = self.repo.pending()
+        work = task['input']
+        self.assertEqual(work['policy']['version'], 2)
+        self.assertEqual(work['policy']['forbidden_name_chars'], [])
+        plan = {'plans': [dict(chapter=work['first'], goal='核对封条。', obstacle='主管阻拦。', choice='查记录。',
+                               cost='得罪同事。', change='拿到签字。', ending='追问来源。',
+                               node_ids=['volume:v1'], participants=['shen'],
+                               new_entities=[{'id': 'yan', 'name': '沈砚', 'kind': 'person'}])]}
+        self.app.submit({**response(self.app), 'data': plan})
+        stored = self.repo.load()['plans'][str(work['first'])]
+        self.assertEqual(stored['new_entities'][0]['name'], '沈砚')
+
+    def test_plan_stage_still_rejects_a_default_forbidden_name(self):
+        drive(self.app, until='plan')
+        work = self.repo.pending()['input']
+        plan = {'plans': [dict(chapter=work['first'], goal='核对封条。', obstacle='主管阻拦。', choice='查记录。',
+                               cost='得罪同事。', change='拿到签字。', ending='追问来源。',
+                               node_ids=['volume:v1'], participants=['shen'],
+                               new_entities=[{'id': 'yan', 'name': '沈砚', 'kind': 'person'}])]}
+        with self.assertRaises(Error) as caught:
+            self.app.submit({**response(self.app), 'data': plan})
+        self.assertEqual(caught.exception.code, 'literal_policy')
+        self.assertIn('砚', json.dumps(caught.exception.details, ensure_ascii=False))
+
+    def test_opening_option_text_is_checked_not_only_the_name(self):
+        """The dispatch declares the whole option; the machine must inspect the whole option."""
+        from novel_ledger import creation
+
+        state = creation.begin()
+        board = creation.offer(state, {
+            'gate': 'genre',
+            'options': [
+                {'id': 'A', 'title': '夜班退件', 'premise': '他把入账记录摊在桌上。', 'driver': '核对来源。',
+                 'tradeoff': '得罪主管。', 'fit_reason': '贴合夜班题材。',
+                 'value': {'genre': '都市生活', 'reader_promise': '查清责任。', 'red_lines': [], 'allow_special_mechanism': False}},
+                {'id': 'B', 'title': '另一条路', 'premise': '换一种推进。', 'driver': '换一个对手。',
+                 'tradeoff': '换一种代价。', 'fit_reason': '同样贴合题材。',
+                 'value': {'genre': '都市生活', 'reader_promise': '换一个承诺。', 'red_lines': [], 'allow_special_mechanism': False}},
+            ]})
+        self.assertEqual(board['board']['options'][0]['title'], '夜班退件')      # offer() alone stores what it got
+        with self.assertRaises(Error) as caught:
+            planning.enforce(planning.resolve_policy({}), 'opening_options',
+                             {'gate': 'genre', 'options': board['board']['options']})
+        self.assertEqual(caught.exception.code, 'literal_policy')
+        fields = {row['field'] for row in caught.exception.details['violations']['forbidden_terms']}
+        self.assertIn('options.premise', fields)
 
     def test_export_cannot_overwrite_database(self):
         self.assertCode('output', delivery.export_book, self.repo, self.project / 'novel.sqlite3')

@@ -195,6 +195,13 @@ def dispatch(args):
 
 
 def main(argv=None):
+    # Output is UTF-8 JSON regardless of the host locale: a controller reading our stdout must not
+    # have to guess the console code page. Windows consoles render it correctly from 3.6 onward.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, ValueError):
+            pass
     try:
         value = dispatch(parser().parse_args(argv))
     except Error as exc:

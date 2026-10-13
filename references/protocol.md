@@ -12,6 +12,8 @@ entities=[{id,name,kind,aliases?}]、initial_facts=[{entity,key,value}]、initia
 
 task.json 给身份、路径和 commands。first_read 时不生成正式 input/template；解锁后 records 提供冻结哈希，required 给必读名称，prose 和 obligations 给正文及义务。
 
+每个任务材料的 `policy` 块是当前生效的项目字面约定：`version`/`source` 说明版本与来源（作者原话或内置默认），`forbidden_terms`/`forbidden_name_chars` 给出规则，`scope` 说明**本阶段实际检查哪些字段**。该块与执行检查共用 `contracts.ENFORCEMENT` 一张表，所以声明与校验不会脱节；越出 scope 的字段不检查，违反 scope 内字段以 `literal_policy` 拒绝并在 details 里列出命中字段与命中词。改规则用 `lexical` 命令。
+
 `read --task ID` 返回全部必读完整记录；`--record 名称` 读单个完整记录。`recall --task ID --chapter N` 读冻结目录中的完整历史章，`--state` 读完整前态。必读 state 按参与人和开放承诺选择，complete_state 永远可补读。结构选择不证明其他事实语义无关；story 完整包含当前引用节点及显式前提，全设计仍有入口。
 
 hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、紧凑分隔符、allow_nan=False。正文哈希也基于 JSON 字符串值，不是裸文件字节。来源完整性不证明阅读理解。

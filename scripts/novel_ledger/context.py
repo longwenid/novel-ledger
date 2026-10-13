@@ -5,7 +5,7 @@ import copy
 import json
 from .contracts import FACT_CHECKS, TASK, dump
 from . import creation, world
-from .planning import volume_for
+from .planning import policy_block, volume_for
 from .workflow import node_map
 
 
@@ -108,4 +108,7 @@ def build(repo, book, job):
     return {'schema': TASK, 'stage': stage, 'chapter': chapter, 'scope': job.scope,
             'first': job.first, 'last': job.last, 'payload': payload, 'branch': book['branch'],
             'revision': book['revision'], 'records': records, 'required': required,
+            # The active lexical policy travels with the task material, together with the fields
+            # this stage actually inspects, so a worker never has to guess either one.
+            'policy': policy_block(book, stage),
             'prose': prose, 'blind': stage in ('chapter_review', 'scope_review'), 'obligations': obligations}
