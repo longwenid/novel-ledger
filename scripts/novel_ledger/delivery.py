@@ -101,6 +101,8 @@ def materialize(repo, task, entry):
 
 def export_book(repo, output=None, format='html'):
     book = repo.load()
+    require(book.get('contract') is not None, 'contract', '尚无生效约定，不能导出正文。',
+            {'recover': '先完成开书：init --contract、opening --file 或逐门开书的约定核验。'})
     output = Path(output).expanduser().resolve() if output else repo.project / ('book.' + ('html' if format == 'html' else 'md'))
     require(not (output.parent == repo.project and output.name.startswith('novel.sqlite3')), 'output', '不能覆盖数据库及其事务文件。')
     rows = repo.headers(book['branch'])

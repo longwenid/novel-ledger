@@ -472,6 +472,17 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse((base / 'input.json').exists())
         self.assertFalse((base / 'result.template.json').exists())
 
+    def test_export_and_audit_refuse_a_project_without_a_contract(self):
+        unstarted = Path(self.temp.name) / 'unstarted'
+        subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(unstarted), 'init'],
+                       capture_output=True, text=True, encoding='utf-8', errors='replace')
+        for command in ('export', 'audit'):
+            proc = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'),
+                                   '--project', str(unstarted), command],
+                                  capture_output=True, text=True, encoding='utf-8', errors='replace')
+            self.assertEqual(proc.returncode, 2, proc.stderr)
+            self.assertEqual(json.loads(proc.stdout)['error'], 'contract')
+
     def test_cli_rejects_unknown_database_and_supports_project_after_command(self):
         command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), 'status', '--project', str(self.project)]
         result = subprocess.run(command, text=True, capture_output=True, encoding='utf-8', errors='replace')

@@ -435,12 +435,21 @@ class Application:
             require(book['revision_run'] is None, 'revision', '先处置当前修订再改约。')
             if opening:
                 state = book.get('creation')
-                # A complete candidate belongs at the start of a project. Inside a guided opening the
-                # author's selections and displayed boards already exist, so importing here would
-                # either discard them or leave two competing sources for the contract.
-                require(state is None or state['phase'] == 'ready', 'creation',
-                        '本项目已进入逐门开书：完整约定用 recontract --file，或对尚无选择的新项目用 init --contract。',
-                        {'recover': '逐门开书按 advance/choose 继续；改约用 recontract。'})
+                pending = self.repo.pending()
+                # A complete candidate may be imported only while the guided opening is pristine:
+                # nothing answered, nothing on display, and no gate task handed to a writer yet.
+                # Dispatching the first gate task is what puts options in front of the author, so a
+                # pending gate task means choices are already on their way and are not ours to drop.
+                pristine = state is None or state['phase'] == 'ready' or (
+                    state['phase'] == 'choosing' and not state['selections'] and state['board'] is None
+                    and state['cursor'] == 0 and pending is None)
+                require(pristine, 'creation',
+                        '开书选择已开始，不能再用 opening --file 覆盖；完整约定请用 recontract --file。',
+                        {'recover': '逐门开书按 advance/choose 继续；已答过门或已有约定时用 recontract。'})
+                if state is not None and state['phase'] == 'choosing':
+                    # The imported contract replaces the guided flow; leaving `creation` behind would
+                    # keep dispatching gate tasks for a book that already has its contract.
+                    book['creation'] = None
             planning.check_contract_names(candidate, planning.policy_of(book))
             if not book['proposal'] or book['proposal']['scope'] != 'contract':
                 self.repo.put('amendment_base', book)
@@ -487,6 +496,8 @@ class Application:
         return book
 
     def _audit(self, book):
+        require(book.get('contract') is not None, 'contract', '尚无生效约定，无法核对账本。',
+                {'recover': '先完成开书约定与其独立核验。'})
         if book.get('world'):
             opening = book['creation']
             world.validate(book['world'], creation.selected(opening), opening['selection_hash'])

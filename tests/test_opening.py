@@ -309,19 +309,37 @@ class OpeningTests(unittest.TestCase):
         data['options'][0]['value']['mechanism']['mode'] = 'bounded'
         self.assertCode('opening_constraint', self.app.submit, receipt(self.app, data))
 
-    def test_importing_a_contract_into_a_guided_project_is_refused_not_ignored(self):
+    def test_importing_a_contract_is_allowed_before_the_first_gate_and_refused_after(self):
         command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project)]
-        early = subprocess.run(command + ['opening', '--file', str(ROOT / 'assets' / 'contract.example.json'),
-                                          '--source', '作者开书前给完整候选。'],
+        example = str(ROOT / 'assets' / 'contract.example.json')
+        early = subprocess.run(command + ['opening', '--file', example, '--source', '作者开书前给完整约定。'],
                                capture_output=True, text=True, encoding='utf-8', errors='replace')
-        self.assertEqual(early.returncode, 2)
-        self.assertEqual(json.loads(early.stdout)['error'], 'creation')
+        self.assertEqual(early.returncode, 0, early.stdout)
+        self.assertTrue(json.loads(early.stdout)['staged'])
+        self.assertIsNone(self.repo.load()['creation'])
+        self.assertEqual(self.app.advance()['task']['stage'], 'contract_review')
+        self.app.submit(receipt(self.app, review_data(self.app)))
+        self.assertEqual(self.app.advance()['task']['stage'], 'book_plan')
+
+    def test_importing_a_contract_after_a_gate_is_shown_is_refused(self):
+        command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project)]
+        example = str(ROOT / 'assets' / 'contract.example.json')
         self.app.advance()
-        late = subprocess.run(command + ['opening', '--file', str(ROOT / 'assets' / 'contract.example.json'),
-                                         '--source', '作者中途给完整候选。'],
+        late = subprocess.run(command + ['opening', '--file', example, '--source', '作者中途给完整约定。'],
                               capture_output=True, text=True, encoding='utf-8', errors='replace')
+        self.assertEqual(late.returncode, 2)
         self.assertEqual(json.loads(late.stdout)['error'], 'creation')
-        self.assertEqual(self.repo.load()['creation']['phase'], 'choosing')
+        self.assertIsNotNone(self.repo.load()['creation'])
+        self.assertIsNone(self.repo.load()['contract'])
+        self.assertIsNotNone(self.repo.pending())
+        # A newly initialised project stays importable right up to the first advance.
+        other = Path(self.temp.name) / 'other'
+        subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(other), 'init'],
+                       capture_output=True, text=True, encoding='utf-8', errors='replace')
+        ready = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(other),
+                                'opening', '--file', example, '--source', '作者开书前给完整约定。'],
+                               capture_output=True, text=True, encoding='utf-8', errors='replace')
+        self.assertEqual(ready.returncode, 0, ready.stdout)
 
     def test_cli_init_without_contract_immediately_supports_guided_opening(self):
         path = Path(self.temp.name) / 'zero'

@@ -28,7 +28,7 @@ advance 返回 task_ready 时读 task.task_path。commands 为 argv 数组，按
 - 候选稿反馈用 `feedback --text 原话`；验收稿用 `revise --from-chapter N --reason 原话`。修订重审完整后缀，revision_ready 后 promote；discard 恢复旧稿及目标。
 - `replan --from-chapter N --reason 原因` 只改未写窗口；已有草稿或正式稿的计划不能直接删除。
 - `lexical --file 规则.json --source 原话` 改作者字面约定，新版本追加在项目记录里，旧版本保留；改规则会取消在途任务并作废其视图，下次 advance 重新派任务。
-- `recontract --file 完整候选.json --source 原话` 取消旧任务留档，经独立核验激活新约定，在父稿保留的分支重新规划写审；`opening --file` 只适用于没有逐门选择记录的项目，进入选择后按 creation 错误拒绝并提示改约路径。
+- `recontract --file 完整候选.json --source 原话` 取消旧任务留档，经独立核验激活新约定，在父稿保留的分支重新规划写审。`opening --file` 是同一核验路径的开书入口：只在项目没有派发过门任务时接受（`init` 之后、第一次 advance 之前），导入后清除逐门选择状态；派过门任务后按 creation 错误拒绝并用 recontract 改约。
 - target_reached 表示授权章节目标完成；ready_to_complete 还须 complete 验收。通过后 html/export 返回绝对路径，章节边界可显式刷新 html。
 
 ## 可选宿主

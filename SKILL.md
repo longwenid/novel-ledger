@@ -28,7 +28,7 @@ ROOT 为本技能目录，PROJECT 为独立小说目录。入口 `python3 ROOT/s
 
 ## 作者决定入口
 
-`lexical --file 规则.json --source 原话` 改字面约定（默认禁词“账本、入账、回执”，默认禁字“砚”）：规则存在项目里并逐版留档，不放进约定，因此开书阶段同样生效。`recontract --file 完整候选.json --source 原话` 改约定，先独立核验再重新规划；开书前就有完整约定直接用 `init --contract 约定.json`，已进入逐门选择的项目按 creation 错误拒绝导入。
+`lexical --file 规则.json --source 原话` 改字面约定（默认禁词“账本、入账、回执”，默认禁字“砚”）：规则存在项目里并逐版留档，不放进约定，因此开书阶段同样生效。完整约定按状态选入口：项目未开始用 `init --contract 约定.json`；`init` 后还没 advance 可用 `opening --file 约定.json --source 原话` 导入并清除逐门选择；已派过门任务或已有约定用 `recontract --file`，先独立核验再重新规划。
 
 ## 最短交接
 

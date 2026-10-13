@@ -36,7 +36,9 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" back --gate scale --reason
 
 board 哈希由主控从展示响应恢复，用户不需知道。选择绑定准确展示版本，旧组编号不能套到新门。保存各组、选择、否决和原话；回退保留前门，后续依赖选择归档后重选。世界构建期间仍可回退，旧任务取消留档；约定激活后改方向用 recontract。
 
-恢复用 advance：已展示组原样返回，未生成组恢复同一任务；不要求重选，不自动采纳历史否决。已有完整约定时：项目尚未开始逐门选择用 `init --contract 约定.json`；已经进入选择或已有生效约定用 `recontract --file 约定.json --source 原话`，先独立核验再重新规划。已进入逐门选择的项目拒绝 `opening --file`，不静默忽略。
+恢复用 advance：已展示组原样返回，未生成组恢复同一任务；不要求重选，不自动采纳历史否决。
+
+已有完整约定时按项目状态选入口：项目还没开始时用 `init --contract 约定.json`；已经 `init` 但还没 advance（没有派过任何门任务）可以用 `opening --file 约定.json --source 原话`，导入后逐门选择状态被清除，流程直接进入约定核验；一旦派过门任务或作者已看过方案，`opening --file` 按 creation 错误拒绝，不静默忽略，也不替他丢掉已见选择，此时用 `recontract --file` 改约。已有生效约定时同样用 recontract，先独立核验再重新规划。
 
 ## 方案回执
 
