@@ -176,6 +176,7 @@ novel-ledger/
 │   ├── architecture.md   模块职责、不变量、扩展指引
 │   └── validation.md     验证方法与文学评估口径
 ├── assets/               可运行的完整约定样例
+├── tools/                安装脚本（install-dsh.ps1：链接到 DSH 技能根）
 ├── docs/                 架构图产物（真源在 references/architecture.md）
 ├── tests/                80 项行为测试
 └── validation/           工程度量脚本与验收记录
@@ -198,6 +199,38 @@ python scripts/novel.py --project "$P" run --through 3 --source '作者授权先
 ```
 
 `run` 返回 `owner` 租约令牌，之后每个主控命令都要带 `--owner <令牌>`，否则返回 `controller_lease`。派工与提交的完整流程见 [运行与恢复](references/runtime.md)。
+
+---
+
+## 五之二、安装到 DeepSeek Harness
+
+DSH 通过 `@deepseek-ai/dsh-skill-filesystem` 发现本地技能（需该 provider 未被禁用）。它按优先级扫描若干根目录，任一根下的 `<name>/SKILL.md` 即为一个技能：
+
+| 优先级 | 根目录 | 说明 |
+|---:|---|---|
+| 100 | `<projectRoot>/.dsh/skills` | 项目根是最靠近的含 `.git` 的祖先目录；仅对该项目生效 |
+| 200 | `<projectRoot>/.agents/skills` | 同上，另一个共享约定 |
+| 300 | `customSkillDirs` | 在 DSH 设置里自定义 |
+| 400 | `$DSH_HOME/skills`（默认 `~/.dsh/skills`） | **推荐**：开启的每个工作区都能看到 |
+
+安装就是把仓库链接到某个根目录，让 `git pull` 直接更新已安装的技能：
+
+```powershell
+# Windows（无需管理员权限，使用目录 junction）
+powershell -ExecutionPolicy Bypass -File tools/install-dsh.ps1
+powershell -ExecutionPolicy Bypass -File tools/install-dsh.ps1 -Remove
+powershell -ExecutionPolicy Bypass -File tools/install-dsh.ps1 -Root D:\another-skills-root
+```
+
+```bash
+# POSIX（符号链接）
+pwsh tools/install-dsh.ps1            # $DSH_HOME/skills
+pwsh tools/install-dsh.ps1 -Remove
+```
+
+脚本会在建立链接后自检：SKILL.md 能否透过链接读取、`scripts/novel.py --version` 是否可运行；若目标位置已有真实目录或指向别处的链接，会拒绝而不是覆盖。装好后技能在下次目录刷新时出现，无需重启。
+
+技能正由同一份源码供多个宿主使用（例如 Codex 的 `~/.codex/skills` 也指向本仓库）；每个宿主需要各自建链，改动一次即可全部生效。
 
 ---
 
