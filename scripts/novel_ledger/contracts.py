@@ -26,6 +26,36 @@ DEFAULT_NAME_CHARS = ['砚']
 # Work-directory artifacts the controller may regenerate; everything else in a task directory
 # is authored by a Worker and is never rewritten behind its back.
 FORM_ARTIFACTS = ('input.json', 'result.template.json')
+# Brainstorm methods. A lens is a way to make the next option genuinely different, not a label:
+# the axis spends one slot of the choice, the method says how to vary it. Kept beside the
+# contract fields because option quality is part of the author-facing contract.
+LENSES = (
+    ('混搭', '让两种差异化设定深度参与因果，双方都必须改变故事走向；只贴皮不算混搭。',
+     '提出两个各自成立的设定，再指出它们互相牵制的具体后果。'),
+    ('倒置', '颠覆类型固有假定，并把反转在终局回溯闭环；为求新奇而无回收不算。',
+     '先写清被倒置的那条公理，再给出终局如何回到它。'),
+    ('代价', '让突破必须支付不可逆的实质代价，代价直接改变人物后续抉择；一次性的痛感不算。',
+     '写清代价的具体形态，以及它如何限制下一次选择。'),
+    ('限制', '用严苛限制驱动破局策略，让主角靠判断而非能力取胜；限制可随时取消不算。',
+     '写清限制的边界与破局要用的具体手段。'),
+    ('认知差', '用信息差制造不可逆选择，让知道本身带来风险；靠误会拖延不算。',
+     '写清谁知道什么、这层差如何逼出选择。'),
+    ('规则推演', '把一条底层规则推到社会结构与经济秩序的极限；只在中段使用不算。',
+     '写清规则的边界，以及它挤压出的制度、代价与冲突。'),
+    ('绑定', '让主角与核心对手在物理或命运上深度绑定，无法简单消灭；换个人当对手不算。',
+     '写清绑定的机制，以及双方各自被限制的动作。'),
+    ('闭环', '让终局与初始预期形成有据可依的反转，全程伏笔支撑；临时改口不算。',
+     '写清初始预期、终局事实与中间需要埋设的线索。'),
+)
+# Volume-level turn methods: what makes a volume mid-point change direction instead of
+# stacking everything on the finale. Used when planning the current volume.
+VOLUME_TURNS = (
+    ('卷中转折', '在卷半程安排关键翻盘，改变后半卷的对抗走向，不把高潮全堆在卷尾。'),
+    ('代价递进', '卷内分段支付不可替代之物（名誉、靠山、同伴），换取核心真相。'),
+    ('对手揭露', '前期明面阻力实为棋子，真正的对手在中期浮出水面。'),
+    ('线索回收', '前期的闲笔或次要人物在卷尾成为决定胜负的关键手。'),
+    ('双线演进', '核心对手在幕后推进自己的目标，与主角线交错施压。'),
+)
 
 # Single authority for the author contract: field, kind, default, whether the guided opening
 # must preserve it, and whether an empty value is a valid skeleton entry. The delivery

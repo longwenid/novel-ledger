@@ -162,6 +162,25 @@ class OpeningTests(unittest.TestCase):
         self.assertEqual(len(board['options']), 3)
         self.assertIsNone(self.repo.load()['contract'])
 
+    def test_brainstorm_lenses_are_unique_methods_not_labels(self):
+        from novel_ledger.contracts import LENSES, VOLUME_TURNS
+
+        self.assertEqual(list(creation.LENSES), [label for label, _p, _s in LENSES])
+        self.assertEqual(len(set(creation.LENSES)), len(LENSES))
+        for index in range(len(LENSES)):
+            brief = creation.lens_brief(index)
+            self.assertIn(LENSES[index][0], brief)
+            self.assertIn(LENSES[index][1], brief)
+            self.assertIn(LENSES[index][2], brief)
+        self.assertEqual(creation.lens_brief(len(LENSES)), creation.lens_brief(0))   # round wraps
+        self.assertEqual(len(VOLUME_TURNS), 5)
+        task = self.app.advance()['task']
+        self.assertIn('hatch.md', json.dumps(task['guides']))
+        material = json.loads(Path(task['input_path']).read_text(encoding='utf-8'))
+        self.assertEqual(material['payload']['creative_lens'], LENSES[0][0])
+        self.assertIn(LENSES[0][0], material['payload']['lens_brief'])
+        self.assertIn(LENSES[0][1], material['payload']['lens_brief'])
+
     def test_single_read_delivers_the_exact_gate_and_brainstorm_lens(self):
         task = self.app.advance()['task']
         material = self.app.read(task['task_id'])

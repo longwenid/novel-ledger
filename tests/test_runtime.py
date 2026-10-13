@@ -51,7 +51,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(self.app.audit()['ok'])
         snapshot = self.repo.read_document(result['snapshot_hash'])
         self.assertEqual(len(snapshot['chapters']), 4)
-        output = delivery.export_book(self.repo)
+        output = delivery.export_book(self.repo, output=Path(self.temp.name) / 'book-plain.html')
         self.assertIn('第4章', Path(output['path']).read_text(encoding='utf-8'))
         self.assertTrue(self.app.complete(owner)['idempotent'])
 
@@ -472,6 +472,13 @@ class RuntimeTests(unittest.TestCase):
         self.app.pause('作者暂停', cancel=True)
         self.assertFalse((base / 'input.json').exists())
         self.assertFalse((base / 'result.template.json').exists())
+
+    def test_export_refuses_to_clobber_the_book_view(self):
+        with self.assertRaises(Error) as caught:
+            delivery.export_book(self.repo)
+        self.assertEqual(caught.exception.code, 'output')
+        allowed = delivery.export_book(self.repo, output=Path(self.temp.name) / 'plain.html')
+        self.assertEqual(Path(allowed['path']).name, 'plain.html')
 
     def test_export_and_audit_refuse_a_project_without_a_contract(self):
         unstarted = Path(self.temp.name) / 'unstarted'

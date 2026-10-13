@@ -48,7 +48,8 @@ def choose(book, headers):
             return {'action': 'await_choice', **creation.view(opening)}
         gate = creation.current(opening)
         return Job('opening_options', 0, 'opening', payload={'gate': gate, 'round': opening['round'],
-            'creative_lens': creation.LENSES[opening['round'] % len(creation.LENSES)]})
+            'creative_lens': creation.LENSES[opening['round'] % len(creation.LENSES)],
+            'lens_brief': creation.lens_brief(opening['round'])})
     if book['status'] != 'running':
         return {'action': book['status']}
     if book['proposal']:

@@ -11,7 +11,7 @@ from novel_ledger.contracts import Error, VERSION, require
 from novel_ledger.application import Application
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book, preparing_book
-from novel_ledger import delivery, host
+from novel_ledger import bookpage, delivery, host
 
 PUBLIC = {'init', 'status', 'advance', 'submit', 'preflight', 'first-read', 'claim', 'run', 'renew', 'approve',
           'pause', 'resume', 'revise', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
@@ -180,8 +180,11 @@ def dispatch(args):
             return app.audit()
         if command == 'complete':
             return app.complete(owner)
-        if command in ('export', 'html'):
+        if command == 'export':
             return delivery.export_book(repo, args.output, args.format)
+        if command == 'html':
+            require(args.format == 'html', 'format', 'html 命令只生成 HTML 全书视图；纯文本导出用 export --format md。')
+            return bookpage.write(repo, args.output)
         if command == 'host-step':
             return host.step(app, load(args.command_json), owner, args.timeout)
         if command == 'host-loop':

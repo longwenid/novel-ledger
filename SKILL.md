@@ -10,7 +10,7 @@ ROOT 为本技能目录，PROJECT 为独立小说目录。入口 `python3 ROOT/s
 
 ## 按任务取用
 
-- 懒人开书：读 [逐门开书](references/opening.md)。无需一句话、题材或大纲，init 后系统先给当前门的 2～3 个方案；用户逐门选择。最后一门结束自动进入 [丰富世界模型](references/world.md) 创建和独立核验。
+- 懒人开书：读 [逐门开书](references/opening.md)。无需一句话、题材或大纲，init 后系统先给当前门的 2～3 个方案；用户逐门选择。换组与方案同质化时读 [创意工具箱](references/hatch.md)。最后一门结束自动进入 [丰富世界模型](references/world.md) 创建和独立核验。
 - 已有完整设定或反馈：读 [创作与写审](references/craft.md)。完整约定用 init --contract；已有要求直接采用，反馈与作者原话保存，不重复开选择题。
 - 续写、无人值守或恢复：读 [运行](references/runtime.md)。advance 返回任务；委派真实 Worker，确认实际提交，再 advance --after 接续。沿用当前模型设置，不编造持续后台能力。
 - 填写任务或处理拒绝：读 [协议](references/protocol.md)。使用当前模板和冻结任务身份，拒绝自带修正出口；不查旧 pass 猜字段。
@@ -38,7 +38,7 @@ advance → 按 task_path 派 Worker → Worker 阅读本任务，必要时冻�
 
 委派只给角色、task_path、一句背景和提交状态要求；技能明确授权在该创作流程中使用子 agent。不要复述整个信封。宿主会话身份填 session；实际使用执行认领时填 execution_claim。短状态、进程启动或口头“完成”不替代数据库内真实提交。
 
-长范围核验由新审稿者逐块读完整章节，再派独立综合核验者阅读全部块报告、逐章证据和必要原文；不能复制块 pass 充当综合判断。到 ready_to_complete 后还须 complete 验收，再 export/html 交付绝对路径链接。
+长范围核验由新审稿者逐块读完整章节，再派独立综合核验者阅读全部块报告、逐章证据和必要原文；不能复制块 pass 充当综合判断。到 ready_to_complete 后还须 complete 验收，再交付绝对路径：`html` 给全书视图（看设定 + 读正文），`export` 给纯文本或简化 HTML。
 
 历史修订用 revise 指定修复起点，候选分支完整重写重审受影响后缀；原正式稿一直保留，范围复核通过后 promote。discard 恢复旧稿及原目标。改作者约定用 recontract，先独立核验，再重新规划与修订；纯更名目前也采用保守重审。
 

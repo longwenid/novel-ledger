@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+from . import contracts
 from .contracts import CONTRACT_ALIGNMENT, digest, require, text
 
 GATES = (
@@ -14,7 +15,14 @@ GATES = (
     ('ending', '工作终局与成立方向'),
     ('voice', '文风与阅读节奏'),
 )
-LENSES = ('限制驱动', '利益冲突', '认知差', '不可逆代价', '规则推演', '关系绑定', '终局回扣', '类型公理倒置')
+# Brainstorm lenses live in contracts.LENSES; this module only picks and carries them.
+LENSES = tuple(label for label, _point, _structure in contracts.LENSES)
+
+
+def lens_brief(index):
+    """The method handed to the option writer: a bare label is not a method."""
+    label, point, structure = contracts.LENSES[index % len(contracts.LENSES)]
+    return '本轮创意透镜：' + label + '。' + point + ' 落地要求：' + structure
 
 
 def begin(source=''):

@@ -66,13 +66,10 @@ def materialize(repo, task, entry):
                              'preflight': command + ['preflight', '--file', str(base / 'result.json')],
                              'read': command + ['read', '--task', task['id']]}}
     reference_dir = Path(entry).parent.parent / 'references'
-    if work['stage'] in ('opening_options', 'opening_contract'):
-        guides = [str(reference_dir / 'opening.md')]
-        if work['stage'] == 'opening_contract':
-            guides.append(str(reference_dir / 'world.md'))
-        envelope['guides'] = guides
-    elif work['stage'] in ('world_model', 'world_review'):
-        envelope['guides'] = [str(reference_dir / 'world.md')]
+    guides = {'opening_options': ('opening.md', 'hatch.md'), 'opening_contract': ('opening.md', 'world.md'),
+              'world_model': ('world.md',), 'world_review': ('world.md',), 'volume_plan': ('hatch.md',)}
+    if work['stage'] in guides:
+        envelope['guides'] = [str(reference_dir / name) for name in guides[work['stage']]]
     if locked:
         first_path = base / 'first-read.json'
         if not first_path.exists():
@@ -104,6 +101,10 @@ def export_book(repo, output=None, format='html'):
     require(book.get('contract') is not None, 'contract', '尚无生效约定，不能导出正文。',
             {'recover': '先完成开书：init --contract、opening --file 或逐门开书的约定核验。'})
     output = Path(output).expanduser().resolve() if output else repo.project / ('book.' + ('html' if format == 'html' else 'md'))
+    if output.name == 'book.html' and output.parent == repo.project:
+        # 全书视图 owns this path; an implicit export would silently replace it with a plain render.
+        require(False, 'output', 'book.html 是全书视图的输出位置；导出请用 --output 指定其他文件，或改用 html 命令。',
+                {'recover': '例如 --output book-export.html（或 --format md 得到 book.md）。'})
     require(not (output.parent == repo.project and output.name.startswith('novel.sqlite3')), 'output', '不能覆盖数据库及其事务文件。')
     rows = repo.headers(book['branch'])
     candidate = book['branch'] != repo.get('official_branch', 'main')

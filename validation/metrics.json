@@ -1,10 +1,10 @@
 {
   "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
   "novel_ledger": {
-    "modules": 12,
-    "runtime_lines_including_cli": 2460,
+    "modules": 13,
+    "runtime_lines_including_cli": 3091,
     "cycles_including_deferred_imports": [],
-    "dependency_edges": 34
+    "dependency_edges": 38
   },
   "context": [
     {

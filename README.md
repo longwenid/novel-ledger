@@ -5,7 +5,7 @@
 仅依赖 Python 3.9+ 标准库，无第三方依赖、无需联网（调用模型的宿主由你自己提供）。
 
 - **定位**：写作流程的**治理层**，不是提示词集合，也不是文本生成器。它不产生一个字，但决定谁能写、写完谁审、事实怎么入账、改稿怎么不毁原稿。
-- **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 12 个纯模块 + 一个 SQLite 项目库。
+- **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 13 个模块（多数为纯规则，`sqlite_store`/`delivery`/`host`/`bookpage` 负责 IO）+ 一个 SQLite 项目库。
 - **当前版本**：`1.0.0`，数据库 schema `novel-ledger/2`（旧版本库显式拒绝，不做隐式升级）。
 
 ---
@@ -43,7 +43,7 @@ flowchart TD
     HOST --> C
 ```
 
-上图为主要源码依赖；application 逐域 import 与各域到 contracts 的边在图上省略，完整边集由依赖守护测试与 `validation/measure.py` 计数给出（当前 34 条、无环）。渲染图见 [docs/architecture.svg](docs/architecture.svg)；源码真源是 [references/architecture.md](references/architecture.md) 中的 mermaid 块，本图与 `docs/architecture.mmd` 保持逐字一致，由测试守护。
+上图为主要源码依赖；application 逐域 import 与各域到 contracts 的边在图上省略，完整边集由依赖守护测试与 `validation/measure.py` 计数给出（当前 38 条、无环）。渲染图见 [docs/architecture.svg](docs/architecture.svg)；源码真源是 [references/architecture.md](references/architecture.md) 中的 mermaid 块，本图与 `docs/architecture.mmd` 保持逐字一致，由测试守护。
 
 ### 分层与职责
 
@@ -59,6 +59,7 @@ flowchart TD
 | 质量（纯） | `quality` | 首读与审稿回执的完整性、一致性、证据核验，模板生成 |
 | 查询 | `context` | 冻结来源登记、必读选择、按需补读入口 |
 | 视图 | `delivery` | 任务目录物化、模板与表单、正文与世界导出 |
+| 全书视图 | `bookpage` | `html` 命令的单文件页面：看设定与读正文两种模式 |
 | 持久化 | `sqlite_store` | 事务边界、唯一 pending、幂等回执、不可变文档、分支 |
 | 宿主 | `host` | 外部进程执行、超时终止、核实真实提交 |
 
@@ -121,9 +122,14 @@ CONTRACT_FIELDS = (
 my-novel/
 ├── novel.sqlite3            唯一真源
 ├── work/<task_id>/          派工材料与回执（可重建）
-├── book.html / book.md      导出正文
+├── book.html                全书视图：看设定（约定/世界/设计/计划/档案/账本/章审）+ 读正文
+├── book.md                  纯文本导出（export）
 └── world.html / world.json  世界模型交付
 ```
+
+`book.html` 是**派生只读视图**：单文件、无外部请求、无服务端，数据全部来自数据库，可随时用 `html` 命令重新生成；删除它不影响项目。阅读模式支持字号、版心、纸色与字体切换，设置存在浏览器本地，`Ctrl+P` 可打印或导出 PDF。
+
+`export` 输出纯文本或简化 HTML，**默认不会写 `book.html`**（那个位置归全书视图）；需要另一个文件时显式给 `--output`：`export --format md`、`export --output book-plain.html`。
 
 SQLite 中的七张表各司其职：
 
@@ -160,7 +166,7 @@ novel-ledger/
 ├── SKILL.md              技能入口（DSH 等宿主的加载说明与执行边界）
 ├── scripts/
 │   ├── novel.py          CLI：参数、访问分级、主控/Worker 边界
-│   └── novel_ledger/     12 个纯模块（contracts 为约定字段唯一权威）
+│   └── novel_ledger/     13 个模块（contracts 为约定字段唯一权威；bookpage 生成全书视图）
 ├── references/           分任务阅读的规程
 │   ├── opening.md        逐门开书
 │   ├── world.md          丰富世界模型
@@ -171,7 +177,7 @@ novel-ledger/
 │   └── validation.md     验证方法与文学评估口径
 ├── assets/               可运行的完整约定样例
 ├── docs/                 架构图产物（真源在 references/architecture.md）
-├── tests/                71 项行为测试
+├── tests/                80 项行为测试
 └── validation/           工程度量脚本与验收记录
 ```
 
@@ -198,11 +204,11 @@ python scripts/novel.py --project "$P" run --through 3 --source '作者授权先
 ## 六、开发与验证
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v   # 71 项
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v   # 80 项
 python3 validation/measure.py --out validation/metrics.json          # 依赖图与必读材料度量
 ```
 
-测试只用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。当前工程度量：12 个核心模块、2,460 行（含 CLI）、34 条内部依赖边、0 个强连通组。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
+测试只用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。当前工程度量：13 个核心模块、3,091 行（含 CLI）、38 条内部依赖边、0 个强连通组。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
 
 Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与 CLI 均可用；若运行外部校验脚本报编码错误，加 `PYTHONUTF8=1`。
 
