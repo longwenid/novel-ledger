@@ -1,8 +1,9 @@
 """Zero-input choices and rich world flow, using synthetic engineering receipts.
 
-These exercise opening/2 — the gate set a new book opens with: 7 gates, the structural length gate
-answered by the engine, and independent verification. The gate set every earlier project was opened
-with is covered by `test_opening_legacy.py`: an in-flight opening keeps its own protocol.
+These exercise opening/2 — the gate set a new book opens with: 10 gates, one question each, the
+structural length gate answered by the engine, and independent verification. The gate set every earlier
+project was opened with is covered by `test_opening_legacy.py`: an in-flight opening keeps its own
+protocol.
 """
 import copy
 import json
@@ -49,8 +50,8 @@ def receipt(app, data):
     return {'schema': RESULT, 'task_id': task['id'], 'input_hash': task['input_hash'], 'session': 'opening-test-' + uuid.uuid4().hex, 'data': data}
 
 
-def options(app):
-    gate = app.repo.pending()['input']['payload']['gate']['id']
+def rows_for(gate):
+    """Three worker-shaped options for one gate, built from the fixture values."""
     rows = []
     for i, ident in enumerate(('A', 'B', 'C')):
         value = copy.deepcopy(VALUES[gate])
@@ -67,7 +68,19 @@ def options(app):
                      'driver': '方案' + ident + '以不同的方式推进：' + '核对封条' + ident + '。',
                      'tradeoff': '相比另外两案，选它要放弃' + ident + '那条更快的路。',
                      'fit_reason': '承接已选题材，因此把推进压在一件具体物件上。', 'value': value})
-    return {'gate': gate, 'options': rows}
+    return rows
+
+
+def options(app):
+    gate = app.repo.pending()['input']['payload']['gate']['id']
+    return {'gate': gate, 'options': rows_for(gate)}
+
+
+def shown(state):
+    """The state with a board on display: the engine already gave one, or a worker offers one."""
+    if state['board'] is not None:
+        return state
+    return creation.offer(state, {'gate': creation.current(state)['id'], 'options': rows_for(creation.current(state)['id'])})
 
 
 def model(app):
@@ -801,6 +814,57 @@ class OpeningDecisionTests(unittest.TestCase):
         self.assertCode('opening_option', creation.validate_value, 'world', value, 2, {})
         value['allow_special_mechanism'] = True
         creation.validate_value('world', value, 2, {})
+
+    def test_the_board_invariant_holds_across_the_walk_and_every_back_jump(self):
+        """A structural gate must never wait for a worker, and no other gate may pre-empt one."""
+        state = creation.begin('工程夹具：走完全程。')
+        for step in range(10):
+            state = shown(state)
+            state = creation.pick(state, state['board']['options'][0]['id'], state['board']['hash'], 'A')
+            structural = state['phase'] == 'choosing' and creation.current(state)['id'] in creation.SYSTEM_GATES[2]
+            self.assertEqual(state['board'] is not None, structural, step)
+            if structural:
+                self.assertTrue(state['board']['system'])
+        self.assertEqual(state['phase'], 'world')
+        self.assertEqual(len(state['selections']), 10)
+        for gate in creation.gate_ids(2):
+            jumped = creation.back(copy.deepcopy(state), gate, '工程夹具：返回重选。')
+            structural = creation.current(jumped)['id'] in creation.SYSTEM_GATES[2]
+            self.assertEqual(jumped['board'] is not None, structural, gate)
+
+    def test_regroup_cycles_every_ladder_window(self):
+        """换一组 on the structural gate slides the ladder instead of stalling on one window."""
+        state = shown(creation.begin('工程夹具：换档。'))
+        state = creation.pick(state, state['board']['options'][0]['id'], state['board']['hash'], 'A')
+        state = shown(state)
+        state = creation.pick(state, state['board']['options'][0]['id'], state['board']['hash'], 'A')
+        windows = []
+        for _ in range(9):
+            board = state['board']
+            windows.append(tuple(option['value']['tier'] for option in board['options']))
+            state = creation.regroup(state, board['hash'], '换一组。')
+            self.assertIsNotNone(state['board'])
+            self.assertNotEqual(state['board']['hash'], board['hash'])
+        self.assertEqual(sorted(set(windows)), [('t1', 't2', 't3'), ('t2', 't3', 't4'), ('t3', 't4', 't5')])
+
+    def test_intake_of_the_structural_gate_needs_only_a_tier(self):
+        """The author names a size class; the proved arithmetic stays the engine's business."""
+        values = {gate: copy.deepcopy(VALUES[gate]) for gate in creation.gate_ids(2) if gate != 'scale'}
+        values['scale'] = {'tier': 't3'}
+        state = creation.intake(creation.begin('作者一次给全。'), values, '作者一次给全。')
+        self.assertEqual(state['phase'], 'world')
+        chosen = creation.selected(state)['scale']
+        tier = next(row for row in SCALE_TIERS if row['id'] == 't3')
+        for key in ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim', 'volume_count', 'chapters', 'chapter_window'):
+            self.assertEqual(chosen[key], tier[key], key)
+        # an unknown class is refused with the real ladder, and a hand-edited number is not silently fixed
+        with self.assertRaises(Exception) as caught:
+            creation.intake(creation.begin('x'), {'scale': {'tier': 't9'}}, 'x')
+        self.assertEqual(caught.exception.code, 'opening_option')
+        self.assertEqual(caught.exception.details['valid_tiers'], [row['id'] for row in SCALE_TIERS])
+        with self.assertRaises(Exception) as caught:
+            creation.intake(creation.begin('x'), {'scale': {'tier': 't3', 'chapters': 7}}, 'x')
+        self.assertEqual(caught.exception.code, 'opening_option')
 
     def test_intake_uses_gate_ids_and_refuses_field_names(self):
         state = creation.begin()

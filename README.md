@@ -201,7 +201,7 @@ novel-ledger/
 ├── assets/               可运行的完整约定样例
 ├── tools/                安装脚本（install-dsh.ps1：链接到 DSH 技能根）
 ├── docs/                 架构图产物（真源在 references/architecture.md）
-├── tests/                200 项行为测试
+├── tests/                204 项行为测试
 └── validation/           工程度量脚本与验收记录
 ```
 
@@ -260,7 +260,7 @@ pwsh tools/install-dsh.ps1 -Remove
 ## 六、开发与验证
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v   # 200 项
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v   # 204 项
 python3 validation/measure.py --out validation/metrics.json          # 依赖图与必读材料度量
 ```
 

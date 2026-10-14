@@ -1,10 +1,10 @@
 """Zero-input opening choices. Pure state; only the author selects a board option.
 
-Two gate sets live side by side. Version 2 is what a new book opens with: fewer, single-purpose gates,
-the setting decided before the people who live in it, and the length gate answered by the engine from a
-ladder of provably writable tiers instead of asking a writer to invent numbers. Version 1 is the gate set
-every already-opened project was opened with; it stays readable so an in-flight opening keeps its own
-protocol instead of being silently re-planned.
+Two gate sets live side by side. Version 2 is what a new book opens with: one question per gate, the view
+settled before any gate that shows sample scenes, the setting decided before the people who live in it,
+and the length gate answered by the engine from a ladder of provably writable tiers instead of asking a
+writer to invent numbers. Version 1 is the gate set every already-opened project was opened with; it
+stays readable so an in-flight opening keeps its own protocol instead of being silently re-planned.
 """
 from __future__ import annotations
 
@@ -36,7 +36,8 @@ GATES_V2 = (
     ('title', '书名'),
 )
 GATE_SETS = {1: GATES_V1, 2: GATES_V2}
-GATES = GATES_V2
+# No bare `GATES` alias on purpose: which gate set applies is a property of the project's creation
+# document, so every lookup goes through gates(state) instead of a module-level constant.
 # Gates the engine answers itself from a table it has already proved satisfiable. A worker must not
 # invent them, and no dispatch is spent on them.
 SYSTEM_GATES = {1: (), 2: ('scale',)}
@@ -82,6 +83,24 @@ def begin(source='', version=OPENING_VERSION):
             'round': 0, 'selections': [], 'board': None, 'history': [], 'rejections': [], 'source': source}
 
 
+def _normalize_intake(gate, value, version):
+    """A structural gate is answered by naming a tier: the proved numbers are the engine's business.
+
+    `intake` exists so an author with existing requirements never walks the gates. For every other gate
+    the value is the decision itself; for the length gate the decision is the size class, so accepting
+    only `{"tier": "t3"}` keeps the author from having to copy arithmetic out of the engine.
+    """
+    if gate not in SYSTEM_GATES.get(version, ()) or not isinstance(value, dict) or set(value) != {'tier'}:
+        return value
+    tier = next((row for row in SCALE_TIERS if row['id'] == value.get('tier')), None)
+    require(tier is not None, 'opening_option', '体量要求须给出档位表里的档位 ID。',
+            {'valid_tiers': [row['id'] for row in SCALE_TIERS], 'recover': '用 tier:t1～t5 的档位 ID 重写要求文件。'})
+    return {'tier': tier['id'], 'word_range': list(tier['word_range']), 'chapter_min': tier['chapter_min'],
+            'chapter_max': tier['chapter_max'], 'chapter_aim': tier['chapter_aim'],
+            'volume_count': tier['volume_count'], 'chapters': tier['chapters'],
+            'chapter_window': list(tier['chapter_window'])}
+
+
 def intake(state, values, source):
     ids = gate_ids(opening_version(state))
     require(state['phase'] == 'choosing' and state['board'] is None and isinstance(values, dict) and values and text(source),
@@ -90,6 +109,7 @@ def intake(state, values, source):
     require(set(values) <= set(ids), 'intake', '要求使用已有门 ID；不把未定项伪造成作者决定。',
             {'valid_gates': list(ids), 'recover': '用本项目的门 ID 重写要求文件；已生效约定改方向用 recontract。'})
     version = opening_version(state)
+    values = {gate: _normalize_intake(gate, value, version) for gate, value in values.items()}
     result = copy.deepcopy(state)
     all_values = {**known, **values}
     for gate in ids:
@@ -150,7 +170,7 @@ VALUE_RULES = {
     2: {
         'genre': 'genre 题材、reader_promise 读者承诺、tone 基调（给读者的情绪与温度）',
         'pov': 'pov 叙述视角与人称：谁在讲、能看多远、换视角时怎样交代；scene 必须用该方案的人称写出来，让作者读到人称的实际效果',
-        'scale': 'tier 档位 ID、word_range、chapter_min/chapter_max/chapter_aim、volume_count、chapters、chapter_window（本门由系统按档位表即时给定，照抄不要改数）',
+        'scale': 'tier 档位 ID（intake 时只给 tier 即可，引擎补齐已证明的数字）、word_range、chapter_min/chapter_max/chapter_aim、volume_count、chapters、chapter_window（本门由系统按档位表即时给定，照抄不要改数）',
         'world': 'world_premise 世界前提、mechanism={mode:none或bounded, principle, cost, limits:数组}、red_lines 禁区数组、allow_special_mechanism 布尔（必须等于 mode=="bounded"）',
         'protagonist': 'id、name、identity 身份、desire 欲望、limit 底线',
         'relationships': 'relationships 具体关系数组，至少一条：独行主角也要写清最关键的那段张力，不能交空数组',

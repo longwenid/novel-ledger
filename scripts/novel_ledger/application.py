@@ -8,12 +8,12 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from .contracts import CHECK_SETS, POLICY_FIELDS, RESULT, VERSION, Error, checks_for, digest, dump, han_count, require, text
+from .contracts import CHECK_SETS, POLICY_FIELDS, RESULT, VERSION, Error, Repository, checks_for, digest, dump, han_count, require, text
 from . import context, creation, delivery, facts, narrative, planning, quality, workflow, world, craft, editorial, bookpage
 
 
 class Application:
-    def __init__(self, repo, entry=None):
+    def __init__(self, repo: Repository, entry=None):
         self.repo = repo
         self.entry = entry or Path(__file__).resolve().parents[1] / 'novel.py'
 

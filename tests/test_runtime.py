@@ -793,6 +793,18 @@ class DomainTests(unittest.TestCase):
         self.assertEqual(block((ROOT / 'docs' / 'architecture.mmd').read_text(encoding='utf-8')), source)
         self.assertIn(source, (ROOT / 'README.md').read_text(encoding='utf-8'))
 
+    def test_the_declared_repository_protocol_covers_the_adapter(self):
+        """A hand-written interface nobody checks drifts: this keeps the declaration honest."""
+        from novel_ledger.contracts import Repository
+        from novel_ledger.sqlite_store import SQLiteRepository
+
+        declared = {name for name in vars(Repository) if not name.startswith('_')}
+        actual = {name for name, value in vars(SQLiteRepository).items()
+                  if not name.startswith('_') and not isinstance(value, (classmethod, staticmethod)) and callable(value)}
+        self.assertEqual(actual - declared, set())          # every adapter method is declared
+        self.assertEqual(declared - actual, set())          # nothing is declared that does not exist
+        self.assertIn('initialize', SQLiteRepository.__dict__)   # the constructor side of the contract
+
     def test_all_imports_including_deferred_are_acyclic_and_domains_have_no_io(self):
         graph = {}
         pure = {'contracts', 'facts', 'planning', 'quality', 'workflow', 'creation', 'world', 'narrative', 'scopes', 'craft', 'spatial', 'editorial'}

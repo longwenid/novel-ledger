@@ -72,7 +72,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 
 ## 操作与恢复
 
-已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"ending":{"ending":"作者指定结局。","theme":"母题。"},"title":{"title":"书名"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。门 ID 必须属于当前协议（`novel-ledger.creation/2` 用上表的十门，旧项目用原八门）。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
+已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"ending":{"ending":"作者指定结局。","theme":"母题。"},"title":{"title":"书名"},"scale":{"tier":"t3"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t1`～`t5`），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前协议（`novel-ledger.creation/2` 用上表的十门，旧项目用原八门）。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
 
 ```bash
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" init
