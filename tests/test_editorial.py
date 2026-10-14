@@ -435,11 +435,12 @@ class EditorialTests(unittest.TestCase):
 
     def test_partial_intake_skips_only_already_decided_gates(self):
         state = creation.begin()
-        value = {'ending': '退件来源公开，承担后果。'}
-        state = creation.intake(state, {'ending': value}, '作者已给结局。')
+        value = {'ending': '退件来源公开，承担后果。', 'theme': '责任怎样在人之间传递。', 'title': '夜班退件'}
+        state = creation.intake(state, {'ending': value}, '作者已给结局、母题和书名。')
         self.assertEqual(creation.current(state)['id'], 'genre')
         self.assertEqual(creation.selected(state)['ending'], value)
-        self.assertCode('intake', creation.intake, state, {'ending': {'ending': '改结局。'}}, '冲突')
+        self.assertCode('intake', creation.intake, state,
+                        {'ending': {'ending': '改结局。', 'theme': '改母题。', 'title': '改书名。'}}, '冲突')
         reopened = creation.back(state, 'ending', '重开结局。')
         self.assertNotIn('ending', creation.selected(reopened))
 

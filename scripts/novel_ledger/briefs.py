@@ -6,23 +6,22 @@ pays for the current gate's rules and lens, not for the entire toolbox on every 
 """
 from __future__ import annotations
 
-from .creation import GATES, VALUE_RULES
-from .contracts import OPTION_CONTRACT
+from .creation import gate_note, gate_title, value_rules
+from .contracts import OPENING_VERSION, OPTION_CONTRACT
 BRIEFS = {
     'opening_options': '开书方案简报',
     'world_model': '世界与约定简报',
 }
 
 
-def gate_title(gate_id):
-    return next((title for ident, title in GATES if ident == gate_id), gate_id)
-
-
-def opening_options(gate, lens_brief, previous=()):
+def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
     """The brief for one gate: what this gate decides, how to vary it, and what to hand back."""
     lines = ['# ' + BRIEFS['opening_options'], '',
-             '## 本门：%s（%s）' % (gate_title(gate.get('id')), gate.get('id')), '',
-             'value 字段：' + VALUE_RULES.get(gate.get('id'), '按已选方向给出结构化方案。'), '']
+             '## 本门：%s（%s）' % (gate_title(gate.get('id'), version), gate.get('id')), '',
+             'value 字段：' + value_rules(version, gate.get('id')), '']
+    note = gate_note(version, gate.get('id'))
+    if note:
+        lines.extend(['## 本门的交付要求', note, ''])
     if previous:
         lines.append('## 已选方向（不要推翻，只在此之上给方案）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
@@ -65,9 +64,9 @@ def stage(name, payload=None):
         'volume_plan': '围绕本卷职责安排转折、代价、余波与关系变化；threads 可为空以沿用既有线路，新节点 ID 不覆盖。远期粗排，近期细化。节点必填字段同 book_plan；完整设计保留可选入口，frontier 为本次窗口视图。',
         'volume_outline': '完整读 world_model、volume_design 与 outline_bridge，承接已通过的卷内方案和前一批最后一章，只交本批次逐章情节推动说明，不重造卷内节点或世界规则。',
         'outline_review': '独立完整读本批次 proposal、已批准 volume_design、world_model 与 outline_bridge，核对每章推进和跨批次接缝。证据 chapter=0 来自本批次候选；按当前设计核验清单举证，提出具体修复，不替执笔签 pass。',
-        'plan': 'plans 按章号恰好覆盖窗口。每章 goal/obstacle/choice/cost/change/ending/node_ids/participants；跟踪项目还交 node_actions=[{node,after:seeded|advanced|resolved}]、preconditions=[{kind,key,expected}]、disclosures=[{topic,after}] 和 pacing 五项。先依据真实前态，再模拟节点行动排后章；已兑现节点不能重复用。reader_refs/hook_refs/history_refs 可声明需要承接的旧资料；动到旧人物或物品前查相关承诺，资料不足用 recall 补读。',
+        'plan': 'plans 按章号恰好覆盖窗口。每章 goal/obstacle/choice/cost/change/ending/node_ids/participants；跟踪项目还交 node_actions=[{node,after:seeded|advanced|resolved}]、preconditions=[{kind,key,expected}]、disclosures=[{topic,after}] 和 pacing 五项。先依据真实前态，再模拟节点行动排后章；已兑现节点不能重复用。reader_refs/hook_refs/history_refs 可声明需要承接的旧资料；动到旧人物或物品前查相关承诺，资料不足用 recall 补读。按约定视角安排场景可叙述的范围，不安排越出该视角的叙述。',
         'profiles': 'profiles 恰好覆盖 payload.entities；每人 entity/desire/fear/limit/voice/knowledge_boundary。底层设定保持稳定，当前动机/关系以 state.character_current 的有据变化为准。人物声线来自关注点、底线和交涉策略。',
-        'write': '交 title/完整 prose/summary/具体 self_check，不交事件或 pass。完整读必读材料，以动作、对白、选择、后果写场景，删除重复解释。遵守 word_budget 的本章范围；静章承担余波、恢复、关系或暗线作用。作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。',
+        'write': '交 title/完整 prose/summary/具体 self_check，不交事件或 pass。完整读必读材料，以动作、对白、选择、后果写场景，删除重复解释。遵守 word_budget 的本章范围；静章承担余波、恢复、关系或暗线作用。作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。约定的叙述视角与人称是硬约束：不越出约定的视角范围，也不无标记地切换人称；母题靠事件与选择体现，不写成口号；基调不靠形容词报幕。',
         'repair': '读完整基稿、问题、义务和前态，交完整合成稿；local 保留成立部分，chapter 重排因果场景。不重置修复额度，旧 pass 不沿用。交付字段与 write 相同。',
         'redesign': '重新设计当前章的因果与场景，再交完整正文；不推翻已成立事实，不重复填充解释。交付字段与 write 相同，修复额度共享。',
         'chapter_review': '先只读本章正文，记录 desire/obstacle/change/read_on_reason 并冻结首读；解锁后同会话独立核验。facts 从正文重建 events/summary/elapsed_days，reader 判断阅读体验，两类都逐项举证。跟踪项目 facts 必须逐项提供 story_node 事件，读者变化交 reader_knowledge，人物动机变化交 character_current；reader.pacing 记录实际节奏及单个 evidence。hook 可按正文证据声明 subjects 人物/物品 ID 与 topics 话题 ID，供远期相关性加载；未标注的旧承诺需补读，不能猜关联。',
@@ -107,9 +106,9 @@ def stage(name, payload=None):
     elif name in ('write', 'repair', 'redesign'):
         time_rule = ' 默认直接从人物行动、对白或场景切入，不在正文前加独立日期或“第一日、第二日”式报日标签，也不把每章首句固定成时间播报。需要交代时间时自然融入场景转折；state.clock 是内部累计天数，不是章号或必须写出的日期。同日续接无需为验收补造过夜；作者明确要求日记体、编年体或日期标记时按约定执行。'
     elif name == 'chapter_review':
-        time_rule = ' facts.time 按正文相对前态核验实际时间，允许 elapsed_days=0 且没有 clock 事件；不能要求每章过一天或用章首日期凑证据，clock 引文可在正文任意位置。reader.language/repetition 检查无叙事作用的章首报日与固定时间播报，有问题按原清单给 fix；情节必要的时间提示及作者明确约定的日期体例按作用判断。'
+        time_rule = ' facts.time 按正文相对前态核验实际时间，允许 elapsed_days=0 且没有 clock 事件；不能要求每章过一天或用章首日期凑证据，clock 引文可在正文任意位置。reader.language/repetition 检查无叙事作用的章首报日与固定时间播报，有问题按原清单给 fix；情节必要的时间提示及作者明确约定的日期体例按作用判断。reader.pov_consistency 按约定的叙述视角与人称核验：切换视角本身不判错，缺少交代或标记的跳跃、越出约定视角范围给 fix。'
     elif name in ('scope_review', 'scope_synthesis'):
-        time_rule = ' 在 pacing 检查跨章开场是否反复报日或沿用固定时间播报；根据叙事作用和作者体例判断，无作用的重复给修订意见，不因时间提示本身判错。'
+        time_rule = ' 在 pacing 检查跨章开场是否反复报日或沿用固定时间播报；根据叙事作用和作者体例判断，无作用的重复给修订意见，不因时间提示本身判错。reader.pov_consistency 一并核验约定的视角与人称在跨章之间是否稳定，以及每次视角切换是否作了交代。'
     extra = (' pacing={role:setup|pressure|turn|climax|aftermath|recovery|relationship|discovery,pressure_in,pressure_out,emotional_aftereffect,recovery_purpose}，用具体文字，不按固定轮替。'
              if name in ('plan', 'chapter_review') else '')
     handoff = (' handoff={causal_bridge,thread_changes,character_changes,disclosures,rhythm,open_questions,evidence}；文字每项≤800字，证据1～8条，每条引文≤240字，原文始终完整保留。'

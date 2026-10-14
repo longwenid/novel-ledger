@@ -8,13 +8,13 @@
 
 新建/改约的 editorial_features 默认 true，需要 narrative_tracking；scope_append_limit 默认 3。anchors/links 可选。任务含 capabilities.editorial=editorial/1 时检查清单为版本 3，人物、场景、改案、关闭及补丁字段见 [编辑能力](editorial.md)。旧生效约定缺字段保持旧行为；旧 pending 不因安装更新改形状。
 
-必填 title/reader_promise/ending/genre/reader_promise 等全部文本字段、word_range=[总汉字下限,上限]、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。planning_window/review_interval/review_chunk 可缺省（3/10/3）。narrative_tracking 默认 true、review_fanout 默认 3，推进与分层规则见 [叙事推进](narrative.md)。verification 可缺省为 full：full 走固定间隔块审+分块范围审，fast 跳过固定间隔块审；跟踪项目两档均保持有界分块，旧兼容模式的 fast 范围审一次成块——两档的章审、首读与事实核验完全一致，档位只收窄调度密度，不放松任何不变量。审稿回执顶层带 checks_version：回执按提交时的检查清单版本存档，验收重放按回执自己的版本核对，因此引擎后续新增检查项不会追溯推翻已通过的核验。
+必填 title/reader_promise/ending/genre/reader_promise 等全部文本字段、word_range=[总汉字下限,上限]、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism。`tone`/`theme`/`pov` 由 opening/2 的逐门开书选定，模板里会给出并要求逐字保留；它们对自备约定（`init --contract`）是可缺省字段，缺省时项目按不带视角清单的版本核验，不会被追溯要求。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。planning_window/review_interval/review_chunk 可缺省（3/10/3）。narrative_tracking 默认 true、review_fanout 默认 3，推进与分层规则见 [叙事推进](narrative.md)。verification 可缺省为 full：full 走固定间隔块审+分块范围审，fast 跳过固定间隔块审；跟踪项目两档均保持有界分块，旧兼容模式的 fast 范围审一次成块——两档的章审、首读与事实核验完全一致，档位只收窄调度密度，不放松任何不变量。审稿回执顶层带 checks_version：回执按提交时的检查清单版本存档，验收重放按回执自己的版本核对，因此引擎后续新增检查项不会追溯推翻已通过的核验。含 `pov` 且启用编辑能力的约定按清单版本 4 核验（新增 reader.pov_consistency）；未声明视角的项目保持 2/3。
 
 跟踪项目按每章 word_budget 动态约束剩余总预算，允许长短章共同收口；旧兼容模式的静态规则如下。篇幅必须**写得完**：固定章数 last 后，每章平均可用区间是 `[ceil(word_range[0]/last), floor(word_range[1]/last)]`；`chapter_aim` 与 `chapter_max` 都必须落在该区间内，否则报 `scale`（区间为空报"章数与总篇幅不能同时成立"）。错误详情里带 `per_chapter_range` 与可执行的修正建议（降低章幅或上调卷末章号），例如 47 章 × 上限 2600 配 11 万上限会被拒，因为每章平均最多只能 2340 字。
 
 entities=[{id,name,kind,aliases?}]、initial_facts=[{entity,key,value}]、initial_resources=[{holder,asset,unit,quantity}]、places=[{id,name,parent?}]、placements={entity:place} 只放已成立事实。quantity 为十进制字符串。world_rules/red_lines/arcs 是字符串数组，voice 保存文风。字面规则不属于约定：它是项目级 book.lexical_policy 的版本记录，用 `lexical --file 规则.json --source 原话` 修改，约定里出现 lexical_policy 会被结构校验拒绝。候选人物放计划 new_entities，经正文事实核验后成立。
 
-protagonist_setup={id,name,identity,desire,limit} 保存主角身份、欲望和底线；relationships 为关系约定数组，style_traits 为文风特征数组。完整约定可参考 [示例约定](../assets/contract.example.json)，按作者真实要求替换，不沿用示例题材和篇幅。
+protagonist_setup={id,name,identity,desire,limit} 保存主角身份、欲望和底线；relationships 为关系约定数组，style_traits 为文风特征数组。tone 保存给读者的基调，theme 保存母题，pov 保存叙述视角与人称（谁在讲、能看多远，换视角时如何交代）。完整约定可参考 [示例约定](../assets/contract.example.json)，按作者真实要求替换，不沿用示例题材和篇幅。
 
 task.json 给身份、路径和 commands。first_read 时不生成正式 input/template；解锁后 records 提供冻结哈希，required 给必读名称，prose 和 obligations 给正文及义务。
 

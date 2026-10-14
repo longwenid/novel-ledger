@@ -17,18 +17,25 @@ from .contracts import CONTRACT_FIELDS, LENSES, VOLUME_TURNS, han_count
 from .delivery import atomic_write, publication
 from .planning import volume_for
 from .world import LABELS as WORLD_LABELS, SECTIONS as WORLD_SECTIONS
+from . import creation
 from .briefs import gate_title
 
 FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '终局', 'genre': '题材',
                 'story_engine': '推进引擎', 'opposition': '主要对抗', 'world_premise': '世界前提',
                 'voice': '文风', 'allow_special_mechanism': '允许特殊机制', 'red_lines': '禁区',
+                'tone': '基调', 'theme': '母题', 'pov': '叙述视角',
                 'style_traits': '文风要点', 'relationships': '核心关系', 'world_rules': '世界规则',
                 'protagonist_setup': '主角设定', 'entities': '初始人物', 'initial_resources': '初始资源',
                 'volumes': '分卷', 'word_range': '总字数区间', 'chapter_min': '章幅下限', 'chapter_max': '章幅上限',
-                'chapter_aim': '章幅目标', 'planning_window': '规划窗口', 'review_interval': '复审间隔',
+                'chapter_aim': '章幅目标', 'volume_count': '卷数', 'chapters': '总章数',
+                'chapter_window': '可写完章数区间', 'tier': '体量档位',
+                'planning_window': '规划窗口', 'review_interval': '复审间隔',
                 'review_chunk': '复审块大小', 'initial_facts': '初始事实', 'places': '初始地点',
                 'placements': '初始站位', 'arcs': '人物弧', 'editorial_features': '编辑能力',
                 'scope_append_limit': '单轮补写章数上限', 'volume_outline': '逐章卷纲要求', 'anchors': '稳定设定', 'links': '空间连接'}
+# Option values that are engine bookkeeping rather than an author-facing decision: the structural gate's
+# tier id and its arithmetic window are already stated in the option's own sentence.
+OPENING_VALUE_HIDDEN = ('tier', 'chapter_window')
 SUB_LABELS = {'id': '标识', 'name': '名称', 'kind': '类型', 'aliases': '别名', 'identity': '身份',
               'desire': '欲望', 'limit': '底线', 'purpose': '卷职责', 'end': '卷末章', 'holder': '持有者',
               'asset': '资产', 'unit': '单位', 'quantity': '数量', 'entity': '实体', 'key': '键', 'value': '值'}
@@ -420,6 +427,10 @@ def _overview(book, contract, rows, state, open_hooks, report, written):
 def _contract(contract):
     pieces = ['<h2 id="contract">创作约定</h2><div class="sub">作者认可的全书边界；系统不为过关而改约</div><div class="card"><table class="t">']
     for row in CONTRACT_FIELDS:
+        # A contract written before a field existed simply does not carry it; an empty row would read
+        # as a decision the author left blank.
+        if row['key'] not in contract:
+            continue
         pieces.append('<tr><th>' + _esc(FIELD_LABELS.get(row['key'], row['key'])) + '</th><td>'
                       + _display(contract.get(row['key'])) + '</td></tr>')
     pieces.append('</table></div>')
@@ -431,13 +442,17 @@ def _world(book):
     opening = book.get('creation')
     if opening and opening.get('selections'):
         pieces.append('<h3>逐门选择</h3>')
+        version = creation.opening_version(opening)
         for row in opening['selections']:
             option = row['option']
-            pieces.append('<div class="card"><b>' + _esc(gate_title(row['gate'])) + ' · ' + _esc(option.get('title', '')) + '</b>'
-                          + '<p>' + _esc(option.get('premise', '')) + '</p><p class="note">推进：'
-                          + _esc(option.get('driver', '')) + '　代价：' + _esc(option.get('tradeoff', '')) + '</p>'
+            notes = [label + _esc(option[key]) for label, key in (('推进：', 'driver'), ('代价：', 'tradeoff'))
+                     if option.get(key)]
+            pieces.append('<div class="card"><b>' + _esc(gate_title(row['gate'], version)) + ' · ' + _esc(option.get('title', '')) + '</b>'
+                          + (('<p>' + _esc(option['premise']) + '</p>') if option.get('premise') else '')
+                          + (('<p class="note">' + '　'.join(notes) + '</p>') if notes else '')
                           + '<table class="t">' + ''.join('<tr><th>' + _esc(FIELD_LABELS.get(k, SUB_LABELS.get(k, k))) + '</th><td>' + _display(v) + '</td></tr>'
-                                                          for k, v in option.get('value', {}).items()) + '</table>'
+                                                          for k, v in option.get('value', {}).items() if k not in OPENING_VALUE_HIDDEN)
+                          + '</table>'
                           + (('<p class="note">作者原话：' + _esc(row.get('source', '')) + '</p>') if row.get('source') else '')
                           + '</div>')
     model = book.get('world')

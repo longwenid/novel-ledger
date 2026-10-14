@@ -5,7 +5,7 @@
 ## 实际验证
 
 - `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q`：89 项测试全部通过。耗时随宿主机变化（记录本次沙箱环境约 18 秒，早前一次为 2.4 秒），不作为性能指标。
-- 技能 quick_validate：通过（Windows 控制台需 `PYTHONUTF8=1`，见 [验证](references/validation.md)）。全部 Python 文件通过 Python 3.9 语法解析，本地文档链接与示例约定校验通过。
+- 技能 quick_validate：通过（Windows 控制台需 `PYTHONUTF8=1`，见 [验证](../references/validation.md)）。全部 Python 文件通过 Python 3.9 语法解析，本地文档链接与示例约定校验通过。
 - 合成工程流实际经过准备开书、全书与卷设计核验、滚动章计划、人物档案、正文候选、首读冻结、独立两类章审、章节提交、范围块审、综合复核、完本快照和 HTML 导出。
 - 实际修订流覆盖保留正式分支、重写后缀、范围复核、合并、撤销、恢复原目标及保留已消耗额度。改约先独立审查，保留父稿、未解决问题和修复额度。
 - 真实子进程使用明确标记的合成 Worker，经 CLI 提交；验证未提交的正常退出、宿主启动失败、Worker 越权主控命令和原首读会话恢复边界。
@@ -24,7 +24,7 @@
 - 完整约定三个入口按项目状态判定：`init --contract`（项目未开始）、`opening --file`（`init` 后未派发门任务，导入后清除逐门选择）、`recontract --file`（已派门任务或已有约定）。派过门任务后 `opening --file` 明确拒绝而不是静默忽略。测试覆盖三条路径，并覆盖"尚无约定时 export/audit 给出 contract 错误而不是崩溃"（该崩溃在重构前即存在，本次一并修掉）。
 - 架构图一致性由测试守护：`docs/architecture.mmd`、README 中的 mermaid 块与 references/architecture.md 的真源逐字一致，防止文档复制后漂移。
 - 字面约定的执行范围只声明一处：`contracts.ENFORCEMENT` 按阶段列出被检查的字段（terms 查禁词、names 查禁字），检查循环 `planning.enforce` 与任务材料里的 `policy.scope` 都由它生成，派工说明因此不可能承诺程序不做的检查。同时在派工材料里交付当前生效版本、来源与修改入口。测试覆盖：各阶段范围声明非空、选项全文（含 premise 等非 name 字段）真实被检查、计划阶段新建人物名遵循项目策略而非内置默认（此处曾因 `validate_plans` 未穿透 policy 导致作者覆盖失效，已修）、作者设定的禁字会被拒且解除后放行。CLI 现在把 stdout/stderr 固定为 UTF-8，调用方按 UTF-8 解析不会因宿主 locale（如 GBK 管道）拿到乱码路径。
-- 脑暴方法集中为数据：`contracts.LENSES`（八个设定生成方法）与 `contracts.VOLUME_TURNS`（五个卷级转折方法），任务 payload 的 `lens_brief` 带方法全文，方案任务与卷设计任务附 [创意工具箱](references/hatch.md)。测试覆盖方法唯一性、brief 组成与 round 顺延。
+- 脑暴方法集中为数据：`contracts.LENSES`（八个设定生成方法）与 `contracts.VOLUME_TURNS`（五个卷级转折方法），任务 payload 的 `lens_brief` 带方法全文，方案任务与卷设计任务附 [创意工具箱](../references/hatch.md)。测试覆盖方法唯一性、brief 组成与 round 顺延。
 - 开书方案的交付契约改为"交提案，不交论证"：`pitch`（一句能记住的话）与 `scene`（2～3 个可落笔的具体画面）成为硬要求；`driver/tradeoff/fit_reason` 不得自述创意方法（`opening_voice`），同组推进方式不得同构（`opening_diversity`）。起因是实测旧契约让方案普遍以"某透镜落地"自证，作者读到的是论证而非提案。
 - 派工材料按需投递：`brief` 由 briefs.py 现生成（本门字段规则 + 本轮透镜 + 交付契约），整篇 guides 降为可选参考；开书必读只剩拒绝记录，且 `opening_rejections` 从整块板子改为只留被否的标题与一句话；记录哈希只在 task.json 出现一次。实测同一门交付从约 20.1 KB 降到约 6.7 KB（-67%），随后精简已选方向行后，第 8 门重新派工为 brief 831 B + input.json 4.0 KB。
 - 约定篇幅必须写得完：由真实的会话导出发现问题——47 章 × 章幅上限 2600 与总上限 110000 冲突（每章平均最多 2340），但旧校验只看渐近极限（`last*chapter_min <= 上限`）而放行，作者不得不靠人工核验两轮才发现。现在校验每章平均可用区间 `[ceil(下限/last), floor(上限/last)]`：为空报错，`chapter_aim` 与 `chapter_max` 越界各自报错，details 带 `per_chapter_range` 与可执行修正建议（降章幅或上调卷末章号）。仓库自带的 assets/contract.example.json 也据此从 chapter_max 6000 调整为 4400。已激活的旧约定不受影响：`_audit` 只用契约自身的章幅上下限，不重跑 `planning.validate_contract`。
@@ -106,3 +106,20 @@
 - 浏览器检查已验证桌面及手机布局、关系图搜索/恢复/节点跳转、正文模式切换、脑暴及逐章说明展开；未出现页面脚本错误或页面横向溢出。页面为单文件离线视图，完整文字仍保留。
 
 上述测试使用工程合成材料，页面样例不作为文学成果；实际模型生成卷纲的精练程度、文学质量与费用仍需真实使用验收。
+
+## 2026-10-14 开书门重设计验收（1.3.0）
+
+版本升至 1.3.0；数据库 schema 仍为 novel-ledger/2。开书协议改为随项目状态冻结：新项目 `novel-ledger.creation/2`，已有项目与在途开书仍是 `novel-ledger.creation/1`，各自走自己的门序、value 规则与对齐。没有迁移，也没有替旧项目重排门序。
+
+- 全量 200 项工程测试通过（1.2.0 基线 178 项）。开书测试 47 项（test_opening 39 项、test_opening_legacy 8 项），另有 2 项页面视图回归。逐门开书改为**十门，一门只问一件事**：题材承诺与基调 → 叙述视角与人称 → 体量（结构门）→ 世界前提机制与禁区 → 主角 → 核心关系 → 推进与对抗 → 终局与母题 → 文风与节奏 → 书名。九门创意门各一次派工，结构门即时给定，因此是 9 次派工 + 10 次作者选择。
+- 顺序由依赖决定而不是偏好：视角排在所有展示画面样本的创意门之前（画面必带人称，最后才定人称等于让作者按错误质感评估方案，且限知决定哪些场面根本不可叙述）；世界先于主角与推进；关系先于对抗（对抗常取自关系网，且“只换关系网”的返回不必推翻主角）；书名最后（最依赖上下文）。测试对门序断言这四条相对顺序，并对 `pov`/`title` 两个单一决定门断言其 brief 携带本门交付要求（视角门必须用人称写出 scene，书名门不得交占位符）。
+- 结构门不派工：游标落到体量门时主控直接写出档位板并返回 await_choice，`pending()` 为空；档位来自 `contracts.SCALE_TIERS` 五档阶梯，板子显示连续三档，换组沿阶梯滑动窗口。测试逐档构造一份规范约定，证明每一档都能通过 `planning.validate_contract`（含每章平均区间、章幅上限与卷末章号的相容性），并对低于该档可写完区间的章数报 `opening_alignment`。
+- 新增的作者决定进入对齐表：`tone`/`theme`/`pov` 三个字段为 `optional`（自备约定可不带，避免追溯要求），逐门开书时由约定逐字保留；`title` 从“约定工人命名”改为作者在最后一门选定。十门决定的正是同样的十八个对齐字段，分布更细。测试覆盖改动书名/基调/视角/篇幅/推进都报 `opening_alignment`，以及 `_v2_groups` 与 `alignment_for(2)` 的分组断言（v1 用 `alignment_for(1)` 单独验证）。
+- 内容归属与顺序修正：`red_lines` 与 `allow_special_mechanism` 归世界门，机制类型与允许范围必须同时成立（不一致报 `opening_option`），旧的“题材门约束世界门”只在 creation/1 保留（`opening_constraint` 仍有回归覆盖）；关系单独成门且不得为空数组；`intake` 的键必须是门 ID，用约定字段名（如 `theme`）会被拒绝并返回 `valid_gates`。
+- 视角独立核验：新增 `CHECK_SETS[4]`（reader 增加 `pov_consistency`）。清单版本按约定选择——声明了 `pov` 且启用编辑能力用 4，否则保持 3/2，自备约定未被追溯要求；测试直接对 `context.build` 断言三种组合的 checks_version。
+- 兼容性回归：`test_opening_legacy.py` 8 项覆盖旧八门全流程（含旧 value 规则、`opening_constraint`、旧对齐分组、旧门 ID 的 intake 拒绝新门、旧约定经 `planning.validate_contract` + `creation.validate_contract` 复核后哈希不变），证明旧项目协议未被静默重排。
+- 页面视图：约定页只在约定实际带有该字段时渲染行，避免旧约定出现空白决定；结构门选项按档位渲染（显示总字数区间、卷数、总章数），隐藏 `tier`/`chapter_window` 等引擎记账字段。
+- 母题进入完本验收：声明了 `theme` 的约定把它作为 scope_synthesis 闭包的必答来源（与读者承诺、终局同级）；未声明母题的旧约定不新增来源。
+- Skill quick_validate、Python 3.9 语法解析与本地引用检查通过；依赖守护与最新测量为 19 个核心模块、65 条依赖边、无环，核心及 CLI 共 5,718 行，原始测量见 metrics.json。
+
+测试仍全部使用工程合成回执：档位可写完性是算术证明，不代表真实作品在该篇幅下的文学承载；门数增加换来的是每门决定更纯与返回代价更小，实际收益须由真实模型长跑与独立阅读验收。

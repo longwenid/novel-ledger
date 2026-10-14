@@ -7,8 +7,13 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol
 
-VERSION = '1.2.0'
+VERSION = '1.3.0'
 SCHEMA = 'novel-ledger/2'
+# The guided opening has its own protocol version, carried by the creation state itself. It is not the
+# database schema: a new gate set only changes a JSON document inside the book record, so raising the
+# storage version would lock every existing project out for no benefit. A project whose creation state
+# is version 1 keeps the gate set it was opened with.
+OPENING_VERSION = 2
 TASK = 'novel-ledger.task/1'
 RESULT = 'novel-ledger.result/1'
 FACT_CHECKS = ('coverage', 'continuity', 'resources', 'knowledge', 'time', 'world_rules', 'space')
@@ -33,6 +38,12 @@ CHECK_SETS[3] = {**CHECK_SETS[2],
                  'fact': CHECK_SETS[2]['fact'] + ('character_consistency', 'stable_facts'),
                  'reader': CHECK_SETS[2]['reader'] + ('dialogue_identity', 'voice_match'),
                  'long': CHECK_SETS[2]['long'] + ('voice_evolution', 'revision_intent')}
+# Version 4 exists because the opening now lets the author choose the narrative person and scope, and a
+# chosen view has to be verified by an independent reader. It is only dispatched for contracts that
+# actually declare `pov`: an imported contract without that field must not be judged against a view
+# nobody chose.
+POV_CHECKS_VERSION = 4
+CHECK_SETS[4] = {**CHECK_SETS[3], 'reader': CHECK_SETS[3]['reader'] + ('pov_consistency',)}
 
 
 def checks_for(version, kind):
@@ -81,6 +92,34 @@ VOLUME_TURNS = (
     ('线索回收', '前期的闲笔或次要人物在卷尾成为决定胜负的关键手。'),
     ('双线演进', '核心对手在幕后推进自己的目标，与主角线交错施压。'),
 )
+# The structural (non-creative) gate: length and volume shape. These are arithmetic, not invention —
+# every set below is proved writable by the same rules `planning.validate_contract` enforces, so the
+# engine offers the tiers itself instead of asking a writer to invent numbers the validator may reject.
+#   chapters       recommended total chapters for the tier
+#   chapter_window the chapter counts at which the tier's band is actually reachable
+SCALE_TIERS = (
+    {'id': 't1', 'name': '短篇', 'word_range': [100000, 200000], 'chapter_min': 1800, 'chapter_aim': 2500,
+     'chapter_max': 3500, 'volume_count': 2, 'chapters': 50, 'chapter_window': [40, 57],
+     'note': '一次完整的因果闭环；没有中段铺陈与多线并行的余地'},
+    {'id': 't2', 'name': '精简', 'word_range': [250000, 450000], 'chapter_min': 2200, 'chapter_aim': 3000,
+     'chapter_max': 4000, 'volume_count': 4, 'chapters': 100, 'chapter_window': [84, 112],
+     'note': '一条主线的完整起落与两三处关系变化；卷内很难安排中期翻盘'},
+    {'id': 't3', 'name': '标准', 'word_range': [500000, 900000], 'chapter_min': 2500, 'chapter_aim': 3500,
+     'chapter_max': 4500, 'volume_count': 6, 'chapters': 180, 'chapter_window': [143, 200],
+     'note': '两三条线索交错、一次卷中转折与中期对手揭露；群像与代际铺陈仍要克制'},
+    {'id': 't4', 'name': '长篇', 'word_range': [1000000, 1800000], 'chapter_min': 3000, 'chapter_aim': 4000,
+     'chapter_max': 5000, 'volume_count': 8, 'chapters': 300, 'chapter_window': [250, 360],
+     'note': '多线并行、次要人物弧线与多次代价递进；再多的人物网需要更长篇幅'},
+    {'id': 't5', 'name': '超长', 'word_range': [2200000, 4000000], 'chapter_min': 3000, 'chapter_aim': 4500,
+     'chapter_max': 6000, 'volume_count': 10, 'chapters': 600, 'chapter_window': [489, 666],
+     'note': '群像规模的多线交织、反复的势力更替与长期伏笔回收；对节奏控制要求最高'},
+)
+SCALE_WINDOW = 3          # how many consecutive tiers one board shows
+SCALE_DEFAULT_WINDOW = 1  # start on 精简/标准/长篇
+# What a structural option hands the author: a size ladder, never raw numbers to invent.
+STRUCTURAL_CONTRACT = ('每个方案给 id、title 档位名（含卷数与字数区间）、premise 用一句话写清总字数、卷数、'
+                       '每章字数与章数、tradeoff 说明这一档比相邻档多买到什么、少买到什么，value 照档位表逐字填。'
+                       '不给 pitch/scene/driver，不写创意方法，不自行改动档位数字。')
 
 # Single authority for the author contract: field, kind, default, whether the guided opening
 # must preserve it, and whether an empty value is a valid skeleton entry. The delivery
@@ -102,6 +141,12 @@ CONTRACT_FIELDS = (
     {'key': 'opposition', 'kind': 'text', 'default': '', 'alignment': True},
     {'key': 'world_premise', 'kind': 'text', 'default': '', 'alignment': True},
     {'key': 'voice', 'kind': 'text', 'default': '', 'alignment': True},
+    # Decided by the author at the opening gates since opening/2. Optional keeps a hand-written
+    # `init --contract` file and every contract written before opening/2 loadable; a guided opening of
+    # version 2 still has to carry them, because its gates chose them.
+    {'key': 'tone', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2},
+    {'key': 'theme', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2},
+    {'key': 'pov', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2},
     {'key': 'allow_special_mechanism', 'kind': 'bool', 'default': None, 'alignment': True},
     {'key': 'red_lines', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True},
     {'key': 'style_traits', 'kind': 'rows', 'default': [], 'alignment': True},
@@ -135,6 +180,16 @@ CONTRACT_FIELDS = (
 )
 CONTRACT_KEYS = tuple(row['key'] for row in CONTRACT_FIELDS)
 CONTRACT_ALIGNMENT = tuple(row['key'] for row in CONTRACT_FIELDS if row['alignment'])
+
+
+def alignment_for(version):
+    """The alignment fields an opening of this version actually decides.
+
+    A contract written before opening/2 never chose a tone, theme or view, so those fields must not be
+    read back as author decisions it failed to keep.
+    """
+    return tuple(row['key'] for row in CONTRACT_FIELDS
+                 if row['alignment'] and row.get('since', 1) <= version)
 CHARACTERS = ('name', 'role', 'desire', 'limit', 'knowledge_boundary')
 POLICY_FIELDS = ('forbidden_terms', 'forbidden_name_chars')
 # Where the author's lexical rules are enforced, declared per task stage. One table, used both to

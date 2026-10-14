@@ -28,6 +28,10 @@ def context_hash(book):
 def sources(book, scope):
     rows = [{'id': 'contract:reader_promise', 'text': book['contract']['reader_promise'], 'required': True},
             {'id': 'contract:ending', 'text': book['contract']['ending'], 'required': True}]
+    # The theme is a payoff like the promise and the ending, so 完本验收 checks it too. A contract
+    # imported before opening/2 never declared one, and then there is simply no such source.
+    if text(book['contract'].get('theme')):
+        rows.append({'id': 'contract:theme', 'text': book['contract']['theme'], 'required': True})
     for field in ('world_rules', 'red_lines', 'style_traits', 'relationships', 'arcs'):
         rows.extend({'id': 'contract:' + field + ':' + str(i), 'text': value, 'required': True}
                     for i, value in enumerate(book['contract'].get(field, [])))

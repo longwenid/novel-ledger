@@ -71,6 +71,52 @@ class BookPageTests(unittest.TestCase):
         self.assertIn('尚无设计', page)
         self.assertIn('尚无章计划', page)
 
+    def test_contract_page_omits_fields_a_contract_never_carried(self):
+        """A contract written before a field existed must not render as a decision left blank."""
+        book = self.repo.load()
+        self.assertNotIn('叙述视角', bookpage.render(self.repo))
+        book['contract'].update(tone='冷硬的夜班底色。', theme='责任怎样在人之间传递。',
+                                pov='第三人称限知，只跟沈桐的所见与所知。')
+        self.repo.save(book)
+        page = bookpage.render(self.repo)
+        for label in ('基调', '母题', '叙述视角'):
+            self.assertIn(label, page)
+        self.assertIn('第三人称限知，只跟沈桐的所见与所知。', page)
+
+    def test_structural_choice_renders_as_a_size_not_as_a_scene_pitch(self):
+        from novel_ledger import creation, workflow
+
+        def offered(gate, value, field):
+            rows = []
+            for ident in ('A', 'B', 'C'):
+                entry = dict(value)
+                if ident != 'A':
+                    entry = {**value, field: value[field] + '侧重' + ident + '。'}
+                rows.append({'id': ident, 'title': '方案' + ident, 'premise': '具体方案' + ident + '。',
+                             'pitch': '看一眼就想翻开的一句话' + ident + '。',
+                             'scene': ['夜班仓库里，他把退件箱推到灯下核对封条。', '凌晨的登记台前，他逐页翻经手的那栏。'],
+                             'driver': '方案' + ident + '以不同的核对顺序推进。',
+                             'tradeoff': '相比另两案，选它要放弃' + ident + '那条更快的路。',
+                             'fit_reason': '承接夜班题材，把推进压在一件具体物件上。', 'value': entry})
+            return {'gate': gate, 'options': rows}
+
+        state = creation.begin('工程夹具。')
+        state = creation.offer(state, offered('genre', {'genre': '都市生活', 'reader_promise': '在退件里查清责任。',
+                                                       'tone': '冷硬的夜班底色。'}, 'reader_promise'))
+        state = creation.pick(state, 'A', state['board']['hash'], 'A')
+        state = creation.offer(state, offered('pov', {'pov': '第三人称限知，只跟沈桐的所见与所知。'}, 'pov'))
+        state = creation.pick(state, 'A', state['board']['hash'], 'A')
+        board = state['board']                                     # the structural gate answered itself
+        state = creation.pick(state, board['options'][0]['id'], board['hash'], '选它。')
+        book = workflow.preparing_book(guided=True)
+        book['creation'] = state
+        self.repo.save(book)
+        page = bookpage.render(self.repo)
+        self.assertIn(board['options'][0]['title'], page)
+        self.assertIn('总字数区间', page)
+        self.assertIn('卷数', page)
+        self.assertNotIn('可写完章数区间', page)      # engine bookkeeping, not an author-facing field
+
     def test_init_creates_unified_page_for_guided_and_imported_books(self):
         for name, imported in (('guided', False), ('imported', True)):
             project = Path(self.temp.name) / name

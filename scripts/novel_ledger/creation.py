@@ -1,11 +1,19 @@
-"""Zero-input opening choices. Pure state; only the author selects a board option."""
+"""Zero-input opening choices. Pure state; only the author selects a board option.
+
+Two gate sets live side by side. Version 2 is what a new book opens with: fewer, single-purpose gates,
+the setting decided before the people who live in it, and the length gate answered by the engine from a
+ladder of provably writable tiers instead of asking a writer to invent numbers. Version 1 is the gate set
+every already-opened project was opened with; it stays readable so an in-flight opening keeps its own
+protocol instead of being silently re-planned.
+"""
 from __future__ import annotations
 
 import copy
 from . import contracts
-from .contracts import CONTRACT_ALIGNMENT, digest, require, text
+from .contracts import (OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_TIERS, SCALE_WINDOW, alignment_for,
+                        digest, require, text)
 
-GATES = (
+GATES_V1 = (
     ('genre', '题材与读者体验'),
     ('scale', '篇幅与分卷体量'),
     ('protagonist', '主角身份、欲望与底线'),
@@ -15,8 +23,52 @@ GATES = (
     ('ending', '工作终局与成立方向'),
     ('voice', '文风与阅读节奏'),
 )
+GATES_V2 = (
+    ('genre', '题材、承诺与基调'),
+    ('pov', '叙述视角与人称'),
+    ('scale', '体量与分卷'),
+    ('world', '世界前提、机制与禁区'),
+    ('protagonist', '主角身份、欲望与底线'),
+    ('relationships', '核心关系与人物张力'),
+    ('engine', '持续推进与主要对抗'),
+    ('ending', '终局与母题'),
+    ('voice', '文风与节奏'),
+    ('title', '书名'),
+)
+GATE_SETS = {1: GATES_V1, 2: GATES_V2}
+GATES = GATES_V2
+# Gates the engine answers itself from a table it has already proved satisfiable. A worker must not
+# invent them, and no dispatch is spent on them.
+SYSTEM_GATES = {1: (), 2: ('scale',)}
 # Brainstorm lenses live in contracts.LENSES; this module only picks and carries them.
 LENSES = tuple(label for label, _point, _structure in contracts.LENSES)
+
+
+def opening_version(state):
+    """Which gate set a creation state belongs to. Anything unrecognised is treated as version 1."""
+    raw = (state or {}).get('schema')
+    try:
+        version = int(str(raw).rsplit('/', 1)[-1])
+    except (TypeError, ValueError):
+        return 1
+    return version if version in GATE_SETS else 1
+
+
+def gates(state):
+    return GATE_SETS[opening_version(state)]
+
+
+def gate_ids(version):
+    return tuple(ident for ident, _title in GATE_SETS[version])
+
+
+def gate_title(gate_id, version=None):
+    """Gate titles are version-scoped: the same id can ask a different question in a later protocol."""
+    if version in GATE_SETS:
+        found = next((title for ident, title in GATE_SETS[version] if ident == gate_id), None)
+        if found:
+            return found
+    return next((title for ident, title in GATES_V2 + GATES_V1 if ident == gate_id), gate_id)
 
 
 def lens_brief(index):
@@ -25,21 +77,24 @@ def lens_brief(index):
     return '本轮创意透镜：' + label + '。' + point + ' 落地要求：' + structure
 
 
-def begin(source=''):
-    return {'schema': 'novel-ledger.creation/1', 'phase': 'choosing', 'cursor': 0,
+def begin(source='', version=OPENING_VERSION):
+    return {'schema': 'novel-ledger.creation/' + str(version), 'phase': 'choosing', 'cursor': 0,
             'round': 0, 'selections': [], 'board': None, 'history': [], 'rejections': [], 'source': source}
 
 
 def intake(state, values, source):
+    ids = gate_ids(opening_version(state))
     require(state['phase'] == 'choosing' and state['board'] is None and isinstance(values, dict) and values and text(source),
             'intake', '在未展示当前方案时保存部分要求，提供门 ID 到完整 value 的映射及作者原话。')
     known = selected(state)
-    require(set(values) <= {k for k, _ in GATES}, 'intake', '要求使用已有门 ID；不把未定项伪造成作者决定。')
+    require(set(values) <= set(ids), 'intake', '要求使用已有门 ID；不把未定项伪造成作者决定。',
+            {'valid_gates': list(ids), 'recover': '用本项目的门 ID 重写要求文件；已生效约定改方向用 recontract。'})
+    version = opening_version(state)
     result = copy.deepcopy(state)
     all_values = {**known, **values}
-    for gate, _ in GATES:
+    for gate in ids:
         if gate in all_values:
-            validate_value(gate, all_values[gate], all_values)
+            validate_value(gate, all_values[gate], version, all_values)
     for gate, value in values.items():
         require(gate not in known or known[gate] == value, 'intake', '已定要求发生冲突，先 back 重开受影响门。')
         if gate not in known:
@@ -50,13 +105,20 @@ def intake(state, values, source):
 
 
 def _advance_cursor(state):
-    order = {k: i for i, (k, _) in enumerate(GATES)}
+    version = opening_version(state)
+    ids = gate_ids(version)
+    order = {ident: index for index, ident in enumerate(ids)}
     state['selections'].sort(key=lambda r: order[r['gate']])
     known = selected(state)
-    state['cursor'] = next((i for i, (k, _) in enumerate(GATES) if k not in known), len(GATES))
-    if state['cursor'] == len(GATES):
+    state['cursor'] = next((index for index, ident in enumerate(ids) if ident not in known), len(ids))
+    if state['cursor'] == len(ids):
         state['phase'] = 'world'
         state['selection_hash'] = basis(state)
+        return state
+    # A structural gate is answered the moment it is reached: the board comes from the tier table, so
+    # the author never waits for a worker to invent numbers the contract stage would then reject.
+    if ids[state['cursor']] in SYSTEM_GATES.get(version, ()):
+        state['board'] = system_board(state)
     return state
 
 
@@ -69,29 +131,55 @@ def basis(state):
 
 
 def current(state):
-    ident, title = GATES[state['cursor']]
-    return {'id': ident, 'title': title, 'number': state['cursor'] + 1, 'total': len(GATES)}
+    ids = gates(state)
+    ident, title = ids[state['cursor']]
+    return {'id': ident, 'title': title, 'number': state['cursor'] + 1, 'total': len(ids)}
 
 
 VALUE_RULES = {
-    'genre': 'genre 题材、reader_promise 读者承诺、red_lines 禁区数组、allow_special_mechanism 布尔',
-    'scale': 'word_range=[总汉字下限,上限]、chapter_min/chapter_max/chapter_aim、volume_count',
-    'protagonist': 'id、name、identity 身份、desire 欲望、limit 底线',
-    'engine': 'story_engine 持续推进的动力、opposition 主要对抗',
-    'relationships': 'relationships 具体关系数组，独行方案可为空数组',
-    'world': 'world_premise 世界前提、mechanism={mode:none或bounded, principle, cost, limits:数组}',
-    'ending': 'ending 工作终局与成立方向',
-    'voice': 'voice 文风、style_traits 表达要点数组',
+    1: {
+        'genre': 'genre 题材、reader_promise 读者承诺、red_lines 禁区数组、allow_special_mechanism 布尔',
+        'scale': 'word_range=[总汉字下限,上限]、chapter_min/chapter_max/chapter_aim、volume_count',
+        'protagonist': 'id、name、identity 身份、desire 欲望、limit 底线',
+        'engine': 'story_engine 持续推进的动力、opposition 主要对抗',
+        'relationships': 'relationships 具体关系数组，独行方案可为空数组',
+        'world': 'world_premise 世界前提、mechanism={mode:none或bounded, principle, cost, limits:数组}',
+        'ending': 'ending 工作终局与成立方向',
+        'voice': 'voice 文风、style_traits 表达要点数组',
+    },
+    2: {
+        'genre': 'genre 题材、reader_promise 读者承诺、tone 基调（给读者的情绪与温度）',
+        'pov': 'pov 叙述视角与人称：谁在讲、能看多远、换视角时怎样交代；scene 必须用该方案的人称写出来，让作者读到人称的实际效果',
+        'scale': 'tier 档位 ID、word_range、chapter_min/chapter_max/chapter_aim、volume_count、chapters、chapter_window（本门由系统按档位表即时给定，照抄不要改数）',
+        'world': 'world_premise 世界前提、mechanism={mode:none或bounded, principle, cost, limits:数组}、red_lines 禁区数组、allow_special_mechanism 布尔（必须等于 mode=="bounded"）',
+        'protagonist': 'id、name、identity 身份、desire 欲望、limit 底线',
+        'relationships': 'relationships 具体关系数组，至少一条：独行主角也要写清最关键的那段张力，不能交空数组',
+        'engine': 'story_engine 持续推进的动力、opposition 主要对抗',
+        'ending': 'ending 工作终局与成立方向、theme 母题（这本书关于什么）',
+        'voice': 'voice 文风、style_traits 表达要点数组',
+        'title': 'title 书名：与已选承诺、终局和文风相称的可用候选名，不是占位符',
+    },
 }
+# A gate whose delivery contract needs one more sentence than the value shape can carry.
+GATE_NOTES = {
+    2: {
+        'pov': '本门只决定一件事：谁在讲。每个方案的 scene 用该方案的人称写出来，让作者读到的不是解释，而是这个人称讲出来的样子；pitch 也一样。不要在本门讨论情节走向。',
+        'title': '本门只决定书名。每个方案给一个真正可用的候选名，并在 premise 里说清它承诺了什么、与终局如何相称；不要给"待定""暂名一"这类占位符，也不要重新讨论故事内容。',
+    },
+}
+
+
+def gate_note(version, gate_id):
+    return GATE_NOTES.get(version, {}).get(gate_id, '')
+
+
+def value_rules(version, gate_id):
+    return VALUE_RULES[version].get(gate_id, '按已选方向给出结构化方案。')
+
+
 # The delivery contract for one option: proposals, not arguments. The lens shapes how the option is
 # found; it must not appear in what the author reads.
-OPTION_CONTRACT = (
-    '每个方案给：id、title 短标题、pitch 一句能记住的话（≤40字，不得出现透镜名或方法词）、'
-    'scene 2～3 个可落笔的具体画面（谁、在哪、什么东西、正要做什么，每条≥12字）、'
-    'premise 具体内容、driver 这一版如何推进（只写故事动作，不要写"某透镜落地"这类自评）、'
-    'tradeoff 选它要放弃什么（与同组另外两案相比的代价，不要写品类通用缺点）、'
-    'fit_reason 与已选方向的具体接口（承接哪条选择、因此改变了什么）、value 按本门字段。'
-)
+OPTION_CONTRACT = contracts.OPTION_CONTRACT
 LENS_WORDS = ('透镜', '落地要求', '典型落法', '混搭', '倒置', '代价递进', '认知差', '规则推演', '闭环')
 
 
@@ -121,8 +209,52 @@ def _check_driver_shape(options):
             {'heads': heads, 'recover': '让三案的推进机制在结构上不同，而不是量级不同。'})
 
 
-def validate_value(gate, value, choices):
+def _tier_option(tier, following):
+    low, high = tier['word_range']
+    option = {'id': 'tier:' + tier['id'],
+              'title': '%s档：%d 卷・约 %s～%s 万字' % (tier['name'], tier['volume_count'], _wan(low), _wan(high)),
+              'premise': '全书约 %s～%s 万字，%d 卷约 %d 章；每章 %d～%d 字（目标 %d）。'
+                         % (_wan(low), _wan(high), tier['volume_count'], tier['chapters'],
+                            tier['chapter_min'], tier['chapter_max'], tier['chapter_aim']),
+              'tradeoff': ('比%s档少买到：%s' % (following['name'], following['note'])) if following
+                          else '已是阶梯里最大的一档：再长的篇幅只增加铺垫，不增加承载。',
+              'value': {'tier': tier['id'], 'word_range': list(tier['word_range']),
+                        'chapter_min': tier['chapter_min'], 'chapter_max': tier['chapter_max'],
+                        'chapter_aim': tier['chapter_aim'], 'volume_count': tier['volume_count'],
+                        'chapters': tier['chapters'], 'chapter_window': list(tier['chapter_window'])}}
+    return option
+
+
+def _wan(count):
+    text = ('%.1f' % (count / 10000.0)).rstrip('0').rstrip('.')
+    return text
+
+
+def _tier_window(round_number):
+    windows = max(1, len(SCALE_TIERS) - SCALE_WINDOW + 1)
+    start = (SCALE_DEFAULT_WINDOW + round_number) % windows
+    return list(SCALE_TIERS[start:start + SCALE_WINDOW])
+
+
+def system_board(state):
+    """The board a structural gate shows, built here and now: no task, no wait."""
+    tiers = _tier_window(state['round'])
+    options = [_tier_option(tier, tiers[index + 1] if index + 1 < len(tiers) else None)
+               for index, tier in enumerate(tiers)]
+    board = {'gate': current(state), 'round': state['round'], 'basis': basis(state),
+             'options': options, 'system': True}
+    board['hash'] = digest(board)
+    return board
+
+
+def validate_value(gate, value, version=OPENING_VERSION, choices=None):
     require(isinstance(value, dict), 'opening_option', '每个方案须有结构化 value。')
+    if version == 2:
+        return _validate_value_v2(gate, value)
+    return _validate_value_v1(gate, value, choices or {})
+
+
+def _validate_value_v1(gate, value, choices):
     if gate == 'genre':
         require(text(value.get('genre')) and text(value.get('reader_promise')) and isinstance(value.get('red_lines'), list)
                 and all(text(s) for s in value['red_lines']) and type(value.get('allow_special_mechanism')) is bool,
@@ -155,9 +287,63 @@ def validate_value(gate, value, choices):
                 and all(text(s) for s in value['style_traits']), 'opening_option', '文风方案需要表达特点和节奏。')
 
 
+def _validate_value_v2(gate, value):
+    if gate == 'genre':
+        require(all(text(value.get(k)) for k in ('genre', 'reader_promise', 'tone')),
+                'opening_option', '题材方案需要题材、读者承诺和基调。')
+    elif gate == 'scale':
+        tier = next((row for row in SCALE_TIERS if row['id'] == value.get('tier')), None)
+        require(tier is not None, 'opening_option', '体量方案须来自档位表。',
+                {'valid_tiers': [row['id'] for row in SCALE_TIERS],
+                 'recover': '本门由主控从当前档位板照抄 value，不要自行改数。'})
+        require(all(value.get(key) == tier[key] for key in ('word_range', 'chapter_min', 'chapter_max',
+                                                           'chapter_aim', 'volume_count')),
+                'opening_option', '体量方案的数字必须与档位表逐字一致。', {'tier': tier['id']})
+        require(value.get('chapters') == tier['chapters'] and list(value.get('chapter_window') or []) == tier['chapter_window'],
+                'opening_option', '体量方案的总章数与可写完区间必须与档位表一致。', {'tier': tier['id']})
+        require(value['chapter_min'] <= value['chapter_aim'] <= value['chapter_max']
+                and value['volume_count'] * value['chapter_min'] <= value['word_range'][1],
+                'opening_option', '档位内的章幅与分卷须自洽。')
+        require(tier['chapter_window'][0] <= value['chapters'] <= tier['chapter_window'][1],
+                'opening_option', '档位推荐的章数必须落在该档可写完区间内。')
+    elif gate == 'world':
+        mechanism = value.get('mechanism')
+        require(text(value.get('world_premise')) and isinstance(mechanism, dict) and mechanism.get('mode') in ('none', 'bounded'),
+                'opening_option', '世界方案需要前提及明确机制类型。')
+        require(text(mechanism.get('principle')) and text(mechanism.get('cost')) and isinstance(mechanism.get('limits'), list)
+                and all(text(s) for s in mechanism['limits']), 'opening_option', '机制需要原理、代价和限制，无特殊机制也需解释。')
+        require(isinstance(value.get('red_lines'), list) and all(text(s) for s in value['red_lines']),
+                'opening_option', '世界方案需要禁区数组（可以为空，但必须是数组）。')
+        require(type(value.get('allow_special_mechanism')) is bool and value['allow_special_mechanism'] == (mechanism['mode'] == 'bounded'),
+                'opening_option', '机制允许范围必须与机制类型一致：有机制为真，无机制为假。')
+    elif gate == 'pov':
+        require(text(value.get('pov')), 'opening_option', '视角方案需要具体的人称与视角范围。')
+    elif gate == 'protagonist':
+        require(all(text(value.get(k)) for k in ('id', 'name', 'identity', 'desire', 'limit')), 'opening_option', '主角需要身份、欲望和底线。')
+        require(not any(c in value['id'] for c in ':>'), 'opening_option', '主角 ID 不能含分隔符。')
+    elif gate == 'relationships':
+        require(isinstance(value.get('relationships'), list) and value['relationships'] and all(text(s) for s in value['relationships']),
+                'opening_option', '核心关系至少一条：独行主角也要写清最关键的那段关系张力，不能交空数组。')
+    elif gate == 'engine':
+        require(text(value.get('story_engine')) and text(value.get('opposition')), 'opening_option', '推进方案需要持续动力和对抗。')
+    elif gate == 'ending':
+        require(all(text(value.get(k)) for k in ('ending', 'theme')), 'opening_option', '终局方案需要成立方向和母题。')
+    elif gate == 'voice':
+        require(text(value.get('voice')) and isinstance(value.get('style_traits'), list)
+                and value['style_traits'] and all(text(s) for s in value['style_traits']),
+                'opening_option', '文风方案需要文风和表达要点。')
+    elif gate == 'title':
+        require(text(value.get('title')), 'opening_option', '书名方案需要可用的书名。')
+
+
 def offer(state, data):
-    require(state['phase'] == 'choosing' and state['board'] is None, 'opening_state', '当前没有待生成的选择门。')
+    require(state['phase'] == 'choosing', 'opening_state', '当前没有待生成的选择门。')
+    version = opening_version(state)
     gate = current(state)
+    require(gate['id'] not in SYSTEM_GATES.get(version, ()), 'opening_system',
+            '本门由系统按档位表即时给定，不接受方案回执。',
+            {'gate': gate['id'], 'recover': '结构门的 value 直接取当前展示档位，不要派 Worker 编造数字。'})
+    require(state['board'] is None, 'opening_state', '当前没有待生成的选择门。')
     require(isinstance(data, dict) and data.get('gate') == gate['id'], 'opening_gate', '选项必须属于当前门。')
     options = data.get('options')
     require(isinstance(options, list) and 2 <= len(options) <= 3, 'opening_options', '每门提供 2～3 个可直接选择的具体方案。')
@@ -167,7 +353,7 @@ def offer(state, data):
         require(text(option.get('pitch')), 'opening_option', '方案需要 pitch：一句能记住的话（≤40字）。')
         _reject_lens_language(option)
         _check_scenes(option)
-        validate_value(gate['id'], option.get('value'), selected(state))
+        validate_value(gate['id'], option.get('value'), version, selected(state))
     _check_driver_shape(options)
     require(all(len({o[k] for o in options}) == len(options) for k in ('id', 'title', 'premise', 'driver')),
             'opening_diversity', '方案应有实质差异，不能只换标签或措辞。')
@@ -189,6 +375,8 @@ def rejection_record(state, reason):
     return {'gate': current(state)['id'], 'round': state['round'], 'reason': reason,
             'titles': [o.get('title', '') for o in board.get('options', [])],
             'pitches': [o.get('pitch', '') for o in board.get('options', [])]}
+
+
 def board_matches(state, board_hash):
     require(state['phase'] == 'choosing' and state['board'] is not None and state['board']['hash'] == board_hash
             and state['board']['basis'] == basis(state), 'opening_version', '请选择当前展示的一组方案；旧选项不能套到新一门。',
@@ -217,15 +405,20 @@ def regroup(state, board_hash, reason):
     state['rejections'].append(rejection_record(state, reason))
     state['history'].append({'action': 'regroup', 'gate': current(state)['id'], 'reason': reason})
     state.update(board=None, round=state['round'] + 1)
+    # A structural board has no worker to re-dispatch: 换一组 slides the tier window along the ladder.
+    if current(state)['id'] in SYSTEM_GATES.get(opening_version(state), ()):
+        state['board'] = system_board(state)
     return state
 
 
 def back(state, gate_id, reason):
     require(text(reason), 'author_source', '保存返回原因。')
-    index = next((i for i, gate in enumerate(GATES) if gate[0] == gate_id), None)
-    require(index is not None and gate_id in selected(state), 'opening_back', '只能返回已经选过的一门。')
+    ids = gate_ids(opening_version(state))
+    index = next((i for i, ident in enumerate(ids) if ident == gate_id), None)
+    require(index is not None and gate_id in selected(state), 'opening_back', '只能返回已经选过的一门。',
+            {'valid_gates': list(ids)})
     state = copy.deepcopy(state)
-    order = {k: i for i, (k, _) in enumerate(GATES)}
+    order = {ident: i for i, ident in enumerate(ids)}
     state['history'].append({'action': 'back', 'gate': gate_id, 'reason': reason, 'invalidated': copy.deepcopy([r for r in state['selections'] if order[r['gate']] >= index])})
     state.update(phase='choosing', cursor=index, round=0, board=None, selections=[r for r in state['selections'] if order[r['gate']] < index])
     _advance_cursor(state)
@@ -235,34 +428,67 @@ def back(state, gate_id, reason):
 
 def view(state):
     if state['phase'] != 'choosing':
-        return {'phase': state['phase'], 'selected_gates': len(state['selections']), 'total_gates': len(GATES), 'selection_hash': state['selection_hash']}
+        return {'phase': state['phase'], 'selected_gates': len(state['selections']), 'total_gates': len(gates(state)),
+                'selection_hash': state['selection_hash']}
     return {'phase': 'choosing', 'gate': current(state), 'board': copy.deepcopy(state['board']), 'selected': selected(state)}
 
 
-def validate_contract(contract, state, world):
-    """Every CONTRACT_ALIGNMENT field is decided by a closed choice, derived, or authored here."""
-    choices = selected(state)
-    # 'world' is the phase right after the last gate: every choice is closed, so a contract may be
-    # formed then too — a combined dispatch drafts the world and that contract in one session.
-    require(state['phase'] in ('world', 'contract', 'ready') and len(choices) == len(GATES),
-            'opening_incomplete', '全部选择和世界核验完成后才能形成约定。')
+def _v1_groups(choices):
     expected = {**choices['scale'], **choices['engine'], **choices['world'], **choices['ending'], **choices['voice'],
                 'reader_promise': choices['genre']['reader_promise'], 'genre': choices['genre']['genre'],
                 'protagonist_setup': choices['protagonist'], 'allow_special_mechanism': choices['genre']['allow_special_mechanism'],
                 'relationships': choices['relationships']['relationships']}
     derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}
-    expected = {key: value for key, value in expected.items() if key in CONTRACT_ALIGNMENT and key not in derived}
-    authored = {'title'}
-    groups = (set(expected), derived, authored)
-    require(set().union(*groups) == set(CONTRACT_ALIGNMENT)
+    return expected, derived, {'title'}
+
+
+def _v2_groups(choices):
+    """Ten gates decide the same eighteen alignment fields; each field is read from its own gate."""
+    expected = {key: choices['scale'][key] for key in ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim')}
+    expected.update(copy.deepcopy(choices['engine']))
+    expected.update(copy.deepcopy(choices['ending']))
+    expected.update(copy.deepcopy(choices['voice']))
+    expected.update(copy.deepcopy(choices['pov']))
+    expected.update(copy.deepcopy(choices['title']))
+    expected.update(genre=choices['genre']['genre'], reader_promise=choices['genre']['reader_promise'],
+                    tone=choices['genre']['tone'],
+                    protagonist_setup=copy.deepcopy(choices['protagonist']),
+                    relationships=copy.deepcopy(choices['relationships']['relationships']),
+                    allow_special_mechanism=choices['world']['allow_special_mechanism'])
+    derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}
+    return expected, derived, set()
+
+
+def validate_contract(contract, state, world):
+    """Every alignment field of this opening version is decided by a closed choice or derived here."""
+    version = opening_version(state)
+    choices = selected(state)
+    ids = gate_ids(version)
+    # 'world' is the phase right after the last gate: every choice is closed, so a contract may be
+    # formed then too — a combined dispatch drafts the world and that contract in one session.
+    require(state['phase'] in ('world', 'contract', 'ready') and len(choices) == len(ids),
+            'opening_incomplete', '全部选择和世界核验完成后才能形成约定。')
+    expected, derived, authored = _v1_groups(choices) if version == 1 else _v2_groups(choices)
+    expected = {key: value for key, value in expected.items() if key in alignment_for(version) and key not in derived}
+    groups = (set(expected), derived, set(authored))
+    require(set().union(*groups) == set(alignment_for(version))
             and not any(groups[i] & groups[j] for i in range(len(groups)) for j in range(i + 1, len(groups))),
             'alignment_schema', '对齐字段表与约定 schema 不一致，须同时更新。')
     for key, value in expected.items():
-        if key == 'volume_count':
-            require(len(contract['volumes']) == value, 'opening_alignment', '分卷数量与用户选择不一致。')
-        else:
-            require(contract.get(key) == value, 'opening_alignment', '最终约定改变了用户选择：' + key)
-    require(all(line in contract['red_lines'] for line in choices['genre']['red_lines']), 'opening_alignment', '不能丢掉已选禁区。')
+        require(key in contract, 'opening_alignment', '约定缺少本门已选字段：' + key,
+                {'key': key, 'recover': '按模板补齐该字段，并逐字保留作者选择。'})
+        require(contract.get(key) == value, 'opening_alignment', '最终约定改变了用户选择：' + key)
+    require(len(contract['volumes']) == choices['scale']['volume_count'], 'opening_alignment', '分卷数量与用户选择不一致。')
+    if version == 2:
+        tier = next((row for row in SCALE_TIERS if row['id'] == choices['scale']['tier']), None)
+        require(tier is not None, 'opening_alignment', '体量档位不在档位表中。', {'tier': choices['scale'].get('tier')})
+        chapters = contract['volumes'][-1]['end']
+        require(tier['chapter_window'][0] <= chapters <= tier['chapter_window'][1], 'opening_alignment',
+                '全书章数与所选体量档位不相容。',
+                {'tier': tier['id'], 'chapters': chapters, 'chapter_window': tier['chapter_window'],
+                 'recover': '把卷末章号落在该档区间内，或 back 重选体量档位。'})
+    forbidden = choices['genre'] if version == 1 else choices['world']
+    require(all(line in contract['red_lines'] for line in forbidden['red_lines']), 'opening_alignment', '不能丢掉已选禁区。')
     protagonist = choices['protagonist']
     require(any(e['id'] == protagonist['id'] and e['name'] == protagonist['name'] and e['kind'] == 'person' for e in contract.get('entities', [])), 'opening_alignment', '最终约定必须保留所选主角身份。')
     require(contract['world_rules'] == [r['principle'] for r in world['rules']], 'opening_alignment', '约定世界规则须来自已独立核验的世界。')

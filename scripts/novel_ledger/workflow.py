@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import CHECKS_VERSION, REPAIRS, REDESIGNS, Job, Outcome, checks_for, digest, han_count, require, text
+from .contracts import CHECKS_VERSION, OPENING_VERSION, REPAIRS, REDESIGNS, Job, Outcome, checks_for, digest, han_count, require, text
 from . import creation, facts, narrative, planning, quality, scopes, world, craft, editorial
 
 
@@ -17,13 +17,13 @@ def new_book(contract, source=''):
     return book
 
 
-def preparing_book(source='', guided=False):
+def preparing_book(source='', guided=False, opening_version=OPENING_VERSION):
     return {'contract': None, 'contract_source': source, 'state': facts.seed({}),
             'branch': 'main', 'revision': 0, 'status': 'preparing', 'target': 1, 'finish': False, 'written_han': 0,
             'lexical_policy': [{'version': 1, 'policy': planning.resolve_policy({}), 'source': '内置默认'}],
             'pilot': None, 'designs': {}, 'plans': {}, 'profiles': {}, 'draft': None,
             'proposal': None, 'reviews': {}, 'scope_parts': {}, 'rework': {}, 'revision_run': None, 'feedback': [], 'decisions': [],
-            'creation': creation.begin(source) if guided else None}
+            'creation': creation.begin(source, opening_version) if guided else None}
 
 
 def review_key(scope, first, last, headers, editorial_context=None):

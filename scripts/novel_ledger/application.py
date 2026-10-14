@@ -31,7 +31,10 @@ class Application:
                 'target': book['target'], 'written_han': book['written_han'], 'finish': book['finish'],
                 'pending_task': task['id'] if task else None, 'stage': task['input']['stage'] if task else None,
                 'pause_reason': None if sealed else book.get('pause_reason'),
-                'opening': {'phase': book['creation']['phase'], 'selected_gates': len(book['creation']['selections'])} if book.get('creation') else None,
+                'opening': {'phase': book['creation']['phase'], 'selected_gates': len(book['creation']['selections']),
+                            'total_gates': len(creation.gates(book['creation'])),
+                            'gate': creation.current(book['creation'])['id'] if book['creation']['phase'] == 'choosing' else None}
+                           if book.get('creation') else None,
                 'revision_run': {k: revision[k] for k in ('parent', 'first', 'last')} if revision else None}
 
     def controller_guard(self, owner=None):

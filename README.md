@@ -6,9 +6,11 @@
 
 - **定位**：写作流程的**治理层**，不是提示词集合，也不是文本生成器。它不产生一个字，但决定谁能写、写完谁审、事实怎么入账、改稿怎么不毁原稿。
 - **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 19 个模块（多数为纯规则，`sqlite_store`/`delivery`/`host`/`bookpage` 负责 IO）+ 一个 SQLite 项目库。
-- **当前版本**：`1.2.0`，数据库 schema `novel-ledger/2`（旧版本库显式拒绝，不做隐式升级）。
+- **当前版本**：`1.3.0`，数据库 schema `novel-ledger/2`（旧版本库显式拒绝，不做隐式升级）。
 
 1.2.0 将世界设定与正文统一到自动生成的 `book.html`，新增关系、时间线与进度图表；新书默认在世界核验后完成所有卷的逐章卷纲，每章目标 500 汉字（450～550），按有界批次独立核验。正文默认从场景切入，避免逐章报日。当前工作区的编辑能力、历史来源复用与远期承诺关联也随本版本交付；旧项目和在途任务仍保持自身协议，尚无保留全部内容并仅补卷纲的一键升级入口。
+
+1.3.0 重做开书逐门选择：八门改为**十门，一门只问一件事**——题材承诺与基调 / 叙述视角与人称 / 体量与分卷（结构门）/ 世界前提机制与禁区 / 主角 / 核心关系 / 推进与对抗 / 终局与母题 / 文风与节奏 / 书名。视角排在所有展示画面样本的门之前（画面必带人称，最后才定人称等于让作者用错质感评估方案），世界先于人物与推进，关系先于对抗，书名最后。体量与分卷是**结构门**：档位由 `contracts.SCALE_TIERS` 给定并由引擎当次给出，不派工、不等待，每一档都已证明能写出一份通过约定校验的书。新书因此是 9 次派工 + 10 次作者选择，但每一门的决定更纯，返回重选的代价也更小。作者新增基调、母题、书名、叙述视角四项决定，其中视角由清单版本 4 的 `reader.pov_consistency` 独立核验。开书协议版本随项目状态冻结（`novel-ledger.creation/1` 的既有项目仍走原八门），数据库 schema 未变。
 
 ---
 
@@ -133,7 +135,7 @@ CONTRACT_FIELDS = (
 
 新增编辑能力在当前纯规则层接入：人物成长后重核表达，章计划声明场景意图与展开单元；返修可交版本补丁，但仍完整独立重审。成立正文的偏离可独立改案，卷末按职责关闭、补写或修订，根问题两轮额度跨任务与分支保留。完本从准确快照导出正文、阅读页与清单，失败只恢复交付。字段与边界见 [编辑能力](references/editorial.md)。
 
-新约定默认 `editorial_features=true`，任务冻结 `editorial/1` 与检查清单 3；旧项目和旧 pending 保持自身协议。部分作者要求用 `intake` 保存，只询问未定门；`usage` 与 `scripts/observe.py` 分别观察工程字符和宿主实际 token，`scripts/quality_eval.py` 提供独立盲测样本、首读冻结与定位计分。
+新约定默认 `editorial_features=true`，任务冻结 `editorial/1` 与检查清单 3（约定声明了 `pov` 时用清单 4，多一项 `reader.pov_consistency`）；旧项目和旧 pending 保持自身协议。部分作者要求用 `intake` 保存，只询问未定门；`usage` 与 `scripts/observe.py` 分别观察工程字符和宿主实际 token，`scripts/quality_eval.py` 提供独立盲测样本、首读冻结与定位计分。
 
 ## 四、项目库与生命周期
 
@@ -166,7 +168,7 @@ SQLite 中的七张表各司其职：
 一次完整生命周期：
 
 ```
-init ──► 逐门选择（8 门）──► 世界模型 ＋ 独立核验 ──► 完整约定 ＋ 独立核验
+init ──► 逐门选择（10 门，一门一件事）──► 世界模型 ＋ 独立核验 ──► 完整约定 ＋ 独立核验
    └─ 或 --contract 直接导入完整约定
         │
         ▼
@@ -189,7 +191,7 @@ novel-ledger/
 │   ├── novel.py          CLI：参数、访问分级、主控/Worker 边界
 │   └── novel_ledger/     19 个模块（contracts 为约定字段唯一权威；bookpage 生成全书视图）
 ├── references/           分任务阅读的规程
-│   ├── opening.md        逐门开书
+│   ├── opening.md        逐门开书（含结构门与开书协议版本）
 │   ├── world.md          丰富世界模型
 │   ├── craft.md          创作与写审
 │   ├── runtime.md        运行、恢复、宿主适配
@@ -199,14 +201,14 @@ novel-ledger/
 ├── assets/               可运行的完整约定样例
 ├── tools/                安装脚本（install-dsh.ps1：链接到 DSH 技能根）
 ├── docs/                 架构图产物（真源在 references/architecture.md）
-├── tests/                80 项行为测试
+├── tests/                200 项行为测试
 └── validation/           工程度量脚本与验收记录
 ```
 
 运行所需路径与常用命令：
 
 ```bash
-python scripts/novel.py --version          # 1.0.0
+python scripts/novel.py --version          # 1.3.0
 python scripts/novel.py --help             # 全部子命令
 ```
 
@@ -258,7 +260,7 @@ pwsh tools/install-dsh.ps1 -Remove
 ## 六、开发与验证
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v   # 80 项
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v   # 200 项
 python3 validation/measure.py --out validation/metrics.json          # 依赖图与必读材料度量
 ```
 

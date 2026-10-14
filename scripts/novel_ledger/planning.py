@@ -127,9 +127,11 @@ def validate_plan_names(plan, policy):
 def validate_contract(raw):
     contract = copy.deepcopy(raw) if isinstance(raw, dict) else raw
     if isinstance(contract, dict):
-        # Defaults are structural, not content: they may never invent an author decision.
+        # Defaults are structural, not content: they may never invent an author decision. An empty
+        # container is a shape the validator has to see; an empty string is a decision nobody made,
+        # so an optional text field stays absent rather than being written in as blank.
         for row in CONTRACT_FIELDS:
-            if row['key'] not in contract and (row.get('optional') or row['default'] not in ('', [], None)):
+            if row['key'] not in contract and row['default'] not in ('', None):
                 contract[row['key']] = copy.deepcopy(row['default'])
     complaints = contract_errors(contract)
     require(not complaints, 'contract', '约定结构不成立：' + '；'.join(complaints[:6]))

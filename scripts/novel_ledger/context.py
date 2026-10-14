@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import CHECKS_VERSION, EDITORIAL_VERSION, TASK, Job, checks_for, dump, digest
+from .contracts import CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, TASK, Job, checks_for, dump, digest
 from . import briefs, creation, narrative, scopes, world, editorial
 from .planning import outline_policy, policy_block, volume_for
 from .workflow import node_map
@@ -41,13 +41,14 @@ def scoped_state(state, participants, plan=None, chapter=0, horizon=3):
 def _brief(book, job):
     """The one page this dispatch needs, generated here instead of shipping whole guides."""
     previous = []
+    version_of_book = creation.opening_version(book.get('creation') or {})
     for row in (book.get('creation') or {}).get('selections', []):
         gate = row['gate']
-        title = next((name for ident, name in creation.GATES if ident == gate), gate)
-        previous.append((title, _selection_line(row['option'])))
+        previous.append((creation.gate_title(gate, version_of_book), _selection_line(row['option'])))
     payload = job.payload or {}
     if job.stage == 'opening_options':
-        return briefs.opening_options(payload.get('gate', {}), payload.get('lens_brief', ''), previous)
+        return briefs.opening_options(payload.get('gate', {}), payload.get('lens_brief', ''), previous,
+                                      creation.opening_version(book['creation']))
     if job.stage == 'world_model':
         return briefs.world_model(previous=previous)
     return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book)})
@@ -62,9 +63,15 @@ def _selection_line(option):
     """
     value = option.get('value', {})
     gist = ''
-    for key in ('reader_promise', 'ending', 'story_engine', 'world_premise', 'identity'):
-        if isinstance(value.get(key), str) and value[key].strip():
-            gist = value[key].strip()
+    for key in ('reader_promise', 'ending', 'story_engine', 'world_premise', 'identity', 'pov', 'voice',
+                'title', 'tone', 'relationships'):
+        entry = value.get(key)
+        # A relation gate's gist is its first relation: an empty list is never a chosen direction.
+        if isinstance(entry, list) and entry and isinstance(entry[0], str) and entry[0].strip():
+            gist = entry[0].strip()
+            break
+        if isinstance(entry, str) and entry.strip():
+            gist = entry.strip()
             break
     line = option.get('title', '')
     if gist:
@@ -81,7 +88,11 @@ def build(repo, book, job):
     stage, chapter = job.stage, job.chapter
     plan = book['plans'].get(str(chapter))
     enhanced = editorial.enabled(book)
-    version = EDITORIAL_VERSION if enhanced else CHECKS_VERSION
+    # A contract that declares a narrative view is reviewed against the check list that carries
+    # pov_consistency; a contract without one keeps the version its project already runs on, so an
+    # imported contract is never judged against a view nobody chose.
+    version = POV_CHECKS_VERSION if enhanced and (book.get('contract') or {}).get('pov') \
+        else EDITORIAL_VERSION if enhanced else CHECKS_VERSION
     # A worker needs the material its stage decides on, and nothing else: the opening reads the
     # closed choices, not a contract that does not exist yet or a state that is still empty.
     opening_stage = stage in ('opening_options', 'world_model', 'world_review', 'opening_contract', 'contract_review')

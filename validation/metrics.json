@@ -2,9 +2,9 @@
   "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
   "novel_ledger": {
     "modules": 19,
-    "runtime_lines_including_cli": 5403,
+    "runtime_lines_including_cli": 5718,
     "cycles_including_deferred_imports": [],
-    "dependency_edges": 64
+    "dependency_edges": 65
   },
   "context": [
     {
@@ -104,8 +104,8 @@
       "synthetic_prose_han_at_least": 60000,
       "history_source_bytes": 197,
       "previous_full_catalog_and_event_index_bytes": 5846,
-      "first_build_ms": 0.214,
-      "six_repeated_snapshot_ms": 1.389,
+      "first_build_ms": 0.433,
+      "six_repeated_snapshot_ms": 4.453,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
@@ -118,8 +118,8 @@
       "synthetic_prose_han_at_least": 300000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 29370,
-      "first_build_ms": 0.96,
-      "six_repeated_snapshot_ms": 0.28,
+      "first_build_ms": 1.592,
+      "six_repeated_snapshot_ms": 4.675,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
@@ -132,8 +132,8 @@
       "synthetic_prose_han_at_least": 1500000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 148570,
-      "first_build_ms": 4.596,
-      "six_repeated_snapshot_ms": 0.322,
+      "first_build_ms": 8.675,
+      "six_repeated_snapshot_ms": 4.495,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
