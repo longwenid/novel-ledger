@@ -42,14 +42,14 @@ flowchart TD
     HOST --> C
 ```
 
-箭头为主要源码依赖。Application 接收 Repository 对象，SQLite 适配器不反向 import Application；Host 接收 Application 对象执行交接。共享契约只包含协议、错误、值工具和少量类型，不持有数据库或全局故事状态。图为可读性只画主要依赖：application 逐域 import（context/creation/delivery/facts/planning/quality/workflow/world）与各域至 contracts 的边在图上省略，完整边集由 `tests/test_runtime.py` 的依赖守护和 `validation/measure.py` 的计数给出。
+箭头为主要源码依赖。Application 接收 Repository 对象，SQLite 适配器不反向 import Application；Host 接收 Application 对象执行交接。共享契约只包含协议、错误、值工具和少量类型，不持有数据库或全局故事状态。图为可读性只画主要依赖：application 逐域 import（context/creation/delivery/facts/planning/quality/workflow/world）与各域至 contracts 的边在图上省略；视图层（bookpage）复用 creation 的版本感知查找（作者选择分协议版本），同样不构成回环。完整边集由 `tests/test_runtime.py` 的依赖守护和 `validation/measure.py` 的计数给出。
 
 架构图存放于 [docs/architecture.svg](../docs/architecture.svg)；图表产物统一放 docs 目录，mermaid 源码块仍以本文档为唯一真源，契约形状以代码中的字段表为唯一真源，两者都不在文档里复制结构。
 
 | 文件 | 权威职责 |
 |---|---|
-| contracts | 协议标识、约定字段表、检查点、修复上限和错误形状；约定形状的唯一权威 |
-| creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；对齐字段由字段表派生 |
+| contracts | 协议标识、约定字段表与按版本过滤的对齐字段、结构门档位表、检查点与检查清单版本、修复上限和错误形状；约定形状的唯一权威 |
+| creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；门序按协议版本冻结（creation/1 八门、creation/2 十门），结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
 | world | 丰富世界记录、关联及选择一致性，保持设计与事实分离 |
 | planning | 作者约定、设计图、章计划和人物档案校验 |
 | narrative | 线路、节点、读者认知、人物当前状态、节奏与动态篇幅的纯规则 |
@@ -70,7 +70,9 @@ flowchart TD
 
 ## 数据所有权与角色
 
-- 约定形状只有一处定义：contracts.CONTRACT_FIELDS（字段、类型、占位、可选性、是否参与对齐）。交付模板（quality.template → planning.skeleton）、结构校验（planning.validate_contract → contracts.contract_errors）和对齐核验（creation.validate_contract）全部由它派生；新增约定字段只改这张表，对齐表与字段表不一致时报 alignment_schema。
+- 约定形状只有一处定义：contracts.CONTRACT_FIELDS（字段、类型、占位、可选性、是否参与对齐、自哪个开书版本起生效）。交付模板（quality.template → planning.skeleton）、结构校验（planning.validate_contract → contracts.contract_errors）和对齐核验（creation.validate_contract）全部由它派生；新增约定字段只改这张表，对齐表与字段表不一致时报 alignment_schema。对齐字段按开书版本过滤（contracts.alignment_for）：后来新增的字段不会变成旧约定没做过、却被追溯追责的决定。
+- 开书协议版本随项目文档冻结，不随安装升级：creation 状态自带的 `schema`（novel-ledger.creation/N）决定门序、value 规则与对齐范围，未知一律按最早版本处理。数据库 schema（novel-ledger/2）只表示存储布局，两者不得互相冒充；升级引擎不得替既有项目或在途开书重排门序。
+- 作者可见的方案板有两类来源：创意门的板子由新空历史 Worker 生成；结构门（体量与分卷）的档位板由引擎按 contracts.SCALE_TIERS 当次给出，不派工、不等待，Worker 回执按 opening_system 拒绝。引擎只给经证明写得完的档位，选择仍由作者做出，程序不替作者决定。
 - `work/<task>/` 里两类文件分属不同作者：task.json、input.json、chapter-*.txt 由主控生成且可重建；result.template.json（表单）与 result.json（回执）由 Worker 写。主控只在表单缺失或属于其他任务时才生成它，重跑 advance 绝不覆盖 Worker 已填内容；取消任务是唯一回收表单的事件。
 - 角色由身份而非称呼区分：read/recall 只在携带 NOVEL_TASK_ID 的派工身份下开放，主控调用按 role_boundary 拒绝；audit/export/html 是验收与交付命令，主控可用。
 - 字面约定是项目级版本记录（book.lexical_policy），不属于约定快照；默认值在开书阶段即生效，作者改规则用 lexical 命令留档，改规则取消在途任务并作废其视图。约定里出现 lexical_policy 属于未知字段，直接拒绝。
@@ -113,7 +115,7 @@ documents 保存不可变完整值；chapters 引用正文、事件、计划和�
 | 修改恢复 | 冻结任务、候选稿、版本化改约、历史分支、合并撤销 |
 | 局部修复 | 冻结能力支持完整稿、版本补丁和原文复用；合成后完整重审，不做审稿者数字快修或自动免审 |
 | 长篇运行 | 主控和 Worker 租约、实际进程适配器；真实模型历史隔离与应用退出后的持续运行另验收 |
-| 迁移 | 严格拒绝未知库；禁止直接改 schema 冒充迁移 |
+| 迁移 | 严格拒绝未知库；禁止直接改 schema 冒充迁移；新增能力用协议/检查清单版本随任务冻结来接入，不靠改存储版本 |
 
 源码精简不证明文学质量或全程费用改善。分别衡量依赖、必读材料、派工、实际用量和返工，不以行数替代功能覆盖。
 
@@ -121,6 +123,6 @@ documents 保存不可变完整值；chapters 引用正文、事件、计划和�
 
 新约定默认启用叙事跟踪，旧约定和在途任务保持自身协议，见 [叙事推进](narrative.md)。narrative 只依赖 contracts，facts 组合其有据结算；scopes 只依赖 contracts。实际进度、读者认知、当前动机和节奏均可重放，不由设计直接初始化。综合按有限扇出递归，当前记录投影与完整可选来源分开；正文和原报告不删除、不截断。检查清单版本随任务冻结，原回执按其版本验收。
 
-新增编辑能力冻结为 editorial/1，检查清单 3；旧任务按原版本运行。craft/spatial/editorial 均是纯值规则，不传 Repository。改案采纳和正文重绑由 workflow 返回，应用层单一事务保存；关闭要求修订时同事务建立候选分支，预检连分支一同回滚。有界补写保存 scope_ends，不覆盖作者原约定或重算旧章链。完本快照保存完整交付所需状态与正文引用，delivery/bookpage 只读取冻结版本；调用渲染器由组合层（Application 或 CLI）注入，避免 delivery 与 bookpage 回环。init 生成统一 book.html，世界激活后及 outline_ready（旧模式 world_ready）更新该页面并导出 world.json；页面失败只重试派生视图，不回滚生效约定。read 观测在适配层留痕，离线评测与宿主观察不修改故事。
+新增编辑能力冻结为 editorial/1，检查清单 3；约定声明了叙述视角的项目按清单 4（多一项 reader.pov_consistency），未声明视角的自备约定与旧项目保持原版本，新增检查项不追溯生效。craft/spatial/editorial 均是纯值规则，不传 Repository。改案采纳和正文重绑由 workflow 返回，应用层单一事务保存；关闭要求修订时同事务建立候选分支，预检连分支一同回滚。有界补写保存 scope_ends，不覆盖作者原约定或重算旧章链。完本快照保存完整交付所需状态与正文引用，delivery/bookpage 只读取冻结版本；调用渲染器由组合层（Application 或 CLI）注入，避免 delivery 与 bookpage 回环。init 生成统一 book.html，世界激活后及 outline_ready（旧模式 world_ready）更新该页面并导出 world.json；页面失败只重试派生视图，不回滚生效约定。read 观测在适配层留痕，离线评测与宿主观察不修改故事。
 
 承诺关联冻结为可选 hook-links/1：领域层只验证有据事件的实体/话题关联及变更理由，查询层据关联选择材料；未标注旧承诺不自动猜关系，仍能完整补读。事件解释版本随规范化事件保存，旧在途能力不被追补，旧投影不因新增字段解释而改变。派工 baseline 取任务自己的冻结 state 视图，避免在信封再灌入全量资源与承诺。read 和 recall 输出都留实际字符观测，计费仍来自宿主日志。
