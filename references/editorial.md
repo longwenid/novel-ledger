@@ -1,6 +1,6 @@
 # 人物、场景、改案与关闭
 
-何时读：任务含 `capabilities.editorial=editorial/1`，尤其是人物重核、补丁、正文偏离、卷末与完本。新建及明确改约默认 `editorial_features=true`，要求 narrative_tracking；已启用项目不能降级以绕过验收；旧生效约定缺该字段保持原协议，旧 pending 不注入新字段。检查版本 3 随任务冻结，旧版本 1/2 的回执仍按原清单验收。
+何时读：任务含 `capabilities.editorial=editorial/1`，尤其是人物重核、补丁、正文偏离、卷末与完本。新建及明确改约默认 `editorial_features=true`，要求 narrative_tracking；已启用项目不能降级以绕过验收；旧生效约定缺该字段保持原协议，旧 pending 不注入新字段。检查版本随任务冻结：编辑能力为 3，约定声明了叙述视角时为 4（reader 多一项 `pov_consistency`），旧版本 1/2/3 的回执仍按原清单验收。
 
 按本任务定位相关小节：profiles/plan 读“人物与场景”，repair/redesign 读“版本补丁”，chapter_review/alignment_* 读“正文偏离”，范围 root 读“关闭与根问题”，完本读“终审与精确交付”。空间及评测工具只在相关任务取用，不因能力开启每次通读整页；任务 brief 和模板是当前执行入口。
 
@@ -19,7 +19,7 @@
 
 expansion_units 非空，每项 id/scene/focus/development/expected_change；scene 从 1 起引用场景，development 说明试探、阻力、误判或演出方式，expected_change 说明删掉会损失什么。短稿补实这些作用，避免同义扩写。静章不强加危机，持续高潮不强插休息。
 
-首章批准保存准确正文样本、声线、traits 与作者原话为 style_anchor。章审新增 character_consistency/stable_facts/dialogue_identity/voice_match，范围审新增 voice_evolution/revision_intent。没有对白或修订时仍说明本范围实际情况并举证，不强迫额外对白或虚构修订目标。
+首章批准保存准确正文样本、声线、traits 与作者原话为 style_anchor。章审新增 character_consistency/stable_facts/dialogue_identity/voice_match，范围审新增 voice_evolution/revision_intent；约定声明了 `pov` 时另加 `pov_consistency`（清单 4），核验约定的人称与视角范围是否稳定、换视角是否作了交代，未声明视角的项目不排此项。没有对白或修订时仍说明本范围实际情况并举证，不强迫额外对白或虚构修订目标。
 
 ## 版本补丁
 
@@ -81,7 +81,7 @@ continue_scope/revise_range 还需 repair_case={root_ref,goal,verification_condi
 
 ## 终审与精确交付
 
-全书 closure 的 completion_coverage 恰好覆盖 payload.sources：作者读者承诺、终局、世界规则、禁区、风格、核心关系、弧线与反馈，以及设计节点、线路、已登记承诺及根问题。每项 id/result/reason/evidence；核心项必须 fulfilled，非必要节点/线路可有依据地 permitted_open。仍须 prose_hashes 完整对应准确章号及哈希，并声明 source_coverage_checked/cross_chunk_checked，从正文发现列表之外的漏项。
+全书 closure 的 completion_coverage 恰好覆盖 payload.sources：作者读者承诺、终局、母题（约定声明时）、世界规则、禁区、风格、核心关系、弧线与反馈，以及设计节点、线路、已登记承诺及根问题。每项 id/result/reason/evidence；核心项必须 fulfilled，非必要节点/线路可有依据地 permitted_open。仍须 prose_hashes 完整对应准确章号及哈希，并声明 source_coverage_checked/cross_chunk_checked，从正文发现列表之外的漏项。
 
 complete 核对当前全部卷关闭、全书来源覆盖、根问题、首章认可、实际篇幅和事件链，再保存不可变 completion_snapshot。`deliver` 从该快照导出 book.md/book.html/delivery.json，清单含快照引用、章节哈希及文件内容哈希（规范 JSON 字符串的 SHA256）。导出失败只重试 deliver，内容完成状态与快照不变。已完本的 export/html 同样使用冻结版本。
 

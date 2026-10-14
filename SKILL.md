@@ -34,7 +34,7 @@ ROOT 为本技能目录，PROJECT 为独立小说目录。入口 `python3 ROOT/s
 
 ## 最短交接
 
-零输入开书：init 自动生成 book.html → opening_options → await_choice → 用户选择 / 换组 / 返回 → 下一门；全部门结束 → world_model → world_review → opening_contract → contract_review → 全书骨架及独立核验 → 卷内脑暴及独立核验 → 逐章卷纲分批设计及独立核验 → outline_ready，更新统一的 book.html 并交付 world.json，给出绝对路径。新约定默认一次交付所有卷的完整逐章卷纲，每章目标 500 汉字（450～550），内部按卷分批独立写审；可在 volume_outline 中调整范围或严格字数。旧约定未启用时仍以 world_ready 交付。世界设定、图表与正文都在 book.html，不再另建 world.html。用户不用编写设定，系统不代替用户选择；已有正文授权时按原话 run 接续，没有授权时停在交付处并向用户说明下一步。
+零输入开书：init 自动生成 book.html → opening_options → await_choice → 用户选择 / 换组 / 返回 → 下一门（体量门没有 opening_options：advance 直接返回档位板，`pending_task` 为 null，不要等任务）；全部门结束 → world_model → world_review → opening_contract → contract_review → 全书骨架及独立核验 → 卷内脑暴及独立核验 → 逐章卷纲分批设计及独立核验 → outline_ready，更新统一的 book.html 并交付 world.json，给出绝对路径。新约定默认一次交付所有卷的完整逐章卷纲，每章目标 500 汉字（450～550），内部按卷分批独立写审；可在 volume_outline 中调整范围或严格字数。旧约定未启用时仍以 world_ready 交付。世界设定、图表与正文都在 book.html，不再另建 world.html。用户不用编写设定，系统不代替用户选择；已有正文授权时按原话 run 接续，没有授权时停在交付处并向用户说明下一步。
 
 advance → 按 task_path 派 Worker → Worker 阅读本任务，必要时冻结首读 → 填 result.template.json → submit → Worker 结束 → 主控 advance --after 最后任务 ID。
 

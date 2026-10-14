@@ -6,7 +6,7 @@
 
 新建/明确改约时，narrative_tracking 默认 true、review_fanout 默认 3。旧已生效约定缺少 narrative_tracking 时沿用原事实形状和调度，不隐式改库；需要新能力时用 recontract 建立明确新版本。显式 false 是旧协议兼容模式，不具备本文的推进门槛。schema 仍为 novel-ledger/2；检查清单版本 2 随任务冻结，旧回执/旧在途任务仍按自身版本验收。
 
-新约定另默认启用 editorial_features，任务检查版本为 3；显式旧兼容模式需 editorial_features=false。editorial/1 在独立章审中记录实际节点判据，可将成立正文的部分实现转入未来改案，或保留当前稿独立核验改案；不再要求所有偏离都重写正文。详见 [编辑能力](editorial.md)，以下严格节点对应规则仍适用于旧任务与 follow_plan。
+新约定另默认启用 editorial_features，任务检查版本为 3（约定声明了叙述视角时为 4，reader 多一项 pov_consistency）；显式旧兼容模式需 editorial_features=false。editorial/1 在独立章审中记录实际节点判据，可将成立正文的部分实现转入未来改案，或保留当前稿独立核验改案；不再要求所有偏离都重写正文。详见 [编辑能力](editorial.md)，以下严格节点对应规则仍适用于旧任务与 follow_plan。
 
 ## 线路和设计
 
