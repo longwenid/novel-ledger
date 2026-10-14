@@ -2,13 +2,15 @@
 import json
 import re
 import sys
+import subprocess
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import bookpage, planning
+from novel_ledger import bookpage, planning, world
 from novel_ledger.application import Application
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book
@@ -68,6 +70,68 @@ class BookPageTests(unittest.TestCase):
         self.assertIn('尚无已提交章节', page)
         self.assertIn('尚无设计', page)
         self.assertIn('尚无章计划', page)
+
+    def test_init_creates_unified_page_for_guided_and_imported_books(self):
+        for name, imported in (('guided', False), ('imported', True)):
+            project = Path(self.temp.name) / name
+            args = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(project), 'init']
+            if imported:
+                source = Path(self.temp.name) / 'contract.json'
+                source.write_text(json.dumps(contract(), ensure_ascii=False), encoding='utf-8')
+                args.extend(['--contract', str(source)])
+            result = subprocess.run(args, capture_output=True, text=True, encoding='utf-8')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            info = json.loads(result.stdout)
+            self.assertEqual(Path(info['book_view']['path']), (project / 'book.html').resolve())
+            page = (project / 'book.html').read_text(encoding='utf-8')
+            self.assertIn('世界与选择', page)
+            self.assertIn('尚无已提交章节', page)
+            self.assertEqual((project / 'world.html').exists(), False)
+
+    def test_graphs_preserve_explicit_links_and_escape_all_labels(self):
+        book = self.repo.load()
+        model = dict(premise='仓库', story_capacity='退件与责任', selection_hash='fixture')
+        for section, fields in world.SECTIONS.items():
+            model[section] = [{**{field: section + ' ' + field for field in fields}, 'id': section + '1', 'links': []}]
+        model['characters'][0]['name'] = '人物 <script>alert(1)</script> & "引号"'
+        model['characters'][0]['links'] = ['geography:geography1']
+        # Reciprocal references represent one undirected association.
+        model['geography'][0]['links'] = ['characters:characters1']
+        book['world'] = model
+        book['state']['entities']['boss'] = {'id': 'boss', 'name': '主管', 'kind': 'person'}
+        book['state']['relations'] = {'shen>boss:信任': '下降'}
+        book['state']['places'] = {'door': {'id': 'door', 'name': '门口'}, 'room': {'id': 'room', 'name': '仓库', 'parent': 'door'}}
+        book['state']['placements'] = {'shen': 'room'}
+        self.repo.save(book)
+        page = bookpage.render(self.repo)
+        svgs = [ET.fromstring(svg) for svg in re.findall(r'<svg\b.*?</svg>', page, re.S)]
+        self.assertEqual(len(svgs), 3)
+        self.assertEqual([len(svg.findall("path[@class='graph-edge']")) for svg in svgs], [1, 1, 2])
+        targets = set(re.findall(r'\bid="([^"]+)"', page))
+        for svg in svgs:
+            for node in svg.findall("a[@class='graph-node']"):
+                self.assertIn(node.attrib['href'][1:], targets)
+        self.assertNotIn('<script>alert(1)</script>', page)
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', page)
+        self.assertIn('信任：下降', page)
+        self.assertIn('历史时间线', page)
+        self.assertNotIn('https://', page)
+
+    def test_progress_and_resource_charts_keep_exact_values_and_units(self):
+        self.written()
+        book = self.repo.load()
+        book['state']['resources'] = {
+            json.dumps(['shen', '车费', '元'], ensure_ascii=False): '0',
+            json.dumps(['shen', '库存', '件'], ensure_ascii=False): '123.4500',
+        }
+        self.repo.save(book)
+        page = bookpage.render(self.repo)
+        for title in ('写作进度', '分卷进度', '章节篇幅', '因果节点图', '章节推进'):
+            self.assertIn(title, page)
+        self.assertIn('0 元', page)
+        self.assertIn('123.4500 件', page)
+        self.assertNotIn('nan%', page)
+        self.assertNotIn('inf%', page)
 
     def test_written_page_matches_database_and_stays_derived(self):
         page = self.written()

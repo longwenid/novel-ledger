@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol
 
-VERSION = '1.0.0'
+VERSION = '1.2.0'
 SCHEMA = 'novel-ledger/2'
 TASK = 'novel-ledger.task/1'
 RESULT = 'novel-ledger.result/1'
@@ -21,9 +21,18 @@ WORLD_CHECKS = ('choice_alignment', 'rule_consistency', 'spatial_connections', '
 # list it was reviewed against, or adding a check would retroactively fail every finished project.
 # Receipts carry their own `checks_version` (absent means the original set); new submissions are
 # always judged by CHECKS_VERSION, so raising it only affects work yet to be reviewed.
-CHECKS_VERSION = 1
+CHECKS_VERSION = 2
 CHECK_SETS = {1: {'fact': FACT_CHECKS, 'reader': READER_CHECKS, 'design': DESIGN_CHECKS,
                   'world': WORLD_CHECKS, 'long': LONG_CHECKS}}
+CHECK_SETS[2] = {'fact': FACT_CHECKS + ('narrative',),
+                 'reader': READER_CHECKS + ('disclosure', 'pacing'),
+                 'design': DESIGN_CHECKS + ('threads',),
+                 'world': WORLD_CHECKS, 'long': LONG_CHECKS + ('bridges', 'disclosure')}
+EDITORIAL_VERSION = 3
+CHECK_SETS[3] = {**CHECK_SETS[2],
+                 'fact': CHECK_SETS[2]['fact'] + ('character_consistency', 'stable_facts'),
+                 'reader': CHECK_SETS[2]['reader'] + ('dialogue_identity', 'voice_match'),
+                 'long': CHECK_SETS[2]['long'] + ('voice_evolution', 'revision_intent')}
 
 
 def checks_for(version, kind):
@@ -112,6 +121,13 @@ CONTRACT_FIELDS = (
     {'key': 'review_interval', 'kind': 'int', 'default': 10, 'alignment': False},
     {'key': 'review_chunk', 'kind': 'int', 'default': 3, 'alignment': False},
     {'key': 'verification', 'kind': 'text', 'default': 'full', 'alignment': False},
+    {'key': 'narrative_tracking', 'kind': 'bool', 'default': True, 'alignment': False},
+    {'key': 'review_fanout', 'kind': 'int', 'default': 3, 'alignment': False},
+    {'key': 'editorial_features', 'kind': 'bool', 'default': True, 'alignment': False},
+    {'key': 'scope_append_limit', 'kind': 'int', 'default': 3, 'alignment': False},
+    {'key': 'volume_outline', 'kind': 'map', 'default': {'scope': 'all', 'words': 500, 'tolerance': 50}, 'alignment': False, 'optional': True},
+    {'key': 'anchors', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
+    {'key': 'links', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'initial_facts', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'places', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'placements', 'kind': 'map', 'default': {}, 'alignment': False, 'optional': True},
@@ -131,9 +147,11 @@ ENFORCEMENT = {
                         'names': ('value.name',)},
     'world_model': {'names': ('characters.name',)},
     'book_plan': {'terms': ('intent', 'ending_conditions', 'nodes')},
-    'volume_plan': {'terms': ('intent', 'ending_conditions', 'nodes')},
+    'volume_plan': {'terms': ('intent', 'ending_conditions', 'nodes', 'brainstorm', 'chapters', 'selection_reason')},
+    'volume_outline': {'terms': ('chapters',)},
     'plan': {'terms': ('plans',), 'names': ('new_entities',)},
     'profiles': {'terms': ('profiles',)},
+    'alignment_plan': {'terms': ('plan', 'designs')},
     'write': {'terms': ('title', 'prose')},
     'repair': {'terms': ('title', 'prose')},
     'redesign': {'terms': ('title', 'prose')},
@@ -157,9 +175,11 @@ def _placeholder(row):
             return entries * row.get('count', 1)
         return copy.deepcopy(row['default'])
     if row['kind'] == 'map':
+        if not row.get('shape') and isinstance(row['default'], dict):
+            return copy.deepcopy(row['default'])
         return {field: '' for field in row.get('shape', ())}
     if row['kind'] == 'int':
-        return 0
+        return row['default'] if type(row['default']) is int and row['default'] > 0 else 0
     return copy.deepcopy(row['default'])
 
 
@@ -270,9 +290,13 @@ class Repository(Protocol):
     def add_task(self, work): ...
     def finish_task(self, task_id, result): ...
     def headers(self, branch): ...
+    def history_snapshot(self, branch): ...
+    def history_pages(self, snapshot, before=None): ...
+    def memory_rows(self, page): ...
     def chapter(self, branch, chapter): ...
     def add_chapter(self, branch, row): ...
     def session_task(self, session): ...
     def bind_session(self, session, task_id): ...
+    def usage(self): ...
     def record(self, action, value): ...
 

@@ -5,8 +5,10 @@
 仅依赖 Python 3.9+ 标准库，无第三方依赖、无需联网（调用模型的宿主由你自己提供）。
 
 - **定位**：写作流程的**治理层**，不是提示词集合，也不是文本生成器。它不产生一个字，但决定谁能写、写完谁审、事实怎么入账、改稿怎么不毁原稿。
-- **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 13 个模块（多数为纯规则，`sqlite_store`/`delivery`/`host`/`bookpage` 负责 IO）+ 一个 SQLite 项目库。
-- **当前版本**：`1.0.0`，数据库 schema `novel-ledger/2`（旧版本库显式拒绝，不做隐式升级）。
+- **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 19 个模块（多数为纯规则，`sqlite_store`/`delivery`/`host`/`bookpage` 负责 IO）+ 一个 SQLite 项目库。
+- **当前版本**：`1.2.0`，数据库 schema `novel-ledger/2`（旧版本库显式拒绝，不做隐式升级）。
+
+1.2.0 将世界设定与正文统一到自动生成的 `book.html`，新增关系、时间线与进度图表；新书默认在世界核验后完成所有卷的逐章卷纲，每章目标 500 汉字（450～550），按有界批次独立核验。正文默认从场景切入，避免逐章报日。当前工作区的编辑能力、历史来源复用与远期承诺关联也随本版本交付；旧项目和在途任务仍保持自身协议，尚无保留全部内容并仅补卷纲的一键升级入口。
 
 ---
 
@@ -35,15 +37,30 @@ flowchart TD
     WF --> PLAN[规划规则]
     WF --> QA[质量规则]
     WF --> FACT[事实规则]
+    WF --> NAR[叙事推进]
+    WF --> SR[分层范围审]
+    WF --> ED[编辑裁决]
+    WF --> CF[人物与文本规则]
+    PLAN --> CF
+    QA --> ED
+    FACT --> SP[空间拓扑]
+    FACT --> NAR
+    PLAN --> NAR
+    QA --> SR
+    CTX --> NAR
+    CTX --> SR
     PLAN --> FACT
     QA --> FACT
+    ED --> C
+    CF --> C
+    SP --> C
     PLAN --> C[共享数据契约]
     FACT --> C
     SQL --> C
     HOST --> C
 ```
 
-上图为主要源码依赖；application 逐域 import 与各域到 contracts 的边在图上省略，完整边集由依赖守护测试与 `validation/measure.py` 计数给出（当前 38 条、无环）。渲染图见 [docs/architecture.svg](docs/architecture.svg)；源码真源是 [references/architecture.md](references/architecture.md) 中的 mermaid 块，本图与 `docs/architecture.mmd` 保持逐字一致，由测试守护。
+上图为主要源码依赖；application 逐域 import 与各域到 contracts 的边在图上省略，完整边集由依赖守护测试与 `validation/measure.py` 计数给出（当前完整边集见 validation/metrics.json、无环）。渲染图见 [docs/architecture.svg](docs/architecture.svg)；源码真源是 [references/architecture.md](references/architecture.md) 中的 mermaid 块，本图与 `docs/architecture.mmd` 保持逐字一致，由测试守护。
 
 ### 分层与职责
 
@@ -57,10 +74,10 @@ flowchart TD
 | 规划（纯） | `planning` | 作者约定、设计图、章计划、人物档案校验 |
 | 事实（纯） | `facts` | 资源守恒、主支线时钟、知情、关系、地点站位、历史断言的纯结算 |
 | 质量（纯） | `quality` | 首读与审稿回执的完整性、一致性、证据核验，模板生成 |
-| 查询 | `context` | 冻结来源登记、必读选择、按需补读入口 |
+| 查询 | `context` | 冻结来源登记、必读选择、按人物/物品和话题带入远期承诺、按需补读入口 |
 | 视图 | `delivery` | 任务目录物化、模板与表单、正文与世界导出 |
 | 全书视图 | `bookpage` | `html` 命令的单文件页面：看设定与读正文两种模式 |
-| 持久化 | `sqlite_store` | 事务边界、唯一 pending、幂等回执、不可变文档、分支 |
+| 持久化 | `sqlite_store` | 事务边界、唯一 pending、幂等回执、不可变文档、分支、可复用逐章历史目录 |
 | 宿主 | `host` | 外部进程执行、超时终止、核实真实提交 |
 
 「纯」= 不 import SQLite、文件、子进程，也不持有全局状态；这条约束由测试里的依赖守护强制（含函数内 import），不是文档口头约定。
@@ -114,6 +131,10 @@ CONTRACT_FIELDS = (
 
 ---
 
+新增编辑能力在当前纯规则层接入：人物成长后重核表达，章计划声明场景意图与展开单元；返修可交版本补丁，但仍完整独立重审。成立正文的偏离可独立改案，卷末按职责关闭、补写或修订，根问题两轮额度跨任务与分支保留。完本从准确快照导出正文、阅读页与清单，失败只恢复交付。字段与边界见 [编辑能力](references/editorial.md)。
+
+新约定默认 `editorial_features=true`，任务冻结 `editorial/1` 与检查清单 3；旧项目和旧 pending 保持自身协议。部分作者要求用 `intake` 保存，只询问未定门；`usage` 与 `scripts/observe.py` 分别观察工程字符和宿主实际 token，`scripts/quality_eval.py` 提供独立盲测样本、首读冻结与定位计分。
+
 ## 四、项目库与生命周期
 
 写小说产生的项目是**独立目录**，不在本仓库内：
@@ -124,10 +145,10 @@ my-novel/
 ├── work/<task_id>/          派工材料与回执（可重建）
 ├── book.html                全书视图：看设定（约定/世界/设计/计划/档案/账本/章审）+ 读正文
 ├── book.md                  纯文本导出（export）
-└── world.html / world.json  世界模型交付
+└── world.json              世界模型与选择、核验记录；页面合并到 book.html
 ```
 
-`book.html` 是**派生只读视图**：单文件、无外部请求、无服务端，数据全部来自数据库，可随时用 `html` 命令重新生成；删除它不影响项目。阅读模式支持字号、版心、纸色与字体切换，设置存在浏览器本地，`Ctrl+P` 可打印或导出 PDF。
+`book.html` 是**派生只读视图**：init 自动生成，开书完成后更新为包含世界设定的统一页面，不再生成单独的 world.html。单文件、无外部请求、无服务端，数据全部来自数据库，可随时用 `html` 命令重新生成；删除它不影响项目。设定模式提供世界关联图、历史与章节时间线、因果节点图、人物关系和地点站位图，以及字数、分卷、章幅与资源图表；图表保留完整文字明细，点击节点可定位详情。阅读模式支持字号、版心、纸色与字体切换，设置存在浏览器本地，`Ctrl+P` 可打印或导出 PDF。
 
 `export` 输出纯文本或简化 HTML，**默认不会写 `book.html`**（那个位置归全书视图）；需要另一个文件时显式给 `--output`：`export --format md`、`export --output book-plain.html`。
 
@@ -149,7 +170,7 @@ init ──► 逐门选择（8 门）──► 世界模型 ＋ 独立核验 �
    └─ 或 --contract 直接导入完整约定
         │
         ▼
-   全书骨架 ─► 卷布局 ─► 章计划 ─► 人物档案 ─► 执笔 ─► 首读冻结 ─► 章审（事实＋阅读）
+   全书骨架 ─► 卷内脑暴 ─► 逐章卷纲（分批独立核验） ─► 章计划 ─► 人物档案 ─► 执笔 ─► 首读冻结 ─► 章审（事实＋阅读）
         │                                            │
         │                                    入库：结算事实、更新投影、记录链指纹
         ▼
@@ -166,7 +187,7 @@ novel-ledger/
 ├── SKILL.md              技能入口（DSH 等宿主的加载说明与执行边界）
 ├── scripts/
 │   ├── novel.py          CLI：参数、访问分级、主控/Worker 边界
-│   └── novel_ledger/     13 个模块（contracts 为约定字段唯一权威；bookpage 生成全书视图）
+│   └── novel_ledger/     19 个模块（contracts 为约定字段唯一权威；bookpage 生成全书视图）
 ├── references/           分任务阅读的规程
 │   ├── opening.md        逐门开书
 │   ├── world.md          丰富世界模型
@@ -241,7 +262,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v   # 80 项
 python3 validation/measure.py --out validation/metrics.json          # 依赖图与必读材料度量
 ```
 
-测试只用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。当前工程度量：13 个核心模块、3,091 行（含 CLI）、38 条内部依赖边、0 个强连通组。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
+测试只用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。当前工程度量见 [metrics.json](validation/metrics.json)，包含所有函数内导入；纯规则依赖仍无环。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
 
 Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与 CLI 均可用；若运行外部校验脚本报编码错误，加 `PYTHONUTF8=1`。
 
@@ -258,3 +279,17 @@ Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与
 ## 许可
 
 本仓库目前**未附许可证**，默认保留所有权利。如需在其它项目中使用或分发，请先联系作者添加合适许可证（如 MIT）。
+
+## 叙事推进与长篇材料
+
+新约定默认启用叙事跟踪：主线、支线与暗线登记职责和终局条件；节点推进、读者已见信息、人物当前动机和节奏均由独立审稿举证后结算。窗口前提变化触发重规划，每章根据真实累计篇幅计算剩余预算。完整协议见 [叙事推进](references/narrative.md)。
+
+世界模型核验后，新约定默认继续全书骨架与所有卷逐章卷纲：基于世界比较卷内推进方案，再分批写每章目标 500 汉字（450～550）的精练情节说明，独立核验后保存并展示在 book.html。完整卷纲覆盖本卷全部章节，试写一章也不会截短；没有正文授权以 outline_ready 交付。volume_outline 默认 scope=all，在正文前完成所有卷；scope=current 可改为先交首卷、后续逐卷设计，tolerance=0 可要求严格 500 字；旧生效约定缺字段及旧 pending 保持原协议。
+
+范围核验先完整读叶块，再按有限扇出逐层综合子报告与边界原文；正文、原报告与完整设计仍保留补读入口。执笔只取目标和直接因果前置，历史可按人物、节点、主题或线路检索。旧项目与旧在途任务沿自身协议，新能力需通过明确改约建立版本；已有审稿不因新增清单追溯失效。
+
+历史来源不再为每轮派工重建全量摘要和事件索引：逐章不可变目录共享未改前缀，任务只冻结目录入口，补读按冻结范围分页返回完整证据及正文。远期承诺可由独立审稿按证据登记人物/物品和话题关联，相关对象再次登场即可带入任务材料；未标注旧承诺仍可补读。派工资源与承诺摘要也取任务冻结视图。原索引名称保持显式完整读取兼容，数据库没有新增表或隐式迁移。
+
+规模与查询读量见 [工程验收](validation/results.md) 的历史来源测量；稀疏检索仍可能遍历全部冻结历史。真实长篇、跨卷文学盲评与实际费用的验收方法见 [验证](references/validation.md)，节奏和多线编排不采用未经验证的固定轮替门槛。
+
+这些是可核验的治理和材料选择机制，不承诺仅靠机械校验证明文学质量或实际模型费用。

@@ -30,6 +30,36 @@ def begin(source=''):
             'round': 0, 'selections': [], 'board': None, 'history': [], 'rejections': [], 'source': source}
 
 
+def intake(state, values, source):
+    require(state['phase'] == 'choosing' and state['board'] is None and isinstance(values, dict) and values and text(source),
+            'intake', '在未展示当前方案时保存部分要求，提供门 ID 到完整 value 的映射及作者原话。')
+    known = selected(state)
+    require(set(values) <= {k for k, _ in GATES}, 'intake', '要求使用已有门 ID；不把未定项伪造成作者决定。')
+    result = copy.deepcopy(state)
+    all_values = {**known, **values}
+    for gate, _ in GATES:
+        if gate in all_values:
+            validate_value(gate, all_values[gate], all_values)
+    for gate, value in values.items():
+        require(gate not in known or known[gate] == value, 'intake', '已定要求发生冲突，先 back 重开受影响门。')
+        if gate not in known:
+            result['selections'].append({'gate': gate, 'option': {'id': 'author:' + gate, 'title': '作者已有要求', 'value': copy.deepcopy(value)},
+                                         'board_hash': None, 'source': source})
+    result['history'].append({'action': 'intake', 'values': copy.deepcopy(values), 'source': source})
+    return _advance_cursor(result)
+
+
+def _advance_cursor(state):
+    order = {k: i for i, (k, _) in enumerate(GATES)}
+    state['selections'].sort(key=lambda r: order[r['gate']])
+    known = selected(state)
+    state['cursor'] = next((i for i, (k, _) in enumerate(GATES) if k not in known), len(GATES))
+    if state['cursor'] == len(GATES):
+        state['phase'] = 'world'
+        state['selection_hash'] = basis(state)
+    return state
+
+
 def selected(state):
     return {row['gate']: copy.deepcopy(row['option']['value']) for row in state['selections']}
 
@@ -176,11 +206,8 @@ def pick(state, option_id, board_hash, source):
     state = copy.deepcopy(state)
     state['selections'].append({'gate': current(state)['id'], 'option': copy.deepcopy(option), 'board_hash': board_hash, 'source': source})
     state['history'].append({'action': 'choose', 'gate': current(state)['id'], 'option': option_id, 'board_hash': board_hash, 'source': source})
-    state.update(board=None, round=0, cursor=state['cursor'] + 1)
-    if state['cursor'] == len(GATES):
-        state['phase'] = 'world'
-        state['selection_hash'] = basis(state)
-    return state
+    state.update(board=None, round=0)
+    return _advance_cursor(state)
 
 
 def regroup(state, board_hash, reason):
@@ -196,10 +223,12 @@ def regroup(state, board_hash, reason):
 def back(state, gate_id, reason):
     require(text(reason), 'author_source', '保存返回原因。')
     index = next((i for i, gate in enumerate(GATES) if gate[0] == gate_id), None)
-    require(index is not None and index < state['cursor'], 'opening_back', '只能返回已经选过的一门。')
+    require(index is not None and gate_id in selected(state), 'opening_back', '只能返回已经选过的一门。')
     state = copy.deepcopy(state)
-    state['history'].append({'action': 'back', 'gate': gate_id, 'reason': reason, 'invalidated': copy.deepcopy(state['selections'][index:])})
-    state.update(phase='choosing', cursor=index, round=0, board=None, selections=state['selections'][:index])
+    order = {k: i for i, (k, _) in enumerate(GATES)}
+    state['history'].append({'action': 'back', 'gate': gate_id, 'reason': reason, 'invalidated': copy.deepcopy([r for r in state['selections'] if order[r['gate']] >= index])})
+    state.update(phase='choosing', cursor=index, round=0, board=None, selections=[r for r in state['selections'] if order[r['gate']] < index])
+    _advance_cursor(state)
     state.pop('selection_hash', None)
     return state
 

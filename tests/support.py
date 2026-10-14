@@ -6,7 +6,7 @@ from novel_ledger.quality import template
 
 
 def contract(chapters=2, volumes=1):
-    return {'title': '夜班退件', 'genre': '都市生活',
+    return {'narrative_tracking': False, 'editorial_features': False, 'volume_outline': {}, 'title': '夜班退件', 'genre': '都市生活',
             'reader_promise': '一个夜班工人查清退件来源并承担自己的选择。',
             'ending': '退件来源公开，工人承担违规开箱的后果。', 'world_premise': '一座仓库的夜班退件纠纷。',
             'story_engine': '核对退件来源，追查签字责任。', 'opposition': '主管担心调查影响考核。',
@@ -39,10 +39,31 @@ def response(app, task_id=None, session=None, claim=None):
         if claim:
             first['execution_claim'] = claim
         app.seal(first)
-    data = template(stage, n, sources, work['obligations'])
+    data = template(stage, n, sources, work['obligations'], version=work.get('checks_version', 1),
+                    payload=work['payload'], tracking=work.get('narrative_tracking', False))
     if stage in ('book_plan', 'volume_plan'):
         data = {'intent': '查明来源。', 'ending_conditions': '证据公开且后果落实。',
                 'nodes': [node('book' if stage == 'book_plan' else work['scope'], () if stage == 'book_plan' else ('book',))]}
+        policy = work['payload'].get('volume_outline')
+        if policy:
+            model = app.repo.load().get('world')
+            refs = [next(section + ':' + r['id'] for section, rows in model.items() if isinstance(rows, list) for r in rows)] if model else []
+            data.update(world_hash=policy['world_hash'],
+                        brainstorm=[dict(id='A', premise='从封条追问经手人，责任逐层扩散。', tradeoff='先承担追查责任。', world_refs=refs),
+                                    dict(id='B', premise='先追查货物流向，再回查签字矛盾。', tradeoff='延迟确认经手人。', world_refs=refs)],
+                        selected='A', selection_reason='工程样本：卷末责任与现有规则相接。')
+    elif stage == 'volume_outline':
+        policy = work['payload']['volume_outline']
+        model = app.repo.load().get('world')
+        refs = [next(section + ':' + r['id'] for section, rows in model.items() if isinstance(rows, list) for r in rows)] if model else []
+        sentence = '沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。'
+        synopsis = (sentence * (policy['words'] // len(sentence) + 3))
+        from novel_ledger.contracts import han_count
+        while han_count(synopsis) > policy['words']:
+            synopsis = synopsis[:-1]
+        data = {'world_hash': policy['world_hash'],
+                'chapters': [dict(chapter=k, synopsis=synopsis, world_refs=refs, node_ids=[work['scope']])
+                             for k in range(policy['first'], policy['last'] + 1)]}
     elif stage == 'plan':
         book = app.repo.load()
         volume_id = next(v['id'] for v in book['contract']['volumes'] if v['first'] <= n <= v['end'])

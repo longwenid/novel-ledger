@@ -6,16 +6,17 @@ import sys
 import tempfile
 import unittest
 import uuid
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import creation, planning, world, workflow
 from novel_ledger.application import Application
-from novel_ledger.contracts import CONTRACT_ALIGNMENT, RESULT
+from novel_ledger.contracts import CONTRACT_ALIGNMENT, RESULT, digest, dump, han_count
 from novel_ledger.quality import template
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, drive
+from support import contract, drive, response
 
 
 VALUES = {
@@ -137,13 +138,20 @@ class OpeningTests(unittest.TestCase):
             board = self.offer()
             self.app.opening_choice('A', board['hash'], 'A')
 
-    def world_ready(self):
+    def world_ready(self, outline=None, volumes=None):
         self.select_gates()
         task = self.app.advance()['task']
         self.assertEqual(task['stage'], 'world_model')
         self.assertEqual(task['stages'], ['world_model', 'opening_contract'])   # one cold worker, two drafts
         # the combined dispatch answers both artifacts in one receipt
-        self.app.submit(receipt(self.app, combined(self.app)))
+        data = combined(self.app)
+        if outline == 'default':
+            data['contract'].pop('volume_outline')
+        elif outline is not None:
+            data['contract']['volume_outline'] = outline
+        if volumes:
+            data['contract']['volumes'] = contract(2, volumes)['volumes']
+        self.app.submit(receipt(self.app, data))
         self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
         self.app.submit(receipt(self.app, review_data(self.app)))
         self.assertEqual(self.app.advance()['task']['stage'], 'contract_review')
@@ -169,7 +177,7 @@ class OpeningTests(unittest.TestCase):
         # Fields the alignment checks read are compared key by key, so the template must carry them.
         self.assertEqual(sorted(set(full) & set(CONTRACT_ALIGNMENT) - set(blank)), [])
         filled = {**blank, **copy.deepcopy(full)}
-        filled.update(planning_window=3, review_interval=10, review_chunk=3)   # structural, not author decisions
+        filled.update(planning_window=3, review_interval=10, review_chunk=3, review_fanout=3)   # structural, not author decisions
         # The same alignment the contract branch runs, on an object filled from the published template.
         planning.validate_contract(filled)
         creation.validate_contract(planning.validate_contract(filled), self.repo.load()['creation'],
@@ -316,9 +324,122 @@ class OpeningTests(unittest.TestCase):
         self.assertEqual(self.app.advance()['action'], 'world_ready')
         view = final['world_view']
         self.assertTrue(Path(view['html_path']).is_file())
+        self.assertEqual(Path(view['html_path']), (self.project / 'book.html').resolve())
+        self.assertFalse((self.project / 'world.html').exists())
+        page = Path(view['html_path']).read_text(encoding='utf-8')
+        for section, fields in world.SECTIONS.items():
+            self.assertIn(world.LABELS[section], page)
+            for row in book['world'][section]:
+                for field in fields:
+                    self.assertIn(row[field], page)
+        self.assertIn('世界独立核验 · 通过', page)
+        self.assertIn('读正文', page)
+        self.assertIn('世界关联图', page)
+        self.assertIn('历史时间线', page)
         artifact = json.loads(Path(view['json_path']).read_text(encoding='utf-8'))
         self.assertEqual(artifact['world'], book['world'])
         self.assertEqual(len(artifact['choices']), 8)
+        self.assertTrue(self.app.audit()['ok'])
+
+    def test_reviewed_world_automatically_leads_to_full_volume_outline_without_prose(self):
+        policy = {'scope': 'current', 'words': 500, 'tolerance': 50}
+        handoff = self.world_ready(outline=policy)
+        self.assertEqual(handoff['task']['stage'], 'book_plan')
+        self.assertTrue(Path(handoff['world_view']['html_path']).is_file())
+        head = drive(self.app, until='volume_plan')
+        task = self.repo.pending()
+        self.assertEqual(head['task']['chapter'], 1)
+        material = self.app.read(task['id'])
+        self.assertIn('world_model', task['input']['required'])
+        self.assertEqual(material['payload']['volume_outline']['last'], 2)
+        template_path = Path(head['task']['template_path'])
+        blank = json.loads(template_path.read_text(encoding='utf-8'))['data']
+        self.assertNotIn('chapters', blank)
+        self.assertEqual(len(blank['brainstorm']), 2)
+        self.assertEqual(blank['world_hash'], digest(self.repo.load()['world']))
+        batch = drive(self.app, until='volume_outline')['task']
+        blank = json.loads(Path(batch['template_path']).read_text(encoding='utf-8'))['data']
+        self.assertEqual([c['chapter'] for c in blank['chapters']], [1, 2])
+        before = copy.deepcopy(self.repo.load()['state'])
+        design = response(self.app)
+        self.app.submit(design)
+        review_task = self.app.advance()['task']
+        self.assertEqual(review_task['stage'], 'outline_review')
+        self.assertIn('world_model', self.repo.pending()['input']['required'])
+        self.assertEqual(self.repo.load()['designs']['volume:v1'].get('chapters', []), [])
+        review = response(self.app)
+        review['session'] = design['session']
+        self.assertCode('session_reuse', self.app.submit, review)
+        self.app.submit(response(self.app))
+        ready = self.app.advance()
+        self.assertEqual(ready['action'], 'outline_ready')
+        self.assertEqual(ready['volumes'], ['v1'])
+        self.assertEqual(self.repo.headers('main'), [])
+        self.assertIsNone(self.repo.pending())
+        self.assertEqual(self.repo.load()['state'], before)
+        chapters = self.repo.load()['designs']['volume:v1']['chapters']
+        self.assertEqual([han_count(c['synopsis']) for c in chapters], [500, 500])
+        page = Path(ready['world_view']['html_path']).read_text(encoding='utf-8')
+        self.assertIn('逐章卷纲', page)
+        self.assertIn('卷纲脑暴与选案', page)
+        self.assertIn(chapters[1]['synopsis'], page)
+        run = self.app.run(through=1, source='试写一章。')
+        drive(self.app, run['owner'], until='plan')
+        planner = self.repo.pending()['input']
+        selected = self.repo.read_document(planner['records']['volume_outline_window'])
+        self.assertEqual([c['chapter'] for c in selected], [1])
+        drive(self.app, run['owner'], until='write')
+        writer = self.repo.pending()['input']
+        self.assertEqual(self.repo.read_document(writer['records']['chapter_outline']), chapters[0])
+
+    def test_volume_outline_rejections_are_atomic_and_preserve_the_frozen_task(self):
+        self.world_ready(outline={'scope': 'current', 'words': 500, 'tolerance': 50})
+        drive(self.app, until='volume_plan')
+        brainstorm = response(self.app)
+        brainstorm['data']['brainstorm'][1]['premise'] = brainstorm['data']['brainstorm'][0]['premise']
+        self.assertCode('outline_brainstorm', self.app.submit, brainstorm)
+        drive(self.app, until='volume_outline')
+        valid = response(self.app)
+        before = dump(self.repo.load())
+        task_id = self.repo.pending()['id']
+        variants = []
+        short = copy.deepcopy(valid); short['data']['chapters'][0]['synopsis'] = '甲' * 449
+        variants.append(('outline_length', short))
+        long = copy.deepcopy(valid); long['data']['chapters'][0]['synopsis'] = '甲' * 551
+        variants.append(('outline_length', long))
+        missing = copy.deepcopy(valid); missing['data']['chapters'].pop()
+        variants.append(('outline_coverage', missing))
+        wrong_world = copy.deepcopy(valid); wrong_world['data']['world_hash'] = 'other'
+        variants.append(('outline_world', wrong_world))
+        wrong_ref = copy.deepcopy(valid); wrong_ref['data']['chapters'][0]['world_refs'] = ['rules:missing']
+        variants.append(('outline_world', wrong_ref))
+        wrong_node = copy.deepcopy(valid); wrong_node['data']['chapters'][0]['node_ids'] = ['missing']
+        variants.append(('outline_nodes', wrong_node))
+        for code, candidate in variants:
+            with self.subTest(code=code):
+                self.assertCode(code, self.app.submit, candidate)
+                self.assertEqual(dump(self.repo.load()), before)
+                self.assertEqual(self.repo.pending()['id'], task_id)
+        for length in (450, 550):
+            edge = copy.deepcopy(valid)
+            edge['data']['chapters'][0]['synopsis'] = '甲' * length
+            self.app.submit(edge, preview=True)
+            self.assertEqual(dump(self.repo.load()), before)
+        self.app.submit(valid)
+
+    def test_default_guided_opening_delivers_all_volume_outlines_before_prose(self):
+        with patch.dict(VALUES['scale'], {'volume_count': 2}):
+            handoff = self.world_ready(outline='default', volumes=2)
+        self.assertEqual(handoff['task']['stage'], 'book_plan')
+        ready = drive(self.app)
+        self.assertEqual(ready['action'], 'outline_ready')
+        self.assertEqual(ready['volumes'], ['v1', 'v2'])
+        book = self.repo.load()
+        self.assertEqual(book['contract']['volume_outline'], {'scope': 'all', 'words': 500, 'tolerance': 50})
+        self.assertEqual([c['chapter'] for c in book['designs']['volume:v1']['chapters']], [1])
+        self.assertEqual([c['chapter'] for c in book['designs']['volume:v2']['chapters']], [2])
+        self.assertEqual(self.repo.headers('main'), [])
+        self.assertIsNone(self.repo.pending())
         self.assertTrue(self.app.audit()['ok'])
 
     def test_world_design_and_review_do_not_generate_canonical_events(self):
@@ -381,7 +502,7 @@ class OpeningTests(unittest.TestCase):
 
     def test_world_delivery_error_does_not_roll_back_activated_contract(self):
         self.world_ready()
-        blocker = self.project / 'world.html'
+        blocker = self.project / 'book.html'
         blocker.unlink()
         blocker.mkdir()
         final = self.app.advance()
@@ -389,6 +510,10 @@ class OpeningTests(unittest.TestCase):
         self.assertIn('world_view_error', final)
         self.assertEqual(self.repo.load()['creation']['phase'], 'ready')
         self.assertIsNotNone(self.repo.load()['contract'])
+        blocker.rmdir()
+        recovered = self.app.advance()
+        self.assertTrue(Path(recovered['world_view']['html_path']).is_file())
+        self.assertNotIn('world_view_error', recovered)
 
     def test_duplicate_options_and_unsupported_mechanism_are_rejected(self):
         self.app.advance()

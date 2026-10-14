@@ -13,12 +13,12 @@ from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book, preparing_book
 from novel_ledger import bookpage, delivery, host
 
-PUBLIC = {'init', 'status', 'advance', 'submit', 'preflight', 'check', 'first-read', 'claim', 'run', 'renew', 'approve',
+PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'first-read', 'claim', 'run', 'renew', 'approve',
           'pause', 'resume', 'revise', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
-SEALED = {'read', 'recall', 'audit', 'export', 'html'}
-WORKER = {'status', 'read', 'recall', 'submit', 'preflight', 'check', 'first-read'}
+SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
+WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'first-read'}
 # Prose, frozen records and the first read belong to a dispatched task; the controller role never executes them.
-WORKER_ONLY = {'read', 'recall', 'first-read'}
+WORKER_ONLY = {'read', 'recall', 'patch', 'first-read'}
 
 
 def load(path):
@@ -41,12 +41,12 @@ def parser():
         if command == 'init':
             sub.add_argument('--contract')
             sub.add_argument('--source', default='')
-        if command in ('submit', 'preflight', 'first-read', 'recontract', 'opening', 'lexical'):
+        if command in ('submit', 'preflight', 'first-read', 'recontract', 'opening', 'lexical', 'intake'):
             sub.add_argument('--file', required=True)
         if command == 'check':
             sub.add_argument('--file')
             sub.add_argument('--task')
-        if command in ('approve', 'recontract', 'opening', 'choose', 'lexical'):
+        if command in ('approve', 'recontract', 'opening', 'choose', 'lexical', 'intake'):
             sub.add_argument('--source', required=True)
         if command == 'choose':
             sub.add_argument('--option', required=True)
@@ -61,14 +61,22 @@ def parser():
             sub.add_argument('--prose-hash', required=True)
         if command == 'advance':
             sub.add_argument('--after')
-        if command in ('read', 'recall', 'claim'):
+        if command in ('read', 'recall', 'claim', 'patch'):
             sub.add_argument('--task', required=True)
+        if command == 'patch':
+            sub.add_argument('--old', required=True)
+            sub.add_argument('--new', required=True)
+            sub.add_argument('--start', type=int)
         if command == 'read':
             sub.add_argument('--record')
         if command == 'recall':
             group = sub.add_mutually_exclusive_group(required=True)
             group.add_argument('--chapter', type=int)
             group.add_argument('--state', action='store_true')
+            for kind in ('entity', 'node', 'topic', 'thread'):
+                group.add_argument('--' + kind)
+            sub.add_argument('--limit', type=int, default=5)
+            sub.add_argument('--before', type=int)
         if command in ('claim', 'run', 'renew'):
             sub.add_argument('--seconds', type=int, default=300)
         if command == 'claim':
@@ -137,10 +145,25 @@ def dispatch(args):
         if args.command in SEALED:
             app.content_guard()
         command, owner = args.command, args.owner
-        if command in ('init', 'status'):
+        if command == 'init':
+            result = app.status()
+            try:
+                result['book_view'] = bookpage.write(repo)
+            except OSError as exc:
+                result['book_view_error'] = str(exc)
+            return result
+        if command == 'status':
             return app.status()
         if command == 'advance':
             return app.advance(args.after, owner)
+        if command == 'intake':
+            return app.intake(load(args.file), args.source, owner)
+        if command == 'usage':
+            return app.usage()
+        if command == 'patch':
+            return app.patch(args.task, args.old, args.new, args.start)
+        if command == 'deliver':
+            return delivery.deliver_completion(repo, bookpage.render)
         if command in ('submit', 'preflight', 'first-read'):
             result = load(args.file)
             if os.environ.get('NOVEL_TASK_ID'):
@@ -154,7 +177,8 @@ def dispatch(args):
         if command == 'read':
             return app.read(args.task, args.record)
         if command == 'recall':
-            return app.recall(args.task, args.chapter, args.state)
+            kind = next((k for k in ('entity', 'node', 'topic', 'thread') if getattr(args, k)), None)
+            return app.recall(args.task, args.chapter, args.state, kind, getattr(args, kind) if kind else None, args.limit, args.before)
         if command == 'claim':
             return app.claim(args.task, args.session, args.seconds)
         if command == 'run':

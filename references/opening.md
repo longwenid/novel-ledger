@@ -16,15 +16,17 @@
 
 ## 系统执行
 
-1. init 不需要 source 或 contract；advance 后派新空历史方案 Worker，只给 task_path 和当前门角色。
+1. init 不需要 source 或 contract，自动生成 book.html，返回 book_view 的绝对路径；advance 后派新空历史方案 Worker，只给 task_path 和当前门角色。
 2. Worker 完整读 opening_choices/opening_rejections/opening_basis 和 payload，生成当前门方案并 submit。
 3. advance 得 await_choice，展示原组并等待用户。用户选择后执行 choose 保存原话，再 advance 下一门。系统不能替用户选择。
 4. 最后一门 choose 返回 next=world_model；立即 advance 派世界设计者，不重复询问是否开始创建世界。
-5. 世界独立核验通过后，系统整理完整约定并独立核验，world_ready 自动生成 world.html/world.json 并交付绝对路径；不再要求作者填表或批准已选设定。
+5. 世界独立核验通过后，系统整理完整约定并独立核验，自动更新 book.html 并生成 world.json。新约定默认继续设计并独立核验全书骨架、各卷脑暴方案及所有卷的完整逐章卷纲，分批完成后以 outline_ready 交付；没有正文授权不派章计划或执笔。旧约定 volume_outline 未启用时仍返回 world_ready。world_view.html_path 指向 book.html；页面生成失败保留已核验内容，重复 advance 可重试。逐章说明与字段见 [叙事推进](narrative.md)。
 
 已有明确正文授权时，世界交付后按原话调用 run；没有授权时在世界交付结束，不把选完设定等同于写完整本。
 
 ## 操作与恢复
+
+已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"ending":{"ending":"作者指定结局"}}`；只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。
 
 ```bash
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" init

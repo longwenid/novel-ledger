@@ -31,8 +31,8 @@ world_model 候选不更新正文事实。新 world_review 完整读选择和候
 
 机械校验只证明字段、引用和声明一致，语义由独立审稿者判断。隐秘真相与未来意图不直接变为人物知情或已发生事件。
 
-opening_contract 以闭合选择和采纳规则整理完整约定，contract_review 继续独立核验。world_ready 交付完整 world.html/world.json；反复 advance 可重建视图。
+opening_contract 以闭合选择和采纳规则整理完整约定，contract_review 继续独立核验。世界与约定核验完成即将完整世界设定、已选方向及世界核验合并到 book.html，并导出 world.json。新约定随后按已定世界设计、独立核验全书骨架和逐章卷纲，outline_ready 再更新统一页面；旧兼容模式仍以 world_ready 交付；world_view.html_path 为统一页面路径，反复 advance 可重建视图。世界关联图仅使用显式 links，历史时间线按模型记录顺序展示，不从描述推断关系或时期。
 
 ## 后续规划
 
-书级规划读完整世界。章计划声明 world_refs=[领域:id]；当前人物定义、引用记录和显式关联完整交付，全量 world_model 保留按需入口。未选记录不代表语义无关，不截断记录或把秘密直接写成角色对白。
+书级规划读完整世界。章计划声明 world_refs=[领域:id]；跟踪项目交付当前人物、引用记录及直接关联；隐秘真相保留在可选 world_author_records，并用 disclosure_boundary 明确本章披露许可。原 world_model 完整保留，沿关联补读，不递归展开整个世界。旧兼容模式保持原关联交付。未选记录不代表语义无关，不截断记录或把秘密直接写成角色对白。

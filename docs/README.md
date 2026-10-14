@@ -7,7 +7,7 @@
 | 文件 | 说明 |
 |---|---|
 | architecture.mmd | 从 architecture.md 提取的 mermaid 源码快照 |
-| architecture.svg | 与 mmd 节点连线一一对应的架构图；本机 mermaid-cli 渲染挂起，当前为手工排版维护 |
+| architecture.svg | 与 mmd 节点连线一一对应的架构图；当前已由 mermaid-cli 渲染；可在自动渲染不可用时手工维护 |
 | puppeteer.json | mermaid-cli 的浏览器沙箱配置，供可正常渲染的机器复用 |
 
 ## 更新流程

@@ -38,5 +38,8 @@
   "initial_resources": [{"holder": "shen", "asset": "散银", "unit": "两", "quantity": "3"}],
   "places": [{"id": "backstage", "name": "后台"}],
   "placements": {"shen": "backstage"},
-  "arcs": ["沈桐从只想保住班社，到愿意承担顶演的后果。"]
+  "arcs": ["沈桐从只想保住班社，到愿意承担顶演的后果。"],
+  "editorial_features": true,
+  "scope_append_limit": 3,
+  "volume_outline": {"scope": "all", "words": 500, "tolerance": 50}
 }

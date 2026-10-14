@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 from decimal import Decimal, InvalidOperation, localcontext
 from .contracts import Error, TIME_MARKERS, digest, dump, require, text
+from . import narrative, spatial
 
 
 def amount(value):
@@ -36,6 +37,9 @@ def entity(state, item):
 def seed(contract):
     state = {k: {} for k in ('entities', 'facts', 'knowledge', 'resources', 'relations', 'hooks', 'clock_threads', 'places', 'placements', 'historical_assertions', 'developments')}
     state['clock'] = 0
+    if contract.get('narrative_tracking'):
+        state.update({k: {} for k in ('story_nodes', 'thread_progress', 'reader_knowledge', 'character_current')})
+        state['pace_history'] = []
     for item in contract.get('entities', []):
         entity(state, item)
     for item in contract.get('initial_facts', []):
@@ -62,6 +66,8 @@ def seed(contract):
     for ident, place in contract.get('placements', {}).items():
         require(ident in state['entities'] and place in state['places'], 'placement', '初始站位实体或地点不存在。')
         state['placements'][ident] = place
+    if contract.get('editorial_features'):
+        spatial.seed(state, contract)
     return state
 
 
@@ -86,6 +92,18 @@ def _before(container, key, event):
             'precondition', '事实前值不匹配。', {'key': key, 'current': container.get(key), 'recover': '照抄 current 为 before；新值放 after。'})
 
 
+def prepare_hook_links(events, enabled):
+    """Freeze new optional semantics without reinterpreting old accepted event fields."""
+    require(isinstance(events, list), 'events', '独立事实审稿须提供 events 数组。')
+    result = copy.deepcopy(events)
+    for event in result:
+        if isinstance(event, dict) and event.get('op') == 'hook':
+            require('hook_links_version' not in event, 'hook_reference', '承诺关联版本由引擎按冻结任务能力填写。')
+            if enabled and any(k in event for k in ('subjects', 'topics')):
+                event['hook_links_version'] = 1
+    return result
+
+
 def settle(before, events, prose, chapter):
     require(isinstance(events, list), 'events', '独立事实审稿须提供 events 数组。')
     state = copy.deepcopy(before)
@@ -95,7 +113,21 @@ def settle(before, events, prose, chapter):
         event = copy.deepcopy(raw)
         event['evidence'] = evidence(event.get('evidence'), {chapter: prose})
         op = event.get('op')
-        if op == 'entity':
+        if op in spatial.OPS:
+            spatial.settle(state, event)
+        elif op in ('story_node', 'story_thread', 'reader_knowledge', 'character_current'):
+            if op == 'story_node' and 'criteria' in event:
+                rows = event['criteria']
+                require(isinstance(rows, list) and all(isinstance(c, dict) and text(c.get('id')) and text(c.get('actual_effect')) for c in rows)
+                        and len({c['id'] for c in rows}) == len(rows), 'story_criteria', '节点判据需唯一 id/actual_effect/evidence。')
+                for criterion in rows:
+                    criterion['evidence'] = evidence(criterion.get('evidence'), {chapter: prose})
+            narrative.settle_event(state, event, chapter)
+        elif op == 'pace':
+            require('pace_history' in state and all(text(event.get(k)) for k in narrative.PACE_FIELDS)
+                    and event['role'] in narrative.PACE_ROLES, 'pacing', '节奏事实须有完整的场景作用和情绪承接。')
+            state['pace_history'] = (state['pace_history'] + [{**event, 'chapter': chapter}])[-6:]
+        elif op == 'entity':
             entity(state, event.get('entity'))
         elif op == 'alias':
             ident, alias = event.get('entity'), event.get('alias')
@@ -169,6 +201,18 @@ def settle(before, events, prose, chapter):
             require(type(due) is int and due >= chapter, 'hook_due', '承诺期限须为当前或后续章节。')
             item = copy.deepcopy(old) if old else {'text': event.get('text'), 'seed': event['evidence'], 'extensions': 0}
             require(text(item.get('text')), 'hook', '新承诺需要内容。')
+            require('hook_links_version' not in event or event['hook_links_version'] == 1,
+                    'hook_reference', '未知承诺关联事件版本。')
+            for field in (('subjects', 'topics') if event.get('hook_links_version') == 1 else ()):
+                if field in event:
+                    refs = event[field]
+                    require(isinstance(refs, list) and all(text(r) for r in refs) and len(refs) == len(set(refs)),
+                            'hook_reference', '承诺 subjects/topics 须为不重复的非空 ID 数组，可用空数组表示无关联。')
+                    require(field != 'subjects' or all(r in state['entities'] for r in refs),
+                            'hook_reference', '承诺 subjects 只能引用已成立的人物或物品实体。')
+                    require(not old or field not in old or old[field] == refs or text(event.get('reason')),
+                            'hook_reference', '改变已登记的承诺关联须给出正文依据及 reason。')
+                    item[field] = list(refs)
             if old and due > old['due']:
                 item['extensions'] += 1
                 require(item['extensions'] <= 2 and text(event.get('reason')), 'hook_extension', '延期须有因果，最多两次。')
@@ -183,6 +227,8 @@ def settle(before, events, prose, chapter):
         elif op == 'move':
             ident, dst = event.get('entity'), event.get('after')
             require(ident in state['entities'] and dst in state['places'], 'move', '站位实体或地点无效。')
+            require(ident not in state.get('custody', {}) and not any(l['kind'] == 'path' for l in state.get('links', {}).values()),
+                    'move', '持有物由携带者移动；已建路径拓扑时用 travel 显式核验。')
             _before(state['placements'], ident, event)
             require(text(event.get('route')) and text(event.get('reason')), 'move', '移动须有路径和因果说明。')
             state['placements'][ident] = dst
@@ -202,10 +248,13 @@ def settle(before, events, prose, chapter):
         else:
             raise Error('event_op', '未知事件类型：' + str(op),
                         {'valid_ops': ['entity', 'alias', 'state', 'relation', 'knowledge', 'resource', 'clock',
-                                       'hook', 'place', 'move', 'historical_assertion', 'character_development']})
+                                       'hook', 'place', 'move', 'historical_assertion', 'character_development',
+                                       'story_node', 'story_thread', 'reader_knowledge', 'character_current', 'pace', *spatial.OPS]})
         normalized.append(event)
     overdue = [k for k, h in state['hooks'].items() if h['status'] == 'open' and h['due'] <= chapter]
     require(not overdue, 'hook_due', '承诺已到期，须在正文兑现或有据延期。', {'hooks': overdue, 'recover': '补齐承诺处理的正文与事件；不得直接删承诺。'})
+    sleeping = [k for k, t in state.get('thread_progress', {}).items() if t['status'] == 'dormant' and t['return_by'] <= chapter]
+    require(not sleeping, 'thread_due', '暂缓线路已到返回章节，须推进或在正文有据调整返回条件。', {'threads': sleeping})
     return state, normalized
 
 
