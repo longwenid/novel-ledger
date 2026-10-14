@@ -66,9 +66,11 @@ def seed(contract):
 
 
 def evidence(ref, sources):
-    require(isinstance(ref, dict) and type(ref.get('chapter')) is int and text(ref.get('quote')), 'evidence', '证据需要 chapter/quote。')
+    require(isinstance(ref, dict) and type(ref.get('chapter')) is int and text(ref.get('quote')), 'evidence', '证据需要 chapter/quote。',
+            {'expect': '单个对象 {chapter:int, quote:str, start?:int}；checks/obligations/coverage 的 evidence 是该对象的数组，findings/challenge/events 的 evidence 是单个对象。',
+             'frozen_chapters': sorted(sources)})
     chapter = ref['chapter']
-    require(chapter in sources, 'evidence_scope', '引文不在冻结正文范围内。')
+    require(chapter in sources, 'evidence_scope', '引文不在冻结正文范围内。', {'frozen_chapters': sorted(sources)})
     prose, quote = sources[chapter], ref['quote']
     start = ref.get('start')
     if start is None:
@@ -122,7 +124,9 @@ def settle(before, events, prose, chapter):
                     and event.get('stance') in ('knows', 'believes', 'suspects', 'disproved'), 'knowledge', '认知需要对象、命题、来源和立场。')
             key = ident + ':' + topic
             old = state['knowledge'].get(key)
-            require('before' in event and event['before'] == (old['claim'] if old else None), 'precondition', '认知前值不匹配。')
+            require('before' in event and event['before'] == (old['claim'] if old else None), 'precondition', '认知前值不匹配。',
+                    {'current': old['claim'] if old else None,
+                     'recover': '新 topic 的 before 为 null；已有 topic 的 before 照抄 current（旧 claim 原文）。'})
             state['knowledge'][key] = {k: event[k] for k in ('claim', 'source', 'stance', 'evidence')}
         elif op == 'resource':
             src, dst, asset, unit = event.get('from'), event.get('to'), event.get('asset'), event.get('unit')
@@ -146,7 +150,8 @@ def settle(before, events, prose, chapter):
             require(thread is None or text(thread), 'clock', '支线时间 ID 须非空。')
             current = state['clock_threads'].get(thread, state['clock']) if thread else state['clock']
             require(type(event.get('before')) is int and type(event.get('after')) is int
-                    and event['before'] == current and event['after'] >= current, 'time_conflict', '时间前值不匹配或发生倒退。')
+                    and event['before'] == current and event['after'] >= current, 'time_conflict', '时间前值不匹配或发生倒退。',
+                    {'current': current, 'recover': 'before 照抄 current；after 不得小于 current。'})
             require(any(t in event['evidence']['quote'] for t in TIME_MARKERS), 'time_evidence', '时间事件须引用正文中的时间表达。')
             if thread:
                 state['clock_threads'][thread] = event['after']
@@ -156,7 +161,9 @@ def settle(before, events, prose, chapter):
             ident, status = event.get('id'), event.get('status')
             require(text(ident) and status in ('open', 'paid', 'closed'), 'hook', '承诺 ID 或状态无效。')
             old = state['hooks'].get(ident)
-            require('before' in event and event['before'] == (old['status'] if old else None), 'precondition', '承诺前态不匹配。')
+            require('before' in event and event['before'] == (old['status'] if old else None), 'precondition', '承诺前态不匹配。',
+                    {'current': old['status'] if old else None,
+                     'recover': '新承诺的 before 为 null；已有承诺照抄 current（当前 status 原文）。'})
             require((old is None and status == 'open') or (old is not None and old['status'] == 'open'), 'hook', '承诺未埋设或已关闭。')
             due = event.get('due', old.get('due') if old else None)
             require(type(due) is int and due >= chapter, 'hook_due', '承诺期限须为当前或后续章节。')
@@ -193,7 +200,9 @@ def settle(before, events, prose, chapter):
             require(ident in state['entities'] and text(event.get('choice')) and text(event.get('cost')) and text(event.get('change')), 'development', '人物发展需要选择、代价和变化。')
             state['developments'].setdefault(ident, []).append(event)
         else:
-            raise Error('event_op', '未知事件类型：' + str(op))
+            raise Error('event_op', '未知事件类型：' + str(op),
+                        {'valid_ops': ['entity', 'alias', 'state', 'relation', 'knowledge', 'resource', 'clock',
+                                       'hook', 'place', 'move', 'historical_assertion', 'character_development']})
         normalized.append(event)
     overdue = [k for k, h in state['hooks'].items() if h['status'] == 'open' and h['due'] <= chapter]
     require(not overdue, 'hook_due', '承诺已到期，须在正文兑现或有据延期。', {'hooks': overdue, 'recover': '补齐承诺处理的正文与事件；不得直接删承诺。'})

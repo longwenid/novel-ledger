@@ -136,6 +136,8 @@ def validate_contract(raw):
     require(all(type(contract[k]) is int and contract[k] > 0
                 for k in ('chapter_min', 'chapter_max', 'chapter_aim', 'planning_window', 'review_interval', 'review_chunk')),
             'contract', '篇幅、窗口和复审间隔须为正整数。')
+    require(contract.get('verification') in ('full', 'fast'), 'contract',
+            'verification 须为 full（默认全档：固定间隔块审+分块范围审）或 fast（快速档：跳过固定间隔块审，范围审一次成块；章审与事实核验不降档）。')
     require(contract['chapter_min'] <= contract['chapter_aim'] <= contract['chapter_max'], 'contract', '章目标须在上下限之间。')
     band = contract['word_range']
     volumes = contract['volumes']

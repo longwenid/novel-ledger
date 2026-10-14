@@ -8,7 +8,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from .contracts import POLICY_FIELDS, RESULT, VERSION, WORLD_CHECKS, Error, digest, dump, han_count, require, text
+from .contracts import CHECK_SETS, POLICY_FIELDS, RESULT, VERSION, Error, checks_for, digest, dump, han_count, require, text
 from . import context, creation, delivery, facts, planning, quality, workflow, world
 
 
@@ -53,15 +53,30 @@ class Application:
 
     def _session(self, task, session, claim=None, check_lease=True):
         require(text(session), 'session', '须提供真实宿主会话身份 session。')
+        require(claim is None or isinstance(claim, str), 'execution_claim',
+                'execution_claim 须为 claim 命令返回的 token 裸字符串，不能是对象。',
+                {'expect': '回执顶层 "execution_claim": "<token>"；token 来自 claim --task <ID> --session <会话> 的返回。'})
         owner = self.repo.session_task(session)
         require(owner is None or owner == task['id'], 'session_reuse', '新任务须由新 Worker 执行，不得复用其他任务会话。')
         lease = self.repo.get('claim:' + task['id'])
         if lease and check_lease:
             require(lease['session'] == session and lease['token'] == claim and lease['until'] > time.time(),
-                    'worker_lease', 'Worker 租约或执行认领已过期。')
+                    'worker_lease', 'Worker 租约或执行认领已过期。',
+                    {'lease_session': lease['session'], 'expired': lease['until'] <= time.time(),
+                     'recover': '先执行 claim --task ' + task['id'] + ' --session <你的会话> 取得新 token，'
+                                '再在回执顶层 execution_claim 填该 token（裸字符串）后重新提交；回执内容本身不用改。'})
 
     def _sources(self, work):
         return {ref['chapter']: self.repo.read_document(ref['hash']) for ref in work['prose']}
+
+    def _baseline(self, book):
+        """A read-only projection of what stands right now, so a dispatcher never hand-summarizes
+        the ledger: resource balances, open hooks, the clock, and the live candidate."""
+        state = book['state']
+        return {'clock': state['clock'], 'resources': dict(sorted(state['resources'].items())),
+                'open_hooks': [{'id': ident, 'due': hook['due'], 'text': hook.get('text', '')}
+                               for ident, hook in sorted(state['hooks'].items()) if hook['status'] == 'open'],
+                'candidate': {'chapter': book['draft']['chapter'], 'stage': book['draft']['stage']} if book['draft'] else None}
 
     def advance(self, after=None, owner=None):
         boundary = None
@@ -98,7 +113,7 @@ class Application:
             except OSError as exc:
                 boundary['world_view_error'] = str(exc)
             return boundary
-        return {'action': 'task_ready', 'task': delivery.materialize(self.repo, task, self.entry), 'status': self.status()}
+        return {'action': 'task_ready', 'task': delivery.materialize(self.repo, task, self.entry, self._baseline(book)), 'status': self.status()}
 
     def read(self, task_id, record=None):
         task = self.repo.task(task_id)
@@ -188,6 +203,9 @@ class Application:
                 self.repo.add_chapter(book['branch'], row)
             self.repo.bind_session(result['session'], task['id'])
             self.repo.finish_task(task['id'], result)
+            revision = updated.get('revision_run')
+            if outcome.chapter and revision and revision.get('carry') and revision['last'] == outcome.chapter['n']:
+                self._carry_suffix(updated, revision)
             self.repo.save(updated)
             self.repo.record('submit', {'task': task['id'], 'stage': work['stage'], 'committed_chapter': outcome.chapter is not None})
             response = {'accepted': not preview, 'checked': preview, 'task_id': task['id'], 'worker_boundary': 'finished',
@@ -208,7 +226,7 @@ class Application:
             lease = {'session': session, 'token': old['token'] if old and old['session'] == session else uuid.uuid4().hex, 'until': time.time() + seconds}
             self.repo.put('claim:' + task_id, lease)
             self.repo.bind_session(session, task_id)
-            return lease
+            return {**lease, 'usage': '回执顶层 execution_claim 填写返回的 token 字段（裸字符串，非对象）。'}
 
     def release_claim(self, task_id, token):
         with self.repo.transaction():
@@ -228,7 +246,9 @@ class Application:
             require(type(target) is int and 1 <= target <= end, 'target', '运行目标须为约定范围内的章号。')
             pending = self.repo.pending()
             require(not pending or pending['input']['chapter'] <= target, 'target', '目标不能低于已冻结任务，先 pause --cancel。')
-            require(book['revision_run'] is None or target == book['revision_run']['last'], 'revision_target', '修订必须先恢复完整传播范围，再接原目标。')
+            # A narrow revision carries its suffix automatically once its end chapter commits, so a
+            # run target beyond the revision end no longer overshoots the propagation range.
+            require(book['revision_run'] is None or target >= book['revision_run']['last'], 'revision_target', '运行目标不能低于修订范围，先完成或撤销修订。')
             owner = owner or uuid.uuid4().hex
             self.repo.put('controller', {'owner': owner, 'until': time.time() + seconds})
             book.update(target=target, finish=finish, run_authorized=True)
@@ -397,7 +417,35 @@ class Application:
             previous = row['chain']
         return state
 
-    def revise(self, first, reason, owner=None):
+    def _carry_suffix(self, book, revision):
+        """Append the chapters past a narrow revision's end, unchanged, onto the candidate branch.
+
+        Carrying is sound only while the rewrite leaves their facts intact: each carried chapter's
+        frozen events settle against the new state, and the first divergence refuses the whole carry
+        so the revision must widen instead of silently deshaping the suffix.
+        """
+        state = book['state']
+        previous = self.repo.headers(book['branch'])[-1]['chain']
+        contract_hash = digest(book['contract'])
+        for row in revision['carry']:
+            prose = self.repo.read_document(row['prose'])
+            try:
+                state, normalized = facts.settle(state, self.repo.read_document(row['events']), prose, row['n'])
+            except Error as exc:
+                raise Error('revision_carry', '修订影响了第 %d 章的事实，不能原样携带其后缀。' % row['n'],
+                            {'chapter': row['n'], 'cause': exc.as_dict(),
+                             'recover': '撤销本修订后用更远的终点（或全书）重开 revise，重做受影响章。'})
+            carried = dict(row)
+            carried['events'] = self.repo.document(normalized)
+            carried['state_hash'] = digest(state)
+            carried['chain'] = facts.chain(previous, carried, contract_hash)
+            self.repo.add_chapter(book['branch'], carried)
+            previous = carried['chain']
+            book['written_han'] += carried['han']
+        book['state'] = state
+        revision['carry'] = []
+
+    def revise(self, first, reason, owner=None, through=None):
         require(type(first) is int and first >= 1 and text(reason), 'revision', '修订需要章号和明确原因。')
         with self.repo.transaction():
             self.controller_guard(owner)
@@ -405,21 +453,27 @@ class Application:
             require(book['revision_run'] is None, 'revision', '先完成或撤销当前修订。')
             rows = self.repo.headers(book['branch'])
             require(rows and first <= rows[-1]['n'], 'revision', '修订起点必须已有正式正文。')
+            book_last = rows[-1]['n']
+            end = book_last if through is None else through
+            require(type(end) is int and first <= end <= book_last, 'revision', '修订终点须在修订起点与最后一章之间。',
+                    {'revision_first': first, 'book_last': book_last,
+                     'recover': '一词级小修用 --through 收窄到受影响章；终点之后的章节原样携带并复核接缝。'})
             parent = book['branch']
             self.repo.put('branch-book:' + parent, book)
             branch = self.repo.fork(parent, first)
             old = self.repo.chapter(parent, first)
             book.update(branch=branch, state=self.replay(parent, book['contract'], first - 1),
                         written_han=sum(r['han'] for r in rows if r['n'] < first), status='running',
-                        target=rows[-1]['n'], finish=False, revision=book['revision'] + 1)
-            book['revision_run'] = {'parent': parent, 'first': first, 'last': rows[-1]['n'], 'reason': reason,
-                                    'target': self.repo.get('branch-book:' + parent)['target'], 'finish': self.repo.get('branch-book:' + parent)['finish']}
+                        target=book_last, finish=False, revision=book['revision'] + 1)
+            book['revision_run'] = {'parent': parent, 'first': first, 'last': end, 'reason': reason,
+                                    'target': self.repo.get('branch-book:' + parent)['target'], 'finish': self.repo.get('branch-book:' + parent)['finish'],
+                                    'carry': [r for r in rows if r['n'] > end]}
             book.pop('scope_findings', None)
             draft = {'chapter': first, 'title': old['title'], 'prose': self.repo.read_document(old['prose']), 'producer': 'historical', 'history': [], 'findings': []}
             workflow.route_repair(book, draft, [{'criterion': 'change', 'severity': 'quality', 'target_chapter': first, 'repair_scope': 'chapter', 'reason': reason}])
             self.repo.cancel_pending(reason)
             self.repo.save(book)
-            self.repo.record('revision', book['revision_run'])
+            self.repo.record('revision', {k: v for k, v in book['revision_run'].items() if k != 'carry'})
         return self.status()
 
     def promote(self, owner=None):
@@ -533,7 +587,7 @@ class Application:
             world.validate(book['world'], creation.selected(opening), opening['selection_hash'])
             creation.validate_contract(book['contract'], opening, book['world'])
             approval = book['world_review']
-            review = quality.checks(approval['receipt'], WORLD_CHECKS, {0: dump(book['world'])})
+            review = quality.checks(approval['receipt'], checks_for(approval['receipt'].get('checks_version', 1), 'world'), {0: dump(book['world'])})
             require(review['verdict'] == 'pass' and approval['reviewer'] != approval['producer'], 'world_review', '世界模型缺少独立通过核验。')
         amendment = book.get('contract_review')
         if amendment:
@@ -548,7 +602,8 @@ class Application:
             plan = self.repo.read_document(row['plan'])
             require(plan['chapter'] == row['n'] and review['writer'] != review['session'], 'review_independence', '章节计划或独立审稿来源不匹配。')
             quality.first_read(review['first_read'], {row['n']: prose})
-            f, r = quality.chapter_review(review, {row['n']: prose}, review['obligations'])
+            f, r = quality.chapter_review(review, {row['n']: prose}, review['obligations'],
+                                          version=review.get('facts', {}).get('checks_version', 1))
             require(f['verdict'] == r['verdict'] == 'pass', 'review', '正式章节缺少两类通过审稿。')
             require(book['contract']['chapter_min'] <= han_count(prose) <= book['contract']['chapter_max'] and han_count(prose) == row['han'], 'length', '正式篇幅不符合约定。')
             require(all(p in book['profiles'] for p in plan['participants']), 'profile', '正式章节人物档案缺失。')

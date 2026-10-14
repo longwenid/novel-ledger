@@ -84,6 +84,8 @@ def parser():
             sub.add_argument('--cancel', action='store_true')
         if command in ('revise', 'replan'):
             sub.add_argument('--from-chapter', type=int, required=True)
+        if command == 'revise':
+            sub.add_argument('--through', type=int)
         if command == 'feedback':
             sub.add_argument('--text', required=True)
         if command in ('export', 'html'):
@@ -172,7 +174,7 @@ def dispatch(args):
         if command == 'resume':
             return app.resume(owner)
         if command == 'revise':
-            return app.revise(args.from_chapter, args.reason, owner)
+            return app.revise(args.from_chapter, args.reason, owner, args.through)
         if command == 'replan':
             return app.replan(args.from_chapter, args.reason, owner)
         if command == 'feedback':

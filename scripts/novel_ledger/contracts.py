@@ -17,6 +17,20 @@ LONG_CHECKS = ('causality', 'character_arcs', 'payoffs', 'pacing', 'world_rules'
 DESIGN_CHECKS = ('author_constraints', 'causality', 'characters', 'disclosure', 'scale')
 WORLD_CHECKS = ('choice_alignment', 'rule_consistency', 'spatial_connections', 'historical_causes',
                 'faction_interests', 'economic_consequences', 'social_pressure', 'character_boundaries', 'disclosure', 'story_capacity')
+# Check lists are part of the wire contract: a book already reviewed must keep being judged by the
+# list it was reviewed against, or adding a check would retroactively fail every finished project.
+# Receipts carry their own `checks_version` (absent means the original set); new submissions are
+# always judged by CHECKS_VERSION, so raising it only affects work yet to be reviewed.
+CHECKS_VERSION = 1
+CHECK_SETS = {1: {'fact': FACT_CHECKS, 'reader': READER_CHECKS, 'design': DESIGN_CHECKS,
+                  'world': WORLD_CHECKS, 'long': LONG_CHECKS}}
+
+
+def checks_for(version, kind):
+    table = CHECK_SETS.get(version)
+    require(table is not None, 'checks_version', '未知的检查清单版本。',
+            {'known_versions': sorted(CHECK_SETS), 'recover': '回执按下发的模板版本填写，不要沿用旧版本号。'})
+    return table[kind]
 FIRST_READ = ('desire', 'obstacle', 'change', 'read_on_reason')
 REPAIRS = 2
 REDESIGNS = 1
@@ -97,6 +111,7 @@ CONTRACT_FIELDS = (
     {'key': 'planning_window', 'kind': 'int', 'default': 3, 'alignment': False},
     {'key': 'review_interval', 'kind': 'int', 'default': 10, 'alignment': False},
     {'key': 'review_chunk', 'kind': 'int', 'default': 3, 'alignment': False},
+    {'key': 'verification', 'kind': 'text', 'default': 'full', 'alignment': False},
     {'key': 'initial_facts', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'places', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'placements', 'kind': 'map', 'default': {}, 'alignment': False, 'optional': True},

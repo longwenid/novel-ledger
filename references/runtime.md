@@ -13,7 +13,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance
 
 ## 任务交接
 
-advance 返回 task_ready 时读 task.task_path。commands 为 argv 数组，按数组执行，不拼 shell 字符串。派真实新 Worker，填真实 session。需要执行认领时宿主调用 `claim --task ID --session ID`，首读与提交附 execution_claim。
+advance 返回 task_ready 时读 task.task_path。commands 为 argv 数组，按数组执行，不拼 shell 字符串。派真实新 Worker，填真实 session。需要执行认领时宿主调用 `claim --task ID --session ID`（返回里的 token 以**裸字符串**填进回执顶层 execution_claim，不能是对象），首读与提交附 execution_claim。任务视图带 `claim` 字段：`null` 表示无人认领，`{session, expired:false}` 表示有 Worker 在途（不要重派），`expired:true` 表示租约已过期、可由新 Worker 重新 claim 接手——result.json 存在但 claim 过期时，先重新 claim 再原样重提，不要改写回执。跨会话接管项目：先 `status` 再 `advance`，按返回动作接续，不手改库。
 
 ### 路径与失效判定
 
@@ -29,7 +29,7 @@ commands/guides 由**当前安装**渲染（解释器取自身份进程，脚本
 
 - `pause --reason 原因` 保留任务与候选；`--cancel` 取消但留档。原会话可恢复时沿原首读继续；另派审稿者时取消旧任务，生成新首读，不能冒用旧 session。
 - `resume` 不增加额度；耗尽时保留材料并报告缺陷和作者处理方向，不能重开任务清零。
-- 候选稿反馈用 `feedback --text 原话`；验收稿用 `revise --from-chapter N --reason 原话`。修订重审完整后缀，revision_ready 后 promote；discard 恢复旧稿及目标。
+- 候选稿反馈用 `feedback --text 原话`；验收稿用 `revise --from-chapter N --reason 原话`。一词级小修可用 `--through M` 把修订终点收窄到受影响章：终点之后的章节在终点章入库时原样携带（冻结事件对新状态重新结算，事实受影响即整单拒绝并要求扩大范围），修订块审覆盖改动章与接缝章。修订重审完整后缀（或窄范围的改动章+接缝）通过后 promote；discard 恢复旧稿及目标。
 - `replan --from-chapter N --reason 原因` 只改未写窗口；已有草稿或正式稿的计划不能直接删除。
 - `lexical --file 规则.json --source 原话` 改作者字面约定，新版本追加在项目记录里，旧版本保留；改规则会取消在途任务并作废其视图，下次 advance 重新派任务。
 - `recontract --file 完整候选.json --source 原话` 取消旧任务留档，经独立核验激活新约定，在父稿保留的分支重新规划写审。`opening --file` 是同一核验路径的开书入口：只在项目没有派发过门任务时接受（`init` 之后、第一次 advance 之前），导入后清除逐门选择状态；派过门任务后按 creation 错误拒绝并用 recontract 改约。

@@ -5,6 +5,7 @@ import html
 import json
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
 from .contracts import FIRST_READ, FORM_ARTIFACTS, RESULT, VERSION, digest, dump, require
@@ -47,7 +48,7 @@ def retire(base):
         (Path(base) / name).unlink(missing_ok=True)
 
 
-def materialize(repo, task, entry):
+def materialize(repo, task, entry, baseline=None):
     work = task['input']
     base = repo.project / 'work' / task['id']
     locked = work['blind'] and not task['first_read']
@@ -57,11 +58,19 @@ def materialize(repo, task, entry):
         atomic_write(path, repo.read_document(ref['hash']))
         prose_files.append({**ref, 'path': str(path)})
     command = [sys.executable, str(entry), '--project', str(repo.project)]
+    lease = repo.get('claim:' + task['id'])
     envelope = {'schema': work['schema'], 'task_id': task['id'], 'input_hash': task['input_hash'],
                 'stage': work['stage'], 'chapter': work['chapter'], 'scope': work['scope'],
                 'delivery_phase': 'first_read' if locked else 'formal', 'prose_files': prose_files,
                 'task_path': str(base / 'task.json'), 'result_path': str(base / 'result.json'),
                 'requires_new_worker': True, 'version': VERSION,
+                # An in-flight claim tells the dispatcher whether another worker still owns this
+                # task: an expired one is reclaimable, a live one is not a re-dispatch candidate.
+                'claim': ({'session': lease['session'], 'expired': lease['until'] <= time.time()}
+                          if lease else None),
+                # The ledger baseline is a read-only projection: dispatchers forward it instead of
+                # hand-summarizing balances, and workers use it to sanity-check precondition values.
+                'baseline': baseline,
                 'commands': {'submit': command + ['submit', '--file', str(base / 'result.json')],
                              'preflight': command + ['preflight', '--file', str(base / 'result.json')],
                              'read': command + ['read', '--task', task['id']]}}

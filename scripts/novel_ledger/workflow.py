@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import DESIGN_CHECKS, LONG_CHECKS, WORLD_CHECKS, REPAIRS, REDESIGNS, Job, Outcome, digest, han_count, require, text
+from .contracts import CHECKS_VERSION, REPAIRS, REDESIGNS, Job, Outcome, checks_for, digest, han_count, require, text
 from . import creation, facts, planning, quality, world
 
 
@@ -85,8 +85,11 @@ def choose(book, headers):
         return Job(draft['stage'], draft['chapter'])
     if head:
         volume = planning.volume_for(contract, head)
+        # The fast tier narrows *scheduling*, never the chapter gate: it skips the fixed-interval
+        # block review and settles each remaining scope in one block instead of chunks.
+        fast = contract.get('verification') == 'fast'
         scopes = []
-        if head % contract['review_interval'] == 0:
+        if head % contract['review_interval'] == 0 and not fast:
             scopes.append(('interval', max(1, head - contract['review_interval'] + 1), head))
         if head == volume['end']:
             scopes.append(('volume:' + volume['id'], volume['first'], head))
@@ -101,7 +104,8 @@ def choose(book, headers):
                 parts = book['scope_parts'].get(key, [])
                 next_first = parts[-1]['last'] + 1 if parts else first
                 if next_first <= last:
-                    return Job('scope_review', last, scope, next_first, min(last, next_first + contract['review_chunk'] - 1), {'review_key': key, 'scope_first': first, 'scope_last': last})
+                    block_last = last if fast else min(last, next_first + contract['review_chunk'] - 1)
+                    return Job('scope_review', last, scope, next_first, block_last, {'review_key': key, 'scope_first': first, 'scope_last': last})
                 return Job('scope_synthesis', last, scope, first, last, {'review_key': key})
         if revision and head >= revision['last']:
             return {'action': 'revision_ready'}
@@ -185,7 +189,7 @@ def apply(book, task, data, actor, sources):
     elif stage == 'world_review':
         proposal = book['proposal']
         require(actor != proposal['producer'], 'review_independence', '世界模型须由独立核验者检查。')
-        review = quality.checks(data, WORLD_CHECKS, sources)
+        review = quality.checks(data, checks_for(CHECKS_VERSION, 'world'), sources)
         if review['verdict'] == 'pass':
             book['world'] = proposal['data']
             book['world_review'] = {'receipt': review, 'producer': proposal['producer'], 'reviewer': actor}
@@ -215,7 +219,7 @@ def apply(book, task, data, actor, sources):
     elif stage == 'design_review':
         proposal = book['proposal']
         require(proposal is not None and actor != proposal['producer'], 'review_independence', '设计核验须独立于提案者。')
-        review = quality.checks(data, DESIGN_CHECKS, sources)
+        review = quality.checks(data, checks_for(CHECKS_VERSION, 'design'), sources)
         if review['verdict'] == 'pass':
             book['designs'][proposal['scope']] = proposal['data']
             book['proposal'] = None
@@ -229,7 +233,7 @@ def apply(book, task, data, actor, sources):
     elif stage == 'contract_review':
         proposal = book['proposal']
         require(actor != proposal['producer'], 'review_independence', '改约核验须独立于作者要求整理者。')
-        review = quality.checks(data, DESIGN_CHECKS, sources)
+        review = quality.checks(data, checks_for(CHECKS_VERSION, 'design'), sources)
         if review['verdict'] == 'pass':
             book['pending_contract'] = proposal
             book['pending_contract_reviewer'] = actor
@@ -291,7 +295,7 @@ def apply(book, task, data, actor, sources):
             book['written_han'] += row['han']
             book['carry_findings'] = [f for f in book.get('carry_findings', []) if f.get('target_chapter') != chapter]
     elif stage in ('scope_review', 'scope_synthesis'):
-        review = quality.checks(data, LONG_CHECKS, sources)
+        review = quality.checks(data, checks_for(CHECKS_VERSION, 'long'), sources)
         coverage = data.get('coverage')
         require(isinstance(coverage, list) and len(coverage) == len(sources) and all(isinstance(r, dict) and type(r.get('chapter')) is int for r in coverage)
                 and {r['chapter'] for r in coverage} == set(sources), 'scope_coverage', '跨章核验须逐章给出覆盖证据。')

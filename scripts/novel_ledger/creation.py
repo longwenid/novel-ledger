@@ -161,14 +161,18 @@ def rejection_record(state, reason):
             'pitches': [o.get('pitch', '') for o in board.get('options', [])]}
 def board_matches(state, board_hash):
     require(state['phase'] == 'choosing' and state['board'] is not None and state['board']['hash'] == board_hash
-            and state['board']['basis'] == basis(state), 'opening_version', '请选择当前展示的一组方案；旧选项不能套到新一门。')
+            and state['board']['basis'] == basis(state), 'opening_version', '请选择当前展示的一组方案；旧选项不能套到新一门。',
+            {'gate': current(state)['id'], 'current_board': state['board']['hash'] if state.get('board') else None,
+             'recover': '先 advance 取当前展示板的 hash，再用它执行 choose/regroup/back。'})
 
 
 def pick(state, option_id, board_hash, source):
     require(text(source), 'author_source', '保存用户实际选择原话，用户只需选编号。')
     board_matches(state, board_hash)
     option = next((o for o in state['board']['options'] if o['id'] == option_id), None)
-    require(option is not None, 'opening_option', '当前展示组中没有该选项。')
+    require(option is not None, 'opening_option', '当前展示组中没有该选项。',
+            {'valid_options': [o['id'] for o in state['board']['options']], 'board': state['board']['hash'],
+             'recover': 'option id 由方案 Worker 自定（不一定是 A/B/C），从 valid_options 中选择。'})
     state = copy.deepcopy(state)
     state['selections'].append({'gate': current(state)['id'], 'option': copy.deepcopy(option), 'board_hash': board_hash, 'source': source})
     state['history'].append({'action': 'choose', 'gate': current(state)['id'], 'option': option_id, 'board_hash': board_hash, 'source': source})

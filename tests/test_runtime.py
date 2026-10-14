@@ -237,6 +237,75 @@ class RuntimeTests(unittest.TestCase):
         self.app.discard(owner)
         self.assertEqual(self.repo.load()['rework']['2']['repairs'], 1)
 
+    def test_narrow_revision_carries_unchanged_suffix(self):
+        self.repo.save(workflow.new_book(contract(3)))
+        owner = self.finish()
+        formal3 = self.repo.chapter('main', 3)
+        self.app.revise(2, '一词之修。', owner, through=2)
+        self.assertEqual(self.app.status()['accepted_chapters'], 1)
+        self.assertEqual(drive(self.app, owner)['action'], 'revision_ready')
+        carried = self.repo.chapter(self.repo.load()['branch'], 3)
+        self.assertEqual(carried['prose'], formal3['prose'])
+        self.assertEqual(self.app.status()['accepted_chapters'], 3)
+        self.assertTrue(self.app.audit()['ok'])
+        self.app.promote(owner)
+        self.assertTrue(self.app.audit()['ok'])
+
+    def test_narrow_revision_refuses_carry_when_facts_drift(self):
+        self.repo.save(workflow.new_book(contract(3)))
+        owner = self.finish()
+        self.app.revise(2, '改时钟。', owner, through=2)
+        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'repair')
+        self.app.submit(response(self.app))  # 重写第 2 章并进入章审
+        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'chapter_review')
+        review = response(self.app)
+        clock = review['data']['facts']['events'][0]['before']
+        review['data']['facts']['events'][0]['after'] = clock + 2
+        review['data']['facts']['elapsed_days'] = 2  # 第 3 章冻结事件的时钟前值随之失效
+        self.assertCode('revision_carry', self.app.submit, review)
+        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'chapter_review')
+
+    def test_advance_carries_ledger_baseline(self):
+        handoff = drive(self.app, until='write')
+        baseline = handoff['task']['baseline']
+        self.assertEqual(baseline['clock'], 0)
+        self.assertIn('["shen","车费","元"]', baseline['resources'])
+        self.assertIsNone(baseline['candidate'])
+        on_disk = json.loads(Path(handoff['task']['task_path']).read_text(encoding='utf-8'))
+        self.assertEqual(on_disk['baseline']['clock'], 0)
+
+    def test_receipts_record_check_list_version(self):
+        self.review_task()
+        result = response(self.app)
+        self.assertEqual(result['data']['facts']['checks_version'], 1)
+        self.app.submit(result)
+        review = self.repo.read_document(self.repo.chapter('main', 1)['review'])
+        self.assertEqual(review['facts']['checks_version'], 1)
+        self.assertTrue(self.app.audit()['ok'])
+
+    def test_fast_verification_skips_interval_and_merges_blocks(self):
+        book = workflow.new_book(contract(4, 1))
+        book['contract']['review_interval'] = 2
+        book['contract']['verification'] = 'fast'
+        self.repo.save(book)
+        run = self.app.run(finish=True, source='工程夹具授权写完。')
+        owner, blocks = run['owner'], []
+        for _ in range(100):
+            handoff = self.app.advance(owner=owner)
+            if handoff['action'] == 'await_author':
+                self.app.approve(handoff['prose_hash'], '工程夹具作者明确认可当前版本。', owner)
+                continue
+            if handoff['action'] != 'task_ready':
+                break
+            task = handoff['task']
+            if task['stage'] == 'scope_review':
+                work = self.repo.task(task['task_id'])['input']
+                blocks.append((work['scope'], work['first'], work['last']))
+            self.app.submit(response(self.app))
+        self.assertEqual(handoff['action'], 'ready_to_complete')
+        self.assertFalse(any(scope == 'interval' for scope, _, _ in blocks))
+        self.assertIn(('volume:v1', 1, 4), blocks)
+
     def test_lexical_override_is_versioned_and_applies_from_the_opening_stage(self):
         self.assertEqual(self.app.advance()['task']['stage'], 'book_plan')
         with self.assertRaises(Error) as caught:

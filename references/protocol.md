@@ -6,7 +6,7 @@
 
 约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威：交付模板、结构校验和对齐核验都由它派生，新增字段只改这一处。结构校验按表逐项执行，未知字段直接拒绝（旧版本残留字段会报 contract），标为 optional 的数组/映射缺省时补空值，其余必填。
 
-必填 title/reader_promise/ending/genre/reader_promise 等全部文本字段、word_range=[总汉字下限,上限]、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。planning_window/review_interval/review_chunk 可缺省（3/10/3）。
+必填 title/reader_promise/ending/genre/reader_promise 等全部文本字段、word_range=[总汉字下限,上限]、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。planning_window/review_interval/review_chunk 可缺省（3/10/3）。verification 可缺省为 full：full 走固定间隔块审+分块范围审，fast 跳过固定间隔块审且范围审一次成块——两档的章审、首读与事实核验完全一致，档位只收窄调度密度，不放松任何不变量。审稿回执顶层带 checks_version：回执按提交时的检查清单版本存档，验收重放按回执自己的版本核对，因此引擎后续新增检查项不会追溯推翻已通过的核验。
 
 篇幅必须**写得完**：固定章数 last 后，每章平均可用区间是 `[ceil(word_range[0]/last), floor(word_range[1]/last)]`；`chapter_aim` 与 `chapter_max` 都必须落在该区间内，否则报 `scale`（区间为空报"章数与总篇幅不能同时成立"）。错误详情里带 `per_chapter_range` 与可执行的修正建议（降低章幅或上调卷末章号），例如 47 章 × 上限 2600 配 11 万上限会被拒，因为每章平均最多只能 2340 字。
 
@@ -34,7 +34,7 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 使用执行认领时附 execution_claim。preflight 完整校验后回滚，checked 不等于入库；submit 才更新。相同已提交结果幂等，不同结果拒绝。拒绝不计修复额度，真实短稿提交计实际执笔轮次并保留稿件。
 
-`check` 是给 Worker 的格式自检：把候选回执从标准输入管道进去（`check` 无需 `--file`，也可省略 task_id），它按与 submit 相同的校验运行但**不提交、不消耗额度**，并直接报告缺哪个字段或哪个枚举不对；会话取自身份进程或任务自身。它的存在是为了让执行者**不必读引擎源码确认格式**——源码不是任务材料，读它会显著推高上下文成本。
+`check` 是给 Worker 的格式自检：把候选回执从标准输入管道进去（`check` 无需 `--file`，也可省略 task_id），它按与 submit 相同的校验运行但**不提交、不消耗额度**，并直接报告缺哪个字段或哪个枚举不对；会话取自身份进程或任务自身。它的存在是为了让执行者**不必读引擎源码确认格式**——源码不是任务材料，读它会显著推高上下文成本。常见拒绝对应的期望形状：前值不匹配时 details 带 `current`（照抄为 before，新键为 null）；`evidence_scope`/首读覆盖带 `frozen_chapters`；`review_coverage`/`finding` 带 `expect`/`valid_criteria`；`event_op` 带 `valid_ops`；`opening_option`（choose）带 `valid_options`。报错里没有的形状不要去源码里找，用 check 试算。
 
 | 阶段 | data |
 |---|---|
