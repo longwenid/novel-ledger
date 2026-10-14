@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger.application import Application
-from novel_ledger.contracts import ENFORCEMENT, Error, FACT_CHECKS, RESULT, digest, dump
+from novel_ledger.contracts import CHECKS_VERSION, ENFORCEMENT, Error, FACT_CHECKS, RESULT, digest, dump
 from novel_ledger import delivery, facts, host, planning, workflow
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import contract, drive, response
@@ -54,6 +54,37 @@ class RuntimeTests(unittest.TestCase):
         output = delivery.export_book(self.repo, output=Path(self.temp.name) / 'book-plain.html')
         self.assertIn('第4章', Path(output['path']).read_text(encoding='utf-8'))
         self.assertTrue(self.app.complete(owner)['idempotent'])
+
+    def test_scene_openings_allow_same_day_chapters_and_interior_time_evidence(self):
+        self.repo.save(workflow.new_book(contract(3)))
+        owner = self.app.run(finish=True, source='工程夹具授权验证三章时间衔接。')['owner']
+        prose = [
+            '沈桐把箱子推到主管面前，指着封条上的签字，要求核对退件来源，主管却按住了箱盖。',
+            '“先把责任栏填上。”主管把登记册塞给沈桐。他没有接，反而抽出封条，指给主管看另一处笔迹。',
+            '封条被主管扣进抽屉，沈桐攥紧了空白的责任单。次日，他带着退件人的签字回来，把两份笔迹并排放下。',
+        ]
+        for n, chapter_prose in enumerate(prose, 1):
+            self.assertEqual(drive(self.app, owner, until='write')['task']['chapter'], n)
+            draft = response(self.app)
+            draft['data']['prose'] = chapter_prose
+            self.app.submit(draft)
+            drive(self.app, owner, until='chapter_review')
+            review = response(self.app)
+            review['data']['facts'].update(elapsed_days=0 if n < 3 else 1, events=[])
+            if n == 3:
+                review['data']['facts']['events'] = [
+                    {'op': 'clock', 'before': 0, 'after': 1,
+                     'evidence': {'chapter': n, 'quote': '次日'}},
+                ]
+            self.app.submit(review)
+            self.assertEqual(self.repo.load()['state']['clock'], 0 if n < 3 else 1)
+        self.assertEqual(drive(self.app, owner)['action'], 'ready_to_complete')
+        self.app.complete(owner)
+        self.assertTrue(self.app.audit()['ok'])
+        output = delivery.export_book(self.repo, output=Path(self.temp.name) / 'scene-openings.md', format='md')
+        exported = Path(output['path']).read_text(encoding='utf-8')
+        for chapter_prose in prose:
+            self.assertIn(chapter_prose, exported)
 
     def test_repeated_advance_keeps_a_worker_form_and_replaces_a_stale_template(self):
         drive(self.app, until='write')
@@ -277,10 +308,10 @@ class RuntimeTests(unittest.TestCase):
     def test_receipts_record_check_list_version(self):
         self.review_task()
         result = response(self.app)
-        self.assertEqual(result['data']['facts']['checks_version'], 1)
+        self.assertEqual(result['data']['facts']['checks_version'], CHECKS_VERSION)
         self.app.submit(result)
         review = self.repo.read_document(self.repo.chapter('main', 1)['review'])
-        self.assertEqual(review['facts']['checks_version'], 1)
+        self.assertEqual(review['facts']['checks_version'], CHECKS_VERSION)
         self.assertTrue(self.app.audit()['ok'])
 
     def test_fast_verification_skips_interval_and_merges_blocks(self):
@@ -764,7 +795,7 @@ class DomainTests(unittest.TestCase):
 
     def test_all_imports_including_deferred_are_acyclic_and_domains_have_no_io(self):
         graph = {}
-        pure = {'contracts', 'facts', 'planning', 'quality', 'workflow', 'creation', 'world'}
+        pure = {'contracts', 'facts', 'planning', 'quality', 'workflow', 'creation', 'world', 'narrative', 'scopes', 'craft', 'spatial', 'editorial'}
         for path in (ROOT / 'scripts' / 'novel_ledger').glob('*.py'):
             deps = set()
             tree = ast.parse(path.read_text(encoding='utf-8'), feature_version=(3, 9))

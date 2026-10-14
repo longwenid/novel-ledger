@@ -7,9 +7,11 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" init --contract 作者约�
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance
 ```
 
-零输入开书不带 --contract 执行 init，advance 先派当前门的方案任务。await_choice 展示当前门，全部选择后自动创建及核验世界，world_ready 交付世界设定；详见 [逐门开书](opening.md)。开书前就有完整约定用 `init --contract 约定.json`；已进入逐门选择的项目不再接受导入，改方向用 recontract。
+零输入开书不带 --contract 执行 init，advance 先派当前门的方案任务。await_choice 展示当前门，全部选择后自动创建及核验世界，再设计并独立核验全书骨架与逐章卷纲，outline_ready 交付（旧兼容模式为 world_ready）；详见 [逐门开书](opening.md)。开书前就有完整约定用 `init --contract 约定.json`；已进入逐门选择的项目不再接受导入，改方向用 recontract。
 
-直接完整约定的默认目标为试章；零输入选择流程默认交付世界模型。作者已授权正文后，用 `run --through N --source 原话` 或 `run --complete --source 原话` 保存目标并取得 owner。后续主控治理命令带 `--owner 返回值`；`renew --owner 返回值` 续租。过期后重新 run 认领，沿用已经授权的实际目标，不扩大范围。
+已有部分要求时，在未展示方案且无 pending 时 `intake --file 部分要求.json --source 原话`；文件为门 ID 到完整 value 的映射，已定门跳过，冲突先 back，不让模型代选缺口。完整约定的三个入口仍按项目状态处理。
+
+直接完整约定的默认目标为试章；零输入选择流程默认交付世界模型、全书骨架和所有卷完整逐章卷纲。作者已授权正文后，用 `run --through N --source 原话` 或 `run --complete --source 原话` 保存目标并取得 owner。后续主控治理命令带 `--owner 返回值`；`renew --owner 返回值` 续租。过期后重新 run 认领，沿用已经授权的实际目标，不扩大范围。
 
 ## 任务交接
 
@@ -23,7 +25,7 @@ commands/guides 由**当前安装**渲染（解释器取自身份进程，脚本
 
 主控核实实际提交后 `advance --after ID`。未提交返回 wait_for_submit，旧回调返回 resync；不能凭口头完成派下章。await_author 给准确 prose_hash；已获得该版本认可时 `approve --prose-hash HASH --source 原话`，沿原目标继续。
 
-范围审稿每个 scope_review 完整读本块章节；全部 pass 后，scope_synthesis 阅读全部块报告、逐章证据与必要历史原文，独立判断长范围关系。综合者不伪造全书首读。综合材料随覆盖增长，系统不承诺任意长篇都有固定上下文上限。
+范围审稿每个 scope_review 完整读本叶块章节；跟踪项目逐层派 scope_synthesis，仅必读冻结子报告摘要和边界章节，疑点补读完整历史原文。覆盖树绑定章节链，父回执按 children 的 part_id 回应；根仍须独立接受当前范围。综合者不伪造全书首读，完整来源始终保留。具体字段和旧兼容模式见 [叙事推进](narrative.md)。
 
 ## 暂停与修改
 
@@ -35,12 +37,14 @@ commands/guides 由**当前安装**渲染（解释器取自身份进程，脚本
 - `recontract --file 完整候选.json --source 原话` 取消旧任务留档，经独立核验激活新约定，在父稿保留的分支重新规划写审。`opening --file` 是同一核验路径的开书入口：只在项目没有派发过门任务时接受（`init` 之后、第一次 advance 之前），导入后清除逐门选择状态；派过门任务后按 creation 错误拒绝并用 recontract 改约。
 - target_reached 表示授权章节目标完成；ready_to_complete 还须 complete 验收。通过后 export 导出纯文本（`--format md`）或简化 HTML，`html` 生成全书视图（约定、世界、设计、计划、档案、账本、章审与正文两种模式），两者都返回绝对路径，章节边界可显式刷新。
 
+editorial/1 章审可能返回独立 alignment_plan/alignment_review，按同一 advance 交接派新 Worker，当前稿不重传、不复用旧通过。卷末 root 可在原授权内有界补写，或原子开启候选修订；最后一轮根问题失败与作者裁决均保持暂停。complete 之后执行 `deliver`，得到 book.md/book.html/delivery.json；交付失败重试该快照的 deliver，不重新写书。`usage` 查看实际记录字符，宿主 token 用独立 observe.py 导入观测，不从字符估算。
+
 ## 可选宿主
 
 command.json 是已安装模型宿主的 argv 数组。`host-step --command-json 文件 --owner ID` 执行一步；`host-loop ... --limit N` 在当前进程持续监督，遇作者边界、失败、暂停或目标终点停止。
 
 通过 NOVEL_TASK_PATH/NOVEL_PROJECT/NOVEL_TASK_ID/NOVEL_SESSION/NOVEL_EXECUTION_CLAIM 提供身份；CLI 只消费其中的 TASK_ID/SESSION/EXECUTION_CLAIM，PROJECT 与 TASK_PATH 是给 Worker 进程定位项目和回执的便利变量，命令行仍须显式给 --project。宿主负责实际模型新会话；新子进程不证明空模型历史。超时终止并等待自己的进程；返回 0 且任务实际 done 才继续。
 
-advance 的动作除 task_ready、await_choice、await_author、wait_for_submit、resync、target_reached、ready_to_complete、world_ready、revision_ready 外，还包括表示停机的 paused、completed 和表示额度耗尽的 repair_exhausted；宿主适配器另有 worker_finished、host_timeout、step_limit、host_launch_failed、resume_session_required、needs_attention。遇到非 task_ready 动作先按边界处理，不要当作未知错误重试。
+advance 的动作除 task_ready、await_choice、await_author、wait_for_submit、resync、target_reached、ready_to_complete、world_ready、outline_ready、revision_ready 外，还包括表示停机的 paused、completed 和表示额度耗尽的 repair_exhausted；宿主适配器另有 worker_finished、host_timeout、step_limit、host_launch_failed、resume_session_required、needs_attention。遇到非 task_ready 动作先按边界处理，不要当作未知错误重试。
 
 冻结过首读的遗留任务返回 resume_session_required；通用适配器不证明模型会话恢复能力。应用关闭后持续运行、真实模型历史隔离和计费用量未默认验证。

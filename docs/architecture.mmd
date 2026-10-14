@@ -10,8 +10,23 @@ flowchart TD
     WF --> PLAN[规划规则]
     WF --> QA[质量规则]
     WF --> FACT[事实规则]
+    WF --> NAR[叙事推进]
+    WF --> SR[分层范围审]
+    WF --> ED[编辑裁决]
+    WF --> CF[人物与文本规则]
+    PLAN --> CF
+    QA --> ED
+    FACT --> SP[空间拓扑]
+    FACT --> NAR
+    PLAN --> NAR
+    QA --> SR
+    CTX --> NAR
+    CTX --> SR
     PLAN --> FACT
     QA --> FACT
+    ED --> C
+    CF --> C
+    SP --> C
     PLAN --> C[共享数据契约]
     FACT --> C
     SQL --> C

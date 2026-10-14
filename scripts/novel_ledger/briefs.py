@@ -55,3 +55,71 @@ def world_model(lens_brief=None, previous=()):
     lines.extend(['## 同一份提交里还要给约定', OPTION_CONTRACT,
                   '约定必须逐字保留已选字段；模板里 contract 一节的字段骨架照填。', ''])
     return '\n'.join(lines)
+
+
+def stage(name, payload=None):
+    """Cold workers receive the rules of their stage without inheriting controller history."""
+    payload = payload or {}
+    rules = {
+        'book_plan': '形成全书粗骨架和终局条件。跟踪项目声明 threads={id,kind:main|side|hidden,purpose,ending_condition,required}；至少一条必要主线。节点需 id/line/cause/choice/cost/outcome/disclosure/depends_on/required/window=[最早章,最晚章]。depends_on 是先发生的因果，不用它表达卷与全书的层级包含关系。',
+        'volume_plan': '围绕本卷职责安排转折、代价、余波与关系变化；threads 可为空以沿用既有线路，新节点 ID 不覆盖。远期粗排，近期细化。节点必填字段同 book_plan；完整设计保留可选入口，frontier 为本次窗口视图。',
+        'volume_outline': '完整读 world_model、volume_design 与 outline_bridge，承接已通过的卷内方案和前一批最后一章，只交本批次逐章情节推动说明，不重造卷内节点或世界规则。',
+        'outline_review': '独立完整读本批次 proposal、已批准 volume_design、world_model 与 outline_bridge，核对每章推进和跨批次接缝。证据 chapter=0 来自本批次候选；按当前设计核验清单举证，提出具体修复，不替执笔签 pass。',
+        'plan': 'plans 按章号恰好覆盖窗口。每章 goal/obstacle/choice/cost/change/ending/node_ids/participants；跟踪项目还交 node_actions=[{node,after:seeded|advanced|resolved}]、preconditions=[{kind,key,expected}]、disclosures=[{topic,after}] 和 pacing 五项。先依据真实前态，再模拟节点行动排后章；已兑现节点不能重复用。reader_refs/hook_refs/history_refs 可声明需要承接的旧资料；动到旧人物或物品前查相关承诺，资料不足用 recall 补读。',
+        'profiles': 'profiles 恰好覆盖 payload.entities；每人 entity/desire/fear/limit/voice/knowledge_boundary。底层设定保持稳定，当前动机/关系以 state.character_current 的有据变化为准。人物声线来自关注点、底线和交涉策略。',
+        'write': '交 title/完整 prose/summary/具体 self_check，不交事件或 pass。完整读必读材料，以动作、对白、选择、后果写场景，删除重复解释。遵守 word_budget 的本章范围；静章承担余波、恢复、关系或暗线作用。作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。',
+        'repair': '读完整基稿、问题、义务和前态，交完整合成稿；local 保留成立部分，chapter 重排因果场景。不重置修复额度，旧 pass 不沿用。交付字段与 write 相同。',
+        'redesign': '重新设计当前章的因果与场景，再交完整正文；不推翻已成立事实，不重复填充解释。交付字段与 write 相同，修复额度共享。',
+        'chapter_review': '先只读本章正文，记录 desire/obstacle/change/read_on_reason 并冻结首读；解锁后同会话独立核验。facts 从正文重建 events/summary/elapsed_days，reader 判断阅读体验，两类都逐项举证。跟踪项目 facts 必须逐项提供 story_node 事件，读者变化交 reader_knowledge，人物动机变化交 character_current；reader.pacing 记录实际节奏及单个 evidence。hook 可按正文证据声明 subjects 人物/物品 ID 与 topics 话题 ID，供远期相关性加载；未标注的旧承诺需补读，不能猜关联。',
+        'scope_review': '只读完整本块正文，冻结首读再核验。逐章 coverage，检查因果、人物桥梁、主支暗线兑现和情绪余波。树形任务还交 handoff 六项和精确短引文，保留未决问题；不能以重复 pass 替代综合判断。',
+        'scope_synthesis': '独立阅读冻结子报告及边界正文，核验跨块/跨卷因果、人物变化、披露顺序、兑现和呼吸衔接。树形任务 coverage 按 children 的 part_id 一一回应，并交 handoff；疑点通过 recall 完整补读历史章。不伪造全书首读，不逐层复制全部正文和报告。',
+        'design_review': '独立核验 proposal 与作者约定；逐项 reason/evidence，不自动填 pass。跟踪设计额外核对线路职责、窗口、前置因果和可兑现终局。证据 chapter=0。',
+        'contract_review': '完整核验作者选择、约定来源、体量与限制的一致性；不改变已有作者决定。证据 chapter=0，按模板检查清单提交。',
+        'opening_contract': '把已核验世界和真实用户选择整理为完整约定，严格保留对齐字段，按模板填写，不增加正文事实。',
+        'world_review': '独立核验选择和世界候选，逐项查规则、空间、历史、势力、经济、社会、人物、披露和长篇承载；证据 chapter=0。',
+        'alignment_plan': '读取 alignment_hold 与准确正文，为当前章或即将进入的章提出完整 plan 和必要 designs 改案。保留已实现节点、必要职责与原目标；设计改案不产生事实，不改正文或清零额度。',
+        'alignment_review': '独立核验 alignment_proposal 是否保全成立正文、作者约定、未解决目标与因果依赖；按设计模板逐项举证。通过后仍由新审稿者重读当前稿，不继承旧首读或 pass。',
+    }
+    rule = rules.get(name)
+    if not rule:
+        return None
+    outline = payload.get('volume_outline')
+    if name == 'volume_plan' and outline:
+        rule += (' 先完整读已核验 world_model 与全书骨架，比较 2～3 个因果不同的卷内推进方案，交 brainstorm=[{id,premise,tradeoff,world_refs}]。'
+                 '在既定作者约定内选出最合适的一案，交 selected/selection_reason，不再要求作者重复选择；脑暴不能改写世界规则。'
+                 '绑定 world_hash，节点覆盖整卷职责；当前只交方案和节点，逐章说明由后续 volume_outline 有界批次完成，不在此任务交 chapters。')
+    if name == 'design_review' and outline:
+        rule += ' 独立核验脑暴各案的推进方式确有差异、选案理由成立，世界限制和本卷节点可落实。逐章说明在后续批次单独核验。'
+    if name == 'volume_outline' and outline:
+        rule += (' world_hash 准确绑定本任务世界版本；chapters=[{chapter,synopsis,world_refs,node_ids}] 恰好覆盖第 %d～%d 章。'
+                 '每章 synopsis 目标 %d 汉字，允许 %d～%d 汉字；以最精练的因果说明写清谁因何行动、遇到的阻力、选择与代价、信息或关系变化，以及怎样推动下一章。'
+                 '静章说明余波、关系或线索的具体变化；不写正文、氛围扩写、空泛目标、重复设定或方法自评。每章引用真实世界记录和已批准设计节点。'
+                 % (outline['first'], outline['last'], outline['words'], outline['words']-outline['tolerance'], outline['words']+outline['tolerance']))
+    if name == 'outline_review':
+        rule += ' 字数合格不等于情节成立：核验世界依据、因果桥梁、角色选择与代价、章末推动和精练程度，有问题沿 author_constraints/causality/characters/disclosure/scale 等当前检查项给 fix。'
+    if name == 'plan':
+        rule += ' 若有 volume_outline_window，先读本窗口每章卷纲，再依据真实前态细化成可执行计划；不能用滚动窗口代替完整卷纲，不把设计当既成事实。'
+    if name in ('write', 'repair', 'redesign'):
+        rule += ' 若有 chapter_outline，承接该章情节推动说明，按当前计划展开场景；卷纲不是正文，避免复制概要腔。'
+    time_rule = ''
+    if name == 'plan':
+        time_rule = ' 章号不等于天数；按场景因果安排时间，允许多章发生在同一天，不默认每章推进一天。schedule 只声明情节需要的硬日程，不把内部时钟设计成逐章日期标题。'
+    elif name in ('write', 'repair', 'redesign'):
+        time_rule = ' 默认直接从人物行动、对白或场景切入，不在正文前加独立日期或“第一日、第二日”式报日标签，也不把每章首句固定成时间播报。需要交代时间时自然融入场景转折；state.clock 是内部累计天数，不是章号或必须写出的日期。同日续接无需为验收补造过夜；作者明确要求日记体、编年体或日期标记时按约定执行。'
+    elif name == 'chapter_review':
+        time_rule = ' facts.time 按正文相对前态核验实际时间，允许 elapsed_days=0 且没有 clock 事件；不能要求每章过一天或用章首日期凑证据，clock 引文可在正文任意位置。reader.language/repetition 检查无叙事作用的章首报日与固定时间播报，有问题按原清单给 fix；情节必要的时间提示及作者明确约定的日期体例按作用判断。'
+    elif name in ('scope_review', 'scope_synthesis'):
+        time_rule = ' 在 pacing 检查跨章开场是否反复报日或沿用固定时间播报；根据叙事作用和作者体例判断，无作用的重复给修订意见，不因时间提示本身判错。'
+    extra = (' pacing={role:setup|pressure|turn|climax|aftermath|recovery|relationship|discovery,pressure_in,pressure_out,emotional_aftereffect,recovery_purpose}，用具体文字，不按固定轮替。'
+             if name in ('plan', 'chapter_review') else '')
+    handoff = (' handoff={causal_bridge,thread_changes,character_changes,disclosures,rhythm,open_questions,evidence}；文字每项≤800字，证据1～8条，每条引文≤240字，原文始终完整保留。'
+               if name in ('scope_review', 'scope_synthesis') else '')
+    enhanced = ''
+    if payload.get('editorial'):
+        enhanced = {'plan': ' 每章还需 scenes（label/intent/conflict/turn/present/speakers/dialogue_intents）与 expansion_units。',
+                    'profiles': ' 还需 tier、biography={public_role,contradiction,values}、speech={register,tactics,rhythm,stress_shift,relationship_modes}；旧档更新给 change_reason。',
+                    'repair': ' 可用 base_hash/patches/repair_note 或 reuse_original 替代 prose；程序合成后完整重审。基稿与前态仍必读。',
+                    'redesign': ' 可提交版本补丁；仍消耗本章共享重设计额度。',
+                    'chapter_review': ' 填 alignment 的实际节点实现及 follow_plan/adapt_future/align_design/repair_prose 裁决；不以完成数量替代实际效果。',
+                    'scope_synthesis': ' root 若含 closure 按六项职责裁决；remedies 逐项验收原目标，末轮额度为零也先验。'}.get(name, '')
+    return rule + time_rule + extra + handoff + enhanced + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，来源不足时按冻结哈希补读，不读源码猜格式。'

@@ -145,6 +145,74 @@ class SQLiteRepository:
     def headers(self, branch):
         return [dict(r) for r in self.db.execute('SELECT * FROM chapters WHERE branch=? ORDER BY n', (branch,))]
 
+    def history_snapshot(self, branch):
+        """Reuse content-addressed chapter pages; the mutable head is only a dispatch cache.
+
+        No schema migration is needed: pages use documents and heads use kv. Existing
+        branches build once, then only appended chapters are indexed. Tasks freeze the
+        returned value and never consult this mutable cache when recalling sources.
+        """
+        cache_key = 'history_head:' + branch
+        cached = self.get(cache_key)
+        snapshot = cached or {'schema': 'novel-ledger.history/1', 'head': None,
+                                         'through': 0, 'chain': 'genesis'}
+        self._validate_history(snapshot)
+        if snapshot['through']:
+            row = self.chapter(branch, snapshot['through'])
+            page = self.read_document(snapshot['head'])
+            require(row['chain'] == snapshot['chain'] == page['chain'] and page['n'] == snapshot['through'],
+                    'history_integrity', '历史目录缓存与章节链不一致；不能用缓存覆盖正式历史。')
+        rows = self.db.execute('SELECT * FROM chapters WHERE branch=? AND n>? ORDER BY n',
+                               (branch, snapshot['through'])).fetchall()
+        for row in rows:
+            require(row['n'] == snapshot['through'] + 1, 'history_integrity', '历史目录的章节不连续。')
+            page = {'schema': 'novel-ledger.history-page/1', 'previous': snapshot['head'],
+                    **{k: row[k] for k in ('n', 'prose', 'events', 'summary', 'chain')}}
+            snapshot = {'schema': 'novel-ledger.history/1', 'head': self.document(page),
+                        'through': row['n'], 'chain': row['chain']}
+        if snapshot != cached:
+            self.put(cache_key, snapshot)
+        return snapshot
+
+    def history_pages(self, snapshot, before=None):
+        """Walk frozen pages newest first, verifying every page that is actually visited."""
+        self._validate_history(snapshot)
+        ident, number = snapshot['head'], snapshot['through']
+        while ident:
+            page = self.read_document(ident)
+            require(page.get('schema') == 'novel-ledger.history-page/1' and page['n'] == number
+                    and (number != snapshot['through'] or page['chain'] == snapshot['chain'])
+                    and bool(page['previous']) == (number > 1), 'history_integrity', '冻结历史目录链不一致。')
+            if before is None or number < before:
+                yield ident, page
+            ident, number = page['previous'], number - 1
+        require(number == 0, 'history_integrity', '冻结历史目录缺少章节。')
+
+    @staticmethod
+    def _validate_history(snapshot):
+        require(isinstance(snapshot, dict) and snapshot.get('schema') == 'novel-ledger.history/1'
+                and type(snapshot.get('through')) is int and snapshot['through'] >= 0
+                and isinstance(snapshot.get('chain'), str)
+                and (snapshot.get('head') is None and snapshot['through'] == 0 and snapshot['chain'] == 'genesis'
+                     or isinstance(snapshot.get('head'), str) and len(snapshot['head']) == 64 and snapshot['through'] > 0),
+                'history_integrity', '冻结历史目录入口或版本无效。')
+
+    def memory_rows(self, page):
+        """Search metadata is derived on demand from this page's immutable event source."""
+        rows = []
+        for event in self.read_document(page['events']):
+            entities = list(event.get('subjects', []))
+            for key in ('entity', 'from', 'to', 'holder'):
+                ident = event.get(key)
+                if isinstance(ident, dict):
+                    ident = ident.get('id')
+                if isinstance(ident, str):
+                    entities.append(ident)
+            rows.append({'chapter': page['n'], 'entities': sorted(set(entities)), 'node': event.get('node'),
+                         'topic': event.get('topic'), 'topics': event.get('topics', []) if event.get('hook_links_version') == 1 else [],
+                         'thread': event.get('thread', event.get('line')), 'op': event['op'], 'evidence': event['evidence']})
+        return rows
+
     def chapter(self, branch, chapter):
         row = self.db.execute('SELECT * FROM chapters WHERE branch=? AND n=?', (branch, chapter)).fetchone()
         require(row is not None, 'chapter', '正式章节不存在。')
@@ -155,9 +223,18 @@ class SQLiteRepository:
                         (branch, row['n'], row['title'], row['prose'], row['events'], row['plan'], row['review'], row['state_hash'], row['chain'], row['summary'], row['han']))
 
     def fork(self, parent, first):
+        snapshot = self.history_snapshot(parent)
+        prefix = {'schema': 'novel-ledger.history/1', 'head': None, 'through': 0, 'chain': 'genesis'}
+        if first > 1:
+            for ident, page in self.history_pages(snapshot):
+                if page['n'] == first - 1:
+                    prefix.update(head=ident, through=page['n'], chain=page['chain'])
+                    break
+            require(prefix['through'] == first - 1, 'history_integrity', '修订分支缺少冻结前缀。')
         ident = 'revision-' + uuid.uuid4().hex[:12]
         self.db.execute('INSERT INTO branches VALUES (?,?,?,\'candidate\')', (ident, parent, first))
         self.db.execute('INSERT INTO chapters SELECT ?,n,title,prose,events,plan,review,state_hash,chain,summary,han FROM chapters WHERE branch=? AND n<?', (ident, parent, first))
+        self.put('history_head:' + ident, prefix)
         return ident
 
     def promote(self, branch, parent):
@@ -173,3 +250,12 @@ class SQLiteRepository:
 
     def record(self, action, value):
         self.db.execute('INSERT INTO journal(at,action,value) VALUES (?,?,?)', (time.time(), action, dump(value)))
+
+    def usage(self):
+        rows = self.db.execute('SELECT input,result FROM tasks').fetchall()
+        reads = self.db.execute("SELECT value FROM journal WHERE action='read'").fetchall()
+        return {'tasks': len(rows), 'task_input_chars': sum(len(r['input']) for r in rows),
+                'accepted_receipt_chars': sum(len(r['result'] or '') for r in rows),
+                'supplemental_read_chars': sum(json.loads(r['value'])['chars'] for r in reads),
+                'attempted_receipt_chars': None, 'billed_tokens': None,
+                'basis': '仅冻结信封、已接受回执和 CLI 实际读取；不含宿主历史、工具包装与缓存计费。'}

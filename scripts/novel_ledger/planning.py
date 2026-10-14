@@ -5,8 +5,9 @@ import copy
 import math
 from . import contracts
 from .contracts import (CONTRACT_ALIGNMENT, CONTRACT_FIELDS, CONTRACT_KEYS, DEFAULT_NAME_CHARS, DEFAULT_TERMS,
-                        POLICY_FIELDS, contract_errors, contract_skeleton, require, text)
+                        POLICY_FIELDS, contract_errors, contract_skeleton, digest, han_count, require, text)
 from .facts import entity, seed
+from . import narrative, craft
 
 
 def resolve_policy(policy):
@@ -139,6 +140,15 @@ def validate_contract(raw):
     require(contract.get('verification') in ('full', 'fast'), 'contract',
             'verification 须为 full（默认全档：固定间隔块审+分块范围审）或 fast（快速档：跳过固定间隔块审，范围审一次成块；章审与事实核验不降档）。')
     require(contract['chapter_min'] <= contract['chapter_aim'] <= contract['chapter_max'], 'contract', '章目标须在上下限之间。')
+    require(type(contract['narrative_tracking']) is bool and type(contract['review_fanout']) is int and 2 <= contract['review_fanout'] <= 8,
+            'contract', 'narrative_tracking 须为布尔值；review_fanout 须为 2～8，限制单次综合材料。')
+    require(type(contract['editorial_features']) is bool and (not contract['editorial_features'] or contract['narrative_tracking']),
+            'contract', 'editorial_features 需要 narrative_tracking；旧兼容模式明确设 false。')
+    policy = contract['volume_outline']
+    require(not policy or set(policy) == {'scope', 'words', 'tolerance'} and policy.get('scope') in ('current', 'all')
+            and type(policy.get('words')) is int and policy['words'] > 0
+            and type(policy.get('tolerance')) is int and 0 <= policy['tolerance'] < policy['words'],
+            'volume_outline', 'volume_outline 为 {}（旧兼容）或 {scope:current|all,words:正整数,tolerance:非负整数且小于 words}。')
     band = contract['word_range']
     volumes = contract['volumes']
     seen, last = set(), 0
@@ -163,12 +173,12 @@ def validate_contract(raw):
               'chapter_aim': contract['chapter_aim'], 'chapter_max': contract['chapter_max']}
     require(high >= low, 'scale', '章数与总篇幅不能同时成立：固定 %d 章时每章需 %.0f~%.0f 字，区间为空。' % (last, band[0] / last, band[1] / last),
             {**detail, 'recover': '增加卷末章号，或放宽总篇幅区间。'})
-    require(contract['chapter_aim'] <= high, 'scale',
+    require(contract['narrative_tracking'] or contract['chapter_aim'] <= high, 'scale',
             '章幅目标偏大：固定 %d 章、总上限 %d 字时，每章平均最多 %d 字（当前目标 %d），全书完成时会超出篇幅上限。'
             % (last, band[1], high, contract['chapter_aim']),
             {**detail, 'recover': '把 chapter_aim 降到 %d 以内，或把卷末章号上调到至少 %d 章。'
              % (high, -(-band[1] // contract['chapter_aim']))})
-    require(contract['chapter_max'] <= high, 'scale',
+    require(contract['narrative_tracking'] or contract['chapter_max'] <= high, 'scale',
             '章幅上限偏大：固定 %d 章、总上限 %d 字时每章平均最多 %d 字（当前上限 %d），每一章都写满就会超篇幅。'
             % (last, band[1], high, contract['chapter_max']),
             {**detail, 'recover': '把 chapter_max 降到 %d 以内，或把卷末章号上调到至少 %d 章。'
@@ -184,7 +194,63 @@ def volume_for(contract, chapter):
     return next((v for v in contract['volumes'] if v['first'] <= chapter <= v['end']), None)
 
 
-def validate_design(data, known=()):
+def outline_policy(contract, volume, model=None):
+    policy = contract.get('volume_outline') or {}
+    if not policy:
+        return None
+    return {**copy.deepcopy(policy), 'first': volume['first'], 'last': volume['end'],
+            'world_hash': digest(model) if model else None}
+
+
+def outline_refs(row, model):
+    known_world = {section + ':' + item['id'] for section, rows in (model or {}).items()
+                   if isinstance(rows, list) for item in rows if isinstance(item, dict) and 'id' in item}
+    values = row.get('world_refs')
+    require(isinstance(values, list) and (values or not model) and all(text(r) and r in known_world for r in values)
+            and len(values) == len(set(values)), 'outline_world', '脑暴方案和每章卷纲须引用有效 world_refs；已有世界模型时不能为空。')
+
+
+def validate_outline(data, policy, model, known_nodes):
+    """Coverage and provenance are mechanical; a separate reviewer judges concise causality."""
+    require(data.get('world_hash') == policy['world_hash'], 'outline_world', '卷纲须绑定本任务的准确世界模型版本。')
+    options = data.get('brainstorm')
+    require(isinstance(options, list) and 2 <= len(options) <= 3 and all(isinstance(o, dict)
+            and all(text(o.get(k)) for k in ('id', 'premise', 'tradeoff')) for o in options),
+            'outline_brainstorm', '卷纲先给 2～3 个不同推进方式的脑暴方案：id/premise/tradeoff/world_refs。')
+    require(len({o['id'] for o in options}) == len(options) and len({o['premise'].strip() for o in options}) == len(options)
+            and data.get('selected') in {o['id'] for o in options} and text(data.get('selection_reason')),
+            'outline_brainstorm', '脑暴方案 ID 和推进说明不能重复；selected 引用选用方案并给 selection_reason。')
+    for option in options:
+        outline_refs(option, model)
+    if policy.get('brainstorm_only'):
+        require(not data.get('chapters'), 'outline_coverage', '先交卷内脑暴与节点；逐章说明由后续有界批次生成。')
+    else:
+        validate_chapter_outlines(data, policy, model, known_nodes)
+
+
+def validate_chapter_outlines(data, policy, model, known_nodes):
+    require(isinstance(data, dict) and data.get('world_hash') == policy['world_hash'], 'outline_world', '逐章卷纲须绑定本任务的准确世界模型版本。')
+    chapters = data.get('chapters')
+    require(isinstance(chapters, list) and all(isinstance(c, dict) and type(c.get('chapter')) is int for c in chapters)
+            and [c['chapter'] for c in chapters] == list(range(policy['first'], policy['last'] + 1)),
+            'outline_coverage', '逐章卷纲须按顺序完整覆盖当前冻结批次，整卷分批完成，不按试章授权截短。',
+            {'first': policy['first'], 'last': policy['last'], 'recover': '补齐本批次的每章情节推进说明。'})
+    for chapter in chapters:
+        prose = chapter.get('synopsis')
+        require(text(prose), 'outline_length', '每章卷纲须提供 synopsis 情节推进说明。')
+        length = han_count(prose)
+        require(policy['words'] - policy['tolerance'] <= length <= policy['words'] + policy['tolerance'],
+                'outline_length', '逐章卷纲篇幅不在目标范围内。',
+                {'chapter': chapter['chapter'], 'actual': length, 'aim': policy['words'],
+                 'minimum': policy['words'] - policy['tolerance'], 'maximum': policy['words'] + policy['tolerance'],
+                 'recover': '用具体因果、选择、代价与变化补足或压缩，不重复设定、口号或正文描写凑字。'})
+        outline_refs(chapter, model)
+        ids = chapter.get('node_ids')
+        require(isinstance(ids, list) and ids and all(text(n) and n in known_nodes for n in ids)
+                and len(ids) == len(set(ids)), 'outline_nodes', '逐章卷纲须引用有效且不重复的设计 node_ids。')
+
+
+def validate_design(data, known=(), tracking=False, known_threads=(), outline=None, model=None):
     require(isinstance(data, dict) and text(data.get('intent')) and text(data.get('ending_conditions')),
             'design', '设计需要 intent 和终局/卷末成立条件 ending_conditions。')
     nodes = data.get('nodes')
@@ -195,6 +261,13 @@ def validate_design(data, known=()):
                 'design', '节点需要 id/line/cause/choice/cost/outcome/disclosure。')
         require(isinstance(node.get('depends_on'), list) and all(text(n) for n in node['depends_on']), 'design', 'depends_on 须为节点 ID 数组。')
         identifiers.append(node['id'])
+        effects, criteria = node.get('effects', []), node.get('criteria', [])
+        require(isinstance(effects, list) and all(isinstance(e, dict) and text(e.get('id')) and text(e.get('text')) for e in effects)
+                and len({e['id'] for e in effects}) == len(effects), 'design', 'effects 为唯一 id/text 数组。')
+        require(isinstance(criteria, list) and all(isinstance(c, dict) and text(c.get('id')) and text(c.get('text'))
+                and type(c.get('required', True)) is bool and isinstance(c.get('effects'), list)
+                and c['effects'] and all(text(e) and e in {i['id'] for i in effects} for e in c['effects']) for c in criteria)
+                and len({c['id'] for c in criteria}) == len(criteria), 'design', 'criteria 为 id/text/required/effects，引用真实作用 ID。')
     require(len(identifiers) == len(set(identifiers)) and not set(identifiers).intersection(known), 'design', '新节点 ID 不能重复或覆盖既有节点。')
     all_ids = set(identifiers) | set(known)
     graph = {n['id']: n['depends_on'] for n in nodes}
@@ -211,11 +284,15 @@ def validate_design(data, known=()):
         done.add(ident)
     for ident in identifiers:
         visit(ident)
+    if tracking:
+        narrative.validate_threads(data, nodes, known_threads)
+    if outline:
+        validate_outline(data, outline, model, all_ids)
     return copy.deepcopy(data)
 
 
 def validate_plans(data, first, last, known_nodes, state, contract, world=None, policy=None):
-    plans = data.get('plans') if isinstance(data, dict) else None
+    plans = copy.deepcopy(data.get('plans')) if isinstance(data, dict) else None
     require(isinstance(plans, list) and [p.get('chapter') for p in plans if isinstance(p, dict)] == list(range(first, last + 1)),
             'plan', '章计划须恰好覆盖本次窗口，按章号排列。')
     temporary = copy.deepcopy(state)
@@ -245,10 +322,14 @@ def validate_plans(data, first, last, known_nodes, state, contract, world=None, 
             require(isinstance(schedule, dict) and schedule.get('basis') == 'main_clock'
                     and type(schedule.get('day')) is int and schedule['day'] >= state['clock']
                     and text(schedule.get('event')), 'schedule', '日程须声明主线坐标、有效天数和事件。')
+        if contract.get('narrative_tracking'):
+            narrative.validate_plan(plan, known_nodes, temporary)
+        if contract.get('editorial_features'):
+            craft.scenes(plan, temporary['entities'])
     return copy.deepcopy(plans)
 
 
-def validate_profiles(data, required):
+def validate_profiles(data, required, state=None, previous=None, enhanced=False):
     profiles = data.get('profiles') if isinstance(data, dict) else None
     require(isinstance(profiles, list) and all(isinstance(p, dict) and text(p.get('entity')) for p in profiles)
             and {p['entity'] for p in profiles} == set(required)
@@ -256,5 +337,7 @@ def validate_profiles(data, required):
     for profile in profiles:
         require(all(text(profile.get(k)) for k in ('entity', 'desire', 'fear', 'limit', 'voice', 'knowledge_boundary')),
                 'profile', '人物档案需要欲望、顾虑、底线、声线和知情边界。')
+    if enhanced:
+        profiles = [craft.profile(p, state, (previous or {}).get(p['entity'])) for p in profiles]
     return copy.deepcopy(profiles)
 

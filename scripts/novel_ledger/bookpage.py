@@ -11,11 +11,13 @@ from __future__ import annotations
 import html
 import json
 import time
+from decimal import Decimal
 from pathlib import Path
-from .contracts import CONTRACT_FIELDS, LENSES, VOLUME_TURNS
-from .delivery import atomic_write
+from .contracts import CONTRACT_FIELDS, LENSES, VOLUME_TURNS, han_count
+from .delivery import atomic_write, publication
 from .planning import volume_for
-from .world import LABELS as WORLD_LABELS
+from .world import LABELS as WORLD_LABELS, SECTIONS as WORLD_SECTIONS
+from .briefs import gate_title
 
 FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '终局', 'genre': '题材',
                 'story_engine': '推进引擎', 'opposition': '主要对抗', 'world_premise': '世界前提',
@@ -25,15 +27,29 @@ FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '
                 'volumes': '分卷', 'word_range': '总字数区间', 'chapter_min': '章幅下限', 'chapter_max': '章幅上限',
                 'chapter_aim': '章幅目标', 'planning_window': '规划窗口', 'review_interval': '复审间隔',
                 'review_chunk': '复审块大小', 'initial_facts': '初始事实', 'places': '初始地点',
-                'placements': '初始站位', 'arcs': '人物弧'}
+                'placements': '初始站位', 'arcs': '人物弧', 'editorial_features': '编辑能力',
+                'scope_append_limit': '单轮补写章数上限', 'volume_outline': '逐章卷纲要求', 'anchors': '稳定设定', 'links': '空间连接'}
 SUB_LABELS = {'id': '标识', 'name': '名称', 'kind': '类型', 'aliases': '别名', 'identity': '身份',
               'desire': '欲望', 'limit': '底线', 'purpose': '卷职责', 'end': '卷末章', 'holder': '持有者',
               'asset': '资产', 'unit': '单位', 'quantity': '数量', 'entity': '实体', 'key': '键', 'value': '值'}
+SUB_LABELS.update(tier='人物层次', biography='小传与矛盾', speech='表达方式', public_role='公开身份', contradiction='内在矛盾',
+                  values='价值优先顺序', register='语域', tactics='交涉策略', rhythm='句式节奏', stress_shift='压力下的变化',
+                  relationship_modes='关系中的表达', mode='表达方式', change_reason='重核原因', fear='顾虑', voice='声线',
+                  knowledge_boundary='知情边界', intent='场景意图', conflict='冲突', turn='转折', label='场所', present='在场者',
+                  speakers='发言者', dialogue_intents='对白意图', seeks='索求', withholds='隐瞒', pressure='压力', tactic='策略',
+                  knowledge_topics='知情话题', focus='展开重点', development='演出方式', expected_change='产生的变化', scene='场景')
+SUB_LABELS.update(environment='环境', resources='资源', access='通行条件', story_pressure='情节压力',
+                  period='时期', event='历史事件', consequence='后果', present_effect='当下影响', principle='规则原理',
+                  scope='适用范围', limits='限制', consequences='违反后果', goal='诉求', power='力量来源',
+                  dependencies='依赖', conflicts='冲突', resource='核心资源', production='生产', distribution='分配',
+                  scarcity='稀缺', institution='制度', norm='习惯', enforcement='执行方式', practice='日常行为',
+                  constraint='约束', story_use='故事作用', role='身份与作用', truth='隐秘内容', disclosure='披露安排',
+                  causal_role='因果作用', cost='代价', failure_condition='失效条件')
 NODE_LABELS = {'id': '节点', 'line': '线索', 'cause': '起因', 'choice': '选择', 'cost': '代价',
                'outcome': '结果', 'disclosure': '披露安排', 'depends_on': '依赖'}
 PLAN_LABELS = {'goal': '目标', 'obstacle': '阻碍', 'choice': '选择', 'cost': '代价', 'change': '变化',
                'ending': '章末', 'node_ids': '设计节点', 'participants': '参与人', 'world_refs': '世界引用',
-               'obligations': '承接义务', 'schedule': '硬日程', 'new_entities': '新人物'}
+               'obligations': '承接义务', 'schedule': '硬日程', 'new_entities': '新人物', 'scenes': '场景安排', 'expansion_units': '展开依据'}
 HOOK_LABELS = {'open': '待兑现', 'paid': '已兑现', 'closed': '已关闭'}
 STANCE_LABELS = {'knows': '确知', 'believes': '相信', 'suspects': '怀疑', 'disproved': '已推翻'}
 CHECK_LABELS = {'coverage': '覆盖', 'continuity': '连续性', 'resources': '资源', 'knowledge': '知情',
@@ -41,6 +57,12 @@ CHECK_LABELS = {'coverage': '覆盖', 'continuity': '连续性', 'resources': '�
                 'character': '人物', 'change': '变化', 'emotion_cost': '情绪代价', 'language': '语言',
                 'repetition': '重复', 'substance': '有效展开', 'causality': '因果', 'character_arcs': '人物弧线',
                 'payoffs': '兑现', 'pacing': '节奏'}
+CHECK_LABELS.update(character_consistency='人物依据', stable_facts='稳定事实', dialogue_identity='对白辨识度',
+                    voice_match='文风连续性', voice_evolution='声线成长', revision_intent='修订目标', narrative='叙事实现',
+                    disclosure='披露边界', bridges='跨段承接', threads='线路职责')
+CHECK_LABELS.update(choice_alignment='选择一致性', rule_consistency='规则一致性', spatial_connections='空间连接',
+                    historical_causes='历史因果', faction_interests='势力利益', economic_consequences='经济后果',
+                    social_pressure='社会压力', character_boundaries='人物边界', story_capacity='长篇承载')
 VERDICT_LABELS = {'pass': '通过', 'fix': '待修'}
 STATUS_LABELS = {'preparing': '开书准备', 'running': '进行中', 'paused': '已暂停', 'completed': '已完本'}
 SECTIONS = (('overview', '概览'), ('contract', '创作约定'), ('world', '世界与选择'), ('design', '设计与节点'),
@@ -140,8 +162,30 @@ html.night{--paper:#211e18;--card:#211e18;--bg:#191713;--ink:#e9e2d2;--muted:#9c
 padding:5px 14px;font-size:13px;cursor:pointer;font-family:inherit}
 .ch-nav button:disabled{opacity:.45;cursor:default}
 .ch-nav .pos{color:var(--muted);font-size:12.5px}
+.chart{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
+.chart figcaption{font-weight:600;margin-bottom:5px}.chart .sub{margin-bottom:12px}
+.chart-tools{display:flex;gap:8px;margin:10px 0}.chart-tools input{min-width:0;flex:1;padding:7px 10px;
+border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink);font:inherit}
+.chart-tools button{border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink);cursor:pointer}
+.graph-scroll,.chart-scroll{overflow:auto;max-height:620px}.graph{display:block;width:100%;min-width:660px}
+.graph rect{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1}.graph text{fill:var(--ink);font-family:var(--sans);font-size:12px}
+.graph .group-label{fill:var(--muted);font-size:10px}.graph path{stroke:var(--muted);fill:none;stroke-width:1.4}
+.graph marker path{fill:var(--muted);stroke:none}.graph-node:focus rect,.graph-node:hover rect{stroke-width:3}
+.graph .faded{opacity:.12}.graph-node,.graph-edge{transition:opacity .15s}
+.bar-row{display:grid;grid-template-columns:minmax(100px,1fr) minmax(120px,3fr) minmax(70px,1fr);gap:12px;
+align-items:center;margin:10px 0;font-size:13px}.bar-track{height:12px;border-radius:20px;background:var(--bg);overflow:hidden}
+.bar-fill{height:100%;background:var(--accent);border-radius:20px}.bar-value{text-align:right;color:var(--muted)}
+.timeline{list-style:none;margin:12px 0;padding:0 0 0 20px;border-left:2px solid var(--line)}
+.timeline li{position:relative;padding:0 0 18px 10px}.timeline li:before{content:"";position:absolute;left:-27px;top:7px;
+width:12px;height:12px;border-radius:50%;background:var(--accent);border:3px solid var(--card)}
+.timeline p{margin:4px 0}.timeline .note{display:block}.node-detail:target{outline:2px solid var(--accent);outline-offset:3px}
+.chapter-bars{display:flex;gap:5px;align-items:flex-end;min-height:160px;padding-top:24px;overflow-x:auto}
+.chapter-bar{min-width:38px;flex:1;text-align:center;font-size:11px;color:var(--muted);text-decoration:none}
+.chapter-bar i{display:block;background:var(--accent);border-radius:5px 5px 0 0;margin:4px auto;max-width:50px}
+.chapter-bar:hover i{background:var(--ok)}
 @media (max-width:880px){.wrap{grid-template-columns:minmax(0,1fr);padding:14px}aside{position:static;max-height:none}
 .rd-tools{top:auto;position:static}}
+@media (max-width:520px){.chart{padding:12px}.bar-row{grid-template-columns:90px minmax(80px,1fr) 66px;gap:6px}}
 @media print{.bar,aside,.rd-tools,.ch-nav{display:none!important}body{background:#fff}#view-settings{display:none}
 #view-read{display:block!important;background:#fff}.chapter{display:block!important;page-break-after:always;max-width:none}
 .item{display:none}}'''
@@ -165,6 +209,18 @@ document.querySelectorAll('#ch-index .item').forEach(function(d){
 d.style.display=(!t||d.textContent.toLowerCase().indexOf(t)>=0)?'':'none'})}
 function jump(sel){var o=sel.selectedOptions[0];if(o&&o.dataset.n)openChapter(+o.dataset.n,true)}
 function toggleSide(){document.body.classList.toggle('side-off')}
+function graphFocus(svg,keys){var near=new Set(keys);
+svg.querySelectorAll('.graph-edge').forEach(function(e){if(keys.indexOf(e.dataset.a)>=0||keys.indexOf(e.dataset.b)>=0){near.add(e.dataset.a);near.add(e.dataset.b)}});
+svg.querySelectorAll('.graph-node').forEach(function(n){n.classList.toggle('faded',keys.length>0&&!near.has(n.dataset.key))});
+svg.querySelectorAll('.graph-edge').forEach(function(e){e.classList.toggle('faded',keys.length>0&&keys.indexOf(e.dataset.a)<0&&keys.indexOf(e.dataset.b)<0)})}
+function focusGraph(node){graphFocus(node.closest('svg'),[node.dataset.key])}
+function filterGraph(input){var svg=input.closest('.chart').querySelector('svg'),q=input.value.trim().toLowerCase(),keys=[];
+svg.querySelectorAll('.graph-node').forEach(function(n){if(q&&n.textContent.toLowerCase().indexOf(q)>=0)keys.push(n.dataset.key)});
+graphFocus(svg,keys);if(q&&!keys.length)svg.querySelectorAll('.graph-node,.graph-edge').forEach(function(n){n.classList.add('faded')})}
+function resetGraph(button){var chart=button.closest('.chart');chart.querySelector('input').value='';graphFocus(chart.querySelector('svg'),[])}
+function revealTarget(){var id=location.hash.slice(1),el=document.getElementById(id);if(!el)return;
+if(el.tagName==='DETAILS')el.open=true;var p=el.parentElement;while(p){if(p.tagName==='DETAILS')p.open=true;p=p.parentElement}el.scrollIntoView()}
+window.addEventListener('hashchange',function(){if(location.hash.indexOf('#read-')===0)openChapter(parseInt(location.hash.slice(6),10),true);else revealTarget()});
 var RS={size:parseInt(localStorage.getItem('nl_rsize')||'19',10),
 serif:localStorage.getItem('nl_rserif')!=='0',wide:localStorage.getItem('nl_rwide')==='1',
 theme:localStorage.getItem('nl_rtheme')||'paper'};
@@ -185,7 +241,7 @@ function readerWide(w){RS.wide=w;localStorage.setItem('nl_rwide',w?'1':'0');appl
 function readerTheme(t){RS.theme=t;localStorage.setItem('nl_rtheme',t);applyReader()}
 applyReader();
 (function(){var h=location.hash;if(h.indexOf('#read-')===0){var n=parseInt(h.slice(6),10);if(n)openChapter(n,true)}
-else if(h==='#read'){mode('read',true)}else{mode('settings',true)}})();'''
+else if(h==='#read'){mode('read',true)}else{mode('settings',true);revealTarget()}})();'''
 
 
 def _esc(value):
@@ -241,6 +297,79 @@ def _records(items, label_key):
         for k, v in item.items() if k != label_key) + '</table></div>' for item in items)
 
 
+def _anchor(prefix, ident):
+    return prefix + '-' + str(ident).encode('utf-8').hex()
+
+
+def _graph(title, nodes, edges, caption='点击节点查看完整详情，搜索可突出节点及其直接关联。'):
+    """Inline SVG, with links derived only from explicit references; no inferred relationships."""
+    if not nodes:
+        return ''
+    columns = min(3, len(nodes))
+    width, height = columns * 250 + 20, ((len(nodes) + columns - 1) // columns) * 92 + 30
+    positions = {node['id']: (135 + (i % columns) * 250, 48 + (i // columns) * 92)
+                 for i, node in enumerate(nodes)}
+    arrow = _anchor('arrow', title)
+    parts = ['<figure class="chart"><figcaption>' + _esc(title) + '</figcaption><div class="sub">' + _esc(caption)
+             + '</div><div class="chart-tools"><input aria-label="搜索' + _esc(title)
+             + '节点" placeholder="搜索节点…" oninput="filterGraph(this)"><button onclick="resetGraph(this)">显示全部</button></div>'
+             '<div class="graph-scroll"><svg class="graph" role="img" aria-label="' + _esc(title)
+             + '" viewBox="0 0 %d %d"><title>' % (width, height) + _esc(title) + '</title><defs><marker id="'
+             + arrow + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">'
+             '<path d="M0 0 L10 5 L0 10 Z"/></marker></defs>']
+    for a, b, label, directed in edges:
+        if a not in positions or b not in positions:
+            continue
+        x1, y1 = positions[a]
+        x2, y2 = positions[b]
+        dx, dy = x2 - x1, y2 - y1
+        if a == b:
+            path = 'M%d %d C%d %d %d %d %d %d' % (x1-40, y1-28, x1-90, y1-60, x1+90, y1-60, x1+40, y1-28)
+        else:
+            ratio = min(104 / abs(dx) if dx else float('inf'), 28 / abs(dy) if dy else float('inf'))
+            x1, y1, x2, y2 = x1 + dx * ratio, y1 + dy * ratio, x2 - dx * ratio, y2 - dy * ratio
+            path = 'M%.1f %.1f L%.1f %.1f' % (x1, y1, x2, y2)
+        parts.append('<path class="graph-edge" data-a="' + _anchor('key', a) + '" data-b="' + _anchor('key', b)
+                     + '" d="' + path + '"' + (' marker-end="url(#' + arrow + ')"' if directed else '')
+                     + '><title>' + _esc(label) + '</title></path>')
+    for node in nodes:
+        x, y = positions[node['id']]
+        parts.append('<a class="graph-node" data-key="' + _anchor('key', node['id']) + '" href="#'
+                     + node['target'] + '" tabindex="0" onclick="focusGraph(this)" onfocus="focusGraph(this)">'
+                     '<title>' + _esc(node.get('detail', node['label'])) + '</title>'
+                     '<rect x="%d" y="%d" width="208" height="56" rx="9"/>' % (x-104, y-28)
+                     + '<text x="%d" y="%d" text-anchor="middle">' % (x, y-2) + _esc(_short(node['label'], 15))
+                     + '</text><text class="group-label" x="%d" y="%d" text-anchor="middle">' % (x, y+17)
+                     + _esc(_short(node.get('group', ''), 24)) + '</text></a>')
+    parts.append('</svg></div><details><summary>查看关联明细 · ' + str(len(edges)) + ' 条</summary><ul class="tight">')
+    labels = {node['id']: node['label'] for node in nodes}
+    parts.extend('<li>' + _esc(labels.get(a, a)) + (' → ' if directed else ' ↔ ') + _esc(labels.get(b, b))
+                 + ' · ' + _esc(label) + '</li>' for a, b, label, directed in edges)
+    parts.append('</ul></details></figure>')
+    return ''.join(parts)
+
+
+def _bars(title, items, caption=''):
+    """Each item supplies its own denominator and readable exact value."""
+    if not items:
+        return ''
+    parts = ['<figure class="chart"><figcaption>' + _esc(title) + '</figcaption><div class="sub">' + _esc(caption) + '</div>']
+    for label, value, maximum, display in items:
+        percent = min(100, max(0, float(Decimal(str(value)) / Decimal(str(maximum)) * 100))) if maximum else 0
+        parts.append('<div class="bar-row"><span>' + _esc(label) + '</span><div class="bar-track" role="img" aria-label="'
+                     + _esc(label + '：' + display) + '"><div class="bar-fill" style="width:%.2f%%"></div></div>' % percent
+                     + '<span class="bar-value">' + _esc(display) + '</span></div>')
+    return ''.join(parts) + '</figure>'
+
+
+def _timeline(title, items, caption=''):
+    if not items:
+        return ''
+    return '<figure class="chart"><figcaption>' + _esc(title) + '</figcaption><div class="sub">' + _esc(caption) + '</div><ol class="timeline">' + ''.join(
+        '<li><span class="pill">' + _esc(label) + '</span><b>' + _esc(head) + '</b><p>' + _esc(body)
+        + '</p><span class="note">' + _esc(note) + '</span></li>' for label, head, body, note in items) + '</ol></figure>'
+
+
 def _overview(book, contract, rows, state, open_hooks, report, written):
     pieces = ['<h2 id="overview">概览</h2><div class="sub">数据库派生只读视图 · 真源 novel.sqlite3 · 可随时重新生成</div><div class="cards">',
               '<div class="stat"><b>' + str(len(rows)) + '</b><span>已提交章节</span></div>',
@@ -251,6 +380,23 @@ def _overview(book, contract, rows, state, open_hooks, report, written):
               '<div class="stat"><b>' + ('是' if report['ok'] else '否') + '</b><span>账本核验</span></div></div>']
     if contract:
         band = contract['word_range']
+        pieces.append(_bars('写作进度', [('目标下限', written, band[0], format(written, ',') + ' / ' + format(band[0], ','))],
+                            '字数达到下限后，仍需完成终局与独立核验。'))
+        pieces.append(_bars('分卷进度', [(v['id'], sum(v['first'] <= row['n'] <= v['end'] for row in rows), v['end']-v['first']+1,
+                                         str(sum(v['first'] <= row['n'] <= v['end'] for row in rows)) + ' / ' + str(v['end']-v['first']+1) + ' 章')
+                                        for v in contract['volumes']]))
+        if contract.get('volume_outline'):
+            pieces.append(_bars('卷纲设计进度', [(v['id'], len(book.get('designs', {}).get('volume:' + v['id'], {}).get('chapters', [])),
+                                                v['end']-v['first']+1,
+                                                str(len(book.get('designs', {}).get('volume:' + v['id'], {}).get('chapters', []))) + ' / ' + str(v['end']-v['first']+1) + ' 章')
+                                               for v in contract['volumes']], '只统计已通过独立核验的逐章卷纲。'))
+        if rows:
+            maximum = max(row['han'] for row in rows) or 1
+            pieces.append('<figure class="chart"><figcaption>章节篇幅</figcaption><div class="sub">柱高表示实际汉字数，点击阅读对应章节。</div><div class="chapter-bars">'
+                          + ''.join('<a class="chapter-bar" href="#read-' + str(row['n']) + '" onclick="openChapter(' + str(row['n'])
+                                    + ');return false" title="第' + str(row['n']) + '章 · ' + str(row['han']) + ' 汉字">'
+                                    + str(row['han']) + '<i style="height:%.1fpx"></i>' % (120 * row['han'] / maximum)
+                                    + str(row['n']) + '</a>' for row in rows) + '</div></figure>')
         pieces.append('<div class="card"><table class="t">'
                       '<tr><th>目标区间</th><td>' + format(band[0], ',') + ' ~ ' + format(band[1], ',') + ' 汉字</td></tr>'
                       '<tr><th>完成度</th><td>' + format(written, ',') + ' 汉字（占目标下限 '
@@ -262,7 +408,7 @@ def _overview(book, contract, rows, state, open_hooks, report, written):
     else:
         pieces.append('<p class="note">约定尚未激活：项目仍在开书阶段。</p>')
     if state.get('clock'):
-        pieces.append('<p class="note">主线时钟：第 ' + str(state['clock']) + ' 天</p>')
+        pieces.append('<p class="note">故事累计经过 ' + str(state['clock']) + ' 天</p>')
     if book.get('pause_reason'):
         pieces.append('<p class="note">暂停原因：' + _esc(book['pause_reason']) + '</p>')
     if report['problems']:
@@ -287,10 +433,10 @@ def _world(book):
         pieces.append('<h3>逐门选择</h3>')
         for row in opening['selections']:
             option = row['option']
-            pieces.append('<div class="card"><b>' + _esc(row['gate']) + ' · ' + _esc(option.get('title', '')) + '</b>'
+            pieces.append('<div class="card"><b>' + _esc(gate_title(row['gate'])) + ' · ' + _esc(option.get('title', '')) + '</b>'
                           + '<p>' + _esc(option.get('premise', '')) + '</p><p class="note">推进：'
                           + _esc(option.get('driver', '')) + '　代价：' + _esc(option.get('tradeoff', '')) + '</p>'
-                          + '<table class="t">' + ''.join('<tr><th>' + _esc(k) + '</th><td>' + _display(v) + '</td></tr>'
+                          + '<table class="t">' + ''.join('<tr><th>' + _esc(FIELD_LABELS.get(k, SUB_LABELS.get(k, k))) + '</th><td>' + _display(v) + '</td></tr>'
                                                           for k, v in option.get('value', {}).items()) + '</table>'
                           + (('<p class="note">作者原话：' + _esc(row.get('source', '')) + '</p>') if row.get('source') else '')
                           + '</div>')
@@ -301,17 +447,41 @@ def _world(book):
     pieces.append('<h3>世界模型</h3><div class="card"><table class="t">'
                   '<tr><th>前提</th><td>' + _esc(model['premise']) + '</td></tr>'
                   '<tr><th>长篇承载</th><td>' + _esc(model['story_capacity']) + '</td></tr></table></div>')
-    for section, records in model.items():
-        if section in ('selection_hash', 'premise', 'story_capacity') or not records:
-            continue
+    nodes, edges, seen = [], [], set()
+    for section in WORLD_SECTIONS:
+        for record in model.get(section, []):
+            ident = section + ':' + record['id']
+            label = record.get('name') or record.get('period') or record.get('resource') or record.get('institution') or record.get('practice') or record.get('principle') or record.get('truth') or record['id']
+            nodes.append(dict(id=ident, label=label, group=WORLD_LABELS[section], target=_anchor('world', ident), detail=label + ' · ' + WORLD_LABELS[section]))
+            for ref in record.get('links', []):
+                pair = tuple(sorted((ident, ref)))
+                if pair not in seen:
+                    edges.append((ident, ref, '设定关联', False))
+                    seen.add(pair)
+    pieces.append(_graph('世界关联图', nodes, edges, '连线来自世界设定的显式引用，表示关联，不推断敌友或因果。点击节点查看设定。'))
+    pieces.append(_timeline('历史时间线', [(r['period'], r['event'], r['consequence'], '当下影响：' + r['present_effect'])
+                                          for r in model.get('history', [])], '按世界模型中的记录顺序展示，时期保留原文。'))
+    for section in WORLD_SECTIONS:
+        records = model.get(section, [])
         pieces.append('<h3>' + _esc(WORLD_LABELS.get(section, section)) + ' <span class="pill dim">'
                       + str(len(records)) + ' 条</span></h3>')
+        if not records:
+            pieces.append('<p class="note">按已选方向，不设置特殊机制。</p>' if section == 'mechanisms' else _empty('记录'))
         for record in records:
             links = record.get('links') or []
-            pieces.append('<div class="card"><b>' + _esc(record.get('id', '')) + '</b><table class="t">' + ''.join(
+            pieces.append('<div class="card node-detail" id="' + _anchor('world', section + ':' + record['id']) + '"><b>'
+                          + _esc(record.get('name') or record.get('period') or record.get('resource') or record.get('institution') or WORLD_LABELS[section]) + '</b><table class="t">' + ''.join(
                 '<tr><th>' + _esc(SUB_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
                 for k, v in record.items() if k not in ('id', 'links')) + '</table>'
-                + ('<p class="note">关联：' + _pills(links) + '</p>' if links else '') + '</div>')
+                + ('<p class="note">关联：' + ''.join('<a class="pill" href="#' + _anchor('world', ref) + '">' + _esc(ref) + '</a>' for ref in links) + '</p>' if links else '') + '</div>')
+    review = book.get('world_review')
+    if review:
+        receipt = review.get('receipt', review)
+        pieces.append('<details><summary>世界独立核验 · ' + _esc(VERDICT_LABELS.get(receipt.get('verdict'), receipt.get('verdict', ''))) + '</summary>')
+        for check in receipt.get('checks', []):
+            pieces.append('<p><span class="pill ' + ('ok' if check['result'] == 'pass' else 'bad') + '">' + _esc(VERDICT_LABELS.get(check['result'], check['result']))
+                          + '</span>' + _esc(CHECK_LABELS.get(check['id'], check['id'])) + ' · ' + _esc(check['reason']) + '</p>')
+        pieces.append(_raw(review) + '</details>')
     return ''.join(pieces)
 
 
@@ -320,12 +490,33 @@ def _designs(book):
     designs = book.get('designs') or {}
     if not designs:
         return ''.join(pieces) + _empty('设计')
+    nodes = [dict(id=n['id'], label=n.get('outcome') or n.get('cause') or n['id'], group=n['id'] + ' · ' + n.get('line', ''),
+                  target=_anchor('design', n['id']), detail=n['id'] + ' · ' + n.get('cause', '') + ' → ' + n.get('outcome', ''))
+             for d in designs.values() for n in d.get('nodes', [])]
+    edges = [(dep, n['id'], '因果前置', True) for d in designs.values() for n in d.get('nodes', []) for dep in n.get('depends_on', [])]
+    pieces.append(_graph('因果节点图', nodes, edges, '箭头从因果前置指向后续节点。设计安排与正文实际实现分别展示。'))
     for scope, design in designs.items():
         pieces.append('<h3>' + _esc('全书' if scope == 'book' else scope) + '</h3><div class="card"><table class="t">'
                       '<tr><th>意图</th><td>' + _esc(design.get('intent', '')) + '</td></tr>'
                       '<tr><th>终局条件</th><td>' + _esc(design.get('ending_conditions', '')) + '</td></tr></table></div>')
+        if design.get('brainstorm'):
+            pieces.append('<details><summary>卷纲脑暴与选案</summary><table class="t">')
+            for option in design['brainstorm']:
+                pieces.append('<tr><th>' + _esc(option['id']) + (' · 已选' if option['id'] == design['selected'] else '')
+                              + '</th><td>' + _esc(option['premise']) + '<p class="note">取舍：' + _esc(option['tradeoff'])
+                              + '</p></td></tr>')
+            pieces.append('</table><p>选案理由：' + _esc(design['selection_reason']) + '</p></details>')
+        if design.get('chapters'):
+            pieces.append('<h3>逐章卷纲 · ' + _esc(scope) + '</h3><ol class="timeline">')
+            for entry in design['chapters']:
+                pieces.append('<li><details id="' + _anchor('outline', entry['chapter']) + '"><summary>第' + str(entry['chapter'])
+                              + '章 · ' + str(han_count(entry['synopsis'])) + ' 字 · ' + _esc(_short(entry['synopsis'], 32))
+                              + '</summary><p style="white-space:pre-wrap">' + _esc(entry['synopsis']) + '</p><p class="note">世界依据：'
+                              + ''.join('<a class="pill" href="#' + _anchor('world', ref) + '">' + _esc(ref) + '</a>' for ref in entry['world_refs'])
+                              + '</p><p class="note">因果节点：' + _pills(entry['node_ids']) + '</p></details></li>')
+            pieces.append('</ol>')
         for node in design.get('nodes', []):
-            pieces.append('<details><summary><span class="pill">' + _esc(node.get('id', '')) + '</span>'
+            pieces.append('<details class="node-detail" id="' + _anchor('design', node['id']) + '"><summary><span class="pill">' + _esc(node.get('id', '')) + '</span>'
                           + _esc(node.get('line', '')) + ' · ' + _esc(_short(node.get('cause', ''))) + '</summary><table class="t">'
                           + ''.join('<tr><th>' + _esc(NODE_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
                                     for k, v in node.items() if k not in ('id', 'line')) + '</table></details>')
@@ -340,6 +531,8 @@ def _plans(book, contract):
     numbers = sorted(int(n) for n in plans)
     pieces.append('<p class="note">已冻结 ' + str(len(numbers)) + ' 章计划：第 ' + str(numbers[0]) + ' ~ '
                   + str(numbers[-1]) + ' 章（滚动窗口，未写部分可重规划）</p>')
+    pieces.append(_timeline('章节推进', [('第' + str(n) + '章', plans[str(n)].get('goal', ''),
+                                        plans[str(n)].get('change', ''), '章末：' + plans[str(n)].get('ending', '')) for n in numbers]))
     for number in numbers:
         plan = plans[str(number)]
         volume = volume_for(contract, number) if contract else None
@@ -360,7 +553,7 @@ def _profiles(book):
     for profile in profiles.values():
         pieces.append('<div class="card"><b>' + _esc(profile.get('entity', '')) + '</b><table class="t">' + ''.join(
             '<tr><th>' + _esc(SUB_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
-            for k, v in profile.items() if k != 'entity') + '</table></div>')
+            for k, v in profile.items() if k not in ('entity', 'growth_basis')) + '</table></div>')
     return ''.join(pieces)
 
 
@@ -373,12 +566,24 @@ def _ledger(state):
         pieces.append('<h3>人物</h3><div class="cards">')
         for item in entities.values():
             aliases = item.get('aliases') or []
-            pieces.append('<div class="stat"><b>' + _esc(item.get('name', '')) + '</b><span>' + _esc(item.get('kind', ''))
+            pieces.append('<div class="stat node-detail" id="' + _anchor('entity', item['id']) + '"><b>' + _esc(item.get('name', '')) + '</b><span>' + _esc(item.get('kind', ''))
                           + (' · ' + _esc('、'.join(aliases)) if aliases else '') + '</span></div>')
         pieces.append('</div>')
     name_of = lambda ident: entities.get(ident, {}).get('name', ident)
+    relations = state.get('relations') or {}
+    if relations:
+        edges = []
+        for key, value in relations.items():
+            pair, label = key.split(':', 1)
+            a, b = pair.split('>', 1)
+            edges.append((a, b, label + '：' + str(value), True))
+        involved = {ident for a, b, _label, _directed in edges for ident in (a, b)}
+        pieces.append(_graph('人物关系图', [dict(id=ident, label=name_of(ident), group=entities.get(ident, {}).get('kind', ''),
+                                               target=_anchor('entity', ident)) for ident in entities if ident in involved], edges,
+                             '连线只展示正文已成立的关系；悬停连线或展开明细查看关系内容。'))
     for key, label in (('facts', '状态事实'), ('relations', '关系'), ('historical_assertions', '历史断言'),
-                       ('developments', '人物成长')):
+                       ('developments', '人物成长'), ('story_nodes', '节点实际推进'), ('thread_progress', '线路实际推进'),
+                       ('reader_knowledge', '读者已见信息'), ('character_current', '人物当前动机与关系')):
         records = state.get(key) or {}
         if records:
             pieces.append('<h3>' + label + ' <span class="pill dim">' + str(len(records)) + '</span></h3><div class="card"><table class="t">'
@@ -386,6 +591,14 @@ def _ledger(state):
                                     for k, v in sorted(records.items())) + '</table></div>')
     resources = state.get('resources') or {}
     if resources:
+        groups = {}
+        for key, value in sorted(resources.items()):
+            holder, asset, unit = json.loads(key)
+            groups.setdefault((asset, unit), []).append((holder, Decimal(value), value))
+        for (asset, unit), items in groups.items():
+            maximum = max(amount for _holder, amount, _value in items)
+            pieces.append(_bars('资源分布 · ' + asset, [(name_of(holder), amount, maximum, value + ' ' + unit)
+                                                       for holder, amount, value in items], '同一资产、同一单位内比较，数值保留原始精度。'))
         pieces.append('<h3>资源</h3><div class="card"><table class="t">')
         for key, value in sorted(resources.items()):
             holder, asset, unit = json.loads(key)
@@ -403,6 +616,8 @@ def _ledger(state):
                           + '<p class="note">来源：' + _esc(item.get('source', '')) + '</p></div>')
     hooks = state.get('hooks') or {}
     if hooks:
+        pieces.append(_timeline('承诺期限', [('最迟第' + str(h['due']) + '章', ident, h.get('text', ''), HOOK_LABELS.get(h.get('status'), ''))
+                                           for ident, h in sorted(hooks.items(), key=lambda pair: pair[1].get('due', 0)) if 'due' in h]))
         pieces.append('<h3>承诺 <span class="pill dim">' + str(len(hooks)) + '</span></h3>')
         for ident, hook in sorted(hooks.items()):
             status = hook.get('status')
@@ -410,13 +625,25 @@ def _ledger(state):
             pieces.append('<div class="card"><b>' + _esc(ident) + '</b><span class="pill' + cls + '">'
                           + _esc(HOOK_LABELS.get(status, status or '')) + '</span><p>' + _esc(hook.get('text', '')) + '</p>'
                           + '<p class="note">最迟第 ' + _esc(hook.get('due', '—')) + ' 章 · 埋设于第 '
-                          + _esc(hook.get('seed_chapter', '—')) + ' 章 · 延期 ' + _esc(hook.get('extensions', 0)) + '/2</p></div>')
+                          + _esc(hook.get('seed', {}).get('chapter', hook.get('seed_chapter', '—'))) + ' 章 · 延期 ' + _esc(hook.get('extensions', 0)) + '/2</p></div>')
     places = state.get('places') or {}
+    if state.get('pace_history'):
+        pieces.append('<h3>近期节奏与情绪承接</h3>' + _display(state['pace_history']))
     if places:
+        nodes = [dict(id='p:' + ident, label=place.get('name', ident), group='地点', target=_anchor('place', ident)) for ident, place in places.items()]
+        edges = [('p:' + ident, 'p:' + place['parent'], '属于', True) for ident, place in places.items() if place.get('parent')]
+        located = set(state.get('placements', {})) | set(state.get('custody', {})) | set(state.get('custody', {}).values())
+        nodes.extend(dict(id='e:' + ident, label=name_of(ident), group='人物 / 物品', target=_anchor('entity', ident)) for ident in entities if ident in located)
+        edges.extend(('e:' + ident, 'p:' + place, '位于', True) for ident, place in state.get('placements', {}).items())
+        edges.extend(('e:' + ident, 'e:' + holder, '由其持有', True) for ident, holder in state.get('custody', {}).items())
+        kinds = {'path': '路径', 'sight': '视线', 'sound': '声音'}
+        edges.extend(('p:' + link['a'], 'p:' + link['b'], kinds.get(link['kind'], link['kind']) + (' · 已关闭' if not link.get('open', True) else ''),
+                      link.get('directed', False)) for link in state.get('links', {}).values())
+        pieces.append(_graph('地点与站位图', nodes, edges, '包含关系、当前位置和已登记的路径 / 视听连接；不推断未登记的距离或人物知情。'))
         pieces.append('<h3>地点与站位</h3><div class="card"><table class="t">')
         for item in places.values():
             parent = places.get(item['parent'], {}).get('name') if item.get('parent') else None
-            pieces.append('<tr><th>' + _esc(item.get('name', '')) + '</th><td>'
+            pieces.append('<tr class="node-detail" id="' + _anchor('place', item['id']) + '"><th>' + _esc(item.get('name', '')) + '</th><td>'
                           + (_esc('上级：' + parent) if parent else '—') + '</td></tr>')
         for entity, place in (state.get('placements') or {}).items():
             pieces.append('<tr><th>' + _esc(name_of(entity)) + '</th><td>位于 '
@@ -538,16 +765,15 @@ def _audit_report(book, rows):
 
 def render(repo):
     """Build the whole page as one HTML string."""
-    book = repo.load()
+    book, rows = publication(repo)
     branch = book['branch']
-    rows = repo.headers(branch)
     contract = book.get('contract')
     state = book.get('state') or {}
     written = book.get('written_han') or 0
     report = _audit_report(book, rows)
     open_hooks = {k: v for k, v in (state.get('hooks') or {}).items() if v.get('status') == 'open'}
     title = contract['title'] if contract else '未定名书稿'
-    generated = time.strftime('%Y-%m-%d %H:%M')
+    generated = time.strftime('%Y-%m-%d %H:%M', time.localtime(book['completed_at'])) if book.get('completed_at') else time.strftime('%Y-%m-%d %H:%M')
 
     nav = ''.join('<a href="#%s">%s</a>' % (key, label) for key, label in SECTIONS)
     jump = ('<select id="jump-read" class="toc-select" style="display:none" onchange="jump(this)">'
@@ -583,6 +809,6 @@ def write(repo, output=None):
     view = render(repo)
     target = Path(output).expanduser().resolve() if output else repo.project / 'book.html'
     atomic_write(target, view)
-    rows = repo.headers(repo.load()['branch'])
+    _, rows = publication(repo)
     return {'path': str(target), 'chars': len(view), 'chapters': len(rows),
             'inside_project': target.is_relative_to(repo.project)}
