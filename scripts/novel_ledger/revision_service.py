@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 from .contracts import Error, digest, require
 from .ports import Repository
-from . import editorial, facts, narrative, revision_impact, story_memory, understanding, workflow
+from . import editorial, facts, narrative, revision_impact, store_keys, story_memory, understanding, workflow
 
 
 class RevisionService:
@@ -129,7 +129,7 @@ class RevisionService:
         memory = book['understanding']
         revision = book.get('revision_run')
         if revision:
-            parent = self.repo.get('branch-book:' + revision['parent']).get('understanding', understanding.empty())
+            parent = self.repo.get(store_keys.branch_book(revision['parent'])).get('understanding', understanding.empty())
             original = {digest(v) for v in parent['versions']}
             memory = {'schema': understanding.SCHEMA, 'versions': parent['versions'] +
                       [v for v in memory['versions'] if digest(v) not in original]}
@@ -184,7 +184,7 @@ class RevisionService:
                         {'required_through': impact['last']})
             impact['analyzed_last'] = analyzed_last
         parent = book['branch']
-        self.repo.put('branch-book:' + parent, book)
+        self.repo.put(store_keys.branch_book(parent), book)
         branch = self.repo.fork(parent, first)
         old = self.repo.chapter(parent, first)
         book.update(branch=branch, state=self.replay(parent, book['contract'], first - 1),
@@ -193,7 +193,7 @@ class RevisionService:
         if 'understanding' in book:
             book['understanding'] = understanding.rebase(book['understanding'], {r['n']: r['prose'] for r in rows if r['n'] < first})
         book['revision_run'] = {'parent': parent, 'first': first, 'last': end, 'reason': reason,
-                                'target': self.repo.get('branch-book:' + parent)['target'], 'finish': self.repo.get('branch-book:' + parent)['finish'],
+                                'target': self.repo.get(store_keys.branch_book(parent))['target'], 'finish': self.repo.get(store_keys.branch_book(parent))['finish'],
                                 'carry': [r for r in rows if r['n'] > end]}
         if impact:
             book['revision_run']['impact'] = impact

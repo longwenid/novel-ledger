@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 from .contracts import CHECK_SETS, POLICY_FIELDS, RESULT, VERSION, Error, checks_for, digest, dump, han_count, require, text
-from . import creation, facts, narrative, planning, quality, workflow, world, craft, editorial, story_memory, understanding
+from . import creation, facts, narrative, planning, quality, workflow, world, craft, editorial, store_keys, story_memory, understanding
 from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
 from .contract_activation import ContractActivation
@@ -22,7 +22,7 @@ class Application:
     def status(self):
         book = self.repo.load()
         rows = self.repo.headers(book['branch'])
-        official = self.repo.get('official_branch', 'main')
+        official = self.repo.get(store_keys.OFFICIAL_BRANCH, 'main')
         formal = self.repo.headers(official)
         task = self.repo.pending()
         sealed = task and task['input']['blind'] and task['first_read'] is None
@@ -68,7 +68,7 @@ class Application:
         return ident
 
     def controller_guard(self, owner=None):
-        run = self.repo.get('controller')
+        run = self.repo.get(store_keys.CONTROLLER)
         if run and run['until'] > self.clock():
             require(owner == run['owner'], 'controller_lease', '运行主控仍持有租约。',
                     {'recover': '使用当前主控 owner，或待租约到期后重新 run 认领。'})
@@ -91,7 +91,7 @@ class Application:
                 {'expect': '回执顶层 "execution_claim": "<token>"；token 来自 claim --task <ID> --session <会话> 的返回。'})
         owner = self.repo.session_task(session)
         require(owner is None or owner == task['id'], 'session_reuse', '新任务须由新 Worker 执行，不得复用其他任务会话。')
-        lease = self.repo.get('claim:' + task['id'])
+        lease = self.repo.get(store_keys.claim(task['id']))
         if lease and check_lease:
             require(lease['session'] == session and lease['token'] == claim and lease['until'] > self.clock(),
                     'worker_lease', 'Worker 租约或执行认领已过期。',
@@ -295,18 +295,18 @@ class Application:
             self._live(task)
             require(not task['reviewer'] or task['reviewer'] == session, 'first_read', '冻结首读只能沿原审稿会话恢复；另派审稿者须取消旧任务。')
             self._session(task, session, check_lease=False)
-            old = self.repo.get('claim:' + task_id)
+            old = self.repo.get(store_keys.claim(task_id))
             require(not old or old['until'] <= self.clock() or old['session'] == session, 'worker_busy', '另一 Worker 仍持有任务租约。')
             lease = {'session': session, 'token': old['token'] if old and old['session'] == session else self.new_id(), 'until': self.clock() + seconds}
-            self.repo.put('claim:' + task_id, lease)
+            self.repo.put(store_keys.claim(task_id), lease)
             self.repo.bind_session(session, task_id)
             return {**lease, 'usage': '回执顶层 execution_claim 填写返回的 token 字段（裸字符串，非对象）。'}
 
     def release_claim(self, task_id, token):
         with self.repo.transaction():
-            claim = self.repo.get('claim:' + task_id)
+            claim = self.repo.get(store_keys.claim(task_id))
             require(claim is not None and claim['token'] == token, 'worker_lease', '不能释放其他执行的认领。')
-            self.repo.put('claim:' + task_id, None)
+            self.repo.put(store_keys.claim(task_id), None)
             self.repo.record('worker_release', {'task': task_id})
 
     def run(self, through=None, finish=False, owner=None, seconds=300, source=''):
@@ -324,7 +324,7 @@ class Application:
             # run target beyond the revision end no longer overshoots the propagation range.
             require(book['revision_run'] is None or target >= book['revision_run']['last'], 'revision_target', '运行目标不能低于修订范围，先完成或撤销修订。')
             owner = owner or self.new_id()
-            self.repo.put('controller', {'owner': owner, 'until': self.clock() + seconds})
+            self.repo.put(store_keys.CONTROLLER, {'owner': owner, 'until': self.clock() + seconds})
             book.update(target=target, finish=finish, run_authorized=True)
             book['decisions'].append({'kind': 'run', 'target': target, 'finish': finish, 'source': source})
             self.repo.save(book)
@@ -333,10 +333,10 @@ class Application:
     def renew(self, owner, seconds=300):
         require(type(seconds) is int and seconds > 0, 'lease', '租期须为正整数。')
         with self.repo.transaction():
-            run = self.repo.get('controller')
+            run = self.repo.get(store_keys.CONTROLLER)
             require(run is not None and run['owner'] == owner and run['until'] > self.clock(), 'controller_lease', '主控租约已失效。')
             run['until'] = self.clock() + seconds
-            self.repo.put('controller', run)
+            self.repo.put(store_keys.CONTROLLER, run)
         return run
 
     def approve(self, prose_hash, source, owner=None):
@@ -607,7 +607,7 @@ class Application:
             self._audit(book)
             revision = book['revision_run']
             self.repo.promote(book['branch'], revision['parent'])
-            self.repo.put('official_branch', book['branch'])
+            self.repo.put(store_keys.OFFICIAL_BRANCH, book['branch'])
             book.update(revision_run=None, target=revision['target'], finish=revision['finish'], revision=book['revision'] + 1)
             self.repo.save(book)
             self.repo.record('promote', {'branch': book['branch']})
@@ -619,7 +619,7 @@ class Application:
             book = self.repo.load()
             require(book['revision_run'] is not None, 'revision', '当前没有候选修订。')
             parent = book['revision_run']['parent']
-            restored = self.repo.get('branch-book:' + parent)
+            restored = self.repo.get(store_keys.branch_book(parent))
             # Discard restores story state, never already spent editorial effort.
             for chapter, spent in book['rework'].items():
                 prior = restored['rework'].setdefault(chapter, {'repairs': 0, 'redesigns': 0})
@@ -665,7 +665,7 @@ class Application:
                     book['creation'] = None
             planning.check_contract_names(candidate, planning.policy_of(book))
             if not book['proposal'] or book['proposal']['scope'] != 'contract':
-                self.repo.put('amendment_base', book)
+                self.repo.put(store_keys.AMENDMENT_BASE, book)
             self._cancel_pending(source)
             # The author's new contract supersedes these dispatches; the amendment base
             # retains them for discard, and scope findings/case budgets remain available.
@@ -793,7 +793,7 @@ class Application:
                     and text(row.get('path')) and text(row.get('content_hash')) for row in files),
                     'delivery', '交付清单须包含文件位置和内容哈希。')
             value = {key: manifest[key] for key in ('snapshot_hash', 'chapters', 'files')}
-            self.repo.put('completion_delivery', value)
+            self.repo.put(store_keys.COMPLETION_DELIVERY, value)
             self.repo.record('deliver', {'snapshot_hash': reference})
         return {'recorded': True, 'snapshot_hash': reference}
 

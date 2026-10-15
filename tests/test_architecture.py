@@ -1,6 +1,7 @@
 """Executable layer boundaries: allowed directions matter in addition to acyclicity."""
 import ast
 import re
+import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -109,6 +110,37 @@ class ArchitectureTests(unittest.TestCase):
                 internal, _ = imports(tree)
                 self.assertFalse(internal - ALLOWED[name],
                                  f'{name} crosses its layer: {sorted(internal - ALLOWED[name])}')
+
+    def test_kv_keys_are_built_only_in_the_declared_module(self):
+        """A raw 'claim:' + id in an adapter would make the key space part of the adapter."""
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        from novel_ledger import store_keys
+        fixed = set(store_keys.KEYS) | {store_keys.BOOK_ROOT}
+        for name, tree in self.trees.items():
+            if name in ('store_keys', 'sqlite_store'):
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or not node.args:
+                    continue
+                called = node.func.attr if isinstance(node.func, ast.Attribute) else None
+                if called not in ('put', 'get'):
+                    continue
+                receiver = node.func.value
+                receiver = receiver.attr if isinstance(receiver, ast.Attribute) else getattr(receiver, 'id', None)
+                if receiver != 'repo':
+                    continue
+                first = node.args[0]
+                literal = first.value if isinstance(first, ast.Constant) else None
+                built = literal if isinstance(literal, str) else None
+                if built is None and isinstance(first, ast.BinOp) and isinstance(first.left, ast.Constant):
+                    built = first.left.value
+                if not isinstance(built, str):
+                    continue
+                with self.subTest(module=name, line=node.lineno):
+                    self.assertNotIn(built, fixed,
+                                     f'{name}:{node.lineno} builds the kv key {built!r} directly.')
+                    self.assertFalse(built.startswith(store_keys.PREFIXES),
+                                     f'{name}:{node.lineno} builds a prefixed kv key {built!r} directly.')
 
     def test_complete_import_graph_is_acyclic(self):
         graph = {name: imports(tree)[0] for name, tree in self.trees.items()}
