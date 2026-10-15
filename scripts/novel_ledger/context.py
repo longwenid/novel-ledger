@@ -6,7 +6,7 @@ import json
 from .contracts import CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, TASK, Job, checks_for, dump, digest, require
 from . import briefs, creation, narrative, scopes, world, editorial, story_memory, understanding
 from .planning import outline_policy, policy_material, volume_for
-from .design_queries import node_map
+from .design_queries import BASIC_DEPTH, TRACKED_DEPTH, frontier, node_map
 from .ports import ContextStore
 from .envelope import validate_work
 
@@ -209,18 +209,11 @@ def build(repo: ContextStore, book, job):
             add('scene_sources', dependencies, bool(dependencies))
         add('profiles', {p: book['profiles'][p] for p in participants if p in book['profiles']})
         nodes = node_map(book['designs'])
-        selected = set()
-        def select(ident):
-            if ident in selected:
-                return
-            selected.add(ident)
-            for parent in nodes[ident]['depends_on']:
-                if tracking:
-                    selected.add(parent)
-                else:
-                    select(parent)
-        for ident in plan['node_ids']:
-            select(ident)
+        # Tracked projects read their target plus direct prerequisites; a basic project has no
+        # progress frontier to narrow by, so it walks a bounded neighbourhood instead of the
+        # whole ancestry. Both are bounded and neither recurses.
+        depth = TRACKED_DEPTH if tracking else BASIC_DEPTH
+        selected = frontier(nodes, plan['node_ids'], depth)
         add('story', [nodes[ident] for ident in sorted(selected)])
     for scope, design in book['designs'].items():
         needed = stage in ('volume_plan', 'plan', 'alignment_plan', 'alignment_review') and scope in ('book', 'volume:' + volume_for(editorial.effective_contract(book), chapter)['id'])
