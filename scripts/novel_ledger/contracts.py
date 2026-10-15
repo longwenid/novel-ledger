@@ -54,6 +54,10 @@ def checks_for(version, kind):
 FIRST_READ = ('desire', 'obstacle', 'change', 'read_on_reason')
 REPAIRS = 2
 REDESIGNS = 1
+# Fast verification merges block reviews by design, but a merged block still stays bounded:
+# one review task may cover at most this many chapters, so a whole volume never lands in
+# a single worker just because the interval review was skipped.
+FAST_REVIEW_BLOCK = 12
 TIME_MARKERS = tuple('日天夜晨早晚午时年月春夏秋冬晓暮昏宵旬翌昨今明') + ('星期', '分钟', '秒钟')
 DEFAULT_TERMS = ['账本', '入账', '回执']
 # No character is banned by default: naming is the author's decision, so the name rule starts empty
@@ -181,6 +185,9 @@ CONTRACT_FIELDS = (
     {'key': 'arcs', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
 )
 CONTRACT_KEYS = tuple(row['key'] for row in CONTRACT_FIELDS)
+# Every field declared as an alignment decision, regardless of opening version.
+# The version-aware view is alignment_for(version); this one answers "which fields
+# ever participate", which the opening tests assert the template covers.
 CONTRACT_ALIGNMENT = tuple(row['key'] for row in CONTRACT_FIELDS if row['alignment'])
 
 

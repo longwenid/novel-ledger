@@ -18,7 +18,7 @@
 | narrative_tracking / review_fanout | true / 3；节点推进和有界综合见 [叙事推进](narrative.md) |
 | editorial_features / scope_append_limit | true / 3；编辑能力要求叙事跟踪，关闭跟踪时也须关闭编辑能力；人物、改案和关闭字段见 [编辑能力](editorial.md) |
 | volume_outline | rolling 近期卷纲；配置、批次与 current/all 范围统一见 [叙事推进](narrative.md) |
-| verification | full；fast 省去固定间隔审，跟踪项目两档都保持有界范围分块，基础流程 fast 范围审一次成块；均保留章审、首读和事实核验 |
+| verification | full；fast 省去固定间隔审，跟踪项目两档都保持有界范围分块；基础流程 fast 合并成块，单块至多 `contracts.FAST_REVIEW_BLOCK` 章，不会把整卷或全书交给一个任务；均保留章审、首读和事实核验 |
 
 启用编辑能力时检查清单为 3，约定另有 pov 时为 4（增加 reader.pov_consistency）；未启用编辑能力时为 2。具体版本随任务冻结，已保存回执按自己的版本复核，不追补后来新增的检查项。
 

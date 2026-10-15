@@ -5,92 +5,11 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from architecture_table import (ADAPTERS, ALLOWED, CORE_EXTERNAL, FORBIDDEN_CORE_NAMES,
+                                allowed_edges)
+
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / 'scripts' / 'novel_ledger'
-
-# A new module or dependency requires an explicit architectural decision here.
-# In particular, two modules can remain acyclic while still crossing a layer.
-ALLOWED = {
-    '__init__': set(),
-    'contracts': set(),
-    'ports': {'contracts'},
-    'book_state': {'contracts'},
-    'craft': {'contracts'},
-    'creation': {'contracts'},
-    'design_queries': set(),
-    'editorial': {'contracts'},
-    'entities': {'contracts'},
-    'evidence': {'contracts'},
-    'facts': {'contracts', 'entities', 'evidence', 'narrative', 'spatial'},
-    'narrative': {'contracts'},
-    'planning': {'contracts', 'entities', 'narrative', 'craft', 'story_memory'},
-    'quality': {'contracts', 'evidence'},
-    'result_templates': {'contracts', 'world', 'scopes', 'editorial', 'narrative'},
-    'revision_impact': {'contracts', 'story_memory'},
-    'scopes': {'contracts'},
-    'spatial': {'contracts'},
-    'story_memory': {'contracts'},
-    'understanding': {'contracts'},
-    'world': {'contracts'},
-    'briefs': {'contracts', 'creation'},
-    'workflow': {'contracts', 'creation', 'facts', 'narrative', 'planning', 'quality',
-                 'scopes', 'world', 'craft', 'editorial', 'understanding',
-                 'design_queries', 'evidence'},
-    'application': {'contracts', 'ports', 'creation', 'facts', 'narrative', 'planning',
-                    'quality', 'workflow', 'world', 'craft', 'editorial',
-                    'story_memory', 'understanding', 'revision_service', 'contract_activation'},
-    'revision_service': {'contracts', 'ports', 'editorial', 'facts', 'narrative', 'revision_impact',
-                         'story_memory', 'understanding', 'workflow'},
-    'contract_activation': {'contracts', 'ports', 'workflow'},
-    'context': {'contracts', 'ports', 'briefs', 'creation', 'narrative', 'scopes',
-                'world', 'editorial', 'story_memory', 'understanding', 'planning',
-                'design_queries'},
-    'publication': {'ports'},
-    'workspace': {'contracts'},
-    'delivery': {'contracts', 'ports', 'result_templates', 'publication', 'workspace'},
-    'bookpage': {'contracts', 'ports', 'publication', 'workspace', 'planning',
-                 'world', 'creation', 'understanding', 'briefs'},
-    'presentation': {'ports', 'bookpage', 'delivery', 'workspace'},
-    'sqlite_store': {'contracts', 'book_state'},
-    'host': {'contracts', 'ports'},
-    'bootstrap': {'contracts', 'application', 'context', 'presentation', 'sqlite_store',
-                  'workspace', 'workflow', 'host', 'delivery', 'bookpage'},
-    'novel': {'contracts', 'bootstrap'},
-}
-
-# These modules can evaluate values and invoke injected capabilities, but cannot
-# discover files, databases, environment variables, processes or dynamic code.
-CORE_EXTERNAL = {
-    '__init__': set(),
-    'contracts': {'__future__', 'copy', 'hashlib', 'json', 'dataclasses', 'typing'},
-    'ports': {'__future__', 'typing'},
-    'book_state': {'__future__', 'copy'},
-    'craft': {'__future__', 'copy'},
-    'creation': {'__future__', 'copy'},
-    'design_queries': {'__future__'},
-    'editorial': {'__future__', 'copy'},
-    'entities': {'__future__', 'copy'},
-    'evidence': {'__future__'},
-    'facts': {'__future__', 'copy', 'decimal'},
-    'narrative': {'__future__', 'copy'},
-    'planning': {'__future__', 'copy', 'math'},
-    'quality': {'__future__', 'copy'},
-    'result_templates': {'__future__'},
-    'revision_impact': {'__future__'},
-    'scopes': {'__future__'},
-    'spatial': {'__future__', 'copy'},
-    'story_memory': {'__future__', 'copy'},
-    'understanding': {'__future__', 'copy'},
-    'world': {'__future__', 'copy'},
-    'briefs': {'__future__'},
-    'workflow': {'__future__', 'copy'},
-    'application': {'__future__', 'copy'},
-    'revision_service': {'__future__', 'copy'},
-    'contract_activation': {'__future__', 'copy'},
-    'context': {'__future__', 'copy', 'json'},
-    'publication': {'__future__'},
-}
-FORBIDDEN_CORE_NAMES = {'open', '__import__', 'eval', 'exec', 'Path'}
 
 
 def imports(tree):
@@ -124,7 +43,11 @@ def imports(tree):
 
 
 def forbidden_core_accesses(tree):
-    """Block builtin aliases too: loading `open` is already an I/O capability leak."""
+    """Block builtin aliases too: loading `open` is already an I/O capability leak.
+
+    Name and attribute lookups cover the direct spellings; `getattr`, `__builtins__`
+    and `__globals__` are banned outright so the ban cannot be spelled around.
+    """
     return {(node.lineno, node.id if isinstance(node, ast.Name) else node.attr)
             for node in ast.walk(tree)
             if (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
@@ -137,6 +60,34 @@ def diagram():
     return re.search(r'```mermaid\n(.*?)```', source, re.S).group(1).strip()
 
 
+def diagram_edges():
+    """Resolve documented edges whose endpoints name a concrete module.
+
+    The diagram is an intentional summary: aggregate nodes (for example the pure
+    rule group) and omitted edges are allowed. What is not allowed is a drawn
+    edge that the declared dependency table does not permit.
+    """
+    source = diagram()
+    labels = {}
+    for match in re.finditer(r'(\w+)\[([^\]]+)\]', source):
+        labels.setdefault(match.group(1), match.group(2))
+    names = sorted(ALLOWED, key=len, reverse=True)
+
+    def resolve(node):
+        label = labels.get(node, '')
+        for name in names:
+            if re.search(r'(?<![\w])' + re.escape(name) + r'(?![\w])', label):
+                return name
+        return None
+
+    resolved = []
+    for match in re.finditer(r'(\w+)(?:\[[^\]]+\])?\s*-->\s*(\w+)(?:\[[^\]]+\])?\s*$', source, re.M):
+        left, right = resolve(match.group(1)), resolve(match.group(2))
+        if left and right:
+            resolved.append((left, right))
+    return resolved, labels
+
+
 class ArchitectureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -144,6 +95,12 @@ class ArchitectureTests(unittest.TestCase):
         cls.sources['novel'] = ROOT / 'scripts' / 'novel.py'
         cls.trees = {name: ast.parse(path.read_text(encoding='utf-8'), feature_version=(3, 9))
                      for name, path in cls.sources.items()}
+
+    def test_every_module_is_classified_as_core_or_adapter(self):
+        """A module missing from both sets would silently escape the I/O ban."""
+        self.assertEqual(set(self.sources), set(ALLOWED))
+        self.assertEqual(set(ALLOWED), set(CORE_EXTERNAL) | ADAPTERS)
+        self.assertEqual(set(CORE_EXTERNAL) & ADAPTERS, set())
 
     def test_every_module_has_an_explicit_dependency_boundary(self):
         self.assertEqual(set(self.sources), set(ALLOWED))
@@ -199,8 +156,33 @@ def hidden():
     module.Path('/tmp')
     builtins.open('/tmp')
 ''')
-        self.assertEqual({name for _, name in forbidden_core_accesses(tree)},
-                         FORBIDDEN_CORE_NAMES)
+        self.assertTrue({'open', '__import__', 'eval', 'exec', 'Path'}
+                        <= {name for _, name in forbidden_core_accesses(tree)})
+
+    def test_scanner_blocks_builtin_lookup_bypasses(self):
+        """The four spellings that used to slip past a name-only ban."""
+        tree = ast.parse('''
+def hidden():
+    getattr(__builtins__, 'open')('/tmp')
+    vars(__builtins__)['open']('/tmp')
+    __builtins__['open']('/tmp')
+    (lambda: 1).__globals__['__builtins__']
+''')
+        found = {name for _, name in forbidden_core_accesses(tree)}
+        self.assertEqual(found, {'getattr', '__builtins__', '__globals__'})
+
+    def test_diagram_edges_are_allowed_by_the_dependency_table(self):
+        edges, labels = diagram_edges()
+        self.assertTrue(edges, 'At least the concrete diagram edges must resolve.')
+        allowed = allowed_edges()
+        for caller, dependency in edges:
+            with self.subTest(edge=f'{caller}->{dependency}'):
+                self.assertIn((caller, dependency), allowed,
+                              f'{caller} -> {dependency} is drawn but not allowed.')
+        # The aggregate node is a group, not a module: it must stay unresolved
+        # rather than silently weakening this check.
+        self.assertTrue(any(label.strip() == '纯领域规则' for label in labels.values()),
+                        'The pure-rule group node must remain an aggregate.')
 
     def test_host_uses_public_application_capabilities(self):
         for name in ('host', 'novel'):
