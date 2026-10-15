@@ -142,6 +142,28 @@ class ArchitectureTests(unittest.TestCase):
                     self.assertFalse(built.startswith(store_keys.PREFIXES),
                                      f'{name}:{node.lineno} builds a prefixed kv key {built!r} directly.')
 
+    def test_dispatched_stages_are_registered(self):
+        """A dispatched stage missing from the registry would degrade silently."""
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        from novel_ledger import stages
+
+        def literals(node):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                yield node.value
+            elif isinstance(node, ast.IfExp):
+                yield from literals(node.body)
+                yield from literals(node.orelse)
+
+        for name, tree in self.trees.items():
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or getattr(node.func, 'id', None) != 'Job' or not node.args:
+                    continue
+                for value in literals(node.args[0]):
+                    with self.subTest(module=name, line=node.lineno):
+                        self.assertIn(value, stages.STAGES,
+                                      f'{name}:{node.lineno} dispatches unregistered stage {value!r}')
+                        self.assertEqual(stages.require_stage(value), value)
+
     def test_complete_import_graph_is_acyclic(self):
         graph = {name: imports(tree)[0] for name, tree in self.trees.items()}
 
