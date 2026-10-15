@@ -110,6 +110,21 @@ class DomainBoundaryTests(unittest.TestCase):
         wide.update({'p%d' % i: {'id': 'p%d' % i, 'depends_on': []} for i in range(40)})
         self.assertEqual(len(queries.frontier(wide, ['seed'])), queries.NODE_LIMIT)
 
+    def test_completion_sources_include_registered_payoffs(self):
+        from novel_ledger import editorial
+        state = {'hooks': {}, 'developments': {'shen': [{'change': '愿意担责。'}]},
+                 'reader_knowledge': {'source': {'claim': '他知道了来源。'}}}
+        book = {'contract': {'reader_promise': '看到责任被查明。', 'ending': '他担下了责任。'},
+                'designs': {}, 'feedback': [], 'state': state,
+                'world': {'mysteries': [{'id': 'source', 'disclosure': '卷末揭示来源。'}]}}
+        rows = {row['id']: row for row in editorial.sources(book, 'book')}
+        self.assertIn('development:shen:0', rows)
+        self.assertIn('reader_knowledge:source', rows)
+        self.assertEqual(rows['reader_knowledge:source']['required'], False)
+        self.assertIn('mystery:source', rows)
+        self.assertEqual(rows['mystery:source']['required'], True)
+        self.assertEqual(editorial.sources(book, 'volume:v1'), [])
+
     def test_task_envelopes_reject_undeclared_fields(self):
         from novel_ledger import envelope
         work = {name: None for name in envelope.WORK_FIELDS}
