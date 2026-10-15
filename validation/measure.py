@@ -243,7 +243,9 @@ def history_metrics(chapters):
                 found = app.recall(task['id'], kind='entity', key='shen', limit=5)
                 recent_pages = scans.call_count
             with patch.object(repo, 'memory_rows', wraps=repo.memory_rows) as scans:
+                started = time.perf_counter()
                 missing = app.recall(task['id'], kind='entity', key='absent', limit=5)
+                missing_ms = round((time.perf_counter() - started) * 1000, 3)
                 missing_pages = scans.call_count
             assert len(found['matches']) == 5 and recent_pages == 6 and not missing['matches']
             assert repeat_reads == 6 and before == after and missing_pages == chapters
@@ -259,6 +261,7 @@ def history_metrics(chapters):
                     'first_build_ms': first_build_ms, 'six_repeated_snapshot_ms': repeat_ms,
                     'six_repeated_snapshot_document_reads': repeat_reads, 'repeated_snapshot_new_documents': after - before,
                     'recent_five_match_event_pages_read': recent_pages, 'missing_match_event_pages_read': missing_pages,
+                    'missing_match_ms': missing_ms,
                     'oldest_prose_complete': True, 'observed_read_chars': repo.usage()['supplemental_read_chars']}
         finally:
             repo.close()

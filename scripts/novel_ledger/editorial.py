@@ -65,6 +65,18 @@ def sources(book, scope):
         for line in design.get('threads', []):
             rows.append({'id': 'thread:' + line['id'], 'text': line['ending_condition'], 'required': line['required']})
     rows.extend({'id': 'hook:' + k, 'text': h['text'], 'required': True} for k, h in book['state']['hooks'].items())
+    # Registered payoffs beyond the contract: a person's recorded turning points, what the
+    # reader has already been told, and the world's declared disclosures. Enumerating them is
+    # the point; only the world's explicit disclosure promise is a hard gate, the rest may be
+    # closed as permitted_open with evidence.
+    for entity, records in sorted((book['state'].get('developments') or {}).items()):
+        for index, record in enumerate(records):
+            rows.append({'id': 'development:' + entity + ':' + str(index), 'text': record['change'],
+                         'required': False})
+    for topic in sorted((book['state'].get('reader_knowledge') or {})):
+        rows.append({'id': 'reader_knowledge:' + topic, 'text': topic, 'required': False})
+    for record in (book.get('world') or {}).get('mysteries', []):
+        rows.append({'id': 'mystery:' + record['id'], 'text': record['disclosure'], 'required': True})
     rows.extend({'id': 'case:' + k, 'text': c['goal'], 'required': True} for k, c in book.get('repair_cases', {}).items())
     # IDs are stable requirements, never a count inferred from chapter length.
     return list({r['id']: r for r in rows}.values()) if scope == 'book' else []
