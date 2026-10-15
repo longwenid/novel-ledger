@@ -20,7 +20,7 @@ PYTHONUTF8=1 python validation/measure.py --out /tmp/metrics.json
 |---|---|---|
 | 架构解耦 | 强 | 逐模块依赖白名单、全作用域无环、核心 I/O 禁令都真实生效；痛点不在方法级耦合，而在**数据契约**（kv 键空间、冻结任务信封字段、阶段名）没有权威表 |
 | token 消耗 | 设计好、证据薄 | 必读材料与书籍体量真正解耦（实测恒定）；但全部是字节证据，**没有真实计费或端到端数据**，且有两条非默认路径会退化 |
-| 长篇小说 | 机制齐备、未验收 | 滚动规划、有界覆盖树、连续性结算、分级修订都在；**真实长篇长跑从未完成**、"longform" 测试只有 4 章量级 |
+| 长篇小说 | 机制齐备、未验收 | 滚动规划、有界覆盖树、连续性结算、分级修订都在；**真实长篇长跑从未完成**、端到端实验最大 6 章；另有存储/写入二次膨胀与默认配置下的修订退化 |
 
 一句话：**工程边界与材料选择是这套实现最扎实的部分，文学质量与真实费用是它自己划清、也确实没有验证的部分。**
 
@@ -92,7 +92,7 @@ PYTHONUTF8=1 python validation/measure.py --out /tmp/metrics.json
 5. **同一章正文每章约 5–7 次进入上下文**：write / plan 各带前 2 章完整正文（L315-320），chapter_review 带草稿（L299），repair / redesign 带 `base_draft`（L324），scope_review 再读整块。以 3000 汉字/章计，一次 write 派工约 32.9 KB，其中前两章正文占约 55%，`brief` 只占约 5%。
 6. **`briefs.py` 无任何长度上限**，全库唯一裁剪是 [context.py](../scripts/novel_ledger/context.py) L87 把已选方向摘要截到 60 字。
 7. **guides 按能力而非按阶段挂载**（[delivery.py](../scripts/novel_ledger/delivery.py) L84-89）：`editorial_features` / `understanding` 启用后，运行期每次派工列出约 48.8 KB 的参考文档（信封里只有路径）。缓解是 [SKILL.md](../SKILL.md) 的"只读相关小节"，属模型自律，无机械上限。
-8. **两条最坏路径线性于篇幅**：无命中 `recall` 与指定旧章补读（实测页数=章数）。作者已声明"不宣称最坏查询复杂度不随篇幅增长"。
+8. **两条最坏路径线性于篇幅**：无命中 `recall` 与指定旧章补读（实测页数=章数）。作者已声明"不宣称最坏查询复杂度不随篇幅增长"。另有两条未在度量里体现的整书路径：`fork` 需回溯到起点建候选，`repo.load()` 每次反序列化**整个 intent + canon 分区**（[sqlite_store.py](../scripts/novel_ledger/sqlite_store.py) L121-123）。
 
 ---
 
@@ -100,7 +100,7 @@ PYTHONUTF8=1 python validation/measure.py --out /tmp/metrics.json
 
 ### 机制（有代码/测试支撑）
 
-- 默认 `rolling`：只完成近期已核验卷纲，按需补下一批（[架构](../references/architecture.md) 当前能力边界表）。
+- 默认 `rolling`：只完成近期已核验卷纲，按需补下一批（[架构](../references/architecture.md) 当前能力边界表）；批大小 = `min(6, planning_window)` = **3 章/批**（[workflow.py](../scripts/novel_ledger/workflow.py) L56）。`scope=current` 先出首卷全卷纲，`scope=all` 也仍分批派工 + 独立批审，不是一次交付。
 - **有界覆盖树**：[scopes.py](../scripts/novel_ledger/scopes.py) L9-28 固定 chunk/fanout 递归；500 章实测深度 5、每综合者 ≤3 子报告、≤6 章边界正文、handoff 六项各 ≤800 字。综合成本被硬性封顶。
 - 连续性结算：资源前值与守恒、时钟、知情、关系、承诺、站位、历史断言由 `facts` / `narrative` 纯规则执行，设计与人物档案不直接产生事实。
 - 修订不毁全书：`revision_impact` 输出 keep / review / local / rewrite 四级；默认只自动改最近 3 章并保护已关闭卷。
@@ -110,9 +110,13 @@ PYTHONUTF8=1 python validation/measure.py --out /tmp/metrics.json
 ### 风险
 
 1. **真实长篇文学验收尚未完成**。[验证](../references/validation.md) L83 明写"真实长篇文学对照尚未完成"，[results.md](results.md) 每轮均以"没有实际模型长篇试写"收尾。**"支持百万字"目前是设计与合成度量，不是已证事实。**
-2. **测试量级与命名不符**：[tests/test_longform.py](../tests/test_longform.py) 是 4 章级机制测试（`range(1, 5)`），规模证据全部来自 [measure.py](measure.py) 的合成夹具，而该夹具明确"不算已写审完本"。
-3. **能力开关需要运维记忆**：1.5.0 新能力默认只对新项目/显式改约启用，旧在途任务按冻结协议解释；creation/1·2、editorial/1、库 schema、检查清单版本构成一张版本矩阵。
-4. 语义质量仍依赖独立审稿者；引擎只保证"不能悄悄越界"。
+2. **测试量级与命名不符（本轮实测）**：[tests/test_revision_bounds.py](../tests/test_revision_bounds.py) L38 用 `tracked_contract(6)`，端到端最大 **6 章**；[tests/test_longform.py](../tests/test_longform.py) 自述是机制测试（`range(1, 5)`），其余为纯函数夹具。夹具正文是**同一句约 90 汉字的固定文本**（[tests/support.py](../tests/support.py) L77-78），契约章幅 `chapter_min=12 / chapter_max=90`（L19），而真实档位是 2500～4500 汉字/章；回执程序化填 pass、理由写"工程夹具"（L80-88）。500 章"历史"是**裸插 chapters 表、不经审稿**（[tests/test_history.py](../tests/test_history.py) L18-29 注释自认）。
+3. **【高】存储与写入二次膨胀，且从不回收**。机制：每次 `save` 都把**整个 intent 分区**（plans + designs，随章数增长）按新哈希写入不可变 [sqlite_store.py](../scripts/novel_ledger/sqlite_store.py) L140-147（`documents` 表），旧快照永不删除；全库**没有任何 `DELETE FROM` 或 `VACUUM`**。本报告独立探针（200 章 × 3000 汉字，含逐章场景与节点）：DB **1.05 / 3.16 / 6.39 / 10.76 / 16.27 MB** @ 40/80/120/160/200 章，每 40 章增量 2.11→3.23→4.37→5.51 MB（**增量本身线性增长 ⇒ 累计二次**），每章写入 21.2→32.3 ms。另一路并行审计在更厚计划下测到 600 章 **433 MB**、每章 24.6→253 ms，趋势与本报告探针一致，常数随计划厚度变化（该外推未由本报告复算）。
+4. **【高】默认 `dependency_coverage=partial` 会让"窄修订"退化为整段后缀重写**。[story_memory.py](../scripts/novel_ledger/story_memory.py) L50 缺省即 `partial`；[revision_impact.py](../scripts/novel_ledger/revision_impact.py) L80 `unknown = plan.get('dependency_coverage') != 'complete'`、L83 命中 `unknown` 即把后续每一章加入重写区间并沿 L92 继续级联。**语义修订**（`mode == semantic`，L70-77）因此默认重写到末章；表达/阅读修订不受影响。[briefs.py](../scripts/novel_ledger/briefs.py) L104 要求执笔显式声明 `complete`，属逐章自愿。
+5. **【中高】作者/主控 `revise` 默认无界**。[revision_service.py](../scripts/novel_ledger/revision_service.py) L172-173：`changes` 为空时 `impact=None`，`through` 也为空时 `end = book_last` —— 一句 `revise --from-chapter N --reason "…"` 即从第 N 章重写到末章，无需显式扩大区间。审稿触发的路径反而受 `revision_bounds` 三重约束保护，两条路径不对称。
+6. **【中】完本覆盖只覆盖"已登记项"**。[editorial.py](../scripts/novel_ledger/editorial.py) L51-70 的 sources 为 reader_promise / ending / theme（声明才有）/ world_rules / red_lines / style_traits / relationships / arcs / 作者反馈 / 节点 outcome / 线路 ending_condition / hooks / 修复案；**人物成长记录（[facts.py](../scripts/novel_ledger/facts.py) L223-226 只累加）、reader_knowledge 话题、世界谜题（[world.py](../scripts/novel_ledger/world.py) L16 有 truth/disclosure 但不在 sources）不进入完成覆盖**。且 `editorial_features=false` 时连 `completion_coverage` 都不要求。
+7. **能力开关需要运维记忆**：1.5.0 新能力默认只对新项目/显式改约启用，旧在途任务按冻结协议解释；creation/1·2、editorial/1、库 schema、检查清单版本构成一张版本矩阵。
+8. 语义质量仍依赖独立审稿者；引擎只保证"不能悄悄越界"。
 
 ---
 
@@ -127,6 +131,13 @@ PYTHONUTF8=1 python validation/measure.py --out /tmp/metrics.json
 | `--compact` 434 B vs 833–855 B 的差异 | 口径不同（是否含内联 `status`）。统一表述为 compact 0.4–0.9 KB vs 非 compact 4.5–5.1 KB |
 | `validation/results.md` 历史字节与现行 `metrics.json` 不一致 | 属时间线日志，已被后文取代；本次不动历史记录，只以现行度量与复现为准 |
 
+本轮（长篇维度）追加复核：
+
+- **存储二次膨胀已独立复现**：曲线见第四节风险 3。趋势与并行审计一致，但**绝对常数不同**（本报告 200 章 16.27 MB，对方 200 章 50.18 MB），差异来自逐章计划的厚度与 designs 结构；两边都是合成夹具，都不能当作真实项目的绝对值。
+- 对方未测到 `_audit` / `replay` 在 promote / complete 时的全书重放耗时，只用等价的批量文档读取做代理；**本报告同样未测，该耗时仍属未知**。
+- 对方把"整本书进单 Worker"列为高危，本报告按代码复核**降为中**（需 `verification=fast` 且 `narrative_tracking=false`），此结论不变。
+- 对"依赖边 122"的否定见上表。
+
 ---
 
 ## 六、建议
@@ -138,6 +149,10 @@ PYTHONUTF8=1 python validation/measure.py --out /tmp/metrics.json
 5. **减少每任务固定开销**：`task.json` 与 `input.json` 字段重叠，`commands` 每任务重发 1307 B。
 6. **补一条守护断言**："每个模块必须登记在 `CORE_EXTERNAL` 或显式适配器集合之一"；删除 `CONTRACT_ALIGNMENT` 死导入，合并 `_v1_groups` 到字段派生。
 7. 把"真实长篇验收"落成可复跑清单产物 —— 方法已在 [验证](../references/validation.md) 写好，缺的是执行记录。
+8. **给存储加保留策略**：intent 快照按周期合并（如每卷或每 N 章一个检查点，其间增量），或提供显式的回收/压缩命令；至少把"documents 只增不删"从隐含行为变成文档化的容量模型，让作者知道 600 章会占用什么量级。
+9. **把 `dependency_coverage` 的缺省反过来**：缺省声明不清时，修订应提示"将扩大为整段后缀重写"并给出受影响章数，而不是静默重写；或让新项目的执笔任务默认产出 `complete`。
+10. **收窄 `revise` 的默认区间**：无 `--through` / `--changes-file` 时应先返回影响范围与影响章数，要求作者确认扩大，而不是直接 `end=book_last`；两条修订路径（作者发起 / 审稿发起）的边界应对称。
+11. **明确完本覆盖的边界**：把人物成长、`reader_knowledge`、世界谜题是"不进完成覆盖"写成显式条目，或在 `sources` 中把它们列为可选要求，避免"机械验收通过"被误读成文学意义上的完结。
 
 ---
 
@@ -146,4 +161,5 @@ PYTHONUTF8=1 python validation/measure.py --out /tmp/metrics.json
 - `validation/run_tests.py fast`：**80 项通过**。
 - `validation/run_tests.py full`：**372 项，0 失败，1 跳过，11 错误**；11 项错误全部为 `OSError WinError 1314`（`os.symlink` 需 Windows 开发者模式或管理员权限），来自 [test_host_ports.py](../tests/test_host_ports.py) L103、[test_presentation_boundaries.py](../tests/test_presentation_boundaries.py)、[test_storage_boundaries.py](../tests/test_storage_boundaries.py) 的符号链接逃逸用例，非代码缺陷。
 - `validation/measure.py` 输出与 [metrics.json](metrics.json) 逐字段一致（除耗时）。
-- 本报告只读完成，未修改引擎、测试或文档；所有夹具项目建在临时目录。
+- **存储增长探针（本报告独立）**：200 章 × 3000 汉字、逐章累积场景与节点后逐章 `save`，DB 1.05 / 3.16 / 6.39 / 10.76 / 16.27 MB @ 40/80/120/160/200 章，每章写入 21.2 / 24.0 / 27.4 / 29.7 / 32.3 ms；`documents` 行数为 3n+5（线性，靠内容哈希去重），体积按 Σ 全 intent 快照呈二次。
+- 本报告未修改引擎、测试或既有文档；所有夹具项目建在临时目录并已清理。
