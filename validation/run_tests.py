@@ -11,6 +11,7 @@ FAST = (
     'test_architecture', 'test_domain_boundaries', 'test_application_ports',
     'test_cli_boundary', 'test_frozen_reading', 'test_revision_bounds',
     'test_revision_repairs', 'test_bookpage', 'test_validation_runner',
+    'test_storage_growth',
     'test_runtime.RuntimeTests.test_first_chapter_approval_binds_exact_version',
     'test_runtime.RuntimeTests.test_fact_fix_and_short_repair_share_one_budget',
     'test_runtime.RuntimeTests.test_compact_loop_preserves_author_boundary_and_reaches_revision_completion_and_delivery',

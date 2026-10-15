@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -141,6 +142,48 @@ class SQLiteRepository:
     def save(self, book):
         parts = {name: self.document(value) for name, value in book_state.split(book).items()}
         self.put(store_keys.BOOK_ROOT, {'schema': book_state.BOOK_SCHEMA, 'parts': parts})
+
+    def prune(self):
+        """Delete immutable documents no live record can reach, then reclaim the space.
+
+        Documents are content addressed and written again on every commit, so superseded
+        partition snapshots stay behind as garbage. Reachability is computed from every
+        live cell that can name a document and then followed transitively, so anything
+        removed is unreachable by construction.
+        """
+        keep, pending = set(), []
+
+        def scan(value):
+            if value is None:
+                return
+            text = value if isinstance(value, str) else dump(value)
+            for token in re.findall(r'[0-9a-f]{64}', text):
+                if token not in keep:
+                    keep.add(token)
+                    pending.append(token)
+
+        for (value,) in self.db.execute('SELECT value FROM kv').fetchall():
+            scan(value)
+        for table in ('tasks', 'chapters', 'journal'):
+            for row in self.db.execute('SELECT * FROM ' + table).fetchall():
+                for cell in tuple(row):
+                    scan(cell)
+        while pending:
+            key = pending.pop()
+            row = self.db.execute('SELECT value FROM documents WHERE hash=?', (key,)).fetchone()
+            if row is not None:
+                scan(row[0])
+        removed, kept = 0, 0
+        for (key,) in self.db.execute('SELECT hash FROM documents').fetchall():
+            if key in keep:
+                kept += 1
+            else:
+                self.db.execute('DELETE FROM documents WHERE hash=?', (key,))
+                removed += 1
+        self.db.execute('VACUUM')
+        # Only some reachable digests are document hashes: task input hashes and chapter
+        # state hashes share the shape, so both counts are reported separately.
+        return {'reachable_hashes': len(keep), 'documents_kept': kept, 'documents_removed': removed}
 
     def document(self, value):
         key = digest(value)

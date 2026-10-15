@@ -11,7 +11,7 @@ from novel_ledger.contracts import Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'first-read', 'claim', 'run', 'renew', 'approve',
-          'pause', 'resume', 'revise', 'revision-impact', 'workbench', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
+          'pause', 'resume', 'revise', 'revision-impact', 'workbench', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
 WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'first-read'}
 # Prose, frozen records and the first read belong to a dispatched task; the controller role never executes them.
@@ -213,6 +213,8 @@ def dispatch(args, open_runtime=open_local_runtime):
                                 '确认要改到末章时显式加 --to-end。'})
             return app.revise(args.from_chapter, args.reason, owner, args.through,
                               load(args.changes_file) if args.changes_file else None, args.proposal_hash, args.source)
+        if command == 'compact':
+            return app.prune(owner)
         if command == 'revision-impact':
             return app.revision_impact(args.from_chapter, load(args.changes_file) if args.changes_file else None)
         if command == 'replan':
