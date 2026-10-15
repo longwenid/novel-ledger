@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import creation, planning, world, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import (CHECK_SETS, CHECKS_VERSION, CONTRACT_ALIGNMENT, EDITORIAL_VERSION,
-                                    POV_CHECKS_VERSION, RESULT, SCALE_TIERS, alignment_for, digest, dump, han_count)
+                                    POV_CHECKS_VERSION, RESULT, SCALE_TIERS, SCALE_WINDOW, alignment_for, digest, dump, han_count)
 from novel_ledger.result_templates import template
 from novel_ledger.sqlite_store import SQLiteRepository
 import support
@@ -929,7 +929,12 @@ class OpeningDecisionTests(unittest.TestCase):
             state = creation.regroup(state, board['hash'], '换一组。')
             self.assertIsNotNone(state['board'])
             self.assertNotEqual(state['board']['hash'], board['hash'])
-        self.assertEqual(sorted(set(windows)), [('t1', 't2', 't3'), ('t2', 't3', 't4'), ('t3', 't4', 't5')])
+        # Derived from the ladder so adding or removing a size class cannot silently
+        # leave this list describing a ladder that no longer exists.
+        ids = [row['id'] for row in SCALE_TIERS]
+        expected = sorted({tuple(ids[start:start + SCALE_WINDOW])
+                           for start in range(len(ids) - SCALE_WINDOW + 1)})
+        self.assertEqual(sorted(set(windows)), expected)
 
     def test_intake_of_the_structural_gate_needs_only_a_tier(self):
         """The author names a size class; the proved arithmetic stays the engine's business."""

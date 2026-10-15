@@ -102,6 +102,9 @@ VOLUME_TURNS = (
 #   chapters       recommended total chapters for the tier
 #   chapter_window the chapter counts at which the tier's band is actually reachable
 SCALE_TIERS = (
+    {'id': 't0', 'name': '微型', 'word_range': [42000, 68000], 'chapter_min': 2000, 'chapter_aim': 2600,
+     'chapter_max': 3500, 'volume_count': 1, 'chapters': 17, 'chapter_window': [14, 20],
+     'note': '单一事件的完整闭环：一条主线、两三个人物，没有卷内转折与支线并行的余地'},
     {'id': 't1', 'name': '短篇', 'word_range': [100000, 200000], 'chapter_min': 1800, 'chapter_aim': 2500,
      'chapter_max': 3500, 'volume_count': 2, 'chapters': 50, 'chapter_window': [40, 57],
      'note': '一次完整的因果闭环；没有中段铺陈与多线并行的余地'},
@@ -119,7 +122,7 @@ SCALE_TIERS = (
      'note': '群像规模的多线交织、反复的势力更替与长期伏笔回收；对节奏控制要求最高'},
 )
 SCALE_WINDOW = 3          # how many consecutive tiers one board shows
-SCALE_DEFAULT_WINDOW = 1  # start on 精简/标准/长篇
+SCALE_DEFAULT_WINDOW = 2  # start on 精简/标准/长篇; the smallest 微型 tier is reached by regrouping
 # What a structural option hands the author: a size ladder, never raw numbers to invent.
 STRUCTURAL_CONTRACT = ('每个方案给 id、title 档位名（含卷数与字数区间）、premise 用一句话写清总字数、卷数、'
                        '每章字数与章数、tradeoff 说明这一档比相邻档多买到什么、少买到什么，value 照档位表逐字填。'
