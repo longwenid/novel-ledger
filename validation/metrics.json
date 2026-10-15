@@ -1,10 +1,10 @@
 {
   "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
   "novel_ledger": {
-    "modules": 34,
-    "runtime_lines_including_cli": 6928,
+    "modules": 37,
+    "runtime_lines_including_cli": 7121,
     "cycles_including_deferred_imports": [],
-    "dependency_edges": 120
+    "dependency_edges": 131
   },
   "context": [
     {
@@ -51,23 +51,22 @@
     {
       "tracking": false,
       "dependent_nodes": 10,
-      "required_story_nodes": 10,
-      "required_record_bytes": 5452,
+      "required_story_nodes": 7,
+      "required_record_bytes": 4615,
       "complete_design_nodes": 10
     },
     {
       "tracking": false,
       "dependent_nodes": 100,
-      "required_story_nodes": 100,
-      "required_record_bytes": 31016,
+      "required_story_nodes": 7,
+      "required_record_bytes": 4634,
       "complete_design_nodes": 100
     },
     {
       "tracking": false,
       "dependent_nodes": 1000,
-      "recursion_error": true,
-      "required_story_nodes": null,
-      "required_record_bytes": null,
+      "required_story_nodes": 7,
+      "required_record_bytes": 4653,
       "complete_design_nodes": 1000
     }
   ],
@@ -169,8 +168,8 @@
       "synthetic_prose_han_at_least": 60000,
       "history_source_bytes": 197,
       "previous_full_catalog_and_event_index_bytes": 5846,
-      "first_build_ms": 0.396,
-      "six_repeated_snapshot_ms": 4.499,
+      "first_build_ms": 0.405,
+      "six_repeated_snapshot_ms": 4.536,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
@@ -183,8 +182,8 @@
       "synthetic_prose_han_at_least": 300000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 29370,
-      "first_build_ms": 1.721,
-      "six_repeated_snapshot_ms": 4.711,
+      "first_build_ms": 1.893,
+      "six_repeated_snapshot_ms": 4.667,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
@@ -197,8 +196,8 @@
       "synthetic_prose_han_at_least": 1500000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 148570,
-      "first_build_ms": 9.137,
-      "six_repeated_snapshot_ms": 4.592,
+      "first_build_ms": 9.359,
+      "six_repeated_snapshot_ms": 4.67,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,

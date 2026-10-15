@@ -15,7 +15,7 @@ from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import dump
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book
-from novel_ledger import context, facts, scopes, story_memory
+from novel_ledger import context, design_queries, facts, scopes, story_memory
 from novel_ledger.contracts import Job
 from support import contract, drive, node
 from test_history import append_history
@@ -130,16 +130,11 @@ def chain_context_metrics(size, tracking):
                         node_contracts={nodes[-1]['id']: nodes[-1]},
                         disclosures=[], preconditions=[])
             repo.save(book)
-            try:
-                work = repo.task(app.advance()['task']['task_id'])['input']
-            except RecursionError:
-                # The untracked path walks the whole dependency closure recursively, so a long
-                # chain aborts the dispatch instead of merely growing the material. Record it
-                # as evidence rather than letting the engineering measurement fail.
-                return {'tracking': tracking, 'dependent_nodes': size, 'recursion_error': True,
-                        'required_story_nodes': None, 'required_record_bytes': None,
-                        'complete_design_nodes': size}
+            work = repo.task(app.advance()['task']['task_id'])['input']
             values = {n: repo.read_document(work['records'][n]) for n in work['required']}
+            # Bounded selection is the contract, not an observation: an unbounded walk both
+            # grew with chain length and aborted dispatch on a long chain.
+            assert len(values['story']) <= design_queries.NODE_LIMIT + 1, len(values['story'])
             return {'tracking': tracking, 'dependent_nodes': size,
                     'required_story_nodes': len(values['story']),
                     'required_record_bytes': len(dump(values).encode('utf-8')),

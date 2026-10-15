@@ -96,6 +96,20 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertEqual(blank['reader']['findings'], [])
         self.assertIn('reader_promise', result_templates.template('opening_contract', 0, {}))
 
+    def test_causal_frontier_is_iterative_and_bounded(self):
+        from novel_ledger import design_queries as queries
+        size = 5000
+        nodes = {'n%d' % i: {'id': 'n%d' % i, 'depends_on': [] if i == 0 else ['n%d' % (i - 1)]}
+                 for i in range(size)}
+        tail = 'n%d' % (size - 1)
+        selected = queries.frontier(nodes, [tail])
+        self.assertEqual(selected,
+                         [tail] + ['n%d' % (size - 1 - k) for k in range(1, queries.BASIC_DEPTH + 1)])
+        self.assertEqual(queries.frontier(nodes, ['n3'], depth=1), ['n3', 'n2'])
+        wide = {'seed': {'id': 'seed', 'depends_on': ['p%d' % i for i in range(40)]}}
+        wide.update({'p%d' % i: {'id': 'p%d' % i, 'depends_on': []} for i in range(40)})
+        self.assertEqual(len(queries.frontier(wide, ['seed'])), queries.NODE_LIMIT)
+
     def test_task_envelopes_reject_undeclared_fields(self):
         from novel_ledger import envelope
         work = {name: None for name in envelope.WORK_FIELDS}
