@@ -5,3 +5,4 @@ __pycache__/
 novel.sqlite3*
 work/
 book.html
+!scripts/novel_ledger/templates/book.html

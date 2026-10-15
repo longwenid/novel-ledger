@@ -44,9 +44,10 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
 def world_model(lens_brief=None, previous=()):
     """World plus contract in one dispatch: what the world owes, and what the contract must keep."""
     lines = ['# ' + BRIEFS['world_model'], '',
-             '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。十个领域的字段权威见 world.SECTIONS，'
+             '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。十个领域的字段按当前模板与世界指南填写，'
              '完整记录须有稳定 id 与 links=[领域:id]；同时给 premise、story_capacity 与准确的 selection_hash。',
-             '每个领域至少一条实写记录：不要写"待补"，也不要只给经济与制度——地域、日常、人物、隐秘与机制都要能落到具体场景。', '']
+             '除 mechanisms 外每个领域至少一条实写记录；已选无特殊机制时 mechanisms 必须为空数组，有限机制时至少一条。'
+             '不要写"待补"，地域、日常、人物与隐秘都要能落到具体场景。', '']
     if previous:
         lines.append('## 已选方向（不得改动）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
@@ -70,6 +71,7 @@ def stage(name, payload=None):
         'repair': '读完整基稿、问题、义务和前态，交完整合成稿；local 保留成立部分，chapter 重排因果场景。不重置修复额度，旧 pass 不沿用。交付字段与 write 相同。',
         'redesign': '重新设计当前章的因果与场景，再交完整正文；不推翻已成立事实，不重复填充解释。交付字段与 write 相同，修复额度共享。',
         'chapter_review': '先只读本章正文，记录 desire/obstacle/change/read_on_reason 并冻结首读；解锁后同会话独立核验。facts 从正文重建 events/summary/elapsed_days，reader 判断阅读体验，两类都逐项举证。跟踪项目 facts 必须逐项提供 story_node 事件，读者变化交 reader_knowledge，人物动机变化交 character_current；reader.pacing 记录实际节奏及单个 evidence。hook 可按正文证据声明 subjects 人物/物品 ID 与 topics 话题 ID，供远期相关性加载；未标注的旧承诺需补读，不能猜关联。',
+        'revision_review': '先只读待携带章正文并冻结首读，再核对 revision_impact、前文和创作记忆的阅读影响。只交 reader 检查，不重抽事实，不修改正文；成立则 pass 并保留原文。实质问题给 fix，findings 明确当前章及 local 或 chapter，程序转入返修后再完整独立章审。建议用 note，不把偏好或不同解释当硬矛盾。',
         'scope_review': '只读完整本块正文，冻结首读再核验。逐章 coverage，检查因果、人物桥梁、主支暗线兑现和情绪余波。树形任务还交 handoff 六项和精确短引文，保留未决问题；不能以重复 pass 替代综合判断。',
         'scope_synthesis': '独立阅读冻结子报告及边界正文，核验跨块/跨卷因果、人物变化、披露顺序、兑现和呼吸衔接。树形任务 coverage 按 children 的 part_id 一一回应，并交 handoff；疑点通过 recall 完整补读历史章。不伪造全书首读，不逐层复制全部正文和报告。',
         'design_review': '独立核验 proposal 与作者约定；逐项 reason/evidence，不自动填 pass。跟踪设计额外核对线路职责、窗口、前置因果和可兑现终局。证据 chapter=0。',
@@ -97,9 +99,14 @@ def stage(name, payload=None):
     if name == 'outline_review':
         rule += ' 字数合格不等于情节成立：核验世界依据、因果桥梁、角色选择与代价、章末推动和精练程度，有问题沿 author_constraints/causality/characters/disclosure/scale 等当前检查项给 fix。'
     if name == 'plan':
-        rule += ' 若有 volume_outline_window，先读本窗口每章卷纲，再依据真实前态细化成可执行计划；不能用滚动窗口代替完整卷纲，不把设计当既成事实。'
+        rule += (' 若有 volume_outline_window，先读已核验窗口卷纲，再依据真实前态细化；rolling 只细化近期，其余卷保留职责和关键节点，不编造已完成全书卷纲。'
+                 ' 每场可声明稳定 id、reads=[{kind,key}] 和 depends_on=[前章或本章前场ID]。新 scene-identity/2 的 id 是不透明身份，移动或拆合章时保留；旧冻结协议仍用 c章号: 前缀。story_time 可独立说明故事发生时间，不按阅读章序推进时钟。'
+                 ' dependency_coverage=complete 表示每场已列全依赖（无依赖也给空数组）；未核清用 partial，修订时将保守扩大范围。')
+        if payload.get('understanding'):
+            rule += ' understanding_refs 可显式补读场外作品理解；reading_refs 按人物/关系/母题/声线/披露声明阅读关联。reading_coverage=complete 须每场列 reading_refs，无额外关联也给空数组；未核清用 partial。'
     if name in ('write', 'repair', 'redesign'):
         rule += ' 若有 chapter_outline，承接该章情节推动说明，按当前计划展开场景；卷纲不是正文，避免复制概要腔。'
+        rule += ' scene_context 按场交付目标、依赖与准确前态，scene_sources 绑定历史原文版本；依赖缺失先补读或重规划，不把人物误信当世界真相。'
     time_rule = ''
     if name == 'plan':
         time_rule = ' 章号不等于天数；按场景因果安排时间，允许多章发生在同一天，不默认每章推进一天。schedule 只声明情节需要的硬日程，不把内部时钟设计成逐章日期标题。'
@@ -107,6 +114,7 @@ def stage(name, payload=None):
         time_rule = ' 默认直接从人物行动、对白或场景切入，不在正文前加独立日期或“第一日、第二日”式报日标签，也不把每章首句固定成时间播报。需要交代时间时自然融入场景转折；state.clock 是内部累计天数，不是章号或必须写出的日期。同日续接无需为验收补造过夜；作者明确要求日记体、编年体或日期标记时按约定执行。'
     elif name == 'chapter_review':
         time_rule = ' facts.time 按正文相对前态核验实际时间，允许 elapsed_days=0 且没有 clock 事件；不能要求每章过一天或用章首日期凑证据，clock 引文可在正文任意位置。reader.language/repetition 检查无叙事作用的章首报日与固定时间播报，有问题按原清单给 fix；情节必要的时间提示及作者明确约定的日期体例按作用判断。reader.pov_consistency 按约定的叙述视角与人称核验：切换视角本身不判错，缺少交代或标记的跳跃、越出约定视角范围给 fix。'
+        time_rule += ' facts.continuity 同时核对场景 reads/depends_on 与正文因果；complete 声明遗漏依赖给 fix。revision_impact 只是范围分析，不替代独立阅读。'
     elif name in ('scope_review', 'scope_synthesis'):
         time_rule = ' 在 pacing 检查跨章开场是否反复报日或沿用固定时间播报；根据叙事作用和作者体例判断，无作用的重复给修订意见，不因时间提示本身判错。reader.pov_consistency 一并核验约定的视角与人称在跨章之间是否稳定，以及每次视角切换是否作了交代。'
     extra = (' pacing={role:setup|pressure|turn|climax|aftermath|recovery|relationship|discovery,pressure_in,pressure_out,emotional_aftereffect,recovery_purpose}，用具体文字，不按固定轮替。'
@@ -121,4 +129,11 @@ def stage(name, payload=None):
                     'redesign': ' 可提交版本补丁；仍消耗本章共享重设计额度。',
                     'chapter_review': ' 填 alignment 的实际节点实现及 follow_plan/adapt_future/align_design/repair_prose 裁决；不以完成数量替代实际效果。',
                     'scope_synthesis': ' root 若含 closure 按六项职责裁决；remedies 逐项验收原目标，末轮额度为零也先验。'}.get(name, '')
-    return rule + time_rule + extra + handoff + enhanced + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，来源不足时按冻结哈希补读，不读源码猜格式。'
+        if name == 'scope_synthesis' and payload.get('closure', {}).get('revision_policy'):
+            enhanced += ' 优先保留已验收前文；确有历史缺陷才 revise_range，range 从最早 target_chapter 起，changes 区分 expression/reading/semantic 并声明真实变更坐标。程序先分析影响，超出近期窗口或触及已关闭的验收范围时只保存修复方案，不自动扩大重写。'
+    memory = ''
+    if payload.get('understanding'):
+        memory = ' creative_memory 是可修订的理解及原文表达样本，结合反证和适用范围使用；不把解释直接当世界事实，也不必模仿样本句式。unavailable_refs 是当前缺失或已失效的旧理解，须核对原文或重规划，不照搬失效解释。'
+        if name in ('chapter_review', 'scope_review', 'scope_synthesis', 'revision_review'):
+            memory += ' 有值得延续的新理解时交 understanding 数组（无新增用空数组），按 workbench 指南给 id/kind/claim/subjects/topics/status/reason/evidence/counterevidence；保留多种解释，不为完成表格强行提炼结论。'
+    return rule + time_rule + extra + handoff + enhanced + memory + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，来源不足时按冻结哈希补读，不读源码猜格式。'

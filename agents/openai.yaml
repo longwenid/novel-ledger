@@ -1,4 +1,4 @@
 interface:
-  display_name: "长篇小说账本"
-  short_description: "零输入逐门选择开书，创建丰富世界模型，再接入独立写审与可恢复长篇创作"
-  default_prompt: "使用 $novel-ledger 从零开书，先给我方案逐门选择，选完自动创建丰富世界模型。"
+  display_name: "长篇小说工作台"
+  short_description: "按作者要求开书、续写和修订长篇网文，结合创作记忆、独立写审与准确版本交付"
+  default_prompt: "使用 $novel-ledger 按我的已有要求推进小说创作，保留作者决定，完成独立写审并交付实际成果。"

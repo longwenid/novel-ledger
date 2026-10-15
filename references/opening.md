@@ -2,6 +2,23 @@
 
 何时读：没有想法也要开书、逐门选择、换方案或恢复开书。讨论技能不表示启动真实小说。
 
+## 适用范围与决定权
+
+作者决定方向，系统负责给出具体选项、保存来源和核验一致性。已有要求先整理保存，只询问真实缺口。门序与字段是协议要求，故事方案的优劣依据具体推进差异判断，写审原则见 [创作与写审](craft.md)。
+
+## 入口选择
+
+下表命令均使用 `python3 ROOT/scripts/novel.py --project PROJECT` 入口。先确认项目是否存在、是否已经派过门任务，不覆盖项目或要求作者重填已有设定。
+
+| 当前情况 | 命令 | 结果与边界 |
+|---|---|---|
+| 新项目，无完整约定 | `init` | 进入逐门选择，已有部分要求再用 intake 保存。 |
+| 新项目，已有完整约定 | `init --contract 约定.json --source 原话` | 采用已有约定，默认推进试章目标。 |
+| 已 init，尚未派过门任务 | `opening --file 约定.json --source 原话` | 导入完整约定，清除逐门选择并进入核验。 |
+| 已派过门任务或已有约定 | `recontract --file 约定.json --source 原话` | 保留旧记录，经独立核验后激活新约定，见 [暂停与修改](runtime.md#暂停与修改)。 |
+| 未展示当前方案且无 pending，已有部分完整门要求 | `intake --file 要求.json --source 原话` | 按门 ID 保存已定值，后续跳过这些门；不替缺口补造决定。 |
+| 已有项目续写或恢复 | `status`，再 `advance --compact` | 接回当前任务；执行身份与授权见 [运行](runtime.md)。 |
+
 ## 用户体验
 
 用户只需表示要开书。不要要求先写一句话、提供题材、起名或填设定表。无 --contract 的 init 创建逐门项目，advance 即派 opening_options。
@@ -10,9 +27,9 @@
 
 每次只展示当前门名、进度和 2～3 个具体方案。方案说清主要内容、推进差异和代价，用户只选 A/B/C 即可；支持“换一组”和“返回某门”。不把字段、哈希和命令展示给用户。真实选择到来才推进，预选和超时不代表选择。方案 id 由方案 Worker 自定（不一定是 A/B/C），主控执行 choose 时用展示组里的真实 id；传错 id 的拒绝会带 `valid_options` 列表。
 
-## 十门权威顺序
+## 门序与字段归属
 
-权威顺序在 `creation.GATES_V2`，一门只问一件事：
+新项目门序由 `creation.GATES_V2` 定义；直接选择字段由 `contracts.CONTRACT_FIELDS.opening` 声明，推导输入由 `creation.DERIVATION_INPUTS` 声明。下表供理解，实际交付以本任务简报列出的允许字段为准：
 
 | # | 门 | 类型 | 作者要回答的一件事 | value |
 |---|---|---|---|---|
@@ -27,19 +44,13 @@
 | 9 | `voice` 文风与节奏 | 创意门 | 什么腔调、什么节奏 | voice/style_traits |
 | 10 | `title` 书名 | 创意门 | 叫什么 | title |
 
-顺序不是任意的：
+视角在世界、人物与推进前确定；题材门的画面发生在视角选择前，只作体验预览，不替作者锁定视角。世界限制约束后续人物与对抗，关系门为推进提供人物张力，书名承接已选终局与文风。
 
-- **视角排在第三门之前**。所有创意门都要给 2～3 个可落笔的画面样本，而画面必然带着人称。视角若排在最后，作者是在没定人称的情况下评估样本，选完再改人称，读到的质感就对不上。视角还先行于对抗与终局：限知决定哪些场面根本不能被叙述。
-- **世界先于人物与推进**。机制与代价结构确定后，主角的欲望底线才在它的代价来源之内成立，主要对抗也取自世界的力量与关系。
-- **关系先于推进**。对抗常直接来自关系网里的人；关系单独成门，也让“主角不动、只换关系网”这种改法不必推翻前面的选择（返回只归档关系之后的门）。
-- **书名最后**。它是所有已选方向里最依赖上下文的一门，读完终局与文风再命名。
-- 结构与内容交错：第 3 门由引擎即时给定（见下节），不打断等待。
+无预填、换组或回退时，十门包含 9 次创意方案派工与 10 次作者选择；结构门当次给板、不派 Worker。已有要求跳过相应门，实际次数随作者操作变化，不作为固定用量承诺。
 
-派工预算：十门中九门是创意门（1、2、4、5、6、7、8、9、10），**9 次派工 + 10 次作者选择**；体量门当次给定、不派工、不等待。相比如下取舍是刻意的：门更细（原来一个门塞四件事），单门只决定一件事，作者对任一门不满意时返回的代价更小；代价是多几次等待。若确实要压缩，最省的一刀是把书名并回终局门（少一次派工），其次是把关系并回主角门。
+方案字段以当前 brief 和模板为准，构思方法见 [创意工具箱](hatch.md)。`pov` 与 `title` 这类单一决定门另有专门交付要求：视角门的每个 scene 用该方案的人称展示实际效果，书名门给真正可用的候选名，不交占位符。
 
-每门方案的交付形状仍由 [创意工具箱](hatch.md) 与任务材料的 `brief` 给出；`pov` 与 `title` 这类单一决定门，`brief` 里另有一段“本门的交付要求”：视角门的每个 `scene` 必须用该方案的人称写出来（让作者读到人称的实际效果，而不是读解释），书名门必须给真正可用的候选名，不得交占位符。
-
-`creation.GATES_V1` 保留原八门。项目自己的 creation 状态写明协议版本：`novel-ledger.creation/1` 的既有项目与在途开书继续走八门、旧 value 规则与旧对齐，`init` 新建项目为 `novel-ledger.creation/2`。不要替旧项目重排门序。
+`init` 新建项目使用 `novel-ledger.creation/2` 十门协议，creation 状态保存所用门序版本；存储布局另使用 novel-ledger/3。协议版本与数据库版本各自负责自己的结构，不能通过修改版本号转换旧库。
 
 ## 结构门（体量与分卷）
 
@@ -48,6 +59,7 @@
 - 游标落到体量门时，主控直接把档位板写进展示状态并返回 await_choice：**没有任务、没有 Worker、没有等待**。
 - 只向作者展示档位名、总字数区间、卷数、每章字数与章数，以及这一档比相邻档多买到什么、少买到什么。**不要求 pitch 与 scene**，也不要求 Worker 编造数字；方案回执的 pitch/scene/driver 硬要求只适用于创意门。
 - 换一组沿阶梯滑动窗口（例如“标准/长篇/超长”），并照常保存否决。
+- 窗口只筛选展示范围；每档的比较说明始终依据完整阶梯，同一档位换到其他窗口仍保持相同说明。只有完整阶梯的最后一档才称为最大档。
 - 档位数字与推荐章数由 `creation.validate_value` 校验；约定阶段的章数必须落在该档可写完区间内，否则报 `opening_alignment`。测试逐档证明每个档位都能写出一份通过 `planning.validate_contract` 的约定。
 
 ## 方案回执（创意门）
@@ -58,25 +70,38 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 - 透镜与方法**只用于构思，不得出现在给作者看的文本里**。`driver` 写这一版如何推进，`tradeoff` 写选它要放弃什么（与同组另外两案相比），`fit_reason` 写与已选方向的具体接口。写"某透镜落地/典型落法"会被 `opening_voice` 拒绝。
 - 同组方案的推进方式不得同构（例如三案都以"以…为刻度推进"起句），会被 `opening_diversity` 拒绝。
 
-必读材料只有拒绝记录：本门所需规则、本轮透镜与交付契约都写在任务材料的 `brief` 里；已选方向也在 brief 中，`opening_choices` 按需补读即可。上表即各门 `value` 字段的权威；结构门照抄不改数，单一决定门另有“本门的交付要求”一段。
+新派 opening_options 冻结 capabilities.opening_bounds=opening-bounds/1，程序按去除首尾空白后的字符数执行 pitch≤40、scene 最多3条。没有该能力的旧冻结任务保留原校验规则，已接受的旧方案板继续按原展示版本选择，不因升级重新拒绝；creation/1 和 creation/2 的门序及 value 规则仍由各自协议决定。
+
+创意门 Worker 先读 task.json、当前简报和 required 中的完整记录。本门规则、当轮方法及已选方向已写入 brief；方案阶段当前必读记录为 opening_rejections，opening_choices 按需补读，不把可选资料升级为重复必读。单一决定门按简报的专门交付要求执行；结构门由主干展示引擎档位板，不派 Worker 或提交方案回执。
+
+`value` 只接受本门负责的字段，任务简报会列出允许字段。携带其他门的字段或未知字段按 `opening_option` 拒绝，详情给出 `allowed_fields`、`unknown_fields` 和修正出口；例如书名门不能附带 `pov` 改写已选视角。intake 使用相同边界，形成约定时还会再次校验闭合选择；改此前决定须 back 返回对应门。
 
 ## 系统执行
 
-1. init 不需要 source 或 contract，自动生成 book.html，返回 book_view 的绝对路径；advance 后派新空历史方案 Worker，只给 task_path 和当前门角色。
-2. Worker 完整读 opening_choices/opening_rejections/opening_basis 和 payload，生成当前门方案并 submit；结构门不接受方案回执（`opening_system`）。
-3. advance 得 await_choice，展示原组并等待用户。用户选择后执行 choose 保存原话，再 advance 下一门。系统不能替用户选择。
-4. 最后一门 choose 返回 next=world_model；立即 advance 派世界设计者，不重复询问是否开始创建世界。
-5. 世界独立核验通过后，系统整理完整约定并独立核验，自动更新 book.html 并生成 world.json。新约定默认继续设计并独立核验全书骨架、各卷脑暴方案及所有卷的完整逐章卷纲，分批完成后以 outline_ready 交付；没有正文授权不派章计划或执笔。旧约定 volume_outline 未启用时仍返回 world_ready。world_view.html_path 指向 book.html；页面生成失败保留已核验内容，重复 advance 可重试。逐章说明与字段见 [叙事推进](narrative.md)。
+以下为默认路径；实际派工始终按 advance 与冻结任务执行，不按流程表手造下一任务。
 
-已有明确正文授权时，世界交付后按原话调用 run；没有授权时在世界交付结束，不把选完设定等同于写完整本。
+| 阶段 | 执行者与动作 | 交接依据 |
+|---|---|---|
+| 初始化 | 主干 init，随后 advance --compact。 | 自动生成 book.html，返回 book_view 的绝对路径；无设定时不要求 source 或 contract。 |
+| 创意门 | 新空历史 Worker 读取 task.json、brief、payload 和 required，生成方案并 submit。 | 主干等待结束，再 --after 核实提交；委派只给任务路径和当前角色。 |
+| 结构门 | 引擎即时返回档位板，主干展示。 | await_choice，无任务或 Worker；方案回执按 opening_system 拒绝。 |
+| 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 系统不代选；换组和返回保留记录。 |
+| 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务同时包含 world_model 与 opening_contract，回执为世界字段加 contract；以任务 stages、payload.also 和模板为准。 |
+| 独立核验 | 依次派 world_review、contract_review。 | 世界通过后才核验其约定；旧任务独立下发 opening_contract 时仍按原任务执行。 |
+| 骨架与卷纲 | 按已核验约定设计并核验骨架、卷方向和逐章说明。 | 策略、批次与实际覆盖见 [叙事推进](narrative.md#滚动卷纲)。 |
+| 交付 | outline_ready 按 planning_mode/coverage 交付；关闭卷纲时为 world_ready。 | world_view.html_path 指向统一 book.html，另交 world.json 的绝对路径；视图失败可 advance 重建。 |
+
+已有明确正文授权时，开书交付后按原话调用 run；没有授权时在 outline_ready/world_ready 停止，不把选完设定等同于写完整本。
+
+后续世界、约定和卷纲任务同样等待子 agent 结束，再用 --after 核实提交；会话恢复及完整动作分支见 [运行](runtime.md)。
 
 ## 操作与恢复
 
-已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"ending":{"ending":"作者指定结局。","theme":"母题。"},"title":{"title":"书名"},"scale":{"tier":"t3"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t1`～`t5`），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前协议（`novel-ledger.creation/2` 用上表的十门，旧项目用原八门）。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
+已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"ending":{"ending":"作者指定结局。","theme":"母题。"},"title":{"title":"书名"},"scale":{"tier":"t3"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t1`～`t5`），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前 creation 协议；新项目的 `novel-ledger.creation/2` 使用上表十门。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
 
 ```bash
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" init
-python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance
+python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" choose --option A --board 当前展示哈希 --source 'A'
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" regroup --board 当前展示哈希 --reason '换一组'
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" back --gate scale --reason '返回体量重选'
@@ -84,12 +109,12 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" back --gate scale --reason
 
 board 哈希由主控从展示响应恢复，用户不需知道。选择绑定准确展示版本，旧组编号不能套到新门。保存各组、选择、否决和原话；回退保留前门，后续依赖选择归档后重选。世界构建期间仍可回退，旧任务取消留档；约定激活后改方向用 recontract。
 
-恢复用 advance：已展示组原样返回（结构门板子重新按同一 round 生成，哈希一致），未生成组恢复同一任务；不要求重选，不自动采纳历史否决。
+恢复用 advance --compact：已展示组原样返回（结构门板子重新按同一 round 生成，哈希一致），未生成组恢复同一任务；先核实原执行者，仍在运行时等待，不重复派工。不要求重选，不自动采纳历史否决。
 
-已有完整约定时按项目状态选入口：项目还没开始时用 `init --contract 约定.json`；已经 `init` 但还没 advance（没有派过任何门任务）可以用 `opening --file 约定.json --source 原话`，导入后逐门选择状态被清除，流程直接进入约定核验；一旦派过门任务或作者已看过方案，`opening --file` 按 creation 错误拒绝，不静默忽略，也不替他丢掉已见选择，此时用 `recontract --file` 改约。已有生效约定时同样用 recontract，先独立核验再重新规划。
+完整约定按 [入口选择](#入口选择) 操作。一旦派过门任务，opening --file 按 creation 拒绝，不静默丢弃已见选择；此时用 recontract。
 
 ## 约定
 
-opening_contract 读取闭合选择及核验世界，产出协议中的完整约定。逐门 value 的字段保留（主角门存为 protagonist_setup，关系门映射到 relationships，机制允许范围由世界门给出）。选定承诺、基调、视角、体量、世界前提、主角、关系、推进、终局、母题、书名和文风不得改变；卷职责、名称和初始化细节由系统推导并独立核验。十门决定的正是同样的十八个对齐字段，只是分布更细。
+默认 opening_contract 随 world_model 起草，读取闭合选择和同轮候选世界；世界先通过 world_review，候选约定再进入独立 contract_review。单独下发的 opening_contract 读取其冻结的已核验世界。逐门 value 的字段保留（主角门存为 protagonist_setup，关系门映射到 relationships，机制允许范围由世界门给出）。选定承诺、基调、视角、体量、世界前提、主角、关系、推进、终局、母题、书名和文风不得改变；卷职责、名称和初始化细节由系统推导并独立核验。对齐字段从同一字段声明派生，不通过合并整份 value 覆盖其他门。
 
 约定还须保留所选禁区（red_lines 是逐门所选禁区的超集），并在 entities 中保留所选主角，kind 为 person，id 与 name 与 protagonist_setup 一致，否则核验报 opening_alignment。result.template.json 由约定字段表派生，含全部对齐字段（含 title 与空 entities 骨架）；结构校验拒绝未知字段，因此模板不接受的字段不要提交。`tone`/`theme`/`pov` 自 opening/2 起由作者选定：模板里有这三个字段，逐门开书必须逐字保留；自备约定（`init --contract`）可以不带它们，此时项目按不带视角清单的版本核验，不会被追溯要求。书名自 opening/2 起也由作者在最后一门选定，约定工人不再代拟。

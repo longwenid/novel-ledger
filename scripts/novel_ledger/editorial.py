@@ -5,6 +5,7 @@ import copy
 from .contracts import digest, require, text
 
 CLOSURE_CHECKS = ('scope_question', 'dramatized_process', 'character_choice', 'cost', 'aftermath', 'handoff')
+REVISION_BOUNDS = 'revision-bounds/1'
 
 
 def enabled(book):
@@ -19,6 +20,28 @@ def effective_contract(book):
         volume['end'] = book.get('scope_ends', {}).get(volume['id'], volume['end'])
         first = volume['end'] + 1
     return value
+
+
+def revision_policy(book, head):
+    limit = book['contract']['planning_window']
+    return {'schema': REVISION_BOUNDS, 'head': head, 'limit': limit, 'earliest': max(1, head - limit + 1),
+            'closed_volumes': [{'id': v['id'],
+                                'first': book['scope_closures']['volume:' + v['id']].get('first', v['first']),
+                                'last': book['scope_closures']['volume:' + v['id']].get('last', v['end'])}
+                               for v in effective_contract(book)['volumes']
+                               if 'volume:' + v['id'] in book.get('scope_closures', {})]}
+
+
+def revision_violations(policy, impact):
+    first, last = impact['first'], impact['last']
+    result = []
+    if first < policy['earliest']:
+        result.append('outside_recent_window')
+    if last - first + 1 > policy['limit']:
+        result.append('rewrite_limit')
+    if any(first <= v['last'] and last >= v['first'] for v in policy['closed_volumes']):
+        result.append('closed_volume')
+    return result
 
 
 def context_hash(book):
@@ -125,6 +148,7 @@ def closure(book, task, data, evidence):
             require(value.get('prose_hashes') == payload['prose_hashes'] and value.get('source_coverage_checked') is True
                     and value.get('cross_chunk_checked') is True, 'completion_coverage', '终审需确认准确正文版本及跨块查漏。')
         book.setdefault('scope_closures', {})[scope] = {'review_key': task['payload']['review_key'], 'context_hash': payload['context_hash'],
+                                                      'first': task['first'], 'last': task['last'],
                                                       'value': copy.deepcopy(value)}
         return
     require(any(r['result'] != 'pass' for r in checks), 'closure', '非关闭决定需明确未解决职责。')
@@ -146,7 +170,17 @@ def closure(book, task, data, evidence):
         span = value.get('range')
         require(isinstance(span, list) and len(span) == 2 and all(type(n) is int for n in span)
                 and task['first'] <= span[0] <= span[1] <= task['last'], 'closure', '修订 range=[起点,终点] 须在已核验范围内。')
-        book['revision_directive'] = {'first': span[0], 'through': task['last'], 'reason': value['repair_case']['goal'], 'case_ids': [case_id]}
+        bounded = payload.get('revision_policy', {}).get('schema') == REVISION_BOUNDS
+        if bounded:
+            targets = [f['target_chapter'] for f in data['findings'] if f['severity'] != 'note']
+            require(targets and span[0] == min(targets) and span[1] >= max(targets),
+                    'revision_range', '修订须从明确缺陷的最早章开始，并覆盖本轮全部实质缺陷。')
+            require(isinstance(value.get('changes'), dict), 'revision_impact', '历史修订须声明 changes，区分 expression、reading 与 semantic。')
+        book['revision_directive'] = {'first': span[0], 'through': span[1] if bounded else task['last'],
+                                      'reason': value['repair_case']['goal'], 'case_ids': [case_id],
+                                      'changes': copy.deepcopy(value['changes']) if bounded else {'mode': 'semantic', 'changes': []}}
+        if bounded:
+            book['revision_directive']['policy'] = copy.deepcopy(payload['revision_policy'])
         book.update(status='paused', pause_reason='关闭核验要求修订已写缺陷。')
         return
     require(value.get('existing_content_valid') is True and not any(r['result'] in ('defect', 'author') for r in checks)
@@ -211,5 +245,7 @@ def alignment(data, plan, events, evidence, state=None):
 def closure_template(payload):
     return {'context_hash': payload['context_hash'], 'decision': '',
             'checks': [{'id': k, 'result': '', 'reason': '', 'evidence': []} for k in CLOSURE_CHECKS],
+            **({'range': [], 'changes': {'mode': '', 'changes': [], 'scenes': [], 'reading_changes': []}}
+               if payload.get('revision_policy', {}).get('schema') == REVISION_BOUNDS else {}),
             **({'completion_coverage': [{'id': r['id'], 'result': '', 'reason': '', 'evidence': []} for r in payload['sources']],
                 'prose_hashes': payload['prose_hashes'], 'source_coverage_checked': False, 'cross_chunk_checked': False} if payload['sources'] else {})}

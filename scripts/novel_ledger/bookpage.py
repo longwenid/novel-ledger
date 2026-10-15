@@ -13,11 +13,14 @@ import json
 import time
 from decimal import Decimal
 from pathlib import Path
+from string import Template
 from .contracts import CONTRACT_FIELDS, LENSES, VOLUME_TURNS, han_count
-from .delivery import atomic_write, publication
+from .ports import PublicationReader
+from .publication import publication
+from .workspace import LocalWorkspace
 from .planning import volume_for
 from .world import LABELS as WORLD_LABELS, SECTIONS as WORLD_SECTIONS
-from . import creation
+from . import creation, understanding
 from .briefs import gate_title
 
 FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '终局', 'genre': '题材',
@@ -73,182 +76,10 @@ CHECK_LABELS.update(choice_alignment='选择一致性', rule_consistency='规则
 VERDICT_LABELS = {'pass': '通过', 'fix': '待修'}
 STATUS_LABELS = {'preparing': '开书准备', 'running': '进行中', 'paused': '已暂停', 'completed': '已完本'}
 SECTIONS = (('overview', '概览'), ('contract', '创作约定'), ('world', '世界与选择'), ('design', '设计与节点'),
-            ('plans', '章计划'), ('profiles', '人物档案'), ('ledger', '事实账本'), ('reviews', '章审记录'),
+            ('plans', '章计划'), ('profiles', '人物档案'), ('understanding', '作品理解'), ('ledger', '事实账本'), ('reviews', '章审记录'),
             ('audit', '账本核验'))
 
-CSS = ''':root{--paper:#fbf8f1;--bg:#f2eee6;--card:#fffdf8;--ink:#2b261e;--muted:#8a8070;--line:#e3dbca;
---accent:#8a6a35;--accent-soft:#f2ead9;--ok:#3c6e3a;--ok-soft:#e4efdf;--bad:#8a3226;--bad-soft:#f3ded8;
---reader-size:19px;--reader-width:38em;
---serif:Georgia,"Times New Roman","Noto Serif SC","Source Han Serif SC",SimSun,serif;
---sans:"Microsoft YaHei","PingFang SC","Hiragino Sans GB",system-ui,sans-serif}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.75}
-a{color:var(--accent)}
-.bar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;padding:8px 18px;background:var(--bg);
-border-bottom:1px solid var(--line);flex-wrap:wrap}
-.bar .menu{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:4px 11px;
-font-size:15px;cursor:pointer;font-family:inherit}
-.bar .brand{display:flex;flex-direction:column;line-height:1.25;min-width:0}
-.bar .brand b{font-family:var(--serif);font-size:16.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar .brand span{color:var(--muted);font-size:11.5px;white-space:nowrap}
-.bar .grow{flex:1}
-.tabs{display:flex;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.tabs button{border:none;background:transparent;color:var(--ink);cursor:pointer;font-size:13.5px;padding:6px 15px;font-family:inherit}
-.tabs button.active{background:var(--accent);color:var(--paper);font-weight:700}
-.wrap{display:grid;grid-template-columns:196px minmax(0,1fr);gap:22px;padding:18px 22px 0}
-body.side-off .wrap{grid-template-columns:minmax(0,1fr)}
-body.side-off aside{display:none}
-aside{position:sticky;top:52px;align-self:start;max-height:calc(100vh - 60px);overflow-y:auto;padding-bottom:30px}
-aside a{display:block;padding:4px 11px;margin:1px 0;border-radius:7px;color:var(--ink);text-decoration:none;font-size:13.5px}
-aside a:hover{background:var(--accent-soft)}
-.toc-select{width:100%;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--card);
-color:var(--ink);margin-top:10px;font-family:inherit}
-main{min-width:0;padding-bottom:40px}
-h2{font-family:var(--serif);font-size:21px;margin:30px 0 4px;padding-top:6px;border-top:1px solid var(--line)}
-h2:first-child{border-top:none;margin-top:6px}
-h3{font-family:var(--serif);font-size:16.5px;margin:18px 0 6px}
-.sub{color:var(--muted);font-size:12.5px;margin-bottom:10px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 15px;margin:9px 0}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:9px;margin:10px 0}
-.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 13px}
-.stat b{display:block;font-family:var(--serif);font-size:21px}
-.stat span{color:var(--muted);font-size:12px}
-table.t{width:100%;border-collapse:collapse;font-size:14px}
-table.t th{text-align:left;vertical-align:top;white-space:nowrap;color:var(--muted);font-weight:600;padding:4px 12px 4px 0;width:7.5em}
-table.t td{padding:4px 0;vertical-align:top}
-.pill{display:inline-block;padding:1px 8px;border-radius:9px;background:var(--accent-soft);color:var(--accent);
-font-size:12px;margin:0 5px 3px 0;white-space:nowrap}
-.pill.ok{background:var(--ok-soft);color:var(--ok)}
-.pill.bad{background:var(--bad-soft);color:var(--bad)}
-.pill.dim{background:transparent;border:1px solid var(--line);color:var(--muted)}
-.note{color:var(--muted);font-size:12.5px}
-ul.tight{margin:6px 0;padding-left:19px}
-ul.tight li{margin:2px 0}
-details{margin:7px 0;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:8px 13px}
-details>summary{cursor:pointer;font-size:14px}
-details[open]>summary{margin-bottom:7px;border-bottom:1px solid var(--line);padding-bottom:6px}
-pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:var(--bg);border:1px solid var(--line);
-border-radius:8px;padding:9px;max-height:26em;overflow:auto}
-footer{color:var(--muted);font-size:12px;padding:16px 22px 30px;border-top:1px solid var(--line);margin-top:20px}
-#view-read{background:var(--paper);border-radius:12px;padding:14px 20px 30px}
-.rd-tools{display:flex;align-items:center;gap:7px;flex-wrap:wrap;position:sticky;top:52px;z-index:20;
-background:var(--paper);padding:8px 0;border-bottom:1px solid var(--line);margin-bottom:14px}
-.rd-tools .lab{color:var(--muted);font-size:12px}
-.rd-tools button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:7px;
-padding:3px 10px;font-size:12.5px;cursor:pointer;font-family:inherit}
-.rd-tools button.on{background:var(--accent);color:var(--paper);border-color:var(--accent)}
-.rd-tools .grow{flex:1;min-width:8px}
-.rd-tools input{border:1px solid var(--line);border-radius:7px;padding:4px 9px;font-size:12.5px;
-background:var(--card);color:var(--ink);font-family:inherit;min-width:9em}
-.rd-tools .themes i{display:inline-block;width:15px;height:15px;border-radius:50%;border:1px solid var(--muted);
-margin-right:5px;cursor:pointer;vertical-align:-3px}
-.rd-tools .themes i.on{outline:2px solid var(--accent);outline-offset:1px}
-.rd-wrap{max-width:var(--reader-width);margin:0 auto}
-.rd-wrap.wide{max-width:52em}
-.book{font-family:var(--serif);text-align:center;font-size:23px;margin:26px 0 4px}
-.book-sub{text-align:center;color:var(--muted);font-size:12.5px;margin-bottom:22px}
-.vol{font-family:var(--serif);font-size:14px;color:var(--accent);margin:16px 0 5px;border-bottom:1px solid var(--line);padding-bottom:4px}
-.item{display:grid;grid-template-columns:4.2em 1fr;gap:2px 10px;padding:7px 9px;border-radius:8px;cursor:pointer}
-.item:hover{background:var(--accent-soft)}
-.item .no{color:var(--muted);font-size:12.5px}
-.item .ttl{font-family:var(--serif);font-size:15px}
-.item .sum{grid-column:2;color:var(--muted);font-size:12.5px}
-.chapter{max-width:var(--reader-width);margin:0 auto}
-.ch-head{text-align:center;margin:22px 0 18px}
-.ch-head .orn{color:var(--accent);letter-spacing:.5em;font-size:12px}
-.ch-head h3{font-size:22px;margin:8px 0 4px}
-.ch-head .meta{color:var(--muted);font-size:12.5px}
-.prose{font-family:var(--serif);font-size:var(--reader-size);line-height:2}
-.prose p{margin:0 0 1.05em;text-indent:2em}
-html.sans-reading .prose{font-family:var(--sans)}
-html.sepia #view-read{background:#f4ead6}
-html.night{--paper:#211e18;--card:#211e18;--bg:#191713;--ink:#e9e2d2;--muted:#9c9280;--line:#3b352a;
---accent:#d6b478;--accent-soft:#332c1e;--ok:#a5c99a;--ok-soft:#26331f;--bad:#dfa294;--bad-soft:#3c241d}
-.ch-nav{display:flex;align-items:center;gap:10px;justify-content:center;margin:30px 0 6px;flex-wrap:wrap}
-.ch-nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;
-padding:5px 14px;font-size:13px;cursor:pointer;font-family:inherit}
-.ch-nav button:disabled{opacity:.45;cursor:default}
-.ch-nav .pos{color:var(--muted);font-size:12.5px}
-.chart{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
-.chart figcaption{font-weight:600;margin-bottom:5px}.chart .sub{margin-bottom:12px}
-.chart-tools{display:flex;gap:8px;margin:10px 0}.chart-tools input{min-width:0;flex:1;padding:7px 10px;
-border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink);font:inherit}
-.chart-tools button{border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink);cursor:pointer}
-.graph-scroll,.chart-scroll{overflow:auto;max-height:620px}.graph{display:block;width:100%;min-width:660px}
-.graph rect{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1}.graph text{fill:var(--ink);font-family:var(--sans);font-size:12px}
-.graph .group-label{fill:var(--muted);font-size:10px}.graph path{stroke:var(--muted);fill:none;stroke-width:1.4}
-.graph marker path{fill:var(--muted);stroke:none}.graph-node:focus rect,.graph-node:hover rect{stroke-width:3}
-.graph .faded{opacity:.12}.graph-node,.graph-edge{transition:opacity .15s}
-.bar-row{display:grid;grid-template-columns:minmax(100px,1fr) minmax(120px,3fr) minmax(70px,1fr);gap:12px;
-align-items:center;margin:10px 0;font-size:13px}.bar-track{height:12px;border-radius:20px;background:var(--bg);overflow:hidden}
-.bar-fill{height:100%;background:var(--accent);border-radius:20px}.bar-value{text-align:right;color:var(--muted)}
-.timeline{list-style:none;margin:12px 0;padding:0 0 0 20px;border-left:2px solid var(--line)}
-.timeline li{position:relative;padding:0 0 18px 10px}.timeline li:before{content:"";position:absolute;left:-27px;top:7px;
-width:12px;height:12px;border-radius:50%;background:var(--accent);border:3px solid var(--card)}
-.timeline p{margin:4px 0}.timeline .note{display:block}.node-detail:target{outline:2px solid var(--accent);outline-offset:3px}
-.chapter-bars{display:flex;gap:5px;align-items:flex-end;min-height:160px;padding-top:24px;overflow-x:auto}
-.chapter-bar{min-width:38px;flex:1;text-align:center;font-size:11px;color:var(--muted);text-decoration:none}
-.chapter-bar i{display:block;background:var(--accent);border-radius:5px 5px 0 0;margin:4px auto;max-width:50px}
-.chapter-bar:hover i{background:var(--ok)}
-@media (max-width:880px){.wrap{grid-template-columns:minmax(0,1fr);padding:14px}aside{position:static;max-height:none}
-.rd-tools{top:auto;position:static}}
-@media (max-width:520px){.chart{padding:12px}.bar-row{grid-template-columns:90px minmax(80px,1fr) 66px;gap:6px}}
-@media print{.bar,aside,.rd-tools,.ch-nav{display:none!important}body{background:#fff}#view-settings{display:none}
-#view-read{display:block!important;background:#fff}.chapter{display:block!important;page-break-after:always;max-width:none}
-.item{display:none}}'''
 
-JS = '''function mode(m,keep){var r=document.getElementById('view-read'),s=document.getElementById('view-settings');
-r.hidden=m!=='read';s.hidden=m!=='settings';document.body.classList.toggle('reading',m==='read');
-var ns=document.getElementById('nav-settings'),jr=document.getElementById('jump-read');
-if(ns)ns.style.display=m==='settings'?'':'none';if(jr)jr.style.display=m==='read'?'':'none';
-document.querySelectorAll('.tabs button').forEach(function(b){b.classList.toggle('active',b.dataset.m===m)});
-if(!keep)history.replaceState(null,'',m==='read'?'#read':'#settings');window.scrollTo(0,0)}
-function openChapter(n,keep){mode('read',true);
-document.querySelectorAll('.chapter').forEach(function(s){s.hidden=true});
-var ix=document.getElementById('ch-index');if(ix)ix.hidden=true;
-var el=document.getElementById('read-'+n);if(el)el.hidden=false;
-if(!keep)history.replaceState(null,'','#read-'+n);window.scrollTo(0,0)}
-function openIndex(){mode('read',true);
-document.querySelectorAll('.chapter').forEach(function(s){s.hidden=true});
-var ix=document.getElementById('ch-index');if(ix)ix.hidden=false;window.scrollTo(0,0)}
-function filterIndex(q){var t=q.trim().toLowerCase();
-document.querySelectorAll('#ch-index .item').forEach(function(d){
-d.style.display=(!t||d.textContent.toLowerCase().indexOf(t)>=0)?'':'none'})}
-function jump(sel){var o=sel.selectedOptions[0];if(o&&o.dataset.n)openChapter(+o.dataset.n,true)}
-function toggleSide(){document.body.classList.toggle('side-off')}
-function graphFocus(svg,keys){var near=new Set(keys);
-svg.querySelectorAll('.graph-edge').forEach(function(e){if(keys.indexOf(e.dataset.a)>=0||keys.indexOf(e.dataset.b)>=0){near.add(e.dataset.a);near.add(e.dataset.b)}});
-svg.querySelectorAll('.graph-node').forEach(function(n){n.classList.toggle('faded',keys.length>0&&!near.has(n.dataset.key))});
-svg.querySelectorAll('.graph-edge').forEach(function(e){e.classList.toggle('faded',keys.length>0&&keys.indexOf(e.dataset.a)<0&&keys.indexOf(e.dataset.b)<0)})}
-function focusGraph(node){graphFocus(node.closest('svg'),[node.dataset.key])}
-function filterGraph(input){var svg=input.closest('.chart').querySelector('svg'),q=input.value.trim().toLowerCase(),keys=[];
-svg.querySelectorAll('.graph-node').forEach(function(n){if(q&&n.textContent.toLowerCase().indexOf(q)>=0)keys.push(n.dataset.key)});
-graphFocus(svg,keys);if(q&&!keys.length)svg.querySelectorAll('.graph-node,.graph-edge').forEach(function(n){n.classList.add('faded')})}
-function resetGraph(button){var chart=button.closest('.chart');chart.querySelector('input').value='';graphFocus(chart.querySelector('svg'),[])}
-function revealTarget(){var id=location.hash.slice(1),el=document.getElementById(id);if(!el)return;
-if(el.tagName==='DETAILS')el.open=true;var p=el.parentElement;while(p){if(p.tagName==='DETAILS')p.open=true;p=p.parentElement}el.scrollIntoView()}
-window.addEventListener('hashchange',function(){if(location.hash.indexOf('#read-')===0)openChapter(parseInt(location.hash.slice(6),10),true);else revealTarget()});
-var RS={size:parseInt(localStorage.getItem('nl_rsize')||'19',10),
-serif:localStorage.getItem('nl_rserif')!=='0',wide:localStorage.getItem('nl_rwide')==='1',
-theme:localStorage.getItem('nl_rtheme')||'paper'};
-function applyReader(){document.documentElement.style.setProperty('--reader-size',RS.size+'px');
-document.documentElement.classList.toggle('sans-reading',!RS.serif);
-document.documentElement.classList.toggle('sepia',RS.theme==='sepia');
-document.documentElement.classList.toggle('night',RS.theme==='dark');
-var w=document.getElementById('rd-wrap');if(w)w.classList.toggle('wide',RS.wide);
-var a=document.getElementById('rb-serif'),b=document.getElementById('rb-sans'),
-c=document.getElementById('rw-std'),d=document.getElementById('rw-wide');
-if(a)a.classList.toggle('on',RS.serif);if(b)b.classList.toggle('on',!RS.serif);
-if(c)c.classList.toggle('on',!RS.wide);if(d)d.classList.toggle('on',RS.wide);
-document.querySelectorAll('.rd-tools .themes i').forEach(function(t){
-t.classList.toggle('on',t.classList.contains('th-'+RS.theme))})}
-function readerSize(v){RS.size=Math.min(30,Math.max(15,RS.size+v));localStorage.setItem('nl_rsize',RS.size);applyReader()}
-function readerFamily(s){RS.serif=s;localStorage.setItem('nl_rserif',s?'1':'0');applyReader()}
-function readerWide(w){RS.wide=w;localStorage.setItem('nl_rwide',w?'1':'0');applyReader()}
-function readerTheme(t){RS.theme=t;localStorage.setItem('nl_rtheme',t);applyReader()}
-applyReader();
-(function(){var h=location.hash;if(h.indexOf('#read-')===0){var n=parseInt(h.slice(6),10);if(n)openChapter(n,true)}
-else if(h==='#read'){mode('read',true)}else{mode('settings',true);revealTarget()}})();'''
 
 
 def _esc(value):
@@ -378,7 +209,7 @@ def _timeline(title, items, caption=''):
 
 
 def _overview(book, contract, rows, state, open_hooks, report, written):
-    pieces = ['<h2 id="overview">概览</h2><div class="sub">数据库派生只读视图 · 真源 novel.sqlite3 · 可随时重新生成</div><div class="cards">',
+    pieces = ['<h2 id="overview">概览</h2><div class="sub">账本派生只读视图 · 真源是作品账本 · 可随时重新生成</div><div class="cards">',
               '<div class="stat"><b>' + str(len(rows)) + '</b><span>已提交章节</span></div>',
               '<div class="stat"><b>' + format(written, ',') + '</b><span>累计汉字</span></div>',
               '<div class="stat"><b>' + str(len(open_hooks)) + '</b><span>待兑现承诺</span></div>',
@@ -572,6 +403,23 @@ def _profiles(book):
     return ''.join(pieces)
 
 
+def _understanding(book):
+    pieces = ['<h2 id="understanding">作品理解</h2><p class="note">独立读者的解释与表达样本，可修订并保留反证；不属于既成事实或强制写作要求。</p>']
+    kinds = {'character': '人物', 'relationship': '关系', 'theme': '母题', 'voice': '表达'}
+    statuses = {'tentative': '待验证', 'supported': '有依据', 'contested': '存在争议', 'retired': '已停用'}
+    rows = understanding.latest(book.get('understanding'))
+    for row in rows.values():
+        pieces.append('<div class="card"><b>' + _esc(row['claim']) + '</b>'
+                      + _pills([kinds[row['kind']], statuses[row['status']]])
+                      + '<p>' + _esc(row['reason']) + '</p>')
+        for field, label in (('evidence', '原文依据'), ('counterevidence', '反证')):
+            for ref in row[field]:
+                pieces.append('<p class="note">' + label + ' · 第' + str(ref['chapter']) + '章</p><blockquote>'
+                              + _esc(ref['quote']) + '</blockquote>')
+        pieces.append('<details><summary>版本与适用范围</summary>' + _raw(row) + '</details></div>')
+    return ''.join(pieces) + ('' if rows else _empty('作品理解'))
+
+
 def _ledger(state):
     pieces = ['<h2 id="ledger">事实账本</h2><div class="sub">由已提交章节的事件结算而来；每条事实都能追溯到正文引文</div>']
     if not state:
@@ -692,7 +540,39 @@ def _reviews(rows, repo):
             for finding in receipt.get('findings') or []:
                 pieces.append('<p class="note">发现（' + _esc(finding.get('severity', '')) + '）：'
                               + _esc(finding.get('reason', '')) + '</p>')
+        for index, reading in enumerate(review.get('revision_readings', []), 1):
+            pieces.append(_revision_reading(reading, index))
         pieces.append('</details>')
+    return ''.join(pieces)
+
+
+def _review_evidence(refs):
+    return ''.join('<p class="note">原文依据 · 第' + _esc(ref.get('chapter', ''))
+                   + '章</p><blockquote>' + _esc(ref.get('quote', '')) + '</blockquote>' for ref in refs)
+
+
+def _revision_reading(reading, index):
+    receipt = reading['receipt']
+    pieces = ['<details><summary>修订独立重读 · 第' + str(index) + '次 · '
+              + _esc(VERDICT_LABELS.get(receipt.get('verdict'), receipt.get('verdict', ''))) + '</summary>',
+              '<p class="note" style="overflow-wrap:anywhere">正文版本：' + _esc(reading['prose_hash'])
+              + '<br>审稿会话：' + _esc(reading['reviewer']) + '<br>核验清单版本：'
+              + _esc(receipt.get('checks_version', 1)) + '</p>', '<h3>冻结首读</h3>']
+    labels = {'desire': '期待', 'obstacle': '阻碍', 'change': '变化', 'read_on_reason': '追读理由'}
+    for first in reading['first_read']['reads']:
+        pieces.append('<div class="card"><b>第' + _esc(first['chapter']) + '章</b><table class="t">'
+                      + ''.join('<tr><th>' + label + '</th><td>' + _esc(first[key]) + '</td></tr>'
+                                for key, label in labels.items()) + '</table></div>')
+    for check in receipt.get('checks', []):
+        pieces.append('<p><b>' + _esc(CHECK_LABELS.get(check['id'], check['id'])) + '</b> · '
+                      + _esc(VERDICT_LABELS.get(check['result'], check['result'])) + ' · '
+                      + _esc(check['reason']) + '</p>' + _review_evidence(check.get('evidence', [])))
+    for finding in receipt.get('findings', []):
+        evidence = finding.get('evidence', [])
+        pieces.append('<p>发现（' + _esc(finding.get('severity', '')) + '）：'
+                      + _esc(finding['reason']) + '</p>'
+                      + _review_evidence(evidence if isinstance(evidence, list) else [evidence]))
+    pieces.append(_raw(reading) + '</details>')
     return ''.join(pieces)
 
 
@@ -778,7 +658,7 @@ def _audit_report(book, rows):
             'problems': problems}
 
 
-def render(repo):
+def render(repo: PublicationReader):
     """Build the whole page as one HTML string."""
     book, rows = publication(repo)
     branch = book['branch']
@@ -794,36 +674,28 @@ def render(repo):
     jump = ('<select id="jump-read" class="toc-select" style="display:none" onchange="jump(this)">'
             '<option>跳转章节…</option>'
             + ''.join('<option data-n="%d">第%d章</option>' % (row['n'], row['n']) for row in rows) + '</select>')
-    pieces = ['<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">',
-              '<meta name="viewport" content="width=device-width,initial-scale=1">',
-              '<title>' + _esc(title) + ' · 全书视图</title><style>' + CSS + '</style></head><body>',
-              '<header class="bar"><button class="menu" onclick="toggleSide()">☰</button>',
-              '<div class="brand"><b>' + _esc(title) + '</b><span>分支 ' + _esc(branch) + ' · ' + str(len(rows))
-              + ' 章 · ' + format(written, ',') + ' 汉字 · 生成于 ' + _esc(generated) + '</span></div>',
-              '<div class="grow"></div><div class="tabs">',
-              '<button data-m="settings" onclick="mode(\'settings\')">看设定</button>',
-              '<button data-m="read" onclick="mode(\'read\')">读正文</button></div></header>',
-              '<div class="wrap"><aside><nav id="nav-settings">' + nav + '</nav>' + jump + '</aside>',
-              '<main><div id="view-settings">',
-              _overview(book, contract, rows, state, open_hooks, report, written),
-              _contract(contract) if contract else '<h2 id="contract">创作约定</h2>' + _empty('生效约定'),
-              _world(book), _designs(book), _plans(book, contract), _profiles(book), _ledger(state),
-              _reviews(rows, repo), _audit(book, report),
-              '</div>',                                                # closes #view-settings
-              _reader(rows, repo, contract, book),
-              '</main></div>',
-              '<footer><div class="rd-wrap">本页为派生只读视图，真源是 novel.sqlite3；重新生成：'
-              'novel.py html --project &lt;PROJECT&gt; · 生成于 ' + _esc(generated)
-              + ' · Ctrl+P 可打印或导出 PDF</div></footer>',
-              '<script>' + JS + '</script></body></html>']
-    return ''.join(pieces)
+    settings = ''.join((
+        _overview(book, contract, rows, state, open_hooks, report, written),
+        _contract(contract) if contract else '<h2 id="contract">创作约定</h2>' + _empty('生效约定'),
+        _world(book), _designs(book), _plans(book, contract), _profiles(book), _understanding(book),
+        _ledger(state), _reviews(rows, repo), _audit(book, report)))
+    templates = Path(__file__).with_name('templates')
+    shell = Template((templates / 'book.html').read_text(encoding='utf-8'))
+    return shell.substitute(
+        title=_esc(title), branch=_esc(branch), chapter_count=len(rows),
+        written=format(written, ','), generated=_esc(generated), nav=nav, jump=jump,
+        settings=settings, reader=_reader(rows, repo, contract, book),
+        styles=(templates / 'book.css').read_text(encoding='utf-8'),
+        script=(templates / 'book.js').read_text(encoding='utf-8'))
 
 
-def write(repo, output=None):
+
+def write(repo: PublicationReader, output=None, *, workspace: LocalWorkspace):
     """Write the view (default <project>/book.html) and report where it went."""
+    target = (workspace.output_path(output, 'book.html') if output
+              else workspace.artifact_path(workspace.project / 'book.html'))
     view = render(repo)
-    target = Path(output).expanduser().resolve() if output else repo.project / 'book.html'
-    atomic_write(target, view)
+    workspace.write_text(target, view)
     _, rows = publication(repo)
     return {'path': str(target), 'chars': len(view), 'chapters': len(rows),
-            'inside_project': target.is_relative_to(repo.project)}
+            'inside_project': target.is_relative_to(workspace.project)}

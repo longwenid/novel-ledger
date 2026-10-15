@@ -11,11 +11,11 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
-from novel_ledger.application import Application
+from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import dump
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book
-from novel_ledger import context, facts, scopes
+from novel_ledger import context, facts, scopes, story_memory
 from novel_ledger.contracts import Job
 from support import contract, drive, node
 from test_history import append_history
@@ -95,6 +95,7 @@ def main():
               'novel_ledger': graph_metrics(ROOT, 'novel_ledger'), 'context': [context_metrics(n) for n in (10, 100, 1000)],
               'tracked_causal_context': [tracked_context_metrics(n) for n in (20, 100, 500)],
               'editorial_causal_context': [tracked_context_metrics(n, enhanced=True) for n in (20, 100, 500)],
+              'creative_memory_context': [creative_memory_metrics(n) for n in (20, 100, 500)],
               'review_trees': [review_metrics(n) for n in (20, 100, 500)],
               'history_transport': [history_metrics(n) for n in (20, 100, 500)]}
     if args.out:
@@ -123,6 +124,8 @@ def tracked_context_metrics(size, enhanced=False):
             book['designs']['book']['nodes'] = nodes
             book['plans']['1'].update(node_ids=[nodes[-1]['id']], node_actions=[{'node': nodes[-1]['id'], 'after': 'seeded'}],
                                       node_contracts={nodes[-1]['id']: nodes[-1]}, disclosures=[], preconditions=[])
+            if enhanced:
+                story_memory.bind(book['plans']['1'], book['plans'], 2)
             repo.save(book)
             work = context.build(repo, book, Job('write', 1)) if enhanced else repo.task(app.advance()['task']['task_id'])['input']
             values = {n: repo.read_document(work['records'][n]) for n in work['required']}
@@ -130,6 +133,35 @@ def tracked_context_metrics(size, enhanced=False):
             return {'causal_nodes': size, 'required_story_nodes': len(values['story']),
                     'required_record_bytes': len(dump(values).encode('utf-8')),
                     'complete_design_nodes': len(repo.read_document(work['records']['design:book'])['nodes'])}
+        finally:
+            repo.close()
+
+
+def creative_memory_metrics(size):
+    from support import response
+    with tempfile.TemporaryDirectory() as temporary:
+        repo = SQLiteRepository.initialize(Path(temporary) / 'book', new_book(contract()))
+        try:
+            app = Application(repo)
+            owner = app.run(through=2, source='工程材料度量。')['owner']
+            drive(app, owner, until='chapter_review')
+            result = response(app)
+            result['data']['understanding'] = [dict(
+                id='interpretation-' + str(n), kind='character', claim='工程解释样本。', status='tentative',
+                subjects=['shen'] if n < 3 else [], topics=[] if n < 3 else ['remote-' + str(n)],
+                reason='仅验证材料筛选，不代表文学判断。', evidence=[{'chapter': 1, 'quote': '次日'}], counterevidence=[])
+                for n in range(size)]
+            app.submit(result)
+            drive(app, owner, until='write')
+            work = repo.pending()['input']
+            selected = repo.read_document(work['records']['creative_memory'])['interpretations']
+            complete = repo.read_document(work['records']['complete_understanding'])
+            assert len(selected) == 3 and len(complete['versions']) == size
+            assert all(r['evidence'][0]['quote'] == '次日' for r in selected.values())
+            values = {n: repo.read_document(work['records'][n]) for n in work['required']}
+            return {'interpretations': size, 'selected_interpretations': len(selected),
+                    'required_record_bytes': len(dump(values).encode('utf-8')),
+                    'complete_optional_source_preserved': True}
         finally:
             repo.close()
 

@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import copy
 from .contracts import CHECKS_VERSION, OPENING_VERSION, REPAIRS, REDESIGNS, Job, Outcome, checks_for, digest, han_count, require, text
-from . import creation, facts, narrative, planning, quality, scopes, world, craft, editorial
+from . import creation, facts, narrative, planning, quality, scopes, world, craft, editorial, understanding, design_queries
+from .evidence import evidence
 
 
 def new_book(contract, source=''):
@@ -11,9 +12,9 @@ def new_book(contract, source=''):
     book = {'contract': contract, 'contract_source': source, 'state': facts.seed(contract),
             'branch': 'main', 'revision': 0, 'status': 'running', 'target': 1, 'finish': False, 'written_han': 0,
             'lexical_policy': [{'version': 1, 'policy': planning.resolve_policy({}), 'source': '内置默认'}],
-            'pilot': None, 'designs': {}, 'plans': {}, 'profiles': {}, 'draft': None,
+            'pilot': None, 'designs': {}, 'plans': {}, 'profiles': {}, 'understanding': understanding.empty(), 'draft': None,
             'proposal': None, 'reviews': {}, 'scope_parts': {}, 'rework': {}, 'revision_run': None, 'feedback': [], 'decisions': []}
-    planning.check_contract_names(contract, planning.policy_of(book))
+    planning.check_contract_names(contract, planning.active_policy(book.get('lexical_policy')))
     return book
 
 
@@ -21,7 +22,7 @@ def preparing_book(source='', guided=False, opening_version=OPENING_VERSION):
     return {'contract': None, 'contract_source': source, 'state': facts.seed({}),
             'branch': 'main', 'revision': 0, 'status': 'preparing', 'target': 1, 'finish': False, 'written_han': 0,
             'lexical_policy': [{'version': 1, 'policy': planning.resolve_policy({}), 'source': '内置默认'}],
-            'pilot': None, 'designs': {}, 'plans': {}, 'profiles': {}, 'draft': None,
+            'pilot': None, 'designs': {}, 'plans': {}, 'profiles': {}, 'understanding': understanding.empty(), 'draft': None,
             'proposal': None, 'reviews': {}, 'scope_parts': {}, 'rework': {}, 'revision_run': None, 'feedback': [], 'decisions': [],
             'creation': creation.begin(source, opening_version) if guided else None}
 
@@ -33,7 +34,7 @@ def review_key(scope, first, last, headers, editorial_context=None):
 
 
 def node_map(book):
-    return {node['id']: node for design in book['designs'].values() for node in design['nodes']}
+    return design_queries.node_map(book['designs'])
 
 
 def repair_stage(budget):
@@ -42,16 +43,26 @@ def repair_stage(budget):
     return 'repair' if budget.get('repairs', 0) < REPAIRS else 'redesign'
 
 
-def next_outline(book, volume):
+def next_outline(book, volume, chapter=None):
     if not book['contract'].get('volume_outline'):
         return None
     scope = 'volume:' + volume['id']
     chapters = book['designs'][scope].get('chapters', [])
     first = chapters[-1]['chapter'] + 1 if chapters else volume['first']
+    rolling = book['contract']['volume_outline']['scope'] == 'rolling'
+    if rolling and first > (chapter or volume['first']):
+        return None
     if first <= volume['end']:
         last = min(volume['end'], first + min(6, book['contract']['planning_window']) - 1)
         return Job('volume_outline', first, scope, first, last)
     return None
+
+
+def profile_job(book, chapter):
+    plan = book['plans'][str(chapter)]
+    missing = [ident for ident in plan['participants'] if ident not in book['profiles']
+               or editorial.enabled(book) and book['profiles'][ident].get('growth_basis') != craft.growth_basis(book['state'], ident)]
+    return Job('profiles', chapter, payload={'entities': missing}) if missing else None
 
 
 def choose(book, headers):
@@ -112,12 +123,29 @@ def choose(book, headers):
             if job:
                 return job
         if opening_only:
-            return {'action': 'outline_ready', 'selection_hash': opening['selection_hash'], 'volumes': [v['id'] for v in volumes]}
+            return {'action': 'outline_ready', 'selection_hash': opening['selection_hash'], 'volumes': [v['id'] for v in volumes],
+                    'planning_mode': outline['scope'],
+                    'coverage': [{'volume': v['id'], 'first': v['first'],
+                                  'last': book['designs']['volume:' + v['id']]['chapters'][-1]['chapter']} for v in volumes]}
     if head and (not book['pilot'] or book['pilot']['prose'] != headers[0]['prose']):
         return {'action': 'await_author', 'chapter': 1, 'prose_hash': headers[0]['prose']}
     if book['draft']:
         draft = book['draft']
+        if draft['stage'] in ('write', 'repair', 'redesign'):
+            job = profile_job(book, draft['chapter'])
+            if job:
+                return job
         return Job(draft['stage'], draft['chapter'])
+    revision = book.get('revision_run')
+    if revision and revision.get('plan_task'):
+        chapter = revision['plan_task']
+        volume = planning.volume_for(contract, chapter)
+        last = min(volume['end'], book['target'], chapter + contract['planning_window'] - 1)
+        if outline.get('scope') == 'rolling':
+            last = min(last, book['designs']['volume:' + volume['id']]['chapters'][-1]['chapter'])
+        return Job('plan', chapter, 'window', chapter, last, {'replan': '独立改案清理了待携带章节计划，重新规划后再核验正文。'})
+    if revision and revision.get('reading_task'):
+        return Job('revision_review', revision['reading_task'], 'revision')
     if head:
         volume = planning.volume_for(contract, head)
         # Tracked projects keep bounded chunks even in fast mode; fast only skips intervals.
@@ -158,20 +186,23 @@ def choose(book, headers):
     scope = 'volume:' + volume['id']
     if scope not in book['designs']:
         return Job('volume_plan', chapter, scope, volume['first'], volume['end']) if outline else Job('volume_plan', chapter, scope)
-    job = next_outline(book, volume)
+    job = next_outline(book, volume, chapter)
     if job:
         return job
     if str(chapter) not in book['plans']:
         last = min(volume['end'], book['target'], chapter + contract['planning_window'] - 1)
+        if outline.get('scope') == 'rolling':
+            last = min(last, book['designs'][scope]['chapters'][-1]['chapter'])
         return Job('plan', chapter, 'window', chapter, last)
     plan = book['plans'][str(chapter)]
     if contract.get('narrative_tracking') and narrative.unmet(book['state'], plan):
         last = min(volume['end'], book['target'], chapter + contract['planning_window'] - 1)
+        if outline.get('scope') == 'rolling':
+            last = min(last, book['designs'][scope]['chapters'][-1]['chapter'])
         return Job('plan', chapter, 'window', chapter, last, {'replan': '实际结果改变了近期计划的前提。', 'unmet': narrative.unmet(book['state'], plan)})
-    missing = [ident for ident in plan['participants'] if ident not in book['profiles']
-               or editorial.enabled(book) and book['profiles'][ident].get('growth_basis') != craft.growth_basis(book['state'], ident)]
-    if missing:
-        return Job('profiles', chapter, payload={'entities': missing})
+    job = profile_job(book, chapter)
+    if job:
+        return job
     budget = book['rework'].get(str(chapter), {})
     if budget.get('initial_used'):
         stage = repair_stage(budget)
@@ -216,13 +247,19 @@ def apply(book, task, data, actor, sources):
     version = task.get('checks_version', 1)
     tracking = bool((book.get('contract') or {}).get('narrative_tracking'))
     enhanced = bool(task.get('capabilities', {}).get('editorial'))
+    workbench = task.get('capabilities', {}).get('understanding') == 'understanding/1'
+    require('understanding' not in data or workbench and stage in ('chapter_review', 'scope_review', 'scope_synthesis', 'revision_review'),
+            'understanding', '作品理解仅由带冻结能力的独立阅读任务更新。')
+    identity_version = 2 if task.get('capabilities', {}).get('scene_identity') == 'scene-identity/2' else 1
+    reading_version = 1 if task.get('capabilities', {}).get('reading_dependencies') == 'reading-dependencies/1' else 0
     row = None
     if stage == 'opening_options':
-        planning.enforce(planning.policy_of(book), stage, data)
-        book['creation'] = creation.offer(book['creation'], data)
+        planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
+        book['creation'] = creation.offer(book['creation'], data,
+                                         strict_bounds=task.get('capabilities', {}).get('opening_bounds') == 'opening-bounds/1')
     elif stage == 'world_model':
         opening = book['creation']
-        planning.enforce(planning.policy_of(book), stage, data)
+        planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         # A combined dispatch returns one object holding both artifacts; each is validated by its
         # own contract, so the world half is split off before world.validate sees it.
         draft = {key: value for key, value in data.items() if key != 'contract'} \
@@ -231,10 +268,11 @@ def apply(book, task, data, actor, sources):
         old = book['proposal'] or {}
         book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': model, 'producer': actor, 'attempts': old.get('attempts', 0)}
         if 'opening_contract' in (task.get('payload') or {}).get('also', ()):  # combined dispatch
-            planning.enforce(planning.policy_of(book), 'opening_contract', data.get('contract'))
+            planning.enforce(planning.active_policy(book.get('lexical_policy')), 'opening_contract', data.get('contract'))
             contract = planning.validate_contract(data.get('contract'))
+            facts.seed(contract)
             creation.validate_contract(contract, opening, model)
-            planning.check_contract_names(contract, planning.policy_of(book))
+            planning.check_contract_names(contract, planning.active_policy(book.get('lexical_policy')))
             book['contract_draft'] = {'scope': 'contract', 'chapter': 1, 'data': contract, 'producer': actor,
                                       'after': 'world',
                                       'source': '与已核验世界一并整理；完整选择版本 ' + opening['selection_hash']}
@@ -257,14 +295,15 @@ def apply(book, task, data, actor, sources):
                 proposal['needs_repair'] = True
     elif stage == 'opening_contract':
         contract = planning.validate_contract(data)
+        facts.seed(contract)
         creation.validate_contract(contract, book['creation'], book['world'])
-        planning.enforce(planning.policy_of(book), stage, contract)
-        planning.check_contract_names(contract, planning.policy_of(book))
+        planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, contract)
+        planning.check_contract_names(contract, planning.active_policy(book.get('lexical_policy')))
         book['proposal'] = {'scope': 'contract', 'chapter': 1, 'data': contract, 'producer': actor,
                             'source': '用户逐门选择；完整选择版本 ' + book['creation']['selection_hash']}
     elif stage in ('book_plan', 'volume_plan'):
         known = node_map(book)
-        planning.enforce(planning.policy_of(book), stage, data)
+        planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         design = planning.validate_design(data, known, tracking, narrative.registry(book)[1],
                                           task.get('payload', {}).get('volume_outline'), book.get('world'))
         if tracking and task['scope'] == 'book':
@@ -274,7 +313,7 @@ def apply(book, task, data, actor, sources):
         book['proposal'] = {'scope': task['scope'], 'chapter': chapter, 'data': design, 'producer': actor, 'attempts': old.get('attempts', 0)}
     elif stage == 'volume_outline':
         policy = task['payload']['volume_outline']
-        planning.enforce(planning.policy_of(book), stage, data)
+        planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         planning.validate_chapter_outlines(data, policy, book.get('world'), node_map(book))
         old = book['proposal'] or {}
         book['proposal'] = {'kind': 'volume_outline', 'scope': task['scope'], 'chapter': chapter,
@@ -334,7 +373,7 @@ def apply(book, task, data, actor, sources):
             proposal['findings'] = review['findings']
     elif stage == 'alignment_plan':
         require(enhanced and text(data.get('reason')) and isinstance(data.get('designs', []), list), 'alignment', '改案需 reason/plan/designs。')
-        planning.enforce(planning.policy_of(book), stage, data)
+        planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         candidate = copy.deepcopy(book)
         replacements = data.get('designs', [])
         allowed = {'book', 'volume:' + planning.volume_for(editorial.effective_contract(book), chapter)['id']}
@@ -363,7 +402,7 @@ def apply(book, task, data, actor, sources):
                 require(line in new.get('threads', []), 'alignment', '既有线路职责保留，新增线路用新 ID。')
             candidate['designs'][scope] = new
         plan = planning.validate_plans({'plans': [data.get('plan')]}, chapter, chapter, node_map(candidate), book['state'],
-                                       editorial.effective_contract(book), book.get('world'), planning.policy_of(book))[0]
+                                       editorial.effective_contract(book), book.get('world'), planning.active_policy(book.get('lexical_policy')), book['plans'], identity_version, reading_version)[0]
         book['alignment_proposal'] = {'producer': actor, 'reason': data['reason'], 'plan': plan,
                                       'designs': candidate['designs'], 'basis': editorial.context_hash(book)}
     elif stage == 'alignment_review':
@@ -389,13 +428,13 @@ def apply(book, task, data, actor, sources):
             if hold['attempts'] >= 2:
                 book.update(status='paused', pause_reason='同一改案两轮未通过，保留原稿、原计划与次数。')
     elif stage == 'plan':
-        planning.enforce(planning.policy_of(book), stage, data)
+        planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         plans = planning.validate_plans(data, task['first'], task['last'], node_map(book), book['state'], editorial.effective_contract(book),
-                                        book.get('world'), planning.policy_of(book))
+                                        book.get('world'), planning.active_policy(book.get('lexical_policy')), book['plans'], identity_version, reading_version)
         for plan in plans:
             book['plans'][str(plan['chapter'])] = plan
     elif stage == 'profiles':
-        planning.enforce(planning.policy_of(book), stage, data)
+        planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         profiles = planning.validate_profiles(data, task['payload']['entities'], book['state'], book['profiles'], enhanced)
         for profile in profiles:
             book['profiles'][profile['entity']] = profile
@@ -409,7 +448,7 @@ def apply(book, task, data, actor, sources):
         require(enhanced or 'prose' in data, 'patch', '旧冻结任务仍提交完整 prose。')
         prose, patch = craft.compose(data, base if stage != 'write' else None)
         data = {**data, 'prose': prose}
-        planning.enforce(planning.policy_of(book), stage, data)
+        planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         spend(book, chapter, stage)
         old = book['draft'] or {}
         draft = {'chapter': chapter, 'title': data['title'], 'prose': data['prose'], 'producer': actor,
@@ -437,7 +476,7 @@ def apply(book, task, data, actor, sources):
         else:
             plan = book['plans'][str(chapter)]
             raw_events = fact_review['events']
-            alignment = editorial.alignment(data, plan, raw_events, lambda r: facts.evidence(r, sources), book['state']) if enhanced else None
+            alignment = editorial.alignment(data, plan, raw_events, lambda r: evidence(r, sources), book['state']) if enhanced else None
             require(not alignment or alignment['action'] != 'repair_prose', 'alignment', 'repair_prose 须与实际 fix 检查和 findings 一起提交。')
             if alignment:
                 realized_rows = {r['node']: r for r in alignment['realizations']}
@@ -483,7 +522,7 @@ def apply(book, task, data, actor, sources):
                                           'original_plan': plan, 'prose_hash': digest(draft['prose'])}
             for item in state['entities'].values():
                 for name in [item['name']] + item.get('aliases', []):
-                    planning.check_text(name, planning.policy_of(book), names=True)
+                    planning.check_text(name, planning.active_policy(book.get('lexical_policy')), names=True)
             row = {'n': chapter, 'title': draft['title'], 'prose': draft['prose'], 'events': events,
                    'plan': plan, 'review': {'facts': fact_review, 'reader': reader, 'session': actor,
                    'writer': draft['producer'], 'first_read': task['first_read'], 'obligations': obligations},
@@ -495,6 +534,38 @@ def apply(book, task, data, actor, sources):
             book['state'], book['draft'] = state, None
             book['written_han'] += row['han']
             book['carry_findings'] = [f for f in book.get('carry_findings', []) if f.get('target_chapter') != chapter]
+    elif stage == 'revision_review':
+        require(set(data) <= {'reader', 'understanding'}, 'revision_review', '修订重读只交 reader 和可选 understanding，不交事实事件或正文。')
+        revision = book.get('revision_run')
+        require(revision and revision.get('reading_task') == chapter and revision['carry']
+                and revision['carry'][0]['n'] == chapter, 'revision', '阅读核验必须绑定当前待携带章节。')
+        receipt = quality.checks(data.get('reader'), checks_for(version, 'reader'), sources,
+                                 [o for o in task['obligations'] if o['category'] == 'reader'], ('language',), version)
+        original = revision['carry'][0]
+        require(actor not in task['payload']['prior_sessions'], 'review_independence', '修订阅读核验须使用独立新会话。')
+        revision.setdefault('reading_reviews', []).append({'chapter': chapter, 'prose_hash': original['prose'],
+                                                          'receipt': receipt, 'reviewer': actor, 'first_read': task['first_read'],
+                                                          'prior_sessions': task['payload']['prior_sessions'],
+                                                          'obligations': [o for o in task['obligations'] if o['category'] == 'reader']})
+        revision.pop('reading_task', None)
+        if receipt['verdict'] == 'pass':
+            revision['reading_approved'] = chapter
+            if workbench:
+                book['understanding'] = understanding.update(book.get('understanding'), data.get('understanding', []), sources, evidence, actor)
+        else:
+            findings = [f for f in receipt['findings'] if f['severity'] != 'note']
+            require(all(f['target_chapter'] == chapter for f in findings), 'repair_scope', '阅读核验只安排当前待携带章修改。')
+            if revision.get('impact'):
+                action = next((a for a in revision['impact'].get('chapter_actions', []) if a['chapter'] == chapter), None)
+                if action is not None:
+                    action.update(action='local' if all(f['repair_scope'] == 'local' for f in findings) else 'rewrite',
+                                  reason='独立重读发现实质问题，按当前发现修改并完整写审。')
+            revision['carry'].pop(0)
+            original_plan = task['payload']['original_plan']
+            book['plans'][str(chapter)] = original_plan
+            draft = {'chapter': chapter, 'title': original['title'], 'prose': sources[chapter],
+                     'producer': 'historical', 'history': [], 'findings': []}
+            route_repair(book, draft, findings)
     elif stage in ('scope_review', 'scope_synthesis'):
         review = quality.checks(data, checks_for(version, 'long'), sources, expected_version=version)
         coverage = data.get('coverage')
@@ -508,23 +579,23 @@ def apply(book, task, data, actor, sources):
                 report = prior[item['part_id']]
                 ref = item.get('evidence', {})
                 require(text(item.get('reason')) and report['first'] <= ref.get('chapter', -1) <= report['last'], 'scope_coverage', '每项覆盖须说明该子范围的作用并引用其原文。')
-                facts.evidence(ref, sources)
+                evidence(ref, sources)
         else:
             require(isinstance(coverage, list) and len(coverage) == len(sources) and all(isinstance(r, dict) and type(r.get('chapter')) is int for r in coverage)
                     and {r['chapter'] for r in coverage} == set(sources), 'scope_coverage', '跨章核验须逐章给出覆盖证据。')
             for item in coverage:
                 require(text(item.get('reason')) and item.get('evidence', {}).get('chapter') == item['chapter'], 'scope_coverage', '逐章覆盖需要本章理由与证据。')
-                facts.evidence(item['evidence'], sources)
+                evidence(item['evidence'], sources)
         root = stage == 'scope_synthesis' and (not tree_task or task['payload']['root'])
         if enhanced and root:
-            editorial.remedy_review(book, data, task['scope'], lambda r: facts.evidence(r, sources))
+            editorial.remedy_review(book, data, task['scope'], lambda r: evidence(r, sources))
             if task['payload'].get('closure'):
-                editorial.closure(book, task, data, lambda r: facts.evidence(r, sources))
+                editorial.closure(book, task, data, lambda r: evidence(r, sources))
         if review['verdict'] == 'pass':
             accepted = {'scope': task['scope'], 'first': task['first'], 'last': task['last'], 'receipt': review, 'coverage': copy.deepcopy(coverage)}
             if tree_task:
                 accepted.update({k: task['payload'][k] for k in ('part_id', 'level', 'children')})
-                accepted['handoff'] = scopes.validate_handoff(data, sources, facts.evidence)
+                accepted['handoff'] = scopes.validate_handoff(data, sources, evidence)
             if stage == 'scope_review' or tree_task and not task['payload']['root']:
                 book['scope_parts'].setdefault(task['payload']['review_key'], []).append(accepted)
             else:
@@ -535,5 +606,7 @@ def apply(book, task, data, actor, sources):
             book['scope_findings'] = review['findings']
     else:
         require(False, 'stage', '未注册的任务阶段。')
+    if workbench and (row is not None or stage in ('scope_review', 'scope_synthesis') and review['verdict'] == 'pass'):
+        book['understanding'] = understanding.update(book.get('understanding'), data.get('understanding', []), sources, evidence, actor)
     book['revision'] += 1
     return Outcome(book, row)

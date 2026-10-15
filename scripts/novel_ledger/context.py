@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, TASK, Job, checks_for, dump, digest
-from . import briefs, creation, narrative, scopes, world, editorial
-from .planning import outline_policy, policy_block, volume_for
-from .workflow import node_map
+from .contracts import CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, TASK, Job, checks_for, dump, digest, require
+from . import briefs, creation, narrative, scopes, world, editorial, story_memory, understanding
+from .planning import outline_policy, policy_material, volume_for
+from .design_queries import node_map
+from .ports import ContextStore
 
 
 def scoped_state(state, participants, plan=None, chapter=0, horizon=3):
@@ -35,6 +36,14 @@ def scoped_state(state, participants, plan=None, chapter=0, horizon=3):
                          if k in plan.get('hook_refs', []) or v['due'] <= chapter + horizon
                          or selected.intersection(v.get('subjects', [])) or refs.intersection(v.get('topics', []))}
         view['memory_sources'] = 'complete_state 保留全部状态和人物发展；历史原文经 history_source/recall 完整补读。未选择不代表不存在。'
+    # Explicit causal inputs may refer to an off-stage character or a remote promise.
+    # Participant heuristics must never erase those coordinates.
+    if plan:
+        for kind, key in story_memory.reads(plan):
+            present, value = story_memory.lookup(state, kind, key)
+            field = 'story_nodes' if kind == 'node' else kind
+            if present and kind != 'clock':
+                view.setdefault(field, {})[key] = value
     return view
 
 
@@ -79,7 +88,7 @@ def _selection_line(option):
     return line
 
 
-def build(repo, book, job):
+def build(repo: ContextStore, book, job):
     records, required, prose = {}, [], []
     def add(name, value, needed=True):
         records[name] = repo.document(value)
@@ -87,6 +96,12 @@ def build(repo, book, job):
             required.append(name)
     stage, chapter = job.stage, job.chapter
     plan = book['plans'].get(str(chapter))
+    if stage == 'revision_review':
+        original_row = book['revision_run']['carry'][0]
+        require(original_row['n'] == chapter, 'revision', '阅读核验须绑定下一章准确版本。')
+        plan = repo.read_document(original_row['plan'])
+    scene_task = bool(plan and plan.get('scenes') and stage in
+                      ('write', 'repair', 'redesign', 'chapter_review', 'alignment_plan', 'alignment_review'))
     enhanced = editorial.enabled(book)
     # A contract that declares a narrative view is reviewed against the check list that carries
     # pov_consistency; a contract without one keeps the version its project already runs on, so an
@@ -108,6 +123,23 @@ def build(repo, book, job):
     tracking = bool((book.get('contract') or {}).get('narrative_tracking'))
     add('state', scoped_state(book['state'], participants, plan, chapter, (book.get('contract') or {}).get('planning_window', 3)), not opening_stage)
     add('complete_state', book['state'], False)
+    memory_stages = ('plan', 'profiles', 'write', 'repair', 'redesign', 'chapter_review',
+                     'revision_review', 'scope_review', 'scope_synthesis', 'alignment_plan', 'alignment_review',
+                     'book_plan', 'volume_plan', 'volume_outline')
+    if 'understanding' in book and not opening_stage:
+        add('complete_understanding', book['understanding'], False)
+        if stage in memory_stages:
+            topics = set((plan or {}).get('reader_refs', [])) | {d['topic'] for d in (plan or {}).get('disclosures', [])}
+            memory_refs = (set(plan.get('understanding_refs', []))
+                           if plan and story_memory.reading_enabled(plan) else set())
+            available_refs = set(understanding.latest(book['understanding']))
+            unavailable_refs = sorted(memory_refs - available_refs)
+            selected_memory = understanding.select(book['understanding'], participants, topics, chapter,
+                                                    memory_refs & available_refs)
+            if selected_memory or unavailable_refs:
+                add('creative_memory', {'interpretations': selected_memory,
+                    'unavailable_refs': unavailable_refs,
+                    'boundary': '这是可修订的作品理解，含原文样本和反证，不是事实或写作命令；作者约定仍为方向来源。'})
     if enhanced:
         add('complete_profiles', book['profiles'], False)
         add('profile_history', book.get('profile_history', []), False)
@@ -154,9 +186,28 @@ def build(repo, book, job):
             else:
                 add('world_records', original)
     if plan:
-        add('plan', plan)
+        add('plan', plan, not scene_task)
+        if scene_task:
+            add('scene_context', story_memory.packet(plan, book['state']))
+            dependencies = []
+            references = {ident for scene in plan.get('scenes', []) for ident in scene.get('depends_on', [])}
+            local_ids = {s['id'] for s in plan['scenes']}
+            external = references - local_ids
+            locations = {s['id']: p['chapter'] for p in book['plans'].values() if p['chapter'] < chapter
+                         for s in p.get('scenes', [])}
+            require(external <= set(locations), 'story_dependency', '场景依赖缺少前章来源，须补读或重新规划。')
+            for n in sorted({locations[ident] for ident in external}):
+                row = repo.chapter(book['branch'], n)
+                original = repo.read_document(row['plan'])
+                scenes = [s for s in original.get('scenes', []) if s['id'] in references]
+                require_ids = {s['id'] for s in scenes}
+                require(require_ids == {ident for ident in external if locations[ident] == n},
+                        'story_dependency', '场景依赖不在已提交章节版本中，须重新规划。')
+                dependencies.append({'chapter': n, 'scenes': scenes, 'plan_hash': row['plan'],
+                                     'prose_hash': row['prose'], 'events_hash': row['events'], 'chain': row['chain']})
+            add('scene_sources', dependencies, bool(dependencies))
         add('profiles', {p: book['profiles'][p] for p in participants if p in book['profiles']})
-        nodes = node_map(book)
+        nodes = node_map(book['designs'])
         selected = set()
         def select(ident):
             if ident in selected:
@@ -188,8 +239,14 @@ def build(repo, book, job):
              'overdue_nodes': [ident for ident, n in nodes.items() if n['required'] and n['window'][1] < chapter and narrative.progress(book['state'], ident) != 'resolved'],
              'source': '只列当前窗口节点及直接前置的真实进度；远期和完整历史保留 design:*/complete_state。'})
     if tracking and stage in ('plan', 'write', 'repair', 'redesign'):
-        add('word_budget', narrative.budget_for(book, chapter))
+        add('word_budget', narrative.budget_for(book, chapter, job.last if stage == 'plan' else None))
     payload = copy.deepcopy(job.payload or {})
+    if 'understanding' in book and not opening_stage:
+        payload['understanding'] = True
+    if stage == 'revision_review':
+        original_review = repo.read_document(original_row['review'])
+        payload.update(original_plan=plan, prior_sessions=[original_review['writer'], original_review['session']],
+                       original_prose_hash=original_row['prose'])
     volume = volume_for(editorial.effective_contract(book), chapter) if book.get('contract') else None
     if volume and book['contract'].get('volume_outline'):
         if stage == 'volume_plan':
@@ -231,7 +288,8 @@ def build(repo, book, job):
             if job.scope == 'book' or job.scope.startswith('volume:'):
                 hashes = [{'chapter': r['n'], 'hash': r['prose']} for r in repo.headers(book['branch']) if job.first <= r['n'] <= job.last]
                 payload['closure'] = {'context_hash': digest({'context': editorial.context_hash(book), 'chapters': hashes, 'scope': job.scope}),
-                                      'sources': editorial.sources(book, job.scope), 'prose_hashes': hashes}
+                                      'sources': editorial.sources(book, job.scope), 'prose_hashes': hashes,
+                                      'revision_policy': editorial.revision_policy(book, repo.headers(book['branch'])[-1]['n'])}
     if stage in ('book_plan', 'volume_plan', 'volume_outline', 'world_model') and book['proposal']:
         add('previous_proposal', book['proposal'])
     if stage in ('design_review', 'outline_review', 'contract_review', 'world_review'):
@@ -239,6 +297,8 @@ def build(repo, book, job):
         prose = [{'chapter': 0, 'hash': repo.document(dump(book['proposal']['data']))}]
     elif stage == 'chapter_review':
         prose = [{'chapter': chapter, 'hash': repo.document(book['draft']['prose'])}]
+    elif stage == 'revision_review':
+        prose = [{'chapter': chapter, 'hash': original_row['prose']}]
     elif stage in ('scope_review', 'scope_synthesis'):
         prose = [{'chapter': row['n'], 'hash': row['prose']} for row in repo.headers(book['branch']) if job.first <= row['n'] <= job.last]
         if stage == 'scope_synthesis':
@@ -252,7 +312,7 @@ def build(repo, book, job):
                 prose = [p for p in prose if p['chapter'] in boundaries]
             else:
                 add('scope_parts', book['scope_parts'][payload['review_key']])
-    if stage in ('write', 'repair', 'redesign', 'plan'):
+    if stage in ('write', 'repair', 'redesign', 'plan', 'revision_review'):
         previous = []
         for n in range(max(1, chapter - 2), chapter):
             row = repo.chapter(book['branch'], n)
@@ -267,6 +327,8 @@ def build(repo, book, job):
             obligations.append({'id': 'repair:' + str(i), 'category': 'facts' if finding['criterion'] in checks_for(CHECKS_VERSION, 'fact') else 'reader', 'text': finding['reason']})
     if book['revision_run']:
         add('revision_instruction', book['revision_run']['reason'])
+        if book['revision_run'].get('impact'):
+            add('revision_impact', book['revision_run']['impact'])
     if book['feedback']:
         add('author_feedback', book['feedback'])
     if book.get('prior_candidate') and book['prior_candidate']['chapter'] == chapter:
@@ -280,12 +342,16 @@ def build(repo, book, job):
             'revision': book['revision'], 'records': records, 'required': required,
             'checks_version': version, 'narrative_tracking': tracking,
             'capabilities': {**({'editorial': 'editorial/1'} if enhanced else {}),
+                             **({'understanding': 'understanding/1', 'scene_identity': 'scene-identity/2',
+                                 'reading_dependencies': story_memory.READING_SCHEMA} if 'understanding' in book else {}),
+                             **({'opening_bounds': 'opening-bounds/1'} if stage == 'opening_options' else {}),
                              **({'volume_outline': 'volume-outline/1'} if (book.get('contract') or {}).get('volume_outline') else {}),
+                             **({'scene_memory': 'scene-memory/1'} if scene_task else {}),
                              **({'hook_links': 'hook-links/1'} if tracking else {})},
             # The active lexical policy travels with the task material, together with the fields
             # this dispatch actually inspects, so a worker never has to guess either one.
-            'policy': policy_block(book, [stage, *tuple(payload.get('also', ()))]),
-            'prose': prose, 'blind': stage in ('chapter_review', 'scope_review'), 'obligations': obligations}
+            'policy': policy_material(book.get('lexical_policy'), [stage, *tuple(payload.get('also', ()))]),
+            'prose': prose, 'blind': stage in ('chapter_review', 'scope_review', 'revision_review'), 'obligations': obligations}
     if brief:
         task['brief'] = brief
     return task

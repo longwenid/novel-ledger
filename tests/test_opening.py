@@ -18,10 +18,10 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import creation, planning, world, workflow
-from novel_ledger.application import Application
+from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import (CHECK_SETS, CHECKS_VERSION, CONTRACT_ALIGNMENT, EDITORIAL_VERSION,
                                     POV_CHECKS_VERSION, RESULT, SCALE_TIERS, alignment_for, digest, dump, han_count)
-from novel_ledger.quality import template
+from novel_ledger.result_templates import template
 from novel_ledger.sqlite_store import SQLiteRepository
 import support
 from support import contract, drive, response
@@ -213,7 +213,7 @@ class OpeningTests(unittest.TestCase):
         # the combined dispatch answers both artifacts in one receipt
         data = combined(self.app)
         if outline == 'default':
-            data['contract']['volume_outline'] = {'scope': 'all', 'words': 500, 'tolerance': 50}
+            data['contract'].pop('volume_outline')
         elif outline is not None:
             data['contract']['volume_outline'] = outline
         self.app.submit(receipt(self.app, data))
@@ -515,8 +515,8 @@ class OpeningTests(unittest.TestCase):
             self.assertEqual(dump(self.repo.load()), before)
         self.app.submit(valid)
 
-    def test_default_guided_opening_delivers_all_volume_outlines_before_prose(self):
-        handoff = self.world_ready(outline='default', scale_tier='t1')
+    def test_explicit_all_guided_opening_delivers_all_volume_outlines_before_prose(self):
+        handoff = self.world_ready(outline={'scope': 'all', 'words': 500, 'tolerance': 50}, scale_tier='t1')
         self.assertEqual(handoff['task']['stage'], 'book_plan')
         ready = drive(self.app)
         self.assertEqual(ready['action'], 'outline_ready')
@@ -530,6 +530,18 @@ class OpeningTests(unittest.TestCase):
         self.assertEqual(self.repo.headers('main'), [])
         self.assertIsNone(self.repo.pending())
         self.assertTrue(self.app.audit()['ok'])
+
+    def test_default_opening_delivers_only_near_term_outline_without_prose(self):
+        self.world_ready(outline='default', scale_tier='t1')
+        ready = drive(self.app)
+        self.assertEqual(ready['action'], 'outline_ready')
+        self.assertEqual(ready['planning_mode'], 'rolling')
+        self.assertEqual(ready['coverage'], [{'volume': 'v1', 'first': 1, 'last': 6}])
+        book = self.repo.load()
+        self.assertNotIn('volume:v2', book['designs'])
+        self.assertEqual(len(book['designs']['volume:v1']['chapters']), 6)
+        self.assertEqual(self.repo.headers('main'), [])
+        self.assertIsNone(self.repo.pending())
 
     def test_world_design_and_review_do_not_generate_canonical_events(self):
         self.select_gates()
@@ -583,6 +595,44 @@ class OpeningTests(unittest.TestCase):
             self.assertCode('opening_alignment', self.app.submit,
                             receipt(self.app, {**model_data, 'contract': draft}))
             self.assertIsNone(self.repo.load().get('proposal'))
+
+    def test_title_option_cannot_override_view_and_rejection_is_atomic(self):
+        self.select_gates(9)
+        self.app.advance()
+        before = dump(self.repo.load())
+        task_id = self.repo.pending()['id']
+        invalid = options(self.app)
+        invalid['options'][0]['value']['pov'] = '第一人称，由主角讲述。'
+        candidate = receipt(self.app, invalid)
+        for preview in (True, False):
+            with self.subTest(preview=preview):
+                with self.assertRaises(Exception) as caught:
+                    self.app.submit(candidate, preview=preview)
+                self.assertEqual(caught.exception.code, 'opening_option')
+                self.assertEqual(caught.exception.details['unknown_fields'], ['pov'])
+                self.assertEqual(caught.exception.details['allowed_fields'], ['title'])
+                self.assertEqual(dump(self.repo.load()), before)
+                self.assertEqual(self.repo.pending()['id'], task_id)
+        self.choose_board(self.board())
+        self.app.advance()
+        self.app.submit(receipt(self.app, combined(self.app)))
+        for _ in range(2):
+            self.app.advance()
+            self.app.submit(receipt(self.app, review_data(self.app)))
+        self.app.advance()
+        self.assertEqual(self.repo.load()['contract']['pov'], VALUES['pov']['pov'])
+
+    def test_contract_alignment_rejects_cross_gate_fields_in_closed_choices(self):
+        self.select_gates()
+        state = self.repo.load()['creation']
+        model_data = model(self.app)
+        draft = contract_data(self.app, model_data)
+        title = next(row for row in state['selections'] if row['gate'] == 'title')
+        title['option']['value']['pov'] = '第一人称，由主角讲述。'
+        for view in (draft['pov'], title['option']['value']['pov']):
+            with self.subTest(view=view):
+                candidate = {**draft, 'pov': view}
+                self.assertCode('opening_option', creation.validate_contract, candidate, state, model_data)
 
     def test_the_tier_window_bounds_the_chapter_count_the_contract_may_choose(self):
         """A book shorter than its tier's window is caught as an alignment failure, not silently kept."""
@@ -734,6 +784,25 @@ class StructuralGateTests(unittest.TestCase):
         self.app.opening_choice(moved['options'][0]['id'], moved['hash'], '选它。')
         self.assertEqual(self.repo.load()['creation']['selections'][-1]['gate'], 'scale')
 
+    def test_tier_comparison_uses_the_full_ladder_in_every_window(self):
+        seen = {}
+        for _ in range(len(SCALE_TIERS) - 2):
+            board = self.app.advance()['board']
+            for option in board['options']:
+                ident = option['value']['tier']
+                index = next(i for i, tier in enumerate(SCALE_TIERS) if tier['id'] == ident)
+                if index + 1 < len(SCALE_TIERS):
+                    following = SCALE_TIERS[index + 1]
+                    self.assertIn(following['name'], option['tradeoff'])
+                    self.assertNotIn('最大', option['tradeoff'])
+                else:
+                    self.assertIn('最大', option['tradeoff'])
+                if ident in seen:
+                    self.assertEqual(option, seen[ident])
+                seen[ident] = option
+            self.app.opening_regroup(board['hash'], '换一组。')
+        self.assertEqual(set(seen), {tier['id'] for tier in SCALE_TIERS})
+
     def test_a_worker_may_not_answer_the_structural_gate(self):
         state = self.repo.load()['creation']
         self.assertCode('opening_system', creation.offer, state, {'gate': 'scale', 'options': []})
@@ -790,6 +859,21 @@ class OpeningDecisionTests(unittest.TestCase):
         self.assertLess(order.index('relationships'), order.index('engine'))
         # the name is the most context-dependent decision, so it closes the opening
         self.assertEqual(order[-1], 'title')
+
+    def test_every_gate_rejects_foreign_and_unknown_value_fields(self):
+        scale = creation.intake(creation.begin(), {'scale': {'tier': 't3'}}, '作者选标准档。')
+        values = {**copy.deepcopy(VALUES), 'scale': creation.selected(scale)['scale']}
+        for gate, value in values.items():
+            for key in ('unrecognized', 'pov' if gate != 'pov' else 'title'):
+                with self.subTest(gate=gate, key=key):
+                    invalid = {**value, key: '越权字段。'}
+                    with self.assertRaises(Exception) as caught:
+                        creation.validate_value(gate, invalid)
+                    self.assertEqual(caught.exception.code, 'opening_option')
+                    self.assertEqual(caught.exception.details['unknown_fields'], [key])
+                    before = creation.begin()
+                    self.assertCode('opening_option', creation.intake, before, {gate: invalid}, '作者要求。')
+                    self.assertEqual(before, creation.begin())
 
     def test_relationships_cannot_be_an_empty_array(self):
         value = copy.deepcopy(VALUES['relationships'])

@@ -1,25 +1,46 @@
 # 人物、场景、改案与关闭
 
-何时读：任务含 `capabilities.editorial=editorial/1`，尤其是人物重核、补丁、正文偏离、卷末与完本。新建及明确改约默认 `editorial_features=true`，要求 narrative_tracking；已启用项目不能降级以绕过验收；旧生效约定缺该字段保持原协议，旧 pending 不注入新字段。检查版本随任务冻结：编辑能力为 3，约定声明了叙述视角时为 4（reader 多一项 `pov_consistency`），旧版本 1/2/3 的回执仍按原清单验收。
+何时读：任务含 `capabilities.editorial=editorial/1`，涉及人物重核、场景计划、补丁、正文偏离、卷末关闭或完本；修订重读的专用协议读 [叙事工作台](workbench.md)。
 
-按本任务定位相关小节：profiles/plan 读“人物与场景”，repair/redesign 读“版本补丁”，chapter_review/alignment_* 读“正文偏离”，范围 root 读“关闭与根问题”，完本读“终审与精确交付”。空间及评测工具只在相关任务取用，不因能力开启每次通读整页；任务 brief 和模板是当前执行入口。
+## 适用范围与读取顺序
+
+| 当前阶段 | 读取位置 | 执行重点 |
+|---|---|---|
+| profiles / plan | [人物与场景](#人物与场景) | 档案、对白意图、场景展开与声线来源。 |
+| repair / redesign | [版本补丁](#版本补丁) | 准确基稿、三选一交稿方式及重新独立章审。 |
+| chapter_review / alignment_* | [正文偏离与独立改案](#正文偏离与独立改案) | 根据实际正文选择动作，保留已兑现作用。 |
+| 范围 root | [关闭与根问题](#关闭与根问题) | 关闭条件、追加及回改范围、准确作者授权。 |
+| 完本 | [终审与精确交付](#终审与精确交付) | 覆盖完整来源，验收后按准确快照交付。 |
+| revision_review | [工作台：分级修订](workbench.md#分级修订) | 先首读与阅读核验；fix 后再按本页返修并完整章审。 |
+
+空间及评测工具按题材和任务取用，不因能力开启每次通读整页。
+
+本页维护编辑能力专用字段与状态转换；默认开关、依赖条件和检查版本统一见 [协议](protocol.md)。执行以当前 brief、capabilities 和模板为准；已启用项目不能降级以绕过验收，已保存回执按冻结版本复核。写作建议与文学判断沿 [创作与写审](craft.md) 执行，字段完整不证明内容成立。
 
 ## 人物与场景
 
-人物档案沿用 entity/desire/fear/limit/voice/knowledge_boundary，新增：
+### 人物档案
+
+人物档案包含 entity/desire/fear/limit/voice/knowledge_boundary，编辑能力另要求：
 
 - tier：major/supporting/walk_on。
 - biography：public_role/contradiction/values，均为具体文字；values 说明价值优先顺序。
 - speech：register/rhythm/stress_shift 与非空 tactics 数组；可带 relationship_modes=[{entity,mode}]。
-- 更新旧档案给 change_reason；引擎绑定完整成长史及 character_current 的 growth_basis，成长后相关人物下次执笔前自动重核。
+- 更新已有档案给 change_reason；引擎绑定完整成长史及 character_current 的 growth_basis，签名变化后相关人物下次执笔前自动重核。
 
 档案解释行动和表达，不能自行确立经历、资源或知情。当前动机与成长事实仍由正文事件结算。档案整份按参与人交付，不额外派昂贵索引任务。
 
-每章 plans 还交 scenes 非空数组，每场 label/intent/conflict/turn/present/speakers/dialogue_intents。present 属于本章 participants；speakers 为实际拟发言者，纯动作场景显式空数组。对白意图恰好覆盖 speakers，每项 entity/seeks/withholds/pressure/tactic/knowledge_topics；没有相关话题用空数组，隐瞒或恢复不需要时说明原因。
+### 场景计划
+
+每章 plans 交 scenes 非空数组，每场 label/intent/conflict/turn/present/speakers/dialogue_intents。present 属于本章 participants；speakers 为实际拟发言者，静默场景显式空数组。对白意图恰好覆盖 speakers，每项 entity/seeks/withholds/pressure/tactic/knowledge_topics；没有相关话题用空数组，不需隐瞒或没有压力时在对应文字中说明实际情况。
+
+场景还可携带稳定 id、reads 和 depends_on，章节以 dependency_coverage 声明依赖是否完整。完整声明须逐场列明输入与前置，独立章审在 facts.continuity 核对遗漏；字段和保守修订规则见 [叙事推进](narrative.md)。执笔及解锁后的章审以 scene_context.plan 读取完整章计划，scene_sources 冻结前置场景版本。
 
 expansion_units 非空，每项 id/scene/focus/development/expected_change；scene 从 1 起引用场景，development 说明试探、阻力、误判或演出方式，expected_change 说明删掉会损失什么。短稿补实这些作用，避免同义扩写。静章不强加危机，持续高潮不强插休息。
 
-首章批准保存准确正文样本、声线、traits 与作者原话为 style_anchor。章审新增 character_consistency/stable_facts/dialogue_identity/voice_match，范围审新增 voice_evolution/revision_intent；约定声明了 `pov` 时另加 `pov_consistency`（清单 4），核验约定的人称与视角范围是否稳定、换视角是否作了交代，未声明视角的项目不排此项。没有对白或修订时仍说明本范围实际情况并举证，不强迫额外对白或虚构修订目标。
+### 声线与阅读核验
+
+首章批准保存准确正文样本、声线、traits 与作者原话为 style_anchor。章审的 character_consistency/stable_facts/dialogue_identity/voice_match 和范围审的 voice_evolution/revision_intent 按当前模板填写；约定声明 pov 时另按 pov_consistency 核对人称、视角范围和切换交代。具体问题由原文、影响及修订范围支持，没有对白或修订时说明实际情况并举证，不强迫额外对白或虚构修订目标。
 
 ## 版本补丁
 
@@ -39,6 +60,10 @@ prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符�
 
 程序合成全文后执行原篇幅、字面规则和额度检查；预检回滚不计次，实际 repair/redesign 计同一章的共享额度。补丁和复用都重新派独立审稿者完整首读及事实/阅读检查，保存补丁审计，不自动免审。新写首稿无基稿，不接受补丁。
 
+人物与关系解释、原文表达样本、跨章场景身份及先重读后修改见 [叙事工作台](workbench.md)。作品理解不覆盖作者约定，成立的新发展继续沿独立改案核验。
+
+历史稿先分析影响时使用 [运行](runtime.md) 中的 revision-impact / revise --changes-file。表达及阅读修订保持事实投影不变，阅读变化声明 reading_changes 并先独立重读后文；语义修订沿依赖传播，缺少完整依赖时保守扩大。这与补丁交付方式分开：review pass 保留原文，实际补丁或全文修改仍完成独立章审，影响报告不代替审核。
+
 ## 正文偏离与独立改案
 
 通过事实与阅读核验的章审增加 alignment={action,reason,realizations}。realizations 恰好覆盖本章 node_ids，每项 node/after/reason/evidence；after 为 seeded/advanced/resolved/not_realized，实际发生的节点须与 facts.events 的 story_node 一一对应。
@@ -56,7 +81,7 @@ prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符�
 
 改案依次为新的 alignment_plan → 新独立 alignment_review。alignment_plan 返回 reason/完整 plan/designs；designs 可为空，或 [{scope,data}]，最多全书 book 和当前 volume:ID 两个范围，按全书后当前卷排序。既有线路职责、已开始实现节点语义、所有必要节点均保留；部分实现可扩展章号窗口但不能改变作用或判据，已兑现节点不改定义；新增后果用新 ID。不能改作者约定或借删除节点解除缺陷。
 
-独立改案核验按设计模板逐项举证（候选材料 chapter=0，当前稿为实际章号），通过后原子采纳设计和计划，清理未写窗口。当前稿仍派新的章审，旧首读和 pass 不转移；未来改案核验完才写下章。同一 hold 两轮失败保留原稿、原目标和次数，不能通过 resume 清零。
+独立改案核验按设计模板逐项举证（候选材料 chapter=0，当前稿为实际章号），通过后原子采纳设计和计划，清理未写窗口。当前稿仍派新的章审，旧首读和 pass 不转移；未来改案核验完才写下章。若修订的下一待携带章已采用新计划，停止携带旧稿及旧计划，沿新计划返修并完整独立章审。同一 hold 两轮失败保留原稿、原目标和次数，不能通过 resume 清零。
 
 ## 关闭与根问题
 
@@ -66,10 +91,16 @@ prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符�
 |---|---|
 | accept_close | 普通审稿 pass，六项全 pass；保存当前版本关闭记录 |
 | continue_scope | 普通审稿 fix；existing_content_valid=true，无 defect/author；missing_function/completion_path/length_basis，append_through |
-| revise_range | 普通审稿 fix，range=[起点,终点]；原子建立候选分支，传播实际覆盖到本范围末尾，原正式稿保留 |
+| revise_range | 普通审稿 fix，range=[起点,终点]；新冻结协议还须 changes 声明实际变更。先分析影响，边界内原子建立候选分支，超界只保存方案，原正式稿保留 |
 | needs_author | 普通审稿 fix；具体 question 和至少两项 options=[{label,impact}]；保留现场，不允许 resume 绕过 |
 
 后三项也须给普通审稿对应的实质 findings 和准确 target_chapter，不能用追加遮掩已写缺陷。
+
+新任务的 payload.closure.revision_policy.schema=revision-bounds/1 冻结自动回改规则。revise_range 从本轮实质 findings 的最早 target_chapter 起，range 覆盖全部目标章，changes 沿修订分析的 expression/reading/semantic 格式填写。优先在当前章修复与已验收前文的冲突；确有历史缺陷才回改，不能以偏好或更换解释为由回退无关章节。请求终点不再自动取整个范围末尾，程序先分析再按实际影响决定后续动作。
+
+自动修改限于最近 planning_window 个已写章，并保护已关闭卷的验收范围；超出边界保存完整方案、暂停并返回 revision_blocked，不建立修订分支或消耗章节返修额度。作者认可准确 plan_hash 后才能扩大，执行和来源核验见 [运行](runtime.md)。旧冻结根审保留原 range 解释，不从同名 changes 获得新语义；执行前仍经过自动范围保护，避免旧任务启动无界重写。
+
+新关闭记录保存当时的 first/last，保护已验收的准确章节范围；获准追加的新章不提前冻结。旧关闭记录没有明确范围时按该卷保守保护。
 
 continue_scope 只在当前卷真实尾部进行，全书补写落在末卷；无后继正式章、无在途修订。单轮最多 scope_append_limit 章（默认 3），不能超出明确章节授权或总篇幅上限。保存独立 scope_ends，不覆盖作者原约定或历史章链；后续卷边界随增量顺延。补写先通过独立未来改案，最后重新做卷审、根问题验收及全书审，不直接标完本。
 
@@ -99,9 +130,11 @@ complete 核对当前全部卷关闭、全书来源覆盖、根问题、首章�
 | travel | entity/from/to/links:[逐段路径ID]；可同时给 depart/arrive，单位为主线天数 |
 | perceive | observer/target/channel:sight或sound/from/to；跨地点须直接给 link，不自动更新 knowledge |
 
-有 path 拓扑时使用 travel，不能以旧 move 的文字路线绕过条件；未建拓扑仍用旧 move。已知耗时为下限，未知段不捏造数字。已记录到达下限由携带物继承，转交或放下不清零；未给精确时间时不宣称移动耗时已验证。拓扑只核对登记连接、条件与时间；遮挡、指代、视距和生理能力仍由独立审稿判断。
+有 path 拓扑时使用 travel，不能以基础 move 的文字路线绕过条件；未建拓扑且满足移动前提时可用 move。已知耗时为下限，未知段不捏造数字。已记录到达下限由携带物继承，转交或放下不清零；未给精确时间时不宣称移动耗时已验证。拓扑只核对登记连接、条件与时间；遮挡、指代、视距和生理能力仍由独立审稿判断。
 
 ## 用量与文学评测
+
+本节仅供评测任务取用，实验条件与验收依据统一见 [验证](validation.md)。
 
 `usage` 观察任务信封、已接受回执和 CLI read 实际交付字符；未记录的尝试或宿主计费为 null，字符不换算费用。`scripts/observe.py summary 宿主观测.jsonl` 对 provider/session_id/request_id 去重，同调用冲突拒绝累加；输入非缓存 token、缓存读取和输出分别记录，任一缺失则总量未知。观察工具不推进故事。
 

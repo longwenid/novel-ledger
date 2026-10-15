@@ -8,13 +8,10 @@ import os
 import sys
 from pathlib import Path
 from novel_ledger.contracts import Error, VERSION, require
-from novel_ledger.application import Application
-from novel_ledger.sqlite_store import SQLiteRepository
-from novel_ledger.workflow import new_book, preparing_book
-from novel_ledger import bookpage, delivery, host
+from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'first-read', 'claim', 'run', 'renew', 'approve',
-          'pause', 'resume', 'revise', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
+          'pause', 'resume', 'revise', 'revision-impact', 'workbench', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
 WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'first-read'}
 # Prose, frozen records and the first read belong to a dispatched task; the controller role never executes them.
@@ -46,7 +43,7 @@ def parser():
         if command == 'check':
             sub.add_argument('--file')
             sub.add_argument('--task')
-        if command in ('approve', 'recontract', 'opening', 'choose', 'lexical', 'intake'):
+        if command in ('approve', 'recontract', 'opening', 'choose', 'lexical', 'intake', 'workbench'):
             sub.add_argument('--source', required=True)
         if command == 'choose':
             sub.add_argument('--option', required=True)
@@ -61,6 +58,7 @@ def parser():
             sub.add_argument('--prose-hash', required=True)
         if command == 'advance':
             sub.add_argument('--after')
+            sub.add_argument('--compact', action='store_true', help='只返回主干派工信息，完整任务保留在 task_path。')
         if command in ('read', 'recall', 'claim', 'patch'):
             sub.add_argument('--task', required=True)
         if command == 'patch':
@@ -90,10 +88,14 @@ def parser():
             sub.add_argument('--reason', required=True)
         if command == 'pause':
             sub.add_argument('--cancel', action='store_true')
-        if command in ('revise', 'replan'):
+        if command in ('revise', 'replan', 'revision-impact'):
             sub.add_argument('--from-chapter', type=int, required=True)
+        if command in ('revise', 'revision-impact'):
+            sub.add_argument('--changes-file')
         if command == 'revise':
             sub.add_argument('--through', type=int)
+            sub.add_argument('--proposal-hash')
+            sub.add_argument('--source', default='')
         if command == 'feedback':
             sub.add_argument('--text', required=True)
         if command in ('export', 'html'):
@@ -123,39 +125,38 @@ def worker_guard(app, args):
     if not ident:
         return
     require(args.command in WORKER, 'worker_boundary', 'Worker 不能执行主控或作者命令。')
-    task = app.repo.task(ident)
     if args.command not in ('submit', 'preflight'):
-        app._live(task)
-        app._session(task, os.environ.get('NOVEL_SESSION'), os.environ.get('NOVEL_EXECUTION_CLAIM'))
+        app.authorize_worker(ident, os.environ.get('NOVEL_SESSION'), os.environ.get('NOVEL_EXECUTION_CLAIM'))
 
 
-def dispatch(args):
+def dispatch(args, open_runtime=open_local_runtime):
     require(args.project, 'project', '须指定 --project 小说项目绝对路径。')
     require(args.command in PUBLIC | SEALED, 'access', '未登记命令默认拒绝。')
     if args.command == 'init':
         require(not os.environ.get('NOVEL_TASK_ID'), 'worker_boundary', 'Worker 不能初始化项目。')
-        book = new_book(load(args.contract), args.source) if args.contract else preparing_book(args.source, guided=True)
-        repo = SQLiteRepository.initialize(args.project, book)
-    else:
-        repo = SQLiteRepository(args.project)
+    runtime = open_runtime(args.project, initialize=args.command == 'init',
+                           contract=load(args.contract) if args.command == 'init' and args.contract else None,
+                           source=args.source if args.command == 'init' else '', entry=Path(__file__).resolve())
     try:
-        app = Application(repo, Path(__file__).resolve())
+        app = runtime.app
         role_guard(args)
         worker_guard(app, args)
+        if args.command == 'workbench':
+            return app.enable_workbench(args.source, args.owner)
         if args.command in SEALED:
             app.content_guard()
         command, owner = args.command, args.owner
         if command == 'init':
             result = app.status()
             try:
-                result['book_view'] = bookpage.write(repo)
+                result['book_view'] = runtime.book_view()
             except OSError as exc:
                 result['book_view_error'] = str(exc)
             return result
         if command == 'status':
             return app.status()
         if command == 'advance':
-            return app.advance(args.after, owner)
+            return app.advance(args.after, owner, compact=args.compact)
         if command == 'intake':
             return app.intake(load(args.file), args.source, owner)
         if command == 'usage':
@@ -163,9 +164,10 @@ def dispatch(args):
         if command == 'patch':
             return app.patch(args.task, args.old, args.new, args.start)
         if command == 'deliver':
-            return delivery.deliver_completion(repo, bookpage.render)
+            return runtime.deliver()
         if command in ('submit', 'preflight', 'first-read'):
             result = load(args.file)
+            require(isinstance(result, dict), 'schema', '回执须为 JSON 对象。')
             if os.environ.get('NOVEL_TASK_ID'):
                 require(result.get('task_id') == os.environ['NOVEL_TASK_ID'] and result.get('session') == os.environ.get('NOVEL_SESSION'),
                         'worker_boundary', '回执不能改投其他任务或会话。')
@@ -173,7 +175,8 @@ def dispatch(args):
         if command == 'check':
             # Same validation as submit, but the receipt may omit task identity and may be piped in:
             # a worker learns which field is wrong without reading the engine's source.
-            return app.check(getattr(args, 'task', None), args.file)
+            payload = load(args.file) if args.file else json.load(sys.stdin)
+            return app.check(payload, getattr(args, 'task', None), session=os.environ.get('NOVEL_SESSION'))
         if command == 'read':
             return app.read(args.task, args.record)
         if command == 'recall':
@@ -198,7 +201,10 @@ def dispatch(args):
         if command == 'resume':
             return app.resume(owner)
         if command == 'revise':
-            return app.revise(args.from_chapter, args.reason, owner, args.through)
+            return app.revise(args.from_chapter, args.reason, owner, args.through,
+                              load(args.changes_file) if args.changes_file else None, args.proposal_hash, args.source)
+        if command == 'revision-impact':
+            return app.revision_impact(args.from_chapter, load(args.changes_file) if args.changes_file else None)
         if command == 'replan':
             return app.replan(args.from_chapter, args.reason, owner)
         if command == 'feedback':
@@ -216,17 +222,17 @@ def dispatch(args):
         if command == 'complete':
             return app.complete(owner)
         if command == 'export':
-            return delivery.export_book(repo, args.output, args.format)
+            return runtime.export(args.output, args.format)
         if command == 'html':
             require(args.format == 'html', 'format', 'html 命令只生成 HTML 全书视图；纯文本导出用 export --format md。')
-            return bookpage.write(repo, args.output)
+            return runtime.html(args.output)
         if command == 'host-step':
-            return host.step(app, load(args.command_json), owner, args.timeout)
+            return runtime.host_step(load(args.command_json), owner, args.timeout)
         if command == 'host-loop':
-            return host.loop(app, load(args.command_json), owner, args.limit, args.timeout)
+            return runtime.host_loop(load(args.command_json), owner, args.limit, args.timeout)
         require(False, 'access', '未实现命令。')
     finally:
-        repo.close()
+        runtime.close()
 
 
 def main(argv=None):

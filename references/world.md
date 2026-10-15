@@ -2,11 +2,13 @@
 
 何时读：选择结束后的 world_model/world_review、世界补读和约定整理。
 
-全部门结束后自动启动。读 opening_choices/opening_basis，固定 selection_hash，不再要求一句话或百科填表。把选择扩展成能持续产生行动、冲突、代价和后果的环境。
+## 适用范围与来源
+
+逐门选择结束后自动进入世界创建。设计者读取 opening_choices/opening_basis，绑定 selection_hash，不再要求作者填百科表。所选前提、主角、机制范围和禁区是约束；世界如何承载持续行动、冲突与后果由设计者展开并独立核验。
 
 ## 创建内容
 
-模型包含 premise/story_capacity/selection_hash 和完整记录数组，字段权威在 world.SECTIONS。
+模型包含 premise/story_capacity/selection_hash 和完整记录数组。领域及记录字段以 `world.SECTIONS` 和当前任务模板为准；各领域须有实际内容，mechanisms 按所选机制方向为空或实写，不用记录数量替代丰富度判断。
 
 | 领域 | 说明 |
 |---|---|
@@ -25,14 +27,26 @@
 
 地域影响通行和资源，历史影响制度与势力，日常能进入人物行动；避免孤立百科和统一动机。体量决定展开尺度，世界可丰富，远期章细纲继续滚动。
 
-## 核验与交付
+## 独立核验
 
 world_model 候选不更新正文事实。新 world_review 完整读选择和候选（证据 chapter=0），分别核对选择、规则、空间、历史、势力、经济、社会、人物、披露和长篇承载。逐项理由及引文，具体指出失效风险；通过后采纳，fix 回原设计有界修复。
 
-机械校验只证明字段、引用和声明一致，语义由独立审稿者判断。隐秘真相与未来意图不直接变为人物知情或已发生事件。
+机械校验只证明字段、引用和声明一致。审稿者从候选引文说明具体风险、对后续人物选择或情节的影响及修复方向，沿现有检查项判断，不增设评分或记录数量门槛。隐秘真相与未来意图不直接变为人物知情或已发生事件。
 
-opening_contract 以闭合选择和采纳规则整理完整约定，contract_review 继续独立核验。世界与约定核验完成即将完整世界设定、已选方向及世界核验合并到 book.html，并导出 world.json。新约定随后按已定世界设计、独立核验全书骨架和逐章卷纲，outline_ready 再更新统一页面；旧兼容模式仍以 world_ready 交付；world_view.html_path 为统一页面路径，反复 advance 可重建视图。世界关联图仅使用显式 links，历史时间线按模型记录顺序展示，不从描述推断关系或时期。
+## 约定与交付
+
+默认 world_model 在同一任务中起草世界和完整约定；检查 task.stages、payload.also 与模板，按要求把约定放入 data.contract。world_review 只核验世界，世界通过后再由独立 contract_review 核验约定；不把候选世界先当作已成立事实。单独的 opening_contract 任务沿自己的冻结材料执行，开书交接见 [系统执行](opening.md#系统执行)。
+
+| 交付对象 | 来源与时机 |
+|---|---|
+| book.html | 世界与约定核验后合并完整设定、已选方向和核验记录，卷纲推进后继续更新。world_view.html_path 指向该统一页面。 |
+| world.json | 导出已核验的完整世界；与页面一并提供绝对路径，失败后由 advance 重建视图。 |
+| 卷纲范围 | 按 outline_ready 的 planning_mode/coverage 说明；默认 rolling 随写作接续，current/all 的范围见 [叙事推进](narrative.md#滚动卷纲)，关闭卷纲时为 world_ready。 |
+
+世界关联图只使用显式 links，历史时间线按模型记录顺序展示，不从描述推断关系或时期。
 
 ## 后续规划
 
-书级规划读完整世界。章计划声明 world_refs=[领域:id]；跟踪项目交付当前人物、引用记录及直接关联；隐秘真相保留在可选 world_author_records，并用 disclosure_boundary 明确本章披露许可。原 world_model 完整保留，沿关联补读，不递归展开整个世界。旧兼容模式保持原关联交付。未选记录不代表语义无关，不截断记录或把秘密直接写成角色对白。
+书级规划读完整世界。章计划声明 world_refs=[领域:id]；跟踪项目交付当前人物、引用记录及直接关联；隐秘真相保留在可选 world_author_records，并用 disclosure_boundary 明确本章披露许可。原 world_model 完整保留，沿关联补读，不递归展开整个世界。未启用叙事跟踪时沿用完整关联交付。未选记录不代表语义无关，不截断记录或把秘密直接写成角色对白。
+
+世界到线路、卷纲和章计划的接口见 [叙事推进](narrative.md)；写作与审稿的判断依据见 [创作与写审](craft.md)；交付失败的恢复入口见 [运行](runtime.md)。

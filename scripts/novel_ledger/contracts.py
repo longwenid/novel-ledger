@@ -5,10 +5,10 @@ import copy
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Dict, Optional
 
-VERSION = '1.3.0'
-SCHEMA = 'novel-ledger/2'
+VERSION = '1.5.0'
+SCHEMA = 'novel-ledger/3'
 # The guided opening has its own protocol version, carried by the creation state itself. It is not the
 # database schema: a new gate set only changes a JSON document inside the book record, so raising the
 # storage version would lock every existing project out for no benefit. A project whose creation state
@@ -124,6 +124,8 @@ STRUCTURAL_CONTRACT = ('每个方案给 id、title 档位名（含卷数与字�
 # Single authority for the author contract: field, kind, default, whether the guided opening
 # must preserve it, and whether an empty value is a valid skeleton entry. The delivery
 # template, the validator and the alignment check are all derived from this table.
+# `opening` declares an opening/2 choice's sole source: (gate, value key). A None key
+# takes that gate's complete value, whose keys are declared by the field's shape.
 CONTRACT_TYPES = {
     'text': (str,),
     'int': (int,),
@@ -133,35 +135,35 @@ CONTRACT_TYPES = {
     'map': (dict,),
 }
 CONTRACT_FIELDS = (
-    {'key': 'title', 'kind': 'text', 'default': '', 'alignment': True},
-    {'key': 'reader_promise', 'kind': 'text', 'default': '', 'alignment': True},
-    {'key': 'ending', 'kind': 'text', 'default': '', 'alignment': True},
-    {'key': 'genre', 'kind': 'text', 'default': '', 'alignment': True},
-    {'key': 'story_engine', 'kind': 'text', 'default': '', 'alignment': True},
-    {'key': 'opposition', 'kind': 'text', 'default': '', 'alignment': True},
+    {'key': 'title', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('title', 'title')},
+    {'key': 'reader_promise', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('genre', 'reader_promise')},
+    {'key': 'ending', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('ending', 'ending')},
+    {'key': 'genre', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('genre', 'genre')},
+    {'key': 'story_engine', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('engine', 'story_engine')},
+    {'key': 'opposition', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('engine', 'opposition')},
     {'key': 'world_premise', 'kind': 'text', 'default': '', 'alignment': True},
-    {'key': 'voice', 'kind': 'text', 'default': '', 'alignment': True},
+    {'key': 'voice', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('voice', 'voice')},
     # Decided by the author at the opening gates since opening/2. Optional keeps a hand-written
     # `init --contract` file and every contract written before opening/2 loadable; a guided opening of
     # version 2 still has to carry them, because its gates chose them.
-    {'key': 'tone', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2},
-    {'key': 'theme', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2},
-    {'key': 'pov', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2},
-    {'key': 'allow_special_mechanism', 'kind': 'bool', 'default': None, 'alignment': True},
+    {'key': 'tone', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2, 'opening': ('genre', 'tone')},
+    {'key': 'theme', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2, 'opening': ('ending', 'theme')},
+    {'key': 'pov', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2, 'opening': ('pov', 'pov')},
+    {'key': 'allow_special_mechanism', 'kind': 'bool', 'default': None, 'alignment': True, 'opening': ('world', 'allow_special_mechanism')},
     {'key': 'red_lines', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True},
-    {'key': 'style_traits', 'kind': 'rows', 'default': [], 'alignment': True},
-    {'key': 'relationships', 'kind': 'rows', 'default': [], 'alignment': True},
+    {'key': 'style_traits', 'kind': 'rows', 'default': [], 'alignment': True, 'opening': ('voice', 'style_traits')},
+    {'key': 'relationships', 'kind': 'rows', 'default': [], 'alignment': True, 'opening': ('relationships', 'relationships')},
     {'key': 'world_rules', 'kind': 'rows', 'default': [], 'alignment': True},
     {'key': 'protagonist_setup', 'kind': 'map', 'default': '', 'alignment': True,
-     'shape': ('id', 'name', 'identity', 'desire', 'limit')},
+     'shape': ('id', 'name', 'identity', 'desire', 'limit'), 'opening': ('protagonist', None)},
     {'key': 'entities', 'kind': 'rows', 'default': [], 'alignment': True},
     {'key': 'initial_resources', 'kind': 'rows', 'default': [], 'alignment': False},
     {'key': 'volumes', 'kind': 'rows', 'default': [], 'alignment': True,
      'shape': ('id', 'purpose', 'end'), 'blank': False, 'count': 1},
-    {'key': 'word_range', 'kind': 'band', 'default': [], 'alignment': True},
-    {'key': 'chapter_min', 'kind': 'int', 'default': None, 'alignment': True},
-    {'key': 'chapter_max', 'kind': 'int', 'default': None, 'alignment': True},
-    {'key': 'chapter_aim', 'kind': 'int', 'default': None, 'alignment': True},
+    {'key': 'word_range', 'kind': 'band', 'default': [], 'alignment': True, 'opening': ('scale', 'word_range')},
+    {'key': 'chapter_min', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_min')},
+    {'key': 'chapter_max', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_max')},
+    {'key': 'chapter_aim', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_aim')},
     {'key': 'planning_window', 'kind': 'int', 'default': 3, 'alignment': False},
     {'key': 'review_interval', 'kind': 'int', 'default': 10, 'alignment': False},
     {'key': 'review_chunk', 'kind': 'int', 'default': 3, 'alignment': False},
@@ -170,7 +172,7 @@ CONTRACT_FIELDS = (
     {'key': 'review_fanout', 'kind': 'int', 'default': 3, 'alignment': False},
     {'key': 'editorial_features', 'kind': 'bool', 'default': True, 'alignment': False},
     {'key': 'scope_append_limit', 'kind': 'int', 'default': 3, 'alignment': False},
-    {'key': 'volume_outline', 'kind': 'map', 'default': {'scope': 'all', 'words': 500, 'tolerance': 50}, 'alignment': False, 'optional': True},
+    {'key': 'volume_outline', 'kind': 'map', 'default': {'scope': 'rolling', 'words': 500, 'tolerance': 50}, 'alignment': False, 'optional': True},
     {'key': 'anchors', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'links', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'initial_facts', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
@@ -276,8 +278,6 @@ def contract_errors(raw):
             if not text(value):
                 complaints.append(key + ' 须为非空文本。')
             continue
-        if value is None:
-            continue
         if kind == 'bool':
             if type(value) is not bool:
                 complaints.append(key + ' 须为布尔值。')
@@ -332,40 +332,4 @@ class Job:
 class Outcome:
     book: Dict[str, Any]
     chapter: Optional[Dict[str, Any]] = None
-
-
-class Repository(Protocol):
-    """The adapter surface the application and query layers may use; never handed to domains.
-
-    `SQLiteRepository.initialize(project, book)` is the constructor side of the same contract.
-    `tests/test_runtime.py` asserts this declaration covers every public instance method of the
-    adapter, so a hand-written interface cannot drift away from the thing it claims to describe.
-    """
-    def close(self): ...
-    def transaction(self, preview=False): ...
-    def get(self, key, default=None): ...
-    def put(self, key, value): ...
-    def load(self): ...
-    def save(self, book): ...
-    def document(self, value): ...
-    def read_document(self, key): ...
-    def pending(self): ...
-    def task(self, task_id): ...
-    def add_task(self, work): ...
-    def seal(self, task_id, session, first_read): ...
-    def finish_task(self, task_id, result): ...
-    def cancel_pending(self, reason): ...
-    def retire(self, base): ...
-    def headers(self, branch): ...
-    def history_snapshot(self, branch): ...
-    def history_pages(self, snapshot, before=None): ...
-    def memory_rows(self, page): ...
-    def chapter(self, branch, chapter): ...
-    def add_chapter(self, branch, row): ...
-    def fork(self, parent, first): ...
-    def promote(self, branch, parent): ...
-    def session_task(self, session): ...
-    def bind_session(self, session, task_id): ...
-    def usage(self): ...
-    def record(self, action, value): ...
 

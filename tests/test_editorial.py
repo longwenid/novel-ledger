@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from test_narrative import tracked_contract, tracked_response, story_node, pace
 from novel_ledger import craft, creation, delivery, editorial, facts, planning, workflow, bookpage
-from novel_ledger.application import Application
+from novel_ledger.bootstrap import local_application as Application, local_workspace
 from novel_ledger.contracts import Error, digest, dump
 from novel_ledger.sqlite_store import SQLiteRepository
 import quality_eval
@@ -134,18 +134,20 @@ class EditorialTests(unittest.TestCase):
                                                      'verification_condition': '关系变化有具体动作和后果。', 'evidence': ref},
                        remedy={'mechanism': '余波场景。', 'substantive_change': '补实主管对违规的处理。'})
         closure['checks'][4]['result'] = 'missing' if decision == 'continue_scope' else 'defect'
+        if decision == 'revise_range' and 'revision_policy' in self.repo.pending()['input']['payload']['closure']:
+            closure['changes'] = {'mode': 'expression'}
         return result
 
     def test_complete_snapshot_and_recover_delivery_use_frozen_version(self):
         owner = self.app.run(finish=True)['owner']
         self.assertEqual(drive(self.app, owner)['action'], 'ready_to_complete')
         complete = self.app.complete(owner)
-        result = delivery.deliver_completion(self.repo, bookpage.render)
+        result = delivery.deliver_completion(self.repo, bookpage.render, workspace=local_workspace(self.repo))
         first = Path(result['files'][0]['path']).read_text()
         b = self.repo.load()
         b['contract']['title'] = '当前投影标题变化不改变完本快照'
         self.repo.save(b)
-        repeated = delivery.deliver_completion(self.repo, bookpage.render)
+        repeated = delivery.deliver_completion(self.repo, bookpage.render, workspace=local_workspace(self.repo))
         self.assertEqual(Path(repeated['files'][0]['path']).read_text(), first)
         self.assertEqual(result['snapshot_hash'], complete['snapshot_hash'])
         self.assertEqual(result['chapters'], repeated['chapters'])
@@ -157,14 +159,28 @@ class EditorialTests(unittest.TestCase):
         complete = self.app.complete(owner)
         with patch('novel_ledger.delivery.atomic_write', side_effect=OSError('工程写盘故障')):
             with self.assertRaises(OSError):
-                delivery.deliver_completion(self.repo, bookpage.render)
+                delivery.deliver_completion(self.repo, bookpage.render, workspace=local_workspace(self.repo))
         self.assertEqual(self.repo.load()['status'], 'completed')
-        result = delivery.deliver_completion(self.repo, bookpage.render)
+        result = delivery.deliver_completion(self.repo, bookpage.render, workspace=local_workspace(self.repo))
         self.assertEqual(result['snapshot_hash'], complete['snapshot_hash'])
 
     def test_active_feature_protocol_cannot_downgrade_to_skip_closure(self):
         raw = tracked_contract(3)
         self.assertCode('editorial_protocol', self.app.recontract, raw, '试图关闭编辑能力。')
+
+    def test_explicit_recontract_supersedes_the_current_alignment_dispatch(self):
+        drive(self.app, until='chapter_review')
+        result = enhanced_response(self.app)
+        result['data']['alignment']['action'] = 'align_design'
+        self.app.submit(result)
+        self.assertIsNotNone(self.repo.load().get('alignment_hold'))
+        changed = copy.deepcopy(self.repo.load()['contract'])
+        changed['reader_promise'] = '工程作者明确改约以调整阅读承诺。'
+        self.app.recontract(changed, '工程作者明确要求改约。')
+        self.assertEqual(self.app.advance()['task']['stage'], 'contract_review')
+        self.app.submit(enhanced_response(self.app))
+        self.assertEqual(self.app.advance()['task']['stage'], 'book_plan')
+        self.assertEqual(self.repo.load()['contract']['reader_promise'], changed['reader_promise'])
 
     def test_completion_source_coverage_cannot_omit_requirement(self):
         owner = self.root()
@@ -435,14 +451,16 @@ class EditorialTests(unittest.TestCase):
 
     def test_partial_intake_skips_only_already_decided_gates(self):
         state = creation.begin()
-        value = {'ending': '退件来源公开，承担后果。', 'theme': '责任怎样在人之间传递。', 'title': '夜班退件'}
-        state = creation.intake(state, {'ending': value}, '作者已给结局、母题和书名。')
+        value = {'ending': '退件来源公开，承担后果。', 'theme': '责任怎样在人之间传递。'}
+        state = creation.intake(state, {'ending': value, 'title': {'title': '夜班退件'}}, '作者已给结局、母题和书名。')
         self.assertEqual(creation.current(state)['id'], 'genre')
         self.assertEqual(creation.selected(state)['ending'], value)
+        self.assertEqual(creation.selected(state)['title'], {'title': '夜班退件'})
         self.assertCode('intake', creation.intake, state,
-                        {'ending': {'ending': '改结局。', 'theme': '改母题。', 'title': '改书名。'}}, '冲突')
+                        {'ending': {'ending': '改结局。', 'theme': '改母题。'}}, '冲突')
         reopened = creation.back(state, 'ending', '重开结局。')
         self.assertNotIn('ending', creation.selected(reopened))
+        self.assertNotIn('title', creation.selected(reopened))
 
     def test_usage_counts_actual_reads_without_inventing_billed_tokens(self):
         drive(self.app, until='write')
@@ -454,6 +472,29 @@ class EditorialTests(unittest.TestCase):
 
 
 class EvaluationTests(unittest.TestCase):
+    def test_first_read_refuses_to_write_inside_skill_tree(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp).resolve()
+            with patch.object(quality_eval, 'ROOT', base):
+                with self.assertRaises(Error) as caught:
+                    quality_eval.seal(base / 'case' / 'input.json', base / 'receipt.json')
+            self.assertEqual(caught.exception.code, 'project_isolation')
+            self.assertFalse((base / 'case' / 'first-read.json').exists())
+
+    def test_malformed_review_rows_are_rejected_as_domain_errors(self):
+        work = {'case_id': 'case', 'chapters': [{'chapter': 1, 'prose': '正文'}]}
+        evidence = [{'chapter': 1, 'start': 0, 'quote': '正文'}]
+        review = {'case_id': 'case', 'input_hash': digest(work), 'first_read': {'reads': []},
+                  'checks': [{'id': c, 'result': 'pass', 'reason': '工程判断。', 'evidence': evidence}
+                             for c in quality_eval.CRITERIA], 'findings': []}
+        for changes in ({'checks': [None]}, {'findings': [None]},
+                        {'findings': [{'id': 'cost', 'severity': 'major', 'reason': '缺 criterion。', 'evidence': evidence}]},
+                        {'findings': [{'criterion': 'cost', 'severity': 'major', 'reason': '坏证据。', 'evidence': [None]}]},
+                        {'findings': [{'criterion': 'cost', 'severity': 'major', 'reason': '不能免证据。',
+                                       'result': 'not_applicable', 'evidence': []}]}):
+            with self.subTest(changes=changes), self.assertRaises(Error):
+                quality_eval.validate_review(work, {**review, **changes})
+
     def test_observation_deduplication_unknown_usage_and_conflict(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'host.jsonl'

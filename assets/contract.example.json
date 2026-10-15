@@ -44,5 +44,5 @@
   "arcs": ["沈桐从只想保住班社，到愿意承担顶演的后果。"],
   "editorial_features": true,
   "scope_append_limit": 3,
-  "volume_outline": {"scope": "all", "words": 500, "tolerance": 50}
+  "volume_outline": {"scope": "rolling", "words": 500, "tolerance": 50}
 }
