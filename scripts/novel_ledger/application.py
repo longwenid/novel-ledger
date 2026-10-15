@@ -38,7 +38,9 @@ class Application:
                             'total_gates': len(creation.gates(book['creation'])),
                             'gate': creation.current(book['creation'])['id'] if book['creation']['phase'] == 'choosing' else None}
                            if book.get('creation') else None,
-                'revision_run': {k: revision[k] for k in ('parent', 'first', 'last')} if revision else None,
+                'revision_run': ({'parent': revision['parent'], 'first': revision['first'], 'last': revision['last'],
+                                  'expansion': (revision.get('impact') or {}).get('expansion')})
+                                 if revision else None,
                 'revision_proposal': self._revision_summary(book)}
 
     def _revision_summary(self, book):

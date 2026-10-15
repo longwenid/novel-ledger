@@ -296,6 +296,8 @@ class ImpactTests(unittest.TestCase):
         impact = revision_impact.analyze(rows, 1, {'mode': 'semantic', 'changes': [{'kind': 'facts', 'key': 'shen:secret'}]})
         self.assertEqual(impact['rewrite_chapters'], [1, 2, 3])
         self.assertFalse(impact['conservative'])
+        self.assertIsNone(impact['expansion'])
+        self.assertEqual(impact['coverage'], 'complete')
         self.assertEqual(impact['sources'][1]['plan_hash'], 'plan-2')
         rows[2]['plan']['scenes'][0]['reads'] = []
         rows[2]['plan']['scenes'][0]['depends_on'] = ['c2:s1']
@@ -307,11 +309,17 @@ class ImpactTests(unittest.TestCase):
         impact = revision_impact.analyze(rows, 1, {'mode': 'semantic', 'changes': [{'kind': 'facts', 'key': 'shen:secret'}]})
         self.assertTrue(impact['conservative'])
         self.assertEqual(impact['last'], 4)
+        # The widening is reported with its cause and size, not left implicit.
+        self.assertEqual(impact['expansion'], {'reason': 'undeclared_dependencies', 'first': 1,
+                                               'through': 4, 'chapters': 4})
+        self.assertEqual(impact['coverage'], 'partial')
         self.assertEqual(revision_impact.analyze(self.chapters(), 1)['last'], 4)
         unknown = self.chapters()
         unknown[0]['events'] = [{'op': 'unmodelled'}]
-        self.assertEqual(revision_impact.analyze(unknown, 1, {'mode': 'semantic',
-            'changes': [{'kind': 'facts', 'key': 'shen:secret'}]})['last'], 4)
+        unexplained = revision_impact.analyze(unknown, 1, {'mode': 'semantic',
+            'changes': [{'kind': 'facts', 'key': 'shen:secret'}]})
+        self.assertEqual(unexplained['last'], 4)
+        self.assertEqual(unexplained['expansion']['reason'], 'unexplained_events')
 
     def test_continuous_rewrite_propagates_outputs_of_intermediate_chapters(self):
         rows = self.chapters()

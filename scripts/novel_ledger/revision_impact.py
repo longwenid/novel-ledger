@@ -66,13 +66,15 @@ def analyze(chapters, first, change=None, through=None):
             and set(change.get('scenes', [])) <= scene_ids, 'revision_impact', '变更场景必须来自修订起章的准确计划。')
     affected = set(change.get('scenes') or scene_ids)
     decisions = [{'chapter': first, 'reason': '作者指定的修订起点。'}]
-    fallback = False
+    fallback, initial_cause = False, None
     if change['mode'] == 'semantic':
         original_writes = writes(origin['events'])
         # Existing writes cannot describe newly introduced semantics without a change declaration.
         fallback = not touched or original_writes is None
+        initial_cause = ('unexplained_events' if original_writes is None else
+                         'undeclared_dependencies' if not touched else None)
         touched = touched or original_writes or set()
-    pending = []
+    pending, causes = [], []
     for row in chapters:
         if row['n'] <= first or change['mode'] != 'semantic':
             continue
@@ -81,8 +83,23 @@ def analyze(chapters, first, change=None, through=None):
         links = {s for scene in plan.get('scenes', []) for s in scene.get('depends_on', [])}
         matched = bool(story_memory.reads(plan).intersection(touched) or links.intersection(affected))
         if row['n'] <= forced_last or fallback or unknown or matched:
-            reason = ('作者明确扩大修改区间。' if row['n'] <= forced_last else
-                      '依赖声明不完整，保守扩大至后续章节。' if fallback or unknown else '读取了受影响事实或依赖受影响场景。')
+            # Name the reason the interval widened: an author-chosen range, an event the ledger
+            # cannot explain, or a plan that never declared its dependencies. Only the last two
+            # are conservative, and they are what the caller has to be able to see.
+            if row['n'] <= forced_last:
+                reason, cause = '作者明确扩大修改区间。', None
+            elif writes(row['events']) is None:
+                reason, cause = '事件无法解释，保守扩大至后续章节。', 'unexplained_events'
+            elif unknown:
+                reason, cause = '依赖声明不完整，保守扩大至后续章节。', 'undeclared_dependencies'
+            elif fallback:
+                cause = initial_cause or 'undeclared_dependencies'
+                reason = ('事件无法解释，保守扩大至后续章节。' if cause == 'unexplained_events'
+                          else '依赖声明不完整，保守扩大至后续章节。')
+            else:
+                reason, cause = '读取了受影响事实或依赖受影响场景。', 'declared_dependency'
+            if cause and cause != 'declared_dependency' and not causes:
+                causes.append(cause)
             # Revisions execute a continuous interval. A gap chapter is rewritten too, so its
             # outputs and scene links must propagate before assessing the remaining suffix.
             for rewritten in pending + [row]:
@@ -124,6 +141,10 @@ def analyze(chapters, first, change=None, through=None):
     return {'schema': 'novel-ledger.revision-impact/2', 'mode': change['mode'],
             'first': first, 'last': last, 'affected_chapters': decisions,
             'affected_scenes': sorted(affected), 'conservative': fallback or reading_conservative,
+            'coverage': ('complete' if all(row['plan'].get('dependency_coverage') == 'complete'
+                                           for row in chapters if row['n'] > first) else 'partial'),
+            'expansion': ({'reason': causes[0], 'first': first, 'through': last,
+                           'chapters': last - first + 1} if causes else None),
             'reading_conservative': reading_conservative,
             'rewrite_chapters': list(range(first, last + 1)),
             'chapter_actions': actions,
