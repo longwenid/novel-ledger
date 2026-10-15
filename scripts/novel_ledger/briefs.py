@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from .creation import gate_note, gate_title, value_rules
 from .contracts import OPENING_VERSION, OPTION_CONTRACT
+from . import stages
 BRIEFS = {
     'opening_options': '开书方案简报',
     'world_model': '世界与约定简报',
@@ -81,9 +82,8 @@ def stage(name, payload=None):
         'alignment_plan': '读取 alignment_hold 与准确正文，为当前章或即将进入的章提出完整 plan 和必要 designs 改案。保留已实现节点、必要职责与原目标；设计改案不产生事实，不改正文或清零额度。',
         'alignment_review': '独立核验 alignment_proposal 是否保全成立正文、作者约定、未解决目标与因果依赖；按设计模板逐项举证。通过后仍由新审稿者重读当前稿，不继承旧首读或 pass。',
     }
-    rule = rules.get(name)
-    if not rule:
-        return None
+    stages.require_stage(name)
+    rule = stages.require_rule(name, rules.get(name))
     outline = payload.get('volume_outline')
     if name == 'volume_plan' and outline:
         rule += (' 先完整读已核验 world_model 与全书骨架，比较 2～3 个因果不同的卷内推进方案，交 brainstorm=[{id,premise,tradeoff,world_refs}]。'

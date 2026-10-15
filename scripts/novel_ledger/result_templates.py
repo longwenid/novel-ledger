@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from .contracts import CHECKS_VERSION, checks_for, contract_skeleton
 from .world import SECTIONS
+from . import stages
 from . import scopes, editorial
 
 
 def template(stage, chapter, sources, obligations=(), extra=(), version=CHECKS_VERSION, payload=None, tracking=False):
+    stages.require_stage(stage)
     """The blank result for a stage. `extra` carries stages a combined dispatch also answers."""
     def review(ids, obs=(), challenges=()):
         return {'verdict': '', 'checks_version': version,

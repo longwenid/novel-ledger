@@ -96,6 +96,14 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertEqual(blank['reader']['findings'], [])
         self.assertIn('reader_promise', result_templates.template('opening_contract', 0, {}))
 
+    def test_unknown_task_stage_is_rejected_instead_of_degrading(self):
+        from novel_ledger import stages
+        with self.assertRaises(Error):
+            stages.require_stage('not_a_stage')
+        with self.assertRaises(Error):
+            result_templates.template('not_a_stage', 1, {})
+        self.assertEqual(stages.require_stage('write'), 'write')
+
     def test_domain_modules_cannot_reintroduce_adapter_or_cross_layer_imports(self):
         # The boundary table is maintained once in architecture_table; this derives
         # the property instead of keeping a second, narrower copy that can drift.
