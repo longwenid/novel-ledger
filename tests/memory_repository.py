@@ -1,6 +1,7 @@
 """A complete test repository using isolated Python values rather than a database."""
 from contextlib import contextmanager
 from copy import deepcopy
+import re
 
 from novel_ledger import book_state
 from novel_ledger.contracts import digest, dump, require
@@ -84,6 +85,36 @@ class MemoryRepository:
         value = deepcopy(self._documents[key])
         require(digest(value) == key, 'source_integrity', 'Frozen source hash differs.')
         return value
+
+    def prune(self):
+        """Keep the observable reclamation contract of the SQLite adapter."""
+        keep, pending = set(), []
+
+        def scan(value):
+            for token in re.findall(r'[0-9a-f]{64}', value if isinstance(value, str) else str(value)):
+                if token not in keep:
+                    keep.add(token)
+                    pending.append(token)
+
+        for value in list(self._values.values()):
+            scan(value)
+        for group in (self._tasks, self._journal):
+            for row in (list(group.values()) if isinstance(group, dict) else list(group)):
+                scan(row)
+        for branch in self._branches.values():
+            for row in branch['chapters'].values():
+                scan(row)
+        while pending:
+            key = pending.pop()
+            if key in self._documents:
+                scan(self._documents[key])
+        removed = 0
+        for key in list(self._documents):
+            if key not in keep:
+                del self._documents[key]
+                removed += 1
+        return {'reachable_hashes': len(keep), 'documents_kept': len(self._documents),
+                'documents_removed': removed}
 
     def pending(self):
         return next((self.task(t['id']) for t in self._tasks.values() if t['status'] == 'pending'), None)

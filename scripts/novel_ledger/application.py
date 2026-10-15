@@ -746,6 +746,11 @@ class Application:
         self.content_guard()
         return self._audit(self.repo.load())
 
+    def prune(self, owner=None):
+        """Reclaim immutable documents no live record can reach; the story is untouched."""
+        self.controller_guard(owner)
+        return self.repo.prune()
+
     def complete(self, owner=None):
         with self.repo.transaction():
             self.controller_guard(owner)
