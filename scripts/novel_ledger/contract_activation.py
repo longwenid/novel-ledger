@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 from .contracts import digest
 from .ports import Repository
-from . import workflow
+from . import store_keys, workflow
 
 
 class ContractActivation:
@@ -14,7 +14,7 @@ class ContractActivation:
     def activate(self, old):
         proposal = old['pending_contract']
         rows = self.repo.headers(old['branch'])
-        self.repo.put('branch-book:' + old['branch'], self.repo.get('amendment_base', old))
+        self.repo.put(store_keys.branch_book(old['branch']), self.repo.get(store_keys.AMENDMENT_BASE, old))
         book = workflow.new_book(proposal['data'], proposal['source'])
         book['lexical_policy'] = copy.deepcopy(old['lexical_policy'])
         book['contract_review'] = {'producer': proposal['producer'],

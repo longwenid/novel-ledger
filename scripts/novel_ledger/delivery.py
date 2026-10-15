@@ -11,6 +11,7 @@ from .result_templates import template
 from .ports import PublicationReader
 from .publication import publication
 from .workspace import LocalWorkspace, atomic_write
+from . import store_keys
 
 
 def json_write(path, value):
@@ -56,7 +57,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         atomic_write(path, repo.read_document(ref['hash']))
         prose_files.append({**ref, 'path': str(path)})
     command = [sys.executable, str(entry), '--project', str(workspace.project)]
-    lease = repo.get('claim:' + task['id'])
+    lease = repo.get(store_keys.claim(task['id']))
     envelope = {'schema': work['schema'], 'task_id': task['id'], 'input_hash': task['input_hash'],
                 'stage': work['stage'], 'chapter': work['chapter'], 'scope': work['scope'],
                 'delivery_phase': 'first_read' if locked else 'formal', 'prose_files': prose_files,
@@ -150,7 +151,7 @@ def export_book(repo: PublicationReader, output=None, format='html', *, workspac
         # 全书视图 owns this path; an implicit export would silently replace it with a plain render.
         require(False, 'output', 'book.html 是全书视图的输出位置；导出请用 --output 指定其他文件，或改用 html 命令。',
                 {'recover': '例如 --output book-export.html（或 --format md 得到 book.md）。'})
-    candidate = book['branch'] != repo.get('official_branch', 'main')
+    candidate = book['branch'] != repo.get(store_keys.OFFICIAL_BRANCH, 'main')
     if format == 'html':
         pieces = ['<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>' + html.escape(book['contract']['title']) + '</title>',
                   '<style>body{max-width:48em;margin:3em auto;padding:0 1em;line-height:1.9}p{white-space:pre-wrap}section{margin:3em 0}</style>',

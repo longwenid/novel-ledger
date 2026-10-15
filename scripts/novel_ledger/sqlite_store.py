@@ -9,6 +9,7 @@ import time
 import uuid
 from pathlib import Path
 from .contracts import SCHEMA, digest, dump, require
+from . import store_keys
 from . import book_state
 
 DDL = '''
@@ -131,7 +132,7 @@ class SQLiteRepository:
         return value
 
     def _book_root(self):
-        root = self.get('book')
+        root = self.get(store_keys.BOOK_ROOT)
         require(isinstance(root, dict) and root.get('schema') == book_state.BOOK_SCHEMA
                 and isinstance(root.get('parts'), dict) and set(root['parts']) == set(book_state.PART_FIELDS),
                 'book_integrity', '项目分区入口无效，禁止隐式转换。')
@@ -139,7 +140,7 @@ class SQLiteRepository:
 
     def save(self, book):
         parts = {name: self.document(value) for name, value in book_state.split(book).items()}
-        self.put('book', {'schema': book_state.BOOK_SCHEMA, 'parts': parts})
+        self.put(store_keys.BOOK_ROOT, {'schema': book_state.BOOK_SCHEMA, 'parts': parts})
 
     def document(self, value):
         key = digest(value)
@@ -196,7 +197,7 @@ class SQLiteRepository:
         branches build once, then only appended chapters are indexed. Tasks freeze the
         returned value and never consult this mutable cache when recalling sources.
         """
-        cache_key = 'history_head:' + branch
+        cache_key = store_keys.history_head(branch)
         cached = self.get(cache_key)
         snapshot = cached or {'schema': 'novel-ledger.history/1', 'head': None,
                                          'through': 0, 'chain': 'genesis'}
@@ -278,7 +279,7 @@ class SQLiteRepository:
         ident = 'revision-' + uuid.uuid4().hex[:12]
         self.db.execute('INSERT INTO branches VALUES (?,?,?,\'candidate\')', (ident, parent, first))
         self.db.execute('INSERT INTO chapters SELECT ?,n,title,prose,events,plan,review,state_hash,chain,summary,han FROM chapters WHERE branch=? AND n<?', (ident, parent, first))
-        self.put('history_head:' + ident, prefix)
+        self.put(store_keys.history_head(ident), prefix)
         return ident
 
     def promote(self, branch, parent):
