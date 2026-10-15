@@ -8,6 +8,7 @@ from . import briefs, creation, narrative, scopes, world, editorial, story_memor
 from .planning import outline_policy, policy_material, volume_for
 from .design_queries import node_map
 from .ports import ContextStore
+from .envelope import validate_work
 
 
 def scoped_state(state, participants, plan=None, chapter=0, horizon=3):
@@ -354,4 +355,4 @@ def build(repo: ContextStore, book, job):
             'prose': prose, 'blind': stage in ('chapter_review', 'scope_review', 'revision_review'), 'obligations': obligations}
     if brief:
         task['brief'] = brief
-    return task
+    return validate_work(task)

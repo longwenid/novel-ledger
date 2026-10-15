@@ -11,6 +11,7 @@ from .result_templates import template
 from .ports import PublicationReader
 from .publication import publication
 from .workspace import LocalWorkspace, atomic_write
+from .envelope import validate_task
 from . import store_keys
 
 
@@ -131,6 +132,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
                                        work['obligations'], also, work.get('checks_version', 1), work['payload'], work.get('narrative_tracking', False))}
             json_write(template_path, result)
         envelope.update(input_path=str(artifact('input.json')), template_path=str(template_path), records=work['records'], required=work['required'])
+    validate_task(envelope)
     json_write(artifact('task.json'), envelope)
     if compact:
         # Keep the controller's context small; workers always receive the complete on-disk envelope.
