@@ -1,27 +1,27 @@
 {
   "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
   "novel_ledger": {
-    "modules": 19,
-    "runtime_lines_including_cli": 5752,
+    "modules": 34,
+    "runtime_lines_including_cli": 6907,
     "cycles_including_deferred_imports": [],
-    "dependency_edges": 65
+    "dependency_edges": 120
   },
   "context": [
     {
       "unreferenced_future_nodes": 10,
-      "required_record_bytes": 2654,
+      "required_record_bytes": 2730,
       "full_book_design_bytes": 2749,
       "complete_optional_source_preserved": true
     },
     {
       "unreferenced_future_nodes": 100,
-      "required_record_bytes": 2654,
+      "required_record_bytes": 2730,
       "full_book_design_bytes": 24619,
       "complete_optional_source_preserved": true
     },
     {
       "unreferenced_future_nodes": 1000,
-      "required_record_bytes": 2654,
+      "required_record_bytes": 2730,
       "full_book_design_bytes": 244219,
       "complete_optional_source_preserved": true
     }
@@ -30,19 +30,19 @@
     {
       "causal_nodes": 20,
       "required_story_nodes": 2,
-      "required_record_bytes": 3534,
+      "required_record_bytes": 3610,
       "complete_design_nodes": 20
     },
     {
       "causal_nodes": 100,
       "required_story_nodes": 2,
-      "required_record_bytes": 3534,
+      "required_record_bytes": 3610,
       "complete_design_nodes": 100
     },
     {
       "causal_nodes": 500,
       "required_story_nodes": 2,
-      "required_record_bytes": 3543,
+      "required_record_bytes": 3619,
       "complete_design_nodes": 500
     }
   ],
@@ -50,20 +50,40 @@
     {
       "causal_nodes": 20,
       "required_story_nodes": 2,
-      "required_record_bytes": 4230,
+      "required_record_bytes": 5153,
       "complete_design_nodes": 20
     },
     {
       "causal_nodes": 100,
       "required_story_nodes": 2,
-      "required_record_bytes": 4230,
+      "required_record_bytes": 5153,
       "complete_design_nodes": 100
     },
     {
       "causal_nodes": 500,
       "required_story_nodes": 2,
-      "required_record_bytes": 4239,
+      "required_record_bytes": 5164,
       "complete_design_nodes": 500
+    }
+  ],
+  "creative_memory_context": [
+    {
+      "interpretations": 20,
+      "selected_interpretations": 3,
+      "required_record_bytes": 4616,
+      "complete_optional_source_preserved": true
+    },
+    {
+      "interpretations": 100,
+      "selected_interpretations": 3,
+      "required_record_bytes": 4616,
+      "complete_optional_source_preserved": true
+    },
+    {
+      "interpretations": 500,
+      "selected_interpretations": 3,
+      "required_record_bytes": 4616,
+      "complete_optional_source_preserved": true
     }
   ],
   "review_trees": [
@@ -104,8 +124,8 @@
       "synthetic_prose_han_at_least": 60000,
       "history_source_bytes": 197,
       "previous_full_catalog_and_event_index_bytes": 5846,
-      "first_build_ms": 0.511,
-      "six_repeated_snapshot_ms": 5.195,
+      "first_build_ms": 0.202,
+      "six_repeated_snapshot_ms": 0.268,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
@@ -118,8 +138,8 @@
       "synthetic_prose_han_at_least": 300000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 29370,
-      "first_build_ms": 1.715,
-      "six_repeated_snapshot_ms": 4.703,
+      "first_build_ms": 0.951,
+      "six_repeated_snapshot_ms": 0.249,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
@@ -132,8 +152,8 @@
       "synthetic_prose_han_at_least": 1500000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 148570,
-      "first_build_ms": 8.892,
-      "six_repeated_snapshot_ms": 4.59,
+      "first_build_ms": 4.606,
+      "six_repeated_snapshot_ms": 0.268,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,

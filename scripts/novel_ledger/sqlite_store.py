@@ -8,7 +8,8 @@ import sqlite3
 import time
 import uuid
 from pathlib import Path
-from .contracts import FORM_ARTIFACTS, SCHEMA, digest, dump, require
+from .contracts import SCHEMA, digest, dump, require
+from . import book_state
 
 DDL = '''
 CREATE TABLE kv(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -33,12 +34,16 @@ class SQLiteRepository:
         self.db = sqlite3.connect(str(path), timeout=10, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.execute('PRAGMA foreign_keys=ON')
+        self._after_commit_callbacks = None
         try:
             schema = self.db.execute("SELECT value FROM kv WHERE key='schema'").fetchone()
             require(schema is not None and json.loads(schema['value']) == SCHEMA, 'schema', '不支持该数据库版本，禁止隐式转换。')
         except sqlite3.DatabaseError:
             self.db.close()
             require(False, 'schema', '此目录不是有效项目；保留原文件并选择新目录。')
+        except BaseException:
+            self.db.close()
+            raise
 
     @classmethod
     def initialize(cls, project, book):
@@ -51,7 +56,11 @@ class SQLiteRepository:
         try:
             db.executescript(DDL)
             db.execute('INSERT INTO kv VALUES (?,?)', ('schema', dump(SCHEMA)))
-            db.execute('INSERT INTO kv VALUES (?,?)', ('book', dump(book)))
+            parts = book_state.split(book)
+            references = {name: digest(value) for name, value in parts.items()}
+            db.executemany('INSERT OR IGNORE INTO documents VALUES (?,?)',
+                           [(references[name], dump(value)) for name, value in parts.items()])
+            db.execute('INSERT INTO kv VALUES (?,?)', ('book', dump({'schema': book_state.BOOK_SCHEMA, 'parts': references})))
             db.execute("INSERT INTO branches VALUES ('main',NULL,1,'active')")
             db.commit()
             db.close()
@@ -68,16 +77,39 @@ class SQLiteRepository:
     def close(self):
         self.db.close()
 
+    @property
+    def storage_paths(self):
+        """Concrete storage files reserved by this adapter, including resolved aliases."""
+        database = self.project / 'novel.sqlite3'
+        return frozenset(Path(str(base) + suffix).resolve()
+                         for base in (database, database.resolve())
+                         for suffix in ('', '-wal', '-shm', '-journal'))
+
     @contextlib.contextmanager
     def transaction(self, preview=False):
         self.db.execute('BEGIN IMMEDIATE')
+        callbacks = []
+        self._after_commit_callbacks = callbacks
         try:
             yield self
+            self.db.rollback() if preview else self.db.commit()
         except BaseException:
             self.db.rollback()
             raise
+        finally:
+            self._after_commit_callbacks = None
+        # Delivery effects run outside the transaction: a failed callback must never
+        # pretend the already committed database was rolled back.
+        if not preview:
+            for callback in callbacks:
+                callback()
+
+    def after_commit(self, callback):
+        """Defer an external effect until commit; outside a transaction run it now."""
+        if self._after_commit_callbacks is None:
+            callback()
         else:
-            self.db.rollback() if preview else self.db.commit()
+            self._after_commit_callbacks.append(callback)
 
     def get(self, key, default=None):
         row = self.db.execute('SELECT value FROM kv WHERE key=?', (key,)).fetchone()
@@ -87,10 +119,27 @@ class SQLiteRepository:
         self.db.execute('INSERT OR REPLACE INTO kv VALUES (?,?)', (key, dump(value)))
 
     def load(self):
-        return self.get('book')
+        root = self._book_root()
+        return book_state.assemble({name: self.read_document(key) for name, key in root['parts'].items()})
+
+    def load_part(self, name):
+        require(name in book_state.PART_FIELDS, 'book_ownership', '未知项目分区。')
+        root = self._book_root()
+        value = self.read_document(root['parts'][name])
+        require(isinstance(value, dict) and set(value) <= set(book_state.PART_FIELDS[name]),
+                'book_integrity', '项目分区字段归属不符。', {'part': name})
+        return value
+
+    def _book_root(self):
+        root = self.get('book')
+        require(isinstance(root, dict) and root.get('schema') == book_state.BOOK_SCHEMA
+                and isinstance(root.get('parts'), dict) and set(root['parts']) == set(book_state.PART_FIELDS),
+                'book_integrity', '项目分区入口无效，禁止隐式转换。')
+        return root
 
     def save(self, book):
-        self.put('book', book)
+        parts = {name: self.document(value) for name, value in book_state.split(book).items()}
+        self.put('book', {'schema': book_state.BOOK_SCHEMA, 'parts': parts})
 
     def document(self, value):
         key = digest(value)
@@ -133,14 +182,9 @@ class SQLiteRepository:
     def cancel_pending(self, reason):
         row = self.db.execute("SELECT id FROM tasks WHERE status='pending'").fetchone()
         self.db.execute("UPDATE tasks SET status='cancelled' WHERE status='pending'")
-        if row:
-            # The dispatcher retires the derived view when it cancels; the store owns the row only.
-            self.retire(str(self.project / 'work' / row['id']))
-        self.record('cancel', {'reason': reason, 'task': row['id'] if row else None})
-
-    def retire(self, base):
-        for name in FORM_ARTIFACTS:
-            (Path(base) / name).unlink(missing_ok=True)
+        task_id = row['id'] if row else None
+        self.record('cancel', {'reason': reason, 'task': task_id})
+        return task_id
 
     def headers(self, branch):
         return [dict(r) for r in self.db.execute('SELECT * FROM chapters WHERE branch=? ORDER BY n', (branch,))]

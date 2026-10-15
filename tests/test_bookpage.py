@@ -3,6 +3,7 @@ import json
 import re
 import sys
 import subprocess
+import shutil
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -11,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import bookpage, planning, world
-from novel_ledger.application import Application
+from novel_ledger.bootstrap import local_application as Application, local_workspace
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book
 from support import contract, drive
@@ -44,7 +45,7 @@ class BookPageTests(unittest.TestCase):
         page = self.written()
         for marker in ('<!DOCTYPE html>', '看设定', '读正文', '概览', '创作约定', '夜班退件', '世界与选择',
                        '设计与因果节点', '章计划', '人物档案', '事实账本', '章审记录', '账本核验',
-                       'novel.sqlite3', 'ch-index', 'view-read', 'view-settings'):
+                       '作品账本', 'ch-index', 'view-read', 'view-settings'):
             self.assertIn(marker, page, marker)
         # the committed prose must be readable, and single quotes in JS must not escape the script
         book = self.repo.load()
@@ -200,6 +201,29 @@ class BookPageTests(unittest.TestCase):
         self.assertIn('标题 &lt;b&gt;粗体&lt;/b&gt; &amp; &quot;引号&quot;', page)
         self.assertNotIn('<b>粗体</b>', page)
 
+    def test_copied_installation_renders_offline_from_an_unrelated_directory(self):
+        install = Path(self.temp.name) / 'installed'
+        shutil.copytree(ROOT / 'scripts', install / 'scripts', ignore=shutil.ignore_patterns('__pycache__'))
+        project = Path(self.temp.name) / 'copied-book'
+        result = subprocess.run(
+            [sys.executable, str(install / 'scripts' / 'novel.py'), '--project', str(project), 'init'],
+            cwd=self.temp.name, capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        page = (project / 'book.html').read_text(encoding='utf-8')
+        self.assertIn('toggleSide()', page)
+        self.assertIn('--reader-size:19px', page)
+        self.assertNotIn('<link', page)
+        self.assertNotIn(' src=', page)
+        self.assertNotIn('$settings', page)
+
+    def test_template_values_are_escaped_once_and_never_reinterpreted(self):
+        book = self.repo.load()
+        book['contract']['title'] = '$script ${reader} <b>书名</b> & "引号"'
+        self.repo.save(book)
+        page = bookpage.render(self.repo)
+        self.assertIn('$script ${reader} &lt;b&gt;书名&lt;/b&gt; &amp; &quot;引号&quot;', page)
+        self.assertEqual(page.count('<script>'), 1)
+
     def test_view_containers_nest_correctly(self):
         """#view-settings must close before #view-read opens, or the reader swallows the settings."""
         page = self.written()
@@ -215,7 +239,7 @@ class BookPageTests(unittest.TestCase):
     def test_html_command_writes_a_file_and_is_repeatable(self):
         self.written()
         first = self.app  # keep the app alive; the command path is exercised below
-        result = bookpage.write(self.repo)
+        result = bookpage.write(self.repo, workspace=local_workspace(self.repo))
         target = Path(result['path'])
         self.assertEqual(target.name, 'book.html')
         self.assertTrue(target.is_file())
@@ -223,7 +247,7 @@ class BookPageTests(unittest.TestCase):
         self.assertEqual(result['chapters'], 1)
         body = target.read_text(encoding='utf-8')
         self.assertEqual(len(body), result['chars'])
-        again = bookpage.write(self.repo)
+        again = bookpage.write(self.repo, workspace=local_workspace(self.repo))
         self.assertEqual(again['chars'], result['chars'])
         self.assertTrue(first is not None)
 

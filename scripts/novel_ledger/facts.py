@@ -5,6 +5,8 @@ import copy
 from decimal import Decimal, InvalidOperation, localcontext
 from .contracts import Error, TIME_MARKERS, digest, dump, require, text
 from . import narrative, spatial
+from .evidence import evidence
+from .entities import register as register_entity
 
 
 def amount(value):
@@ -23,15 +25,8 @@ def resource_key(holder, asset, unit):
 
 
 def entity(state, item):
-    require(isinstance(item, dict) and all(text(item.get(k)) for k in ('id', 'name', 'kind')), 'entity', '实体需要 id/name/kind。')
-    ident = item['id']
-    require(not any(c in ident for c in ':>') and ident not in state['entities'], 'entity', '实体 ID 重复或含分隔符。')
-    aliases = item.get('aliases', [])
-    require(isinstance(aliases, list) and all(text(a) for a in aliases), 'alias', '别名须为非空字符串数组。')
-    names = [item['name']] + aliases
-    used = {s for e in state['entities'].values() for s in [e['name']] + e.get('aliases', [])}
-    require(len(set(names)) == len(names) and not used.intersection(names), 'alias_conflict', '称呼重复或属于另一实体。')
-    state['entities'][ident] = copy.deepcopy(item)
+    """Compatibility entry point for a factual state; identity rules own only entities."""
+    register_entity(state['entities'], item)
 
 
 def seed(contract):
@@ -69,22 +64,6 @@ def seed(contract):
     if contract.get('editorial_features'):
         spatial.seed(state, contract)
     return state
-
-
-def evidence(ref, sources):
-    require(isinstance(ref, dict) and type(ref.get('chapter')) is int and text(ref.get('quote')), 'evidence', '证据需要 chapter/quote。',
-            {'expect': '单个对象 {chapter:int, quote:str, start?:int}；checks/obligations/coverage 的 evidence 是该对象的数组，findings/challenge/events 的 evidence 是单个对象。',
-             'frozen_chapters': sorted(sources)})
-    chapter = ref['chapter']
-    require(chapter in sources, 'evidence_scope', '引文不在冻结正文范围内。', {'frozen_chapters': sorted(sources)})
-    prose, quote = sources[chapter], ref['quote']
-    start = ref.get('start')
-    if start is None:
-        start = prose.find(quote)
-        require(start >= 0 and prose.find(quote, start + 1) < 0, 'evidence', '引文缺失或多次出现，请提供准确 start。')
-    require(type(start) is int and start >= 0 and prose[start:start + len(quote)] == quote,
-            'evidence', '引文与冻结正文不一致。')
-    return {'chapter': chapter, 'start': start, 'quote': quote}
 
 
 def _before(container, key, event):

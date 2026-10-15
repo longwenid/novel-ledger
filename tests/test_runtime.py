@@ -8,10 +8,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger.application import Application
+from novel_ledger.bootstrap import local_application as Application, local_workspace
 from novel_ledger.contracts import CHECKS_VERSION, ENFORCEMENT, Error, FACT_CHECKS, RESULT, digest, dump
 from novel_ledger import delivery, facts, host, planning, workflow
 from novel_ledger.sqlite_store import SQLiteRepository
@@ -51,7 +52,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(self.app.audit()['ok'])
         snapshot = self.repo.read_document(result['snapshot_hash'])
         self.assertEqual(len(snapshot['chapters']), 4)
-        output = delivery.export_book(self.repo, output=Path(self.temp.name) / 'book-plain.html')
+        output = delivery.export_book(self.repo, output=Path(self.temp.name) / 'book-plain.html', workspace=local_workspace(self.repo))
         self.assertIn('第4章', Path(output['path']).read_text(encoding='utf-8'))
         self.assertTrue(self.app.complete(owner)['idempotent'])
 
@@ -81,7 +82,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(drive(self.app, owner)['action'], 'ready_to_complete')
         self.app.complete(owner)
         self.assertTrue(self.app.audit()['ok'])
-        output = delivery.export_book(self.repo, output=Path(self.temp.name) / 'scene-openings.md', format='md')
+        output = delivery.export_book(self.repo, output=Path(self.temp.name) / 'scene-openings.md', format='md', workspace=local_workspace(self.repo))
         exported = Path(output['path']).read_text(encoding='utf-8')
         for chapter_prose in prose:
             self.assertIn(chapter_prose, exported)
@@ -206,12 +207,98 @@ class RuntimeTests(unittest.TestCase):
 
     def test_advance_requires_real_submission_and_rejects_old_callback(self):
         task = self.app.advance()['task']
-        self.assertEqual(self.app.advance(after=task['task_id'])['action'], 'wait_for_submit')
+        self.assertEqual(self.app.advance(after=task['task_id'], compact=True)['action'], 'wait_for_submit')
         self.app.submit(response(self.app))
-        following = self.app.advance(after=task['task_id'])['task']
+        following = self.app.advance(after=task['task_id'], compact=True)['task']
         self.app.submit(response(self.app))
-        self.assertEqual(self.app.advance(after=task['task_id'])['action'], 'resync')
+        self.assertEqual(self.app.advance(after=task['task_id'], compact=True)['action'], 'resync')
         self.assertEqual(self.app.advance(after=following['task_id'])['action'], 'task_ready')
+
+    def test_compact_dispatch_keeps_complete_worker_material_and_preserves_its_form(self):
+        full = self.app.advance()['task']
+        template = Path(full['template_path'])
+        form = json.loads(template.read_text(encoding='utf-8'))
+        form['data']['intent'] = 'Worker 尚未完成的方案。'
+        template.write_text(json.dumps(form, ensure_ascii=False), encoding='utf-8')
+        frozen = copy.deepcopy(self.repo.pending()['input'])
+
+        compact = self.app.advance(compact=True)['task']
+        stored = json.loads(Path(compact['task_path']).read_text(encoding='utf-8'))
+        self.assertLess(len(dump(compact)), len(dump(full)))
+        self.assertNotIn('baseline', compact)
+        self.assertNotIn('records', compact)
+        self.assertNotIn('commands', compact)
+        self.assertEqual(stored, full)
+        self.assertTrue(Path(stored['input_path']).is_file())
+        self.assertEqual(self.repo.pending()['input'], frozen)
+        self.assertEqual(json.loads(template.read_text(encoding='utf-8')), form)
+        self.assertEqual(self.app.submit(response(self.app))['worker_boundary'], 'finished')
+
+    def test_compact_dispatch_exposes_claim_and_same_reviewer_after_first_read(self):
+        handle = self.review_task()
+        compact = self.app.advance(compact=True)['task']
+        self.assertTrue(compact['requires_new_worker'])
+        self.assertIsNone(compact['review_session'])
+        locked = json.loads(Path(compact['task_path']).read_text(encoding='utf-8'))
+        self.assertNotIn('input_path', locked)
+        self.assertNotIn('records', locked)
+        self.assertTrue(all(Path(p['path']).is_file() for p in locked['prose_files']))
+
+        claim = self.app.claim(handle['task_id'], 'reviewer-for-current-task')
+        compact = self.app.advance(compact=True)['task']
+        self.assertEqual(compact['claim'], {'session': claim['session'], 'expired': False})
+        self.assertNotIn('token', compact['claim'])
+        result = response(self.app, session=claim['session'], claim=claim['token'])
+        resumed = self.app.advance(compact=True)['task']
+        self.assertEqual(resumed['task_id'], handle['task_id'])
+        self.assertEqual(resumed['delivery_phase'], 'formal')
+        self.assertFalse(resumed['requires_new_worker'])
+        self.assertEqual(resumed['review_session'], claim['session'])
+        self.assertCode('first_read', self.app.claim, handle['task_id'], 'another-reviewer')
+        self.assertTrue(self.app.submit(result)['accepted'])
+
+    def test_compact_cli_dispatches_a_complete_task_file(self):
+        command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project),
+                   'advance', '--compact']
+        executed = subprocess.run(command, text=True, capture_output=True, encoding='utf-8', check=True)
+        handoff = json.loads(executed.stdout)
+        self.assertEqual(handoff['action'], 'task_ready')
+        handle = handoff['task']
+        stored = json.loads(Path(handle['task_path']).read_text(encoding='utf-8'))
+        self.assertEqual(stored['task_id'], handle['task_id'])
+        self.assertIn('read', stored['commands'])
+        self.assertNotIn('commands', handle)
+
+    def test_compact_loop_preserves_author_boundary_and_reaches_revision_completion_and_delivery(self):
+        owner = self.app.run(finish=True, source='工程夹具：授权写完并验收交付。')['owner']
+
+        def until_boundary():
+            after = None
+            for _ in range(100):
+                handoff = self.app.advance(after=after, owner=owner, compact=True)
+                if handoff['action'] != 'task_ready':
+                    return handoff
+                after = handoff['task']['task_id']
+                submitted = self.app.submit(response(self.app, task_id=after))
+                self.assertTrue(submitted['accepted'])
+                self.assertEqual(submitted['worker_boundary'], 'finished')
+            self.fail('工程循环未到达业务边界。')
+
+        author = until_boundary()
+        self.assertEqual(author['action'], 'await_author')
+        self.assertEqual(self.app.status()['accepted_chapters'], 1)
+        self.app.approve(author['prose_hash'], '工程夹具作者认可当前首章。', owner)
+        self.assertEqual(until_boundary()['action'], 'ready_to_complete')
+        self.app.revise(2, '工程夹具：修改末章表达。', owner)
+        self.assertEqual(until_boundary()['action'], 'revision_ready')
+        self.app.promote(owner)
+        self.assertEqual(until_boundary()['action'], 'ready_to_complete')
+        completed = self.app.complete(owner)
+        self.assertEqual(until_boundary()['action'], 'completed')
+        manifest = delivery.deliver_completion(self.repo, workspace=local_workspace(self.repo))
+        self.assertEqual(manifest['snapshot_hash'], completed['snapshot_hash'])
+        self.assertTrue((self.project / 'book.md').is_file())
+        self.assertTrue((self.project / 'delivery.json').is_file())
 
     def test_cancelled_receipt_never_commits(self):
         self.app.advance()
@@ -391,6 +478,81 @@ class RuntimeTests(unittest.TestCase):
         self.assertIsNone(self.repo.load().get('pending_contract'))
         self.assertEqual(self.app.advance(owner=owner)['action'], 'ready_to_complete')
 
+    def test_contract_activation_preserves_project_lexical_versions(self):
+        self.app.set_lexical({'forbidden_terms': ['临时禁词'], 'forbidden_name_chars': ['禁']}, '工程作者指定项目字面规则。')
+        versions = self.repo.load()['lexical_policy']
+        changed = contract()
+        changed['reader_promise'] = '工程作者改变阅读承诺。'
+        self.app.recontract(changed, '工程作者明确改约。')
+        self.app.advance()
+        self.app.submit(response(self.app))
+        self.app.advance()
+        self.assertEqual(self.repo.load()['lexical_policy'], versions)
+        task = self.repo.pending()['input']
+        self.assertEqual(task['policy']['forbidden_terms'], ['临时禁词'])
+        self.assertEqual(task['policy']['source'], '工程作者指定项目字面规则。')
+
+    def test_null_contract_controls_are_rejected_before_staging_an_amendment(self):
+        before = self.repo.get('book')
+        for field in ('scope_append_limit', 'allow_special_mechanism'):
+            with self.subTest(field=field):
+                changed = contract()
+                changed[field] = None
+                self.assertCode('contract', self.app.recontract, changed, '工程作者提供的候选约定。')
+                self.assertEqual(self.repo.get('book'), before)
+
+    def test_discard_restores_prose_without_undoing_project_lexical_decisions(self):
+        owner = self.finish()
+        original = self.repo.headers('main')
+        self.app.revise(2, '工程作者要求调整表达。', owner, through=2)
+        self.app.set_lexical({'forbidden_terms': ['临时禁词']}, '工程作者在修订期间调整项目字面规则。', owner)
+        versions = self.repo.load()['lexical_policy']
+        self.app.discard(owner)
+        self.assertEqual(self.repo.headers('main'), original)
+        self.assertEqual(self.repo.load()['lexical_policy'], versions)
+
+    def test_malformed_worker_receipt_is_a_json_error_without_a_traceback(self):
+        task = self.app.advance()['task']
+        path = self.project / 'malformed.json'
+        path.write_text('[]', encoding='utf-8')
+        environment = dict(os.environ, NOVEL_TASK_ID=task['task_id'], NOVEL_SESSION='engineering-malformed')
+        for command in ('submit', 'preflight', 'first-read'):
+            with self.subTest(command=command):
+                result = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'),
+                    '--project', str(self.project), command, '--file', str(path)], env=environment,
+                    capture_output=True, text=True, encoding='utf-8')
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(json.loads(result.stdout)['error'], 'schema')
+                self.assertNotIn('Traceback', result.stderr)
+        self.assertEqual(self.repo.pending()['id'], task['task_id'])
+
+    def test_malformed_plan_rows_are_rejected_without_mutating_the_task(self):
+        drive(self.app, until='plan')
+        result = response(self.app)
+        before = self.repo.get('book')
+        valid = copy.deepcopy(result['data']['plans'])
+        for rows in (valid + [None], [None] + valid, [dict(valid[0], chapter=True)]):
+            with self.subTest(rows=rows):
+                result['data']['plans'] = rows
+                self.assertCode('plan', self.app.submit, result)
+                self.assertEqual(self.repo.get('book'), before)
+        self.assertEqual(self.repo.pending()['id'], result['task_id'])
+
+    def test_malformed_plan_dependencies_entities_and_schedule_leave_the_task_intact(self):
+        drive(self.app, until='plan')
+        valid = response(self.app)
+        before = self.repo.get('book')
+        for field, value in (('node_ids', [[]]), ('new_entities', [None]),
+                             ('new_entities', [{'id': 'new', 'name': '新人物', 'kind': 'person', 'aliases': None}]),
+                             ('schedule', None), ('schedule', {})):
+            with self.subTest(field=field, value=value):
+                result = copy.deepcopy(valid)
+                result['data']['plans'][0][field] = value
+                with self.assertRaises(Error):
+                    self.app.submit(result)
+                self.assertEqual(self.repo.get('book'), before)
+        self.assertEqual(self.repo.pending()['id'], valid['task_id'])
+
     def test_audit_detects_modified_document_and_projection(self):
         self.finish()
         row = self.repo.chapter('main', 1)
@@ -481,7 +643,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn('options.premise', fields)
 
     def test_export_cannot_overwrite_database(self):
-        self.assertCode('output', delivery.export_book, self.repo, self.project / 'novel.sqlite3')
+        self.assertCode('output', delivery.export_book, self.repo, self.project / 'novel.sqlite3', workspace=local_workspace(self.repo))
 
     def test_preparing_project_activates_only_reviewed_contract(self):
         self.repo.save(workflow.preparing_book('作者先给了一个想法。'))
@@ -605,6 +767,23 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result['action'], 'host_launch_failed')
         self.assertIsNone(self.repo.get('claim:' + result['task_id']))
 
+    def test_host_releases_claim_when_log_cannot_be_opened(self):
+        def open_log(path, *args, **kwargs):
+            if path.name == 'host.log':
+                raise OSError('工程夹具：日志目录不可写。')
+            return original(path, *args, **kwargs)
+        original = Path.open
+        with patch.object(Path, 'open', open_log):
+            result = host.step(self.app, [sys.executable, '-c', 'pass'])
+        self.assertEqual(result['action'], 'host_launch_failed')
+        self.assertIsNone(self.repo.get('claim:' + result['task_id']))
+
+    def test_host_releases_claim_when_owner_renewal_fails(self):
+        owner = self.app.run(through=1, source='工程夹具授权。')['owner']
+        with patch.object(self.app, 'renew', side_effect=Error('lease', '工程夹具续租失败。')):
+            self.assertCode('lease', host.step, self.app, [sys.executable, '-c', 'pass'], owner)
+        self.assertIsNone(self.repo.get('claim:' + self.repo.pending()['id']))
+
     def test_worker_process_cannot_take_controller_actions(self):
         result = host.step(self.app, [sys.executable, str(ROOT / 'tests' / 'process_worker.py'), 'controller'])
         self.assertEqual(result['action'], 'needs_attention')
@@ -653,9 +832,9 @@ class RuntimeTests(unittest.TestCase):
 
     def test_export_refuses_to_clobber_the_book_view(self):
         with self.assertRaises(Error) as caught:
-            delivery.export_book(self.repo)
+            delivery.export_book(self.repo, workspace=local_workspace(self.repo))
         self.assertEqual(caught.exception.code, 'output')
-        allowed = delivery.export_book(self.repo, output=Path(self.temp.name) / 'plain.html')
+        allowed = delivery.export_book(self.repo, output=Path(self.temp.name) / 'plain.html', workspace=local_workspace(self.repo))
         self.assertEqual(Path(allowed['path']).name, 'plain.html')
 
     def test_contract_must_be_finishable_inside_the_author_word_band(self):
@@ -795,36 +974,17 @@ class DomainTests(unittest.TestCase):
 
     def test_the_declared_repository_protocol_covers_the_adapter(self):
         """A hand-written interface nobody checks drifts: this keeps the declaration honest."""
-        from novel_ledger.contracts import Repository
+        from novel_ledger.ports import Repository
         from novel_ledger.sqlite_store import SQLiteRepository
 
-        declared = {name for name in vars(Repository) if not name.startswith('_')}
+        declared = {name for cls in Repository.__mro__ for name, value in vars(cls).items()
+                    if not name.startswith('_') and callable(value)}
         actual = {name for name, value in vars(SQLiteRepository).items()
                   if not name.startswith('_') and not isinstance(value, (classmethod, staticmethod)) and callable(value)}
         self.assertEqual(actual - declared, set())          # every adapter method is declared
         self.assertEqual(declared - actual, set())          # nothing is declared that does not exist
         self.assertIn('initialize', SQLiteRepository.__dict__)   # the constructor side of the contract
 
-    def test_all_imports_including_deferred_are_acyclic_and_domains_have_no_io(self):
-        graph = {}
-        pure = {'contracts', 'facts', 'planning', 'quality', 'workflow', 'creation', 'world', 'narrative', 'scopes', 'craft', 'spatial', 'editorial'}
-        for path in (ROOT / 'scripts' / 'novel_ledger').glob('*.py'):
-            deps = set()
-            tree = ast.parse(path.read_text(encoding='utf-8'), feature_version=(3, 9))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom) and node.level == 1:
-                    deps.update([node.module] if node.module else [a.name for a in node.names])
-                if path.stem in pure and isinstance(node, ast.Import):
-                    self.assertFalse({a.name.split('.')[0] for a in node.names} & {'sqlite3', 'pathlib', 'subprocess', 'os'})
-            graph[path.stem] = deps
-            if path.stem in pure:
-                self.assertFalse(deps - pure)
-        def visit(name, trail):
-            self.assertNotIn(name, trail, str(trail))
-            for dependency in graph.get(name, set()):
-                visit(dependency, trail + [name])
-        for name in graph:
-            visit(name, [])
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@ import math
 from . import contracts
 from .contracts import (CONTRACT_ALIGNMENT, CONTRACT_FIELDS, CONTRACT_KEYS, DEFAULT_NAME_CHARS, DEFAULT_TERMS,
                         POLICY_FIELDS, contract_errors, contract_skeleton, digest, han_count, require, text)
-from .facts import entity, seed
+from .entities import register as register_entity
 from . import narrative, craft
 
 
@@ -22,13 +22,18 @@ def resolve_policy(policy):
     return resolved
 
 
-def policy_of(book):
-    """Resolve the active policy from a book record (versions are history, not authority)."""
-    versions = book.get('lexical_policy') or []
+def active_policy(versions):
+    """Resolve only the active version; unrelated book state is never an input."""
+    versions = versions or []
     require(isinstance(versions, list) and versions, 'lexical_policy', '项目缺少字面规则记录。')
     latest = versions[-1]
     require(isinstance(latest, dict), 'lexical_policy', '字面规则版本须为对象。')
     return resolve_policy(latest.get('policy', {}))
+
+
+def policy_of(book):
+    """Compatibility query for callers holding a transaction aggregate."""
+    return active_policy(book.get('lexical_policy'))
 
 
 def check_text(value, policy, names=False):
@@ -92,10 +97,10 @@ def enforcement_scope(stage):
     return {'stages': covered, 'terms': terms, 'names': names, 'note': contracts.POLICY_NOTE}
 
 
-def policy_block(book, stage):
-    """The active policy as task material: what applies, where it came from, and how it changes."""
+def policy_material(versions, stage):
+    """Task material built from policy versions and requested stages only."""
     stages = (stage,) if isinstance(stage, str) else tuple(stage)
-    versions = book.get('lexical_policy') or []
+    versions = versions or []
     latest = versions[-1] if versions else {'version': 1, 'policy': resolve_policy({}), 'source': '内置默认'}
     resolved = resolve_policy(latest.get('policy', {}))
     return {'version': latest.get('version', 1), 'source': latest.get('source', ''),
@@ -103,6 +108,11 @@ def policy_block(book, stage):
             'forbidden_name_chars': resolved['forbidden_name_chars'],
             'scope': enforcement_scope(stages),
             'editable': '作者改规则：novel.py lexical --file 规则.json --source 原话（逐版留档，开书阶段即生效）。'}
+
+
+def policy_block(book, stage):
+    """Compatibility query; the material builder accepts policy history only."""
+    return policy_material(book.get('lexical_policy'), stage)
 
 
 def skeleton():
@@ -145,12 +155,12 @@ def validate_contract(raw):
     require(type(contract['narrative_tracking']) is bool and type(contract['review_fanout']) is int and 2 <= contract['review_fanout'] <= 8,
             'contract', 'narrative_tracking 须为布尔值；review_fanout 须为 2～8，限制单次综合材料。')
     require(type(contract['editorial_features']) is bool and (not contract['editorial_features'] or contract['narrative_tracking']),
-            'contract', 'editorial_features 需要 narrative_tracking；旧兼容模式明确设 false。')
+            'contract', 'editorial_features 需要 narrative_tracking；基础模式可明确设 false。')
     policy = contract['volume_outline']
-    require(not policy or set(policy) == {'scope', 'words', 'tolerance'} and policy.get('scope') in ('current', 'all')
+    require(not policy or set(policy) == {'scope', 'words', 'tolerance'} and policy.get('scope') in ('rolling', 'current', 'all')
             and type(policy.get('words')) is int and policy['words'] > 0
             and type(policy.get('tolerance')) is int and 0 <= policy['tolerance'] < policy['words'],
-            'volume_outline', 'volume_outline 为 {}（旧兼容）或 {scope:current|all,words:正整数,tolerance:非负整数且小于 words}。')
+            'volume_outline', 'volume_outline 为 {} 或 {scope:rolling|current|all,words:正整数,tolerance:非负整数且小于 words}。')
     band = contract['word_range']
     volumes = contract['volumes']
     seen, last = set(), 0
@@ -187,7 +197,6 @@ def validate_contract(raw):
              % (high, -(-band[1] // contract['chapter_max']))})
     for key in ('world_rules', 'red_lines', 'arcs'):
         require(isinstance(contract[key], list) and all(text(v) for v in contract[key]), 'contract', key + ' 须为字符串数组。')
-    seed(contract)
     return contract
 
 
@@ -235,7 +244,7 @@ def validate_chapter_outlines(data, policy, model, known_nodes):
     chapters = data.get('chapters')
     require(isinstance(chapters, list) and all(isinstance(c, dict) and type(c.get('chapter')) is int for c in chapters)
             and [c['chapter'] for c in chapters] == list(range(policy['first'], policy['last'] + 1)),
-            'outline_coverage', '逐章卷纲须按顺序完整覆盖当前冻结批次，整卷分批完成，不按试章授权截短。',
+            'outline_coverage', '逐章卷纲须按顺序完整覆盖当前冻结批次；后续范围由卷纲策略决定。',
             {'first': policy['first'], 'last': policy['last'], 'recover': '补齐本批次的每章情节推进说明。'})
     for chapter in chapters:
         prose = chapter.get('synopsis')
@@ -293,21 +302,23 @@ def validate_design(data, known=(), tracking=False, known_threads=(), outline=No
     return copy.deepcopy(data)
 
 
-def validate_plans(data, first, last, known_nodes, state, contract, world=None, policy=None):
+def validate_plans(data, first, last, known_nodes, state, contract, world=None, policy=None, known_plans=None, identity_version=1, reading_version=None):
     plans = copy.deepcopy(data.get('plans')) if isinstance(data, dict) else None
-    require(isinstance(plans, list) and [p.get('chapter') for p in plans if isinstance(p, dict)] == list(range(first, last + 1)),
+    require(isinstance(plans, list) and all(isinstance(p, dict) and type(p.get('chapter')) is int for p in plans)
+            and [p['chapter'] for p in plans] == list(range(first, last + 1)),
             'plan', '章计划须恰好覆盖本次窗口，按章号排列。')
     temporary = copy.deepcopy(state)
+    previous = {n: p for n, p in (known_plans or {}).items() if not first <= p['chapter'] <= last}
     for plan in plans:
         require(all(text(plan.get(k)) for k in ('goal', 'obstacle', 'choice', 'cost', 'change', 'ending')), 'plan', '章计划需要目标、阻碍、选择、代价、变化和结尾。')
-        require(isinstance(plan.get('node_ids'), list) and plan['node_ids'] and all(n in known_nodes for n in plan['node_ids']), 'plan', '章计划须引用有效设计节点。')
+        require(isinstance(plan.get('node_ids'), list) and plan['node_ids'] and all(text(n) and n in known_nodes for n in plan['node_ids']), 'plan', '章计划须引用有效设计节点。')
         participants = plan.get('participants')
         require(isinstance(participants, list) and participants and all(text(p) for p in participants)
                 and len(participants) == len(set(participants)), 'plan', 'participants 须为非空、不重复实体 ID。')
         require(isinstance(plan.get('new_entities', []), list), 'plan', 'new_entities 须为实体数组。')
-        validate_plan_names(plan, policy if policy is not None else resolve_policy({}))
         for item in plan.get('new_entities', []):
-            entity(temporary, item)
+            register_entity(temporary['entities'], item)
+        validate_plan_names(plan, policy if policy is not None else resolve_policy({}))
         require(all(p in temporary['entities'] for p in participants), 'plan', '参与人须为既有实体或本窗口声明的候选实体。')
         if world:
             refs = plan.get('world_refs')
@@ -320,6 +331,7 @@ def validate_plans(data, first, last, known_nodes, state, contract, world=None, 
                     and obligation.get('category') in ('facts', 'reader'), 'obligation', '义务需要 id/text/category。')
             ids.append(obligation['id'])
         require(len(ids) == len(set(ids)), 'obligation', '义务 ID 重复。')
+        require(isinstance(plan.get('schedule', []), list), 'schedule', 'schedule 须为日程对象数组。')
         for schedule in plan.get('schedule', []):
             require(isinstance(schedule, dict) and schedule.get('basis') == 'main_clock'
                     and type(schedule.get('day')) is int and schedule['day'] >= state['clock']
@@ -328,6 +340,9 @@ def validate_plans(data, first, last, known_nodes, state, contract, world=None, 
             narrative.validate_plan(plan, known_nodes, temporary)
         if contract.get('editorial_features'):
             craft.scenes(plan, temporary['entities'])
+        from . import story_memory
+        story_memory.bind(plan, previous, identity_version, reading_version)
+        previous[str(plan['chapter'])] = plan
     return copy.deepcopy(plans)
 
 

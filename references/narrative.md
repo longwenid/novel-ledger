@@ -2,21 +2,35 @@
 
 何时读：全书/卷设计、章计划、执笔、章审、范围综合和叙事拒绝。只把实际正文及独立判断写入事实，不把未来设计改称既成事实。
 
-## 新约定与旧项目
+## 适用范围与能力要求
 
-新建/明确改约时，narrative_tracking 默认 true、review_fanout 默认 3。旧已生效约定缺少 narrative_tracking 时沿用原事实形状和调度，不隐式改库；需要新能力时用 recontract 建立明确新版本。显式 false 是旧协议兼容模式，不具备本文的推进门槛。schema 仍为 novel-ledger/2；检查清单版本 2 随任务冻结，旧回执/旧在途任务仍按自身版本验收。
+本文维护滚动卷纲、叙事状态、场景依赖与分层核验的接口规则。narrative_tracking 默认 true；显式关闭时使用基础流程，不具备本文的节点推进门槛。能力开关和检查版本统一见 [协议](protocol.md)，当前任务与已保存回执按各自冻结版本核验。
 
-新约定另默认启用 editorial_features，任务检查版本为 3（约定声明了叙述视角时为 4，reader 多一项 pov_consistency）；显式旧兼容模式需 editorial_features=false。editorial/1 在独立章审中记录实际节点判据，可将成立正文的部分实现转入未来改案，或保留当前稿独立核验改案；不再要求所有偏离都重写正文。详见 [编辑能力](editorial.md)，以下严格节点对应规则仍适用于旧任务与 follow_plan。
+状态、来源和依赖核验是流程要求；主支线安排与节奏作用按 [创作与写审](craft.md) 判断，不增加固定推进间隔或张力评分。editorial/1 可将成立正文的部分实现转入独立改案，见 [编辑能力](editorial.md)；以下严格节点对应规则适用于 follow_plan。
 
-## 线路和设计
+| 当前任务 | 读取位置 |
+|---|---|
+| 卷内方案、逐章卷纲、交付覆盖 | [滚动卷纲](#滚动卷纲) |
+| 全书或卷设计、章计划 | [线路与章计划](#线路与章计划)；声明场景来源时补读 [场景依赖与任务材料](#场景依赖与任务材料)。 |
+| 执笔、章审、叙事事件被拒绝 | [独立章审与事件](#独立章审与事件) 与 [篇幅与上下文](#篇幅与上下文) |
+| 块审、卷审、全书综合 | [分层范围核验](#分层范围核验) |
+| 需要早期原文或事件 | [历史补读](#历史补读) |
 
-新建/明确改约默认 `volume_outline={scope:all,words:500,tolerance:50}`，scope 可改为 current，tolerance=0 为严格字数。空对象 `{}` 是旧兼容模式；旧生效约定缺字段及旧在途任务不追补。字数用工程统一的汉字计数，标点和拉丁字符不计。每章情节说明保持精练，字数合格不证明因果、人物选择或阅读作用成立。
+## 滚动卷纲
+
+### 策略与篇幅
+
+新建/明确改约默认 `volume_outline={scope:rolling,words:500,tolerance:50}`，scope 可改为 current 或 all，tolerance=0 为严格字数。空对象 `{}` 表示明确关闭逐章卷纲；省略字段则采用 rolling 默认值。字数用工程统一的汉字计数，标点和拉丁字符不计。每章情节说明保持精练，字数合格不证明因果、人物选择或阅读作用成立。
 
 世界及约定核验后自动接续全书骨架，再做卷内脑暴与独立设计核验；volume_plan 在既定作者约定内给 2～3 个具体推进方案，交 `world_hash/brainstorm=[{id,premise,tradeoff,world_refs}]/selected/selection_reason`，当前阶段只交方案与节点。world_hash 绑定已核验世界，world_refs 必须存在；有世界时每案至少一项。选案由设计者判断并说明理由，独立审稿核验，不要求作者重复回答开书选择。
 
+### 批次、核验与实际覆盖
+
 方案通过后派 `volume_outline`，每批最多 min(6,planning_window) 章，交 `world_hash/chapters=[{chapter,synopsis,world_refs,node_ids}]`，恰好覆盖本批次连续章号。每章 synopsis 写清行动、阻力、选择、代价、变化及对下一章的推动，默认 450～550 汉字；引用真实世界记录与已批准节点，不把未来设计登记成事实。`outline_review` 独立完整阅读当前批次、已定卷方案、世界及 `outline_bridge`（前一批最后一章），沿现有设计检查项举证；通过后原子追加，返修预算共享且有界，失败保留已通过前缀。完整旧卷纲始终保留可选来源，不在每批必读中重复全部前缀。
 
-current 先完成首卷，后续每卷进入前完成；all 在正文前按卷顺序完成全部卷纲。完整覆盖不受试章授权影响，没有正文授权时以 `outline_ready` 交付并停止。逐章说明及脑暴选案在 book.html 的设计区展示；章计划必读 `volume_outline_window`，执笔只必读本章 `chapter_outline`，跟踪项目 frontier 不重复全部逐章说明。改案应保留已成立事实，再独立核验设计及正文。
+rolling 先完成首卷近期一个批次，进入未覆盖章节时才补下一批；章计划不得越过已核验卷纲边界。远期卷保留职责与关键节点，进入该卷时再细化。current 先完成首卷，后续每卷进入前完成；all 在正文前按卷顺序完成全部卷纲。后两种模式的完整覆盖不受试章授权影响。没有正文授权时以 `outline_ready` 交付并停止，返回 planning_mode/coverage 表示实际完成范围。逐章说明及脑暴选案在 book.html 的设计区展示；章计划必读 `volume_outline_window`，执笔只必读本章 `chapter_outline`，跟踪项目 frontier 不重复全部逐章说明。改案应保留已成立事实，再独立核验设计及正文。
+
+## 线路与章计划
 
 book_plan 的 threads 至少一条必要主线，每条 `{id,kind:main|side|hidden,purpose,ending_condition,required:bool}`。支线与暗线按故事需要登记，不按固定顺序轮流出现。volume_plan 的 threads 可为空以沿用既有线路，新线路不能覆盖已有 ID。
 
@@ -28,6 +42,18 @@ book_plan 的 threads 至少一条必要主线，每条 `{id,kind:main|side|hidd
 - preconditions=[{kind,key,expected}]，kind 为 facts/knowledge/resources/relations/placements/character_current/node/clock。character_current 的 expected 是人物当前 value 对象，node 为状态字符串，clock 的 key 可填 main。无额外前提用空数组。窗口内仅节点行动会模拟，后章资源、动机等尚未实际成立的前提不要伪造；下一章前重新检查真实状态，变化时自动重规划未写窗口。
 - disclosures=[{topic,after:hinted|suspected|misled|confirmed|retracted}]，列本章允许的读者认知变化，无变化用空数组。reader_refs/hook_refs/history_refs 可指出要承接的旧认知、承诺和历史断言。当前任务未选择某条资料不意味着它不存在。
 - pacing={role,pressure_in,pressure_out,emotional_aftereffect,recovery_purpose}。role 为 setup/pressure/turn/climax/aftermath/recovery/relationship/discovery，其余用具体文字；本章不需恢复时说明原因。使用节奏功能判断，不计算张力分数或固定轮替。
+
+## 场景依赖与任务材料
+
+新工作台任务采用 scene-identity/2：场景 ID 不绑定章号，跨章移动保留身份，独立的故事时间、作品理解与阅读关联见 [叙事工作台](workbench.md)。以下 c章号: 前缀是旧冻结身份协议；新任务未提供 ID 时引擎生成不透明 ID。
+
+阅读关联另由 reading-dependencies/1 能力及计划 reading_schema 标记冻结，旧计划中的同名字段不追补解释；没有标记时保守重读。相关字段、分级修订和创作记忆统一在工作台维护，不用事实 dependency_coverage 代替阅读关联覆盖。
+
+章计划可声明 `dependency_coverage=partial|complete`，默认 partial。旧身份协议中每场的 id 以 `c章号:` 开头，建议给有意义且跨重排保留的名称；省略时按当前顺序分配 c1:s1 形式的编号。`reads=[{kind,key}]` 声明使用的事实坐标，`depends_on=[场景ID]` 只能指向已登记前章或本章前场，禁止环及前向引用。complete 要求每场显式提供两份数组，无依赖给空数组；独立章审以 facts.continuity 核对声明是否与正文因果一致，遗漏则返修。partial 在修订传播时保守扩大范围。
+
+保守扩大只说明影响，不能据此自动重写全书。新根审须声明真实 changes；审稿触发的历史修订在建立分支前检查近期窗口与已关闭验收范围，超界保存 revision_blocked 方案并等待准确授权，见 [运行](runtime.md)。
+
+任务的 `scene_context.plan` 包含完整章计划及场景，inputs 给出显式输入和输入是否存在，plan_hash/state_hash 绑定准确来源；独立 plan 记录作为按需来源，避免重复必读；场外人物或远期承诺的显式坐标不会被参与人筛选丢掉。`scene_sources` 绑定前置已提交场景的 plan/prose/events 哈希与章节链；原文按本任务的 recall --chapter 补读。引用若只存在于未提交的重规划计划，派工拒绝并要求重新规划。材料只是作者可用信息，人物实际知情仍以 knowledge 和对白意图为准；未来设计不会变成事实。
 
 ## 独立章审与事件
 
@@ -44,7 +70,7 @@ reader.pacing 独立填写实际节奏五项和单个 evidence；引擎将这份
 
 事件按数组顺序检查前态，包括同章前一事件的影响。例如先兑现 story_node，再关闭该线时，story_thread.before 应为 active，即便本章开始时该线未登记；check 会返回实际 current，不需要猜字段或修改历史。
 
-首读先记录真实体验，再解锁设计。主动检查连续加压、高潮后立即重置、重复悬念、没有余波的代价、人物统一声线。静章可以承担关系变化、生活质感、恢复或暗线铺垫，不能把静章判成“必须增加对抗”。
+首读先记录真实体验，再解锁设计。沿当前检查项用原文说明连续性、披露和节奏的实际作用，具体问题、影响及范围写入现有 reason/findings，不凭场景数量或强制动静轮替给 fix。判断依据见 [创作与写审](craft.md)。
 
 ## 篇幅与上下文
 
@@ -64,6 +90,10 @@ review_chunk 限制叶块章数；review_fanout 为 2～8，限制每个综合�
 
 complete 除原验收外，必须验证所有 required 节点已 resolved、所有 required 线路已 resolved。机械门槛不证明情节好看；真实文学评价和实际 token 费用需真实宿主长跑另验收。
 
+## 历史补读
+
 记忆检索可用 `recall --task ID --entity 人物ID`，或 `--node/--topic/--thread ID`：默认返回最近5个匹配章节的全部匹配证据；用 `--limit 1～20`、`--before 章号` 分页，再用 `--chapter N` 完整补读。新任务的可选 history_source 只冻结逐章不可变目录的入口及截至章号，查询由近到远读取所需页与事件，不每次重建全书摘要/事件索引。旧冻结任务仍读原 historical_index/memory_index；显式 --record 读取这两个旧名称时，新任务也能完整展开，但常规检索应使用 recall。首读冻结前同样禁止检索，后续新增章节和其他修订分支不会进入本任务的历史来源。
 
 稀疏或无匹配查询仍可能遍历整个冻结历史，按章直接补读也可能遍历目录；页式复用减少重复构建与存储，不宣称所有查询都是常数时间。read/recall 返回的实际字符量均计入 usage，宿主包装、模型缓存与计费 token 由真实用量日志另算。
+
+命令身份、首读封印与修订影响分析见 [运行](runtime.md)，工程及真实长篇验收口径见 [验证](validation.md)。

@@ -111,7 +111,7 @@ def prepare_events(events, plan):
 
 def settle_event(state, event, chapter):
     op = event['op']
-    require('story_nodes' in state, 'story_protocol', '旧项目未启用叙事跟踪；通过明确改约建立新版本。')
+    require('story_nodes' in state, 'story_protocol', '当前约定未启用叙事跟踪；通过明确改约启用后使用。')
     if op == 'story_node':
         ident, after = event.get('node'), event.get('after')
         require(text(ident) and text(event.get('line')) and isinstance(event.get('depends_on'), list)
@@ -166,8 +166,11 @@ def closure(book):
             {'nodes': missing, 'threads': open_lines, 'recover': '在正文中兑现并独立核验；改变终局要求须走作者改约。'})
 
 
-def budget_for(book, chapter):
-    carried = (book.get('revision_run') or {}).get('carry', [])
+def budget_for(book, chapter, through=None):
+    # A pending carry row is fixed only beyond the chapter/window being rewritten.
+    # Future alignment can clear plans while their original prose remains queued.
+    boundary = chapter if through is None else through
+    carried = [r for r in (book.get('revision_run') or {}).get('carry', []) if r['n'] > boundary]
     contract = copy.deepcopy(book['contract'])
     for volume in contract['volumes']:
         volume['end'] = book.get('scope_ends', {}).get(volume['id'], volume['end'])

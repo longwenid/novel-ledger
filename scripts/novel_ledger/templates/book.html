@@ -1,0 +1,14 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>$title · 全书视图</title><style>$styles</style></head><body>
+<header class="bar"><button class="menu" onclick="toggleSide()">☰</button>
+<div class="brand"><b>$title</b><span>分支 $branch · $chapter_count 章 · $written 汉字 · 生成于 $generated</span></div>
+<div class="grow"></div><div class="tabs">
+<button data-m="settings" onclick="mode('settings')">看设定</button>
+<button data-m="read" onclick="mode('read')">读正文</button></div></header>
+<div class="wrap"><aside><nav id="nav-settings">$nav</nav>$jump</aside>
+<main><div id="view-settings">$settings</div>
+$reader
+</main></div>
+<footer><div class="rd-wrap">本页为派生只读视图，真源是作品账本；重新生成：novel.py html --project &lt;PROJECT&gt; · 生成于 $generated · Ctrl+P 可打印或导出 PDF</div></footer>
+<script>$script</script></body></html>

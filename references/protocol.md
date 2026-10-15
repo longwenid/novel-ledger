@@ -2,21 +2,43 @@
 
 何时读：约定、回执、事件和报错。协议与机械清单由 contracts.py 定义，模板动态生成，不预填判断。
 
-## 约定与材料
+## 适用范围与字段来源
 
-约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威：交付模板、结构校验和对齐核验都由它派生，新增字段只改这一处。结构校验按表逐项执行，未知字段直接拒绝（旧版本残留字段会报 contract），标为 optional 的数组/映射缺省时补空值，其余必填。
+本页说明字段与机械核验，文学判断见 [创作与写审](craft.md)。填写时以当前任务的 capabilities、checks_version、brief 和 result.template.json 为准，不自行增删检查项或预填 pass；格式不确定用 check，处理入口见 [运行](runtime.md)。
 
-新建/改约的 editorial_features 默认 true，需要 narrative_tracking；scope_append_limit 默认 3。anchors/links 可选。任务含 capabilities.editorial=editorial/1 时检查清单为版本 3，人物、场景、改案、关闭及补丁字段见 [编辑能力](editorial.md)。旧生效约定缺字段保持旧行为；旧 pending 不因安装更新改形状。
+约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威，模板、结构校验和对齐核验均由它派生。未知字段按 contract 拒绝，标为 optional 的数组/映射缺省时补空值；有 default 的字段采用表中默认值，其余按表检查必填。当前存储为 novel-ledger/3，已有 v3 可继续使用，v2 及更早数据库拒绝打开；任务协议和检查清单版本分别冻结，不用于转换数据库。
 
-必填 title/reader_promise/ending/genre 等全部文本字段、word_range=[总汉字下限,上限]、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism。`tone`/`theme`/`pov` 由 opening/2 的逐门开书选定，模板里会给出并要求逐字保留；它们对自备约定（`init --contract`）是可缺省字段，缺省时项目按不带视角清单的版本核验，不会被追溯要求。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。planning_window/review_interval/review_chunk 可缺省（3/10/3）。narrative_tracking 默认 true、review_fanout 默认 3，推进与分层规则见 [叙事推进](narrative.md)。verification 可缺省为 full：full 走固定间隔块审+分块范围审，fast 跳过固定间隔块审；跟踪项目两档均保持有界分块，旧兼容模式的 fast 范围审一次成块——两档的章审、首读与事实核验完全一致，档位只收窄调度密度，不放松任何不变量。审稿回执顶层带 checks_version：回执按提交时的检查清单版本存档，验收重放按回执自己的版本核对，因此引擎后续新增检查项不会追溯推翻已通过的核验。含 `pov` 且启用编辑能力的约定按清单版本 4 核验（新增 reader.pov_consistency）；未声明视角的项目保持 2/3。
+## 作者约定
 
-跟踪项目按每章 word_budget 动态约束剩余总预算，允许长短章共同收口；旧兼容模式的静态规则如下。篇幅必须**写得完**：固定章数 last 后，每章平均可用区间是 `[ceil(word_range[0]/last), floor(word_range[1]/last)]`；`chapter_aim` 与 `chapter_max` 都必须落在该区间内，否则报 `scale`（区间为空报"章数与总篇幅不能同时成立"）。错误详情里带 `per_chapter_range` 与可执行的修正建议（降低章幅或上调卷末章号），例如 47 章 × 上限 2600 配 11 万上限会被拒，因为每章平均最多只能 2340 字。
+核心字段包括 title/reader_promise/ending/genre、word_range=[总汉字下限,上限]、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism，完整必填项按模板检查。`tone`/`theme`/`pov` 在 opening/2 中由作者选择并逐字保留；自备约定可缺省，不追溯要求补选。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。
+
+| 设置 | 默认与作用 |
+|---|---|
+| planning_window / review_interval / review_chunk | 3 / 10 / 3；近期计划窗口（同时限定自动历史回改的回溯窗口及初始修改章数）、间隔审与叶块大小 |
+| narrative_tracking / review_fanout | true / 3；节点推进和有界综合见 [叙事推进](narrative.md) |
+| editorial_features / scope_append_limit | true / 3；编辑能力要求叙事跟踪，关闭跟踪时也须关闭编辑能力；人物、改案和关闭字段见 [编辑能力](editorial.md) |
+| volume_outline | rolling 近期卷纲；配置、批次与 current/all 范围统一见 [叙事推进](narrative.md) |
+| verification | full；fast 省去固定间隔审，跟踪项目两档都保持有界范围分块，基础流程 fast 范围审一次成块；均保留章审、首读和事实核验 |
+
+启用编辑能力时检查清单为 3，约定另有 pov 时为 4（增加 reader.pov_consistency）；未启用编辑能力时为 2。具体版本随任务冻结，已保存回执按自己的版本复核，不追补后来新增的检查项。
+
+跟踪项目按每章 word_budget 动态约束剩余总预算，允许长短章共同收口；关闭叙事跟踪时的静态规则如下。篇幅必须**写得完**：固定章数 last 后，每章平均可用区间是 `[ceil(word_range[0]/last), floor(word_range[1]/last)]`；`chapter_aim` 与 `chapter_max` 都必须落在该区间内，否则报 `scale`（区间为空报"章数与总篇幅不能同时成立"）。错误详情里带 `per_chapter_range` 与可执行的修正建议（降低章幅或上调卷末章号），例如 47 章 × 上限 2600 配 11 万上限会被拒，因为每章平均最多只能 2340 字。
 
 entities=[{id,name,kind,aliases?}]、initial_facts=[{entity,key,value}]、initial_resources=[{holder,asset,unit,quantity}]、places=[{id,name,parent?}]、placements={entity:place} 只放已成立事实。quantity 为十进制字符串。world_rules/red_lines/arcs 是字符串数组，voice 保存文风。字面规则不属于约定：它是项目级 book.lexical_policy 的版本记录，用 `lexical --file 规则.json --source 原话` 修改，约定里出现 lexical_policy 会被结构校验拒绝。候选人物放计划 new_entities，经正文事实核验后成立。
 
 protagonist_setup={id,name,identity,desire,limit} 保存主角身份、欲望和底线；relationships 为关系约定数组，style_traits 为文风特征数组。tone 保存给读者的基调，theme 保存母题，pov 保存叙述视角与人称（谁在讲、能看多远，换视角时如何交代）。完整约定可参考 [示例约定](../assets/contract.example.json)，按作者真实要求替换，不沿用示例题材和篇幅。
 
-task.json 给身份、路径和 commands。first_read 时不生成正式 input/template；解锁后 records 提供冻结哈希，required 给必读名称，prose 和 obligations 给正文及义务。
+## 冻结任务与资料读取
+
+task.json 给身份、路径和 commands。首读封印阶段不生成正式 input/template；解锁后 records 提供冻结哈希，required 给必读名称，prose 和 obligations 给正文及义务。brief 说明当前任务规则，guides 作为相关章节的参考，不重复通读全部文档。
+
+主干使用 advance --compact 获取精简 task，再把 task_path 交给子 agent；磁盘 task.json 始终完整。review_session 非空表示当前任务已冻结首读，requires_new_worker=false，仍须沿该真实会话完成核验；新任务使用新会话。claim 只表示执行认领，须结合宿主中的子 agent 状态判断是否仍在执行，主干循环及动作分支见 [运行](runtime.md)。
+
+工作台能力 `understanding/1`、稳定场景身份 `scene-identity/2`、阅读关联 `reading-dependencies/1`、作品理解字段和修订阅读任务见 [叙事工作台](workbench.md)。能力及规范化计划的 reading_schema 按版本解释，不追补旧回执或重解释旧计划的同名字段。新开书方案的篇幅上界另由 opening-bounds/1 冻结，见 [逐门开书](opening.md)。
+
+新根审的 payload.closure.revision_policy 以 revision-bounds/1 冻结近期回改窗口、章数上限和已关闭卷的验收范围；revise_range 需在 closure.changes 声明表达、阅读或语义变更。该标记位于任务 payload，不是数据库版本或 capabilities 字段。没有该标记的旧根审保持原字段解释，执行层仍检查自动范围。revision_blocked 与 plan_hash 授权入口见 [运行](runtime.md)，修复回执字段见 [编辑能力](editorial.md)。
+
+场景任务携带 capabilities.scene_memory=scene-memory/1；scene_context/scene_sources 为冻结的场景输入和已提交来源，字段及 dependency_coverage 见 [叙事推进](narrative.md)。revision-impact 的输入、采用范围与保守扩展规则见 [运行](runtime.md)。
 
 每个任务材料的 `policy` 块是当前生效的项目字面约定：`version`/`source` 说明版本与来源（作者原话或内置默认），`forbidden_terms`/`forbidden_name_chars` 给出规则，`scope` 说明**本阶段实际检查哪些字段**。该块与执行检查共用 `contracts.ENFORCEMENT` 一张表，所以声明与校验不会脱节；越出 scope 的字段不检查，违反 scope 内字段以 `literal_policy` 拒绝并在 details 里列出命中字段与命中词。改规则用 `lexical` 命令。
 
@@ -24,7 +46,7 @@ task.json 给身份、路径和 commands。first_read 时不生成正式 input/t
 
 hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、紧凑分隔符、allow_nan=False。正文哈希也基于 JSON 字符串值，不是裸文件字节。来源完整性不证明阅读理解。
 
-## 结果
+## 回执与格式自检
 
 ```json
 {
@@ -38,13 +60,17 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 使用执行认领时附 execution_claim。preflight 完整校验后回滚，checked 不等于入库；submit 才更新。相同已提交结果幂等，不同结果拒绝。拒绝不计修复额度，真实短稿提交计实际执笔轮次并保留稿件。
 
-`check` 是给 Worker 的格式自检：把候选回执从标准输入管道进去（`check` 无需 `--file`，也可省略 task_id），它按与 submit 相同的校验运行但**不提交、不消耗额度**，并直接报告缺哪个字段或哪个枚举不对；会话取自身份进程或任务自身。它的存在是为了让执行者**不必读引擎源码确认格式**——源码不是任务材料，读它会显著推高上下文成本。常见拒绝对应的期望形状：前值不匹配时 details 带 `current`（照抄为 before，新键为 null）；`evidence_scope`/首读覆盖带 `frozen_chapters`；`review_coverage`/`finding` 带 `expect`/`valid_criteria`；`event_op` 带 `valid_ops`；`opening_option`（choose）带 `valid_options`。报错里没有的形状不要去源码里找，用 check 试算。
+submit 的 accepted=true 表示回执已接受，不等于正文通过：verdict=fix 也可正常入库并转入返修或暂停。根审可先成功保存修复回执，再由 advance 返回 revision_blocked。主干等待子 agent 结束后用 advance --compact --after 核实实际动作，不凭 accepted 单独判断章审通过或授权目标完成。
+
+`check` 是给 Worker 的格式自检：把候选回执从标准输入管道进去（无需 `--file`，已通过身份环境定位当前任务时可省略命令行 `--task`）。回执本身仍须提供 task_id 和 input_hash，不允许猜测或改投身份；会话取自身份进程或任务自身。它按与 submit 相同的校验运行但**不提交、不消耗额度**，直接报告缺哪个字段或哪个枚举不对，让执行者不必读引擎源码确认格式。常见拒绝对应的期望形状：前值不匹配时 details 带 `current`（照抄为 before，新键为 null）；`evidence_scope`/首读覆盖带 `frozen_chapters`；`review_coverage`/`finding` 带 `expect`/`valid_criteria`；`event_op` 带 `valid_ops`；`opening_option`（choose）带 `valid_options`。报错里没有的形状不要去源码里找，用 check 试算。
+
+历史修订的 revision_range 表示请求未覆盖已登记目标或回退到无关前文；revision_bounds 表示不能用 resume 跳过超界方案；revision_proposal 表示方案哈希、范围、变更或来源不匹配；author_source 表示缺少配套的方案哈希和作者原话。revision_blocked 是已保存方案的业务动作，不是回执格式拒绝；恢复步骤统一见 [运行](runtime.md)。
 
 | 阶段 | data |
 |---|---|
 | opening_options | 当前门 gate 与 2～3 个 options，详见 [逐门开书](opening.md) |
-| world_model / world_review | 完整世界记录与独立核验，详见 [世界模型](world.md) |
-| opening_contract | 依据闭合选择和核验世界形成完整约定，不能更改用户选择；模板即 CONTRACT_FIELDS 骨架 |
+| world_model / world_review | 完整世界记录与独立核验；默认 world_model 同时起草 data.contract，按 payload.also 和模板交付，详见 [世界模型](world.md) |
+| opening_contract | 默认随世界起草，世界通过后再 contract_review；单独派发时读冻结的核验世界。约定不得更改用户选择，模板由 CONTRACT_FIELDS 派生 |
 | book_plan / volume_plan | intent/ending_conditions/nodes。节点 id/line/cause/choice/cost/outcome/disclosure/depends_on；ID 唯一，引用存在，无因果环 |
 | volume_outline / outline_review | 逐章卷纲有界批次与独立设计核验；world_hash/chapters、脑暴选案及篇幅规则见 [叙事推进](narrative.md) |
 | design_review / contract_review | verdict/checks/findings/obligations；独立核验 proposal 来源，证据 chapter=0 |
@@ -52,10 +78,11 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 | profiles | 恰好覆盖 payload.entities；entity/desire/fear/limit/voice/knowledge_boundary |
 | alignment_plan / alignment_review | 独立改案提案 reason/plan/designs 与设计核验；通过仍重新章审，见编辑能力 |
 | write / repair / redesign | title/完整 prose/summary/具体 self_check；不交 events 或 candidate_events |
+| revision_review | reader 阅读回执；先冻结首读，pass 保留待携带正文，fix 按 local/chapter 返修；不重抽事实 |
 | chapter_review | facts 和 reader 两套完整回执；事实通过需 events/summary/elapsed_days，首读已持久冻结 |
 | scope_review / scope_synthesis | 叶块 coverage 按 chapter；树形综合按 children 的 part_id，另交 handoff，见 [叙事推进](narrative.md) |
 
-有世界模型的章计划还须声明 world_refs=[领域:id]，引用须存在，完整关联记录随任务交付。计划义务为 {id,category:facts或reader,text}；硬日程为 {basis:main_clock,day:整数,event:具体事件}，提交主线时间区间须覆盖该天数。
+有世界模型的章计划还须声明 world_refs=[领域:id]，引用须存在，所选关联记录完整保留，并按跟踪能力选择关联范围。计划义务为 {id,category:facts或reader,text}；硬日程为 {basis:main_clock,day:整数,event:具体事件}，提交主线时间区间须覆盖该天数。
 
 ## 首读与审稿
 
@@ -63,7 +90,7 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 checks 恰好覆盖模板，各项 {id,result:pass或fix,reason,evidence:[...]}。证据 {chapter,quote,start?}；缺 start 时引文必须唯一。time/language 附 challenge={risk,disposition:satisfied或violated,reason,evidence}，对应 pass/fix。
 
-findings=[{criterion,severity:blocker或quality或note,reason,evidence,target_chapter,repair_scope:local或chapter}]。实质 finding 与 fix 检查一致，修复起点由 target_chapter 明示，不从举证位置猜。义务逐项回 {id,result,reason,evidence}，未履行者须关联带 obligation_id 的实质 finding。
+findings=[{criterion,severity:blocker或quality或note,reason,evidence,target_chapter,repair_scope:local或chapter}]。实质 finding 与 fix 检查一致，须给 target_chapter 与 repair_scope；note 可省修复范围。修复起点不从举证位置猜。reason 说明具体问题、影响和修订建议，evidence 保留精确原文，不另加字段。义务逐项回 {id,result,reason,evidence}，未履行者须关联带 obligation_id 的实质 finding。
 
 事实核对正文覆盖、连续性、资源、知情、时间、世界规则和空间；阅读核对追读、人物、变化、情绪代价、语言、重复和有效展开。跨章核对因果、人物弧线、兑现、节奏、世界规则和覆盖。程序检查协议及证据，独立审稿者负责判断语义。
 

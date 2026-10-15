@@ -41,6 +41,10 @@ GATE_SETS = {1: GATES_V1, 2: GATES_V2}
 # Gates the engine answers itself from a table it has already proved satisfiable. A worker must not
 # invent them, and no dispatch is spent on them.
 SYSTEM_GATES = {1: (), 2: ('scale',)}
+# Inputs used by the world/scale derivation rules rather than copied into a contract.
+# Direct choices and the protagonist value shape come from CONTRACT_FIELDS.opening.
+DERIVATION_INPUTS = {'world': ('world_premise', 'mechanism', 'red_lines'),
+                     'scale': ('tier', 'volume_count', 'chapters', 'chapter_window')}
 # Brainstorm lenses live in contracts.LENSES; this module only picks and carries them.
 LENSES = tuple(label for label, _point, _structure in contracts.LENSES)
 
@@ -194,7 +198,20 @@ def gate_note(version, gate_id):
 
 
 def value_rules(version, gate_id):
-    return VALUE_RULES[version].get(gate_id, '按已选方向给出结构化方案。')
+    rule = VALUE_RULES[version].get(gate_id, '按已选方向给出结构化方案。')
+    if version == 2:
+        rule += ' value 只允许这些字段：' + '/'.join(value_fields(gate_id)) + '；不得携带其他门的决定或额外字段。'
+    return rule
+
+
+def value_fields(gate):
+    """Opening/2 input ownership, derived from the same source used for alignment."""
+    fields = []
+    for row in contracts.CONTRACT_FIELDS:
+        source = row.get('opening')
+        if source and source[0] == gate:
+            fields.extend(row['shape'] if source[1] is None else (source[1],))
+    return tuple(fields) + DERIVATION_INPUTS.get(gate, ())
 
 
 # The delivery contract for one option: proposals, not arguments. The lens shapes how the option is
@@ -210,10 +227,13 @@ def _reject_lens_language(option):
             {'found': self_reference, 'recover': '把"某透镜落地"改成这一版具体怎么推进。'})
 
 
-def _check_scenes(option):
+def _check_scenes(option, strict_bounds=True):
     scenes = option.get('scene')
-    require(isinstance(scenes, list) and len(scenes) >= 2 and all(text(s) and len(s.strip()) >= 12 for s in scenes),
-            'opening_scene', '每个方案至少给 2 个可落笔的具体画面（每条≥12字）：作者要看到能直接开写的场面。',
+    require(isinstance(scenes, list) and len(scenes) >= 2
+            and (not strict_bounds or len(scenes) <= 3)
+            and all(text(s) and len(s.strip()) >= 12 for s in scenes),
+            'opening_scene', ('每个方案给 2～3 个可落笔的具体画面（每条≥12字）。' if strict_bounds
+                              else '每个方案至少给 2 个可落笔的具体画面（每条≥12字）。') + '作者要看到能直接开写的场面。',
             {'recover': '写清谁在哪、手上是什么、正要做什么，不要给概念或口号。'})
 
 
@@ -259,8 +279,9 @@ def _tier_window(round_number):
 def system_board(state):
     """The board a structural gate shows, built here and now: no task, no wait."""
     tiers = _tier_window(state['round'])
-    options = [_tier_option(tier, tiers[index + 1] if index + 1 < len(tiers) else None)
-               for index, tier in enumerate(tiers)]
+    following = {tier['id']: SCALE_TIERS[index + 1] if index + 1 < len(SCALE_TIERS) else None
+                 for index, tier in enumerate(SCALE_TIERS)}
+    options = [_tier_option(tier, following[tier['id']]) for tier in tiers]
     board = {'gate': current(state), 'round': state['round'], 'basis': basis(state),
              'options': options, 'system': True}
     board['hash'] = digest(board)
@@ -308,6 +329,11 @@ def _validate_value_v1(gate, value, choices):
 
 
 def _validate_value_v2(gate, value):
+    allowed = value_fields(gate)
+    unknown = sorted(set(value) - set(allowed))
+    require(gate in gate_ids(2) and not unknown, 'opening_option', 'value 只能包含本门负责的字段。',
+            {'gate': gate, 'unknown_fields': unknown, 'allowed_fields': list(allowed),
+             'recover': '删除额外字段；修改此前决定须 back 返回对应门。'})
     if gate == 'genre':
         require(all(text(value.get(k)) for k in ('genre', 'reader_promise', 'tone')),
                 'opening_option', '题材方案需要题材、读者承诺和基调。')
@@ -356,7 +382,7 @@ def _validate_value_v2(gate, value):
         require(text(value.get('title')), 'opening_option', '书名方案需要可用的书名。')
 
 
-def offer(state, data):
+def offer(state, data, strict_bounds=True):
     require(state['phase'] == 'choosing', 'opening_state', '当前没有待生成的选择门。')
     version = opening_version(state)
     gate = current(state)
@@ -370,9 +396,10 @@ def offer(state, data):
     for option in options:
         require(isinstance(option, dict) and all(text(option.get(k)) for k in ('id', 'title', 'premise', 'driver', 'tradeoff', 'fit_reason')),
                 'opening_option', '方案需要标识、标题、具体内容、推进差异、代价和与已有选择的关联。')
-        require(text(option.get('pitch')), 'opening_option', '方案需要 pitch：一句能记住的话（≤40字）。')
+        require(text(option.get('pitch')) and (not strict_bounds or len(option['pitch'].strip()) <= 40),
+                'opening_option', '方案需要 pitch：一句能记住的话（≤40字）。' if strict_bounds else '方案需要非空 pitch。')
         _reject_lens_language(option)
-        _check_scenes(option)
+        _check_scenes(option, strict_bounds)
         validate_value(gate['id'], option.get('value'), version, selected(state))
     _check_driver_shape(options)
     require(all(len({o[k] for o in options}) == len(options) for k in ('id', 'title', 'premise', 'driver')),
@@ -463,18 +490,12 @@ def _v1_groups(choices):
 
 
 def _v2_groups(choices):
-    """Ten gates decide the same eighteen alignment fields; each field is read from its own gate."""
-    expected = {key: choices['scale'][key] for key in ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim')}
-    expected.update(copy.deepcopy(choices['engine']))
-    expected.update(copy.deepcopy(choices['ending']))
-    expected.update(copy.deepcopy(choices['voice']))
-    expected.update(copy.deepcopy(choices['pov']))
-    expected.update(copy.deepcopy(choices['title']))
-    expected.update(genre=choices['genre']['genre'], reader_promise=choices['genre']['reader_promise'],
-                    tone=choices['genre']['tone'],
-                    protagonist_setup=copy.deepcopy(choices['protagonist']),
-                    relationships=copy.deepcopy(choices['relationships']['relationships']),
-                    allow_special_mechanism=choices['world']['allow_special_mechanism'])
+    """Project each decision from its declared owner, never merge entire option values."""
+    expected = {}
+    for row in contracts.CONTRACT_FIELDS:
+        if 'opening' in row:
+            gate, key = row['opening']
+            expected[row['key']] = copy.deepcopy(choices[gate] if key is None else choices[gate][key])
     derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}
     return expected, derived, set()
 
@@ -488,6 +509,9 @@ def validate_contract(contract, state, world):
     # formed then too — a combined dispatch drafts the world and that contract in one session.
     require(state['phase'] in ('world', 'contract', 'ready') and len(choices) == len(ids),
             'opening_incomplete', '全部选择和世界核验完成后才能形成约定。')
+    if version == 2:
+        for gate in ids:
+            validate_value(gate, choices[gate], version)
     expected, derived, authored = _v1_groups(choices) if version == 1 else _v2_groups(choices)
     expected = {key: value for key, value in expected.items() if key in alignment_for(version) and key not in derived}
     groups = (set(expected), derived, set(authored))

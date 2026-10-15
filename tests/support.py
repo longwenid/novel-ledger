@@ -2,7 +2,7 @@
 import copy
 import uuid
 from novel_ledger.contracts import RESULT, digest
-from novel_ledger.quality import template
+from novel_ledger.result_templates import template
 
 
 def contract(chapters=2, volumes=1):
@@ -86,7 +86,9 @@ def response(app, task_id=None, session=None, claim=None):
                     row['challenge'] = dict(risk='工程反证样本。', disposition='satisfied', reason='仅用于协议测试。', evidence=ref)
             for row in receipt['obligations']:
                 row.update(result='pass', reason='工程义务样本。', evidence=[ref])
-        if stage == 'chapter_review':
+        if stage == 'revision_review':
+            fill(data['reader'])
+        elif stage == 'chapter_review':
             fill(data['facts'])
             fill(data['reader'])
             before = app.repo.load()['state']['clock']

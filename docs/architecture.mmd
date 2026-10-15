@@ -1,33 +1,39 @@
 flowchart TD
-    CLI[命令入口] --> APP[应用编排]
-    CLI --> SQL[SQLite 适配器]
-    CLI --> HOST[宿主进程适配器]
-    APP --> WF[纯流程决策]
-    APP --> CTX[上下文查询]
-    APP --> VIEW[任务与导出视图]
-    WF --> OPEN[逐门选择]
-    WF --> WORLD[世界规则]
-    WF --> PLAN[规划规则]
-    WF --> QA[质量规则]
-    WF --> FACT[事实规则]
-    WF --> NAR[叙事推进]
-    WF --> SR[分层范围审]
-    WF --> ED[编辑裁决]
-    WF --> CF[人物与文本规则]
-    PLAN --> CF
-    QA --> ED
-    FACT --> SP[空间拓扑]
-    FACT --> NAR
-    PLAN --> NAR
-    QA --> SR
-    CTX --> NAR
-    CTX --> SR
-    PLAN --> FACT
-    QA --> FACT
-    ED --> C
-    CF --> C
-    SP --> C
-    PLAN --> C[共享数据契约]
-    FACT --> C
-    SQL --> C
-    HOST --> C
+    CLI[命令入口 novel.py] --> BOOT[组合根 bootstrap]
+    BOOT --> APP[应用编排 application]
+    BOOT --> CTX[冻结编译 context]
+    BOOT --> VIEW[交付适配器 presentation]
+    BOOT --> SQL[存储适配器 sqlite_store]
+    BOOT --> HOST[进程适配器 host]
+    BOOT --> DEL
+    BOOT --> PAGE
+    BOOT --> WF
+    BOOT --> WS[输出路径 workspace]
+    APP --> PORT[应用端口 ports]
+    APP --> WF[纯流程 workflow]
+    APP --> DOMAIN[纯领域规则]
+    CTX --> PORT
+    CTX --> DOMAIN
+    CTX --> BRIEF[任务说明 briefs]
+    BRIEF --> DOMAIN
+    WF --> DOMAIN
+    VIEW --> PORT
+    VIEW --> DEL[任务与导出 delivery]
+    VIEW --> PAGE[全书页面 bookpage]
+    VIEW --> WS
+    DEL --> PORT
+    DEL --> PUB[只读查询 publication]
+    DEL --> TPL[模板 result_templates]
+    DEL --> WS
+    PAGE --> PORT
+    PAGE --> PUB
+    PAGE --> DOMAIN
+    PAGE --> WS
+    TPL --> DOMAIN
+    PUB --> PORT
+    SQL --> BS[四区归属 book_state]
+    SQL --> C[基础契约 contracts]
+    HOST --> PORT
+    PORT --> C
+    BS --> C
+    DOMAIN --> C

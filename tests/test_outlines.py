@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import context, planning, workflow
-from novel_ledger.application import Application
+from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error, Job, han_count
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import contract, response
@@ -124,7 +124,7 @@ class OutlineTests(unittest.TestCase):
     def test_defaults_strict_length_and_original_task_compatibility(self):
         raw = contract()
         raw.pop('volume_outline')
-        self.assertEqual(planning.validate_contract(raw)['volume_outline'], {'scope': 'all', 'words': 500, 'tolerance': 50})
+        self.assertEqual(planning.validate_contract(raw)['volume_outline'], {'scope': 'rolling', 'words': 500, 'tolerance': 50})
         self.assertEqual(planning.skeleton()['volume_outline']['words'], 500)
         raw['volume_outline'] = {'scope': 'current', 'words': 500, 'tolerance': 0}
         self.repo.save(workflow.new_book(raw))

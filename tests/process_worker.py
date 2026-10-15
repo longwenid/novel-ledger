@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger.sqlite_store import SQLiteRepository
-from novel_ledger.application import Application
+from novel_ledger.bootstrap import local_application as Application
 from support import response
 from novel import main
 
