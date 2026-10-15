@@ -96,6 +96,19 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertEqual(blank['reader']['findings'], [])
         self.assertIn('reader_promise', result_templates.template('opening_contract', 0, {}))
 
+    def test_task_envelopes_reject_undeclared_fields(self):
+        from novel_ledger import envelope
+        work = {name: None for name in envelope.WORK_FIELDS}
+        self.assertEqual(envelope.validate_work(dict(work, brief='x'))['brief'], 'x')
+        with self.assertRaises(Error):
+            envelope.validate_work(dict(work, surprise=1))
+        with self.assertRaises(Error):
+            envelope.validate_work({k: v for k, v in work.items() if k != 'stage'})
+        task = {name: None for name in envelope.TASK_FIELDS}
+        self.assertIs(envelope.validate_task(task), task)
+        with self.assertRaises(Error):
+            envelope.validate_task(dict(task, guides=['x'], unexpected=1))
+
     def test_unknown_task_stage_is_rejected_instead_of_degrading(self):
         from novel_ledger import stages
         with self.assertRaises(Error):
