@@ -2,7 +2,7 @@
   "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
   "novel_ledger": {
     "modules": 34,
-    "runtime_lines_including_cli": 6907,
+    "runtime_lines_including_cli": 6928,
     "cycles_including_deferred_imports": [],
     "dependency_edges": 120
   },
@@ -24,6 +24,51 @@
       "required_record_bytes": 2730,
       "full_book_design_bytes": 244219,
       "complete_optional_source_preserved": true
+    }
+  ],
+  "dependent_chain_context": [
+    {
+      "tracking": true,
+      "dependent_nodes": 10,
+      "required_story_nodes": 2,
+      "required_record_bytes": 3337,
+      "complete_design_nodes": 10
+    },
+    {
+      "tracking": true,
+      "dependent_nodes": 100,
+      "required_story_nodes": 2,
+      "required_record_bytes": 3346,
+      "complete_design_nodes": 100
+    },
+    {
+      "tracking": true,
+      "dependent_nodes": 1000,
+      "required_story_nodes": 2,
+      "required_record_bytes": 3355,
+      "complete_design_nodes": 1000
+    },
+    {
+      "tracking": false,
+      "dependent_nodes": 10,
+      "required_story_nodes": 10,
+      "required_record_bytes": 5452,
+      "complete_design_nodes": 10
+    },
+    {
+      "tracking": false,
+      "dependent_nodes": 100,
+      "required_story_nodes": 100,
+      "required_record_bytes": 31016,
+      "complete_design_nodes": 100
+    },
+    {
+      "tracking": false,
+      "dependent_nodes": 1000,
+      "recursion_error": true,
+      "required_story_nodes": null,
+      "required_record_bytes": null,
+      "complete_design_nodes": 1000
     }
   ],
   "tracked_causal_context": [
@@ -124,8 +169,8 @@
       "synthetic_prose_han_at_least": 60000,
       "history_source_bytes": 197,
       "previous_full_catalog_and_event_index_bytes": 5846,
-      "first_build_ms": 0.202,
-      "six_repeated_snapshot_ms": 0.268,
+      "first_build_ms": 0.396,
+      "six_repeated_snapshot_ms": 4.499,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
@@ -138,8 +183,8 @@
       "synthetic_prose_han_at_least": 300000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 29370,
-      "first_build_ms": 0.951,
-      "six_repeated_snapshot_ms": 0.249,
+      "first_build_ms": 1.721,
+      "six_repeated_snapshot_ms": 4.711,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
@@ -152,8 +197,8 @@
       "synthetic_prose_han_at_least": 1500000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 148570,
-      "first_build_ms": 4.606,
-      "six_repeated_snapshot_ms": 0.268,
+      "first_build_ms": 9.137,
+      "six_repeated_snapshot_ms": 4.592,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,

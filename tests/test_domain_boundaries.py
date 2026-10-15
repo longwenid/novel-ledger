@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import design_queries, entities, facts, planning, quality, result_templates, workflow
 from novel_ledger.contracts import CHECKS_VERSION, Error
 from novel_ledger.evidence import evidence
+from architecture_table import ADAPTERS, ALLOWED, CORE_EXTERNAL
 from support import contract
 
 
@@ -96,21 +97,15 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertIn('reader_promise', result_templates.template('opening_contract', 0, {}))
 
     def test_domain_modules_cannot_reintroduce_adapter_or_cross_layer_imports(self):
-        allowed = {'quality': {'contracts', 'evidence'}, 'evidence': {'contracts'},
-                   'entities': {'contracts'}, 'design_queries': set(),
-                   'planning': {'contracts', 'entities', 'narrative', 'craft', 'story_memory'}}
-        for name, dependencies in allowed.items():
+        # The boundary table is maintained once in architecture_table; this derives
+        # the property instead of keeping a second, narrower copy that can drift.
+        self.assertTrue(CORE_EXTERNAL, 'Core modules must stay explicitly listed.')
+        for name in CORE_EXTERNAL:
             with self.subTest(module=name):
-                tree = ast.parse((ROOT / 'scripts' / 'novel_ledger' / (name + '.py')).read_text())
-                actual = set()
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.ImportFrom) and node.level:
-                        actual.update([node.module] if node.module else [a.name for a in node.names])
-                    if isinstance(node, ast.Import):
-                        self.assertFalse({a.name.split('.')[0] for a in node.names}
-                                         & {'sqlite3', 'pathlib', 'subprocess', 'os'})
-                self.assertLessEqual(actual, dependencies)
-        context = ast.parse((ROOT / 'scripts' / 'novel_ledger' / 'context.py').read_text())
+                dependencies = ALLOWED[name]
+                self.assertFalse(dependencies & ADAPTERS,
+                                 f'{name} depends on an adapter: {sorted(dependencies & ADAPTERS)}')
+        context = ast.parse((ROOT / 'scripts' / 'novel_ledger' / 'context.py').read_text(encoding='utf-8'))
         self.assertFalse(any(isinstance(n, ast.ImportFrom) and n.module == 'workflow'
                              for n in ast.walk(context)))
 

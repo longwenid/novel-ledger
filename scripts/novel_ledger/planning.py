@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import math
 from . import contracts
-from .contracts import (CONTRACT_ALIGNMENT, CONTRACT_FIELDS, CONTRACT_KEYS, DEFAULT_NAME_CHARS, DEFAULT_TERMS,
+from .contracts import (CONTRACT_FIELDS, DEFAULT_NAME_CHARS, DEFAULT_TERMS,
                         POLICY_FIELDS, contract_errors, contract_skeleton, digest, han_count, require, text)
 from .entities import register as register_entity
 from . import narrative, craft

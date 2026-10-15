@@ -93,6 +93,8 @@ def main():
     args = parser.parse_args()
     report = {'scope': 'engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings',
               'novel_ledger': graph_metrics(ROOT, 'novel_ledger'), 'context': [context_metrics(n) for n in (10, 100, 1000)],
+              'dependent_chain_context': [chain_context_metrics(n, tracking)
+                                          for tracking in (True, False) for n in (10, 100, 1000)],
               'tracked_causal_context': [tracked_context_metrics(n) for n in (20, 100, 500)],
               'editorial_causal_context': [tracked_context_metrics(n, enhanced=True) for n in (20, 100, 500)],
               'creative_memory_context': [creative_memory_metrics(n) for n in (20, 100, 500)],
@@ -102,6 +104,48 @@ def main():
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, ensure_ascii=False))
+
+
+def chain_context_metrics(size, tracking):
+    """Measure required material along a dependent node chain.
+
+    The older fixture used dependency-free nodes, so it could not observe the
+    difference between one-hop selection and a transitive closure. This fixture
+    points the current chapter plan at the tail of a real chain instead.
+    """
+    with tempfile.TemporaryDirectory() as temporary:
+        repo = SQLiteRepository.initialize(Path(temporary) / 'book', new_book(contract()))
+        try:
+            app = Application(repo)
+            drive(app, until='write')
+            repo.cancel_pending('engineering dependent chain benchmark')
+            book = repo.load()
+            book['contract']['narrative_tracking'] = tracking
+            nodes = [{**node('chain-' + str(i), () if i == 0 else ['chain-' + str(i - 1)]),
+                      'required': False, 'window': [1, 2]} for i in range(size)]
+            book['designs']['book']['nodes'] = nodes
+            plan = book['plans']['1']
+            plan.update(node_ids=[nodes[-1]['id']],
+                        node_actions=[{'node': nodes[-1]['id'], 'after': 'seeded'}],
+                        node_contracts={nodes[-1]['id']: nodes[-1]},
+                        disclosures=[], preconditions=[])
+            repo.save(book)
+            try:
+                work = repo.task(app.advance()['task']['task_id'])['input']
+            except RecursionError:
+                # The untracked path walks the whole dependency closure recursively, so a long
+                # chain aborts the dispatch instead of merely growing the material. Record it
+                # as evidence rather than letting the engineering measurement fail.
+                return {'tracking': tracking, 'dependent_nodes': size, 'recursion_error': True,
+                        'required_story_nodes': None, 'required_record_bytes': None,
+                        'complete_design_nodes': size}
+            values = {n: repo.read_document(work['records'][n]) for n in work['required']}
+            return {'tracking': tracking, 'dependent_nodes': size,
+                    'required_story_nodes': len(values['story']),
+                    'required_record_bytes': len(dump(values).encode('utf-8')),
+                    'complete_design_nodes': len(repo.read_document(work['records']['design:book'])['nodes'])}
+        finally:
+            repo.close()
 
 
 def tracked_context_metrics(size, enhanced=False):

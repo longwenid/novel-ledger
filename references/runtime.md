@@ -102,7 +102,7 @@ await_author 给准确 prose_hash；已获得该版本认可时由主干 `approv
 | 暂停 | pause --reason 原因 | 保留任务与候选；--cancel 取消但留档。恢复原首读用原会话，另派审稿者须取消并重新首读，不能冒用 session。 |
 | 恢复 | resume | 不增加额度；耗尽时保留材料并报告，不重开任务清零。内容与篇幅共享两次返修、一次重设计，字段拒绝与预检回滚不计次。 |
 | 候选稿反馈 | feedback --text 原话 | 对当前候选安排修复；已验收正文改用 revise。 |
-| 历史正文修改 | revise --from-chapter N --reason 原话 | 可用 --through M 收窄初始区间；影响分析、后缀处理和完整范围验收见 [修订影响分析](#修订影响分析)。 |
+| 历史正文修改 | revise --from-chapter N --reason 原话 | 必须声明作用范围四选一：`--through M` / `--changes-file` / `--proposal-hash` / `--to-end`；不给范围时命令直接拒绝，并提示先跑 revision-impact 查看影响终点。影响分析、后缀处理和完整范围验收见 [修订影响分析](#修订影响分析)。 |
 | 未写窗口重规划 | replan --from-chapter N --reason 原因 | 已有草稿或正式稿的计划不能直接删除。 |
 | 字面规则修改 | lexical --file 规则.json --source 原话 | 逐版记录，执行及恢复见 [字面规则](#字面规则)。 |
 | 完整约定修改 | recontract --file 完整候选.json --source 原话 | 取消旧任务留档，独立核验后在父稿保留的分支重新规划写审；开书导入的状态条件见 [入口选择](opening.md#入口选择)。 |
@@ -141,7 +141,7 @@ kind 使用事实投影坐标（如 facts/knowledge/resources/relations/placemen
 
 语义分析沿显式 reads 与 depends_on 传播，受影响章节的已核验事件继续扩大影响；连续修订区间内的中间章节也会重写，其输出和场景依赖同样继续传播。story_node 同时更新节点与所属线路状态，两者均计入影响。缺少完整依赖、没有明确变更坐标或事件无法解释时保守扩展；move/placement/travel 涉及持有链、站位或到达时间的派生影响，目前也保守扩展。`last` 为建议终点，rewrite_chapters 是连续初始修改区间（semantic 为重写，expression/reading 为局部修改）；区间后动作另看 chapter_actions。source_hash/sources 绑定分析的准确章节版本。语义上的依赖完整性仍由独立审稿判断，程序不从空数组证明故事没有联系。
 
-执行 `revise --from-chapter N --reason 原因 --changes-file 变更.json` 时会在创建候选分支的同一事务中重新分析，默认采用计算终点；显式 --through 不能小于该终点。扩大终点时，实际初始修改区间及 chapter_actions 同步扩大，新增修改章的事实输出与场景桥梁继续传播；分析命令的原建议不能冒充实际采用范围。不提供 changes-file 时保留手动修订入口。修改章仍须新执笔和完整独立章审，重读 pass 章保持原文；后缀重放及起章至候选末章的范围复核通过后才能 promote。任务材料 revision_impact 携带实际采用的分析，表达及阅读修订不得改变事实。无论是否启用叙事追踪、是否提供 changes-file，原样携带后文都核对显式输入与原版本前态，拒绝漏报变更造成的失配；已由独立改案改变计划的待携带章转入返修写审。
+执行 `revise --from-chapter N --reason 原因 --changes-file 变更.json` 时会在创建候选分支的同一事务中重新分析，默认采用计算终点；显式 --through 不能小于该终点。扩大终点时，实际初始修改区间及 chapter_actions 同步扩大，新增修改章的事实输出与场景桥梁继续传播；分析命令的原建议不能冒充实际采用范围。不提供 changes-file 时保留手动修订入口，但必须显式选一边：`--through M` 收窄到受影响章，或 `--to-end` 确认改到当前末章——命令不会再把"改第 N 章"默认解释为"重写其后全部"。修改章仍须新执笔和完整独立章审，重读 pass 章保持原文；后缀重放及起章至候选末章的范围复核通过后才能 promote。任务材料 revision_impact 携带实际采用的分析，表达及阅读修订不得改变事实。无论是否启用叙事追踪、是否提供 changes-file，原样携带后文都核对显式输入与原版本前态，拒绝漏报变更造成的失配；已由独立改案改变计划的待携带章转入返修写审。
 
 ### 自动回改边界
 

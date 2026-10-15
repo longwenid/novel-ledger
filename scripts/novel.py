@@ -95,6 +95,8 @@ def parser():
         if command == 'revise':
             sub.add_argument('--through', type=int)
             sub.add_argument('--proposal-hash')
+            sub.add_argument('--to-end', action='store_true',
+                             help='确认从修订起点重写到当前末章；未给 --through/--changes-file 时必须显式选择。')
             sub.add_argument('--source', default='')
         if command == 'feedback':
             sub.add_argument('--text', required=True)
@@ -201,6 +203,14 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'resume':
             return app.resume(owner)
         if command == 'revise':
+            # An unscoped author revision silently rewrites from the start chapter to the last
+            # one. Require an explicit scope so "change chapter 2" never means "rewrite the
+            # rest of the book" by accident; revision_impact stays read-only and free.
+            require(args.through or args.changes_file or args.proposal_hash or args.to_end,
+                    'revision_scope',
+                    '历史修订须声明作用范围：--through、--changes-file、--proposal-hash 或 --to-end 四选一。',
+                    {'recover': '先跑 revision-impact --from-chapter N 查看影响终点，再用 --through 收窄；'
+                                '确认要改到末章时显式加 --to-end。'})
             return app.revise(args.from_chapter, args.reason, owner, args.through,
                               load(args.changes_file) if args.changes_file else None, args.proposal_hash, args.source)
         if command == 'revision-impact':

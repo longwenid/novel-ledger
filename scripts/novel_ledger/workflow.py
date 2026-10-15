@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import copy
-from .contracts import CHECKS_VERSION, OPENING_VERSION, REPAIRS, REDESIGNS, Job, Outcome, checks_for, digest, han_count, require, text
+from .contracts import (CHECKS_VERSION, FAST_REVIEW_BLOCK, OPENING_VERSION, REPAIRS, REDESIGNS, Job, Outcome,
+                        checks_for, digest, han_count, require, text)
 from . import creation, facts, narrative, planning, quality, scopes, world, craft, editorial, understanding, design_queries
 from .evidence import evidence
 
@@ -149,6 +150,8 @@ def choose(book, headers):
     if head:
         volume = planning.volume_for(contract, head)
         # Tracked projects keep bounded chunks even in fast mode; fast only skips intervals.
+        # A merged fast block is still capped by FAST_REVIEW_BLOCK, so skipping the interval
+        # review never hands a whole volume (or the whole book) to one worker.
         fast = contract.get('verification') == 'fast'
         review_scopes = []
         if head % contract['review_interval'] == 0 and not fast:
@@ -171,7 +174,8 @@ def choose(book, headers):
                 parts = book['scope_parts'].get(key, [])
                 next_first = parts[-1]['last'] + 1 if parts else first
                 if next_first <= last:
-                    block_last = last if fast else min(last, next_first + contract['review_chunk'] - 1)
+                    span = FAST_REVIEW_BLOCK if fast else contract['review_chunk']
+                    block_last = min(last, next_first + span - 1)
                     return Job('scope_review', last, scope, next_first, block_last, {'review_key': key, 'scope_first': first, 'scope_last': last})
                 return Job('scope_synthesis', last, scope, first, last, {'review_key': key})
         if revision and head >= revision['last']:
