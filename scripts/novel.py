@@ -46,9 +46,10 @@ def parser():
         if command in ('approve', 'recontract', 'opening', 'choose', 'lexical', 'intake', 'workbench'):
             sub.add_argument('--source', required=True)
         if command == 'choose':
-            sub.add_argument('--option', required=True)
+            sub.add_argument('--option')
+            sub.add_argument('--tier', help='结构门按档位直接指定；展示窗口会自动滑到该档。')
         if command in ('choose', 'regroup'):
-            sub.add_argument('--board', required=True)
+            sub.add_argument('--board')
         if command == 'regroup':
             sub.add_argument('--reason', default='换一组')
         if command == 'back':
@@ -193,8 +194,13 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'approve':
             return app.approve(args.prose_hash, args.source, owner)
         if command == 'choose':
+            if args.tier:
+                return app.opening_tier(args.tier, args.source, owner)
+            require(args.option and args.board, 'opening_option',
+                    'choose 需要 --option 与 --board，或用 --tier 直接指定档位。')
             return app.opening_choice(args.option, args.board, args.source, owner)
         if command == 'regroup':
+            require(args.board, 'opening_option', 'regroup 需要 --board。')
             return app.opening_regroup(args.board, args.reason, owner)
         if command == 'back':
             return app.opening_back(args.gate, args.reason, owner)
