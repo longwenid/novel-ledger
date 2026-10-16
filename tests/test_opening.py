@@ -200,6 +200,15 @@ class OpeningTests(unittest.TestCase):
         self.app.opening_choice(option['id'], board['hash'], '选它。')
         return option
 
+    def test_naming_a_tier_slides_the_ladder_to_it(self):
+        """A size class is named, not proposed: the window slides instead of the author regrouping."""
+        self.select_gates(2)
+        board = self.board()
+        self.assertEqual(board['gate']['id'], 'scale')
+        self.assertNotIn('t0', [row['value']['tier'] for row in board['options']])
+        self.app.opening_tier('t0', '作者指定最小档。')
+        self.assertEqual(creation.view(self.repo.load()['creation'])['selected']['scale']['tier'], 't0')
+
     def select_gates(self, count=10, scale_tier=None):
         for _ in range(count):
             board = self.board()

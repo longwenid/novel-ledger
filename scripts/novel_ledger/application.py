@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import copy
-from .contracts import CHECK_SETS, POLICY_FIELDS, RESULT, VERSION, Error, checks_for, digest, dump, han_count, require, text
+from .contracts import (CHECK_SETS, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, checks_for, digest, dump,
+                        han_count, require, text)
 from . import creation, facts, narrative, planning, quality, workflow, world, craft, editorial, store_keys, story_memory, understanding
 from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
@@ -390,6 +391,25 @@ class Application:
 
     def usage(self):
         return self.repo.usage()
+
+    def opening_tier(self, tier, source, owner=None):
+        """Choose a size class by ladder position, however the window happens to be placed.
+
+        A size class is not a creative proposal: making the author regroup and guess how many
+        times to slide is an accident of the board, not a decision. The choice stays bound to a
+        shown board, so this slides the ladder until the named tier is visible and picks it.
+        """
+        for _ in range(len(SCALE_TIERS)):
+            book = self.repo.load()
+            board = (book.get('creation') or {}).get('board') or {}
+            require(board.get('gate', {}).get('id') == 'scale', 'opening_gate',
+                    '只有结构门可以按档位直接指定。', {'gate': board.get('gate', {}).get('id')})
+            option = next((row for row in board.get('options', []) if row['value'].get('tier') == tier), None)
+            if option is not None:
+                return self.opening_choice(option['id'], board['hash'], source, owner)
+            self.opening_regroup(board['hash'], '按档位直接指定：窗口沿阶梯滑动。', owner)
+        require(False, 'opening_option', '该档位不在体量阶梯中。',
+                {'valid_tiers': [row['id'] for row in SCALE_TIERS]})
 
     def opening_regroup(self, board_hash, reason, owner=None):
         with self.repo.transaction():
