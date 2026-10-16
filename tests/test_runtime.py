@@ -177,6 +177,38 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(self.app.status()['status'], 'paused')
         self.assertCode('repair_budget', self.app.resume)
 
+    def test_answering_a_pending_author_decision_releases_the_halt(self):
+        block = {'id': 'death-detail', 'question': '录音能不能带出铁门内的内容？',
+                 'options': [{'label': '不能', 'impact': '录音须改写。'}, {'label': '能', 'impact': '禁令改写为另一条。'}]}
+        book = self.repo.load()
+        book['author_block'] = copy.deepcopy(block)
+        book.update(status='paused', pause_reason=block['question'])
+        self.repo.save(book)
+        status = self.app.status()
+        self.assertEqual(status['author_decision']['id'], 'death-detail')
+        self.assertEqual(len(status['author_decision']['options']), 2)
+        # The whole point of a handed-up decision: resume cannot bypass it.
+        self.assertCode('author_decision', self.app.resume)
+        self.assertCode('author_decision', self.app.answer, 'death-detail', '第三条路', '作者原话', 'controller-1')
+        self.assertCode('author_decision', self.app.answer, 'voice-range', '不能', '作者原话', 'controller-1')
+        answered = self.app.answer('death-detail', '不能', '铁门内不留记录，录音也不能例外。', 'controller-1')
+        self.assertIsNone(answered['author_decision'])
+        self.assertEqual((answered['status'], answered['pause_reason']), ('running', None))
+        record = self.repo.load()['author_decision_history'][-1]
+        self.assertEqual(record['question']['id'], 'death-detail')
+        self.assertEqual(record['resolution'], {'result': 'answered', 'option': '不能',
+                                                'reason': '铁门内不留记录，录音也不能例外。'})
+        self.assertEqual(record['reviewer'], 'controller-1')
+        # The question is closed: it cannot be answered twice.
+        self.assertCode('author_decision', self.app.answer, 'death-detail', '不能', '再答一次', 'controller-1')
+        # The command is wired end to end: no pending decision means an explicit refusal, not a crash.
+        blocked = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project),
+                                  '--owner', 'controller-1', 'answer', '--decision-id', 'death-detail',
+                                  '--option', '不能', '--source', '作者原话'],
+                                 text=True, capture_output=True, encoding='utf-8', errors='replace')
+        self.assertEqual(blocked.returncode, 2)
+        self.assertEqual(json.loads(blocked.stdout)['error'], 'author_decision')
+
     def test_first_chapter_approval_binds_exact_version(self):
         final = drive(self.app, until='chapter_review')
         self.app.submit(response(self.app))

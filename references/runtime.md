@@ -107,6 +107,7 @@ await_author 给准确 prose_hash；已获得该版本认可时由主干 `approv
 | 字面规则修改 | lexical --file 规则.json --source 原话 | 逐版记录，执行及恢复见 [字面规则](#字面规则)。 |
 | 回收不可达文档 | compact | 只删除任何活动记录都到不了的内容寻址文档并回收空间；不改故事与账本状态，重复执行无副作用。 |
 | 完整约定修改 | recontract --file 完整候选.json --source 原话 | 取消旧任务留档，独立核验后在父稿保留的分支重新规划写审；开书导入的状态条件见 [入口选择](opening.md#入口选择)。 |
+| 答复作者裁决 | answer --decision-id ID --option 选项 --source 原话 | 只回答 status 的 author_decision 里已展示的选项，记录问题、选择与原话后清除 author_block；选项之外的新决定走 recontract 或重新提案。 |
 
 作者明确改约时，暂时停用旧回改指令及改案调度，先完成约定核验；原缺陷、根案例和已耗额度保留，撤销改约候选时恢复父稿原问题。不能借改约绕过修复额度或作者边界。
 
@@ -164,6 +165,15 @@ advance 返回 revision_blocked 时，顶层 proposal 为摘要，并将完整�
 主干据摘要说明范围与原因，交付完整方案路径；不把全量影响记录重复灌入对话。
 
 已有 scope_findings 时，主干调用 revise 也经过同一分析和边界，不能用未带 changes-file 的命令默认为全书重写。作者主动提出的历史修订仍按明确请求执行；主干不得把审稿建议改称作者要求，也不得用改约、重新 run 或 resume 绕过边界。
+
+审稿把问题标为 severity=author 时（见 [协议](protocol.md)），项目暂停、status 的 author_decision 与 book.html 都显示待作者裁决的问题和选项，author_block 保存同一问题；此时不派任何写作任务，也不消耗返修额度。主干把问题和选项原样交给作者，作者选定后按原话记录：
+
+```bash
+python3 "$ROOT/scripts/novel.py" --project "$PROJECT" --owner "$OWNER" answer \
+  --decision-id 待决问题ID --option '作者选定的选项label' --source '作者答复的原话'
+```
+
+答复须是已展示选项之一，否则以 author_decision 拒绝：作者另有第三条路时那是新决定，走改约核验（blocked_resolution 回答准确问题）或重新提案。记录写入 author_decision_history（同一问题、所选选项与作者原话），答复同时进入作者原话（author_feedback），清除 author_block；暂停原因就是该问题时项目恢复 running，否则保持暂停待处理其他停点。下一步按新前提重新起草候选：世界、全书或卷设计交 world_model/book_plan/volume_plan 返修，卷纲批次重交 volume_outline，改案丢弃旧候选重新 alignment_plan；改约定本身的问题仍走 recontract。没有作者答复时 resume 会以 author_decision 拒绝，不能用改约或重发绕过。
 
 作者明确授权准确方案后，保存其原话并执行：
 

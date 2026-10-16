@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (CHECK_SETS, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, checks_for, digest, dump,
+from .contracts import (AUTHOR_CHANNEL_STAGES, CHECK_SETS, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, checks_for, digest, dump,
                         han_count, require, text)
 from . import creation, facts, narrative, planning, quality, workflow, world, craft, editorial, store_keys, story_memory, understanding
 from .ports import Presentation, Repository, TaskCompiler
@@ -34,6 +34,7 @@ class Application:
                 'target': book['target'], 'written_han': book['written_han'], 'finish': book['finish'],
                 'pending_task': task['id'] if task else None, 'stage': task['input']['stage'] if task else None,
                 'pause_reason': None if sealed else book.get('pause_reason'),
+                'author_decision': None if sealed else copy.deepcopy(book.get('author_block')),
                 'workbench': {'enabled': 'understanding' in book},
                 'opening': {'phase': book['creation']['phase'], 'selected_gates': len(book['creation']['selections']),
                             'total_gates': len(creation.gates(book['creation'])),
@@ -459,12 +460,48 @@ class Application:
                     self._revision_summary(book))
             require(not book['draft'] or book['draft']['stage'] != 'exhausted', 'repair_budget', '修复额度已耗尽，恢复不增加额度；作者需明确处置当前方案。')
             require(not book['proposal'] or book['proposal'].get('attempts', 0) <= 2, 'repair_budget', '设计返修额度已耗尽。')
-            require(not book.get('scope_findings'), 'scope_fix', '先按跨章核验缺陷开启修订。')
+            require(not quality.repairable(book.get('scope_findings')), 'scope_fix', '先按跨章核验缺陷开启修订。')
             require(not book.get('author_block'), 'author_decision', '原作者裁决尚未回答，不能通过 resume 绕过。')
             require(not book.get('remedy_exhausted'), 'remedy_exhausted', '根问题最后一轮失败，不能 resume 重发。')
             require(not book.get('alignment_hold') or book['alignment_hold'].get('attempts', 0) < 2, 'remedy_exhausted', '同一改案额度已耗尽。')
             book['status'] = 'running'
             self.repo.save(book)
+        return self.status()
+
+    def answer(self, decision_id, option, source, owner=None):
+        """Record the author's answer to a pending decision and release the halt it caused.
+
+        The question was handed up because no rewrite could settle it, so only the author can close
+        it: the chosen option and the author's own words go on the record under the same question,
+        and the block is cleared. A third way the options do not cover is a new decision, not an
+        answer to this one — it goes back through the stage that asks (recontract for a changed
+        premise), which is also how the pending block is replaced.
+        """
+        require(text(decision_id) and text(option), 'author_decision', '答复须指明待决问题的 id 与所选选项。')
+        require(text(source), 'author_source', '保存作者答复的原话。')
+        with self.repo.transaction():
+            self.controller_guard(owner)
+            book = self.repo.load()
+            block = book.get('author_block')
+            require(isinstance(block, dict), 'author_decision', '当前没有待作者裁决的问题。')
+            require(block.get('id') == decision_id, 'author_decision', '答复的问题与待决问题不一致。',
+                    {'expected': block.get('id'), 'got': decision_id})
+            labels = [row['label'] for row in block.get('options') or []]
+            require(option in labels, 'author_decision', '答复须是已展示的选项之一；作者另有第三条路时走改约或重新提案。',
+                    {'options': labels, 'got': option})
+            book.setdefault('author_decision_history', []).append(
+                {'question': copy.deepcopy(block),
+                 'resolution': {'result': 'answered', 'option': option, 'reason': source}, 'reviewer': owner})
+            # The answer must reach the next draft, which is why it joins the author's own words:
+            # every task reads author_feedback, so the premise is re-drafted against it, not guessed.
+            book['feedback'].append('作者裁决：' + block['question'] + ' → ' + option + '（作者原话：' + source + '）')
+            book.pop('author_block', None)
+            if book.get('pause_reason') == block.get('question'):
+                book.pop('pause_reason', None)
+                book['status'] = 'running'
+            book['revision'] += 1
+            self.repo.save(book)
+            self.repo.record('author_decision', book['author_decision_history'][-1])
         return self.status()
 
     def set_lexical(self, override, source, owner=None):
@@ -594,7 +631,9 @@ class Application:
                                           'first': first, 'last': impact['last'], 'source': source})
                 self.repo.record('revision_authorization', book['decisions'][-1])
             elif book.get('scope_findings'):
-                targets = [f['target_chapter'] for f in book['scope_findings'] if f['severity'] != 'note']
+                # Author-level findings were handed up through the author channel; only the rest
+                # describe work a writer can actually do.
+                targets = [f['target_chapter'] for f in quality.repairable(book['scope_findings'])]
                 require(targets and first == min(targets) and (through is None or through >= max(targets)),
                         'revision_range', '审稿触发的修订须覆盖已记录缺陷，不得回退到无关前文。')
                 directive = {'first': first, 'through': max(targets) if through is None else through,
@@ -713,7 +752,8 @@ class Application:
             world.validate(book['world'], creation.selected(opening), opening['selection_hash'])
             creation.validate_contract(book['contract'], opening, book['world'])
             approval = book['world_review']
-            review = quality.checks(approval['receipt'], checks_for(approval['receipt'].get('checks_version', 1), 'world'), {0: dump(book['world'])})
+            review = quality.checks(approval['receipt'], checks_for(approval['receipt'].get('checks_version', 1), 'world'), {0: dump(book['world'])},
+                                    author_channel='world_review' in AUTHOR_CHANNEL_STAGES)
             require(review['verdict'] == 'pass' and approval['reviewer'] != approval['producer'], 'world_review', '世界模型缺少独立通过核验。')
         amendment = book.get('contract_review')
         if amendment:
