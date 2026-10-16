@@ -96,6 +96,26 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertEqual(blank['reader']['findings'], [])
         self.assertIn('reader_promise', result_templates.template('opening_contract', 0, {}))
 
+    def test_declared_delivery_blocks_match_the_blank_templates(self):
+        from novel_ledger import stages
+        for stage, blocks in stages.BLOCKS.items():
+            with self.subTest(stage=stage):
+                self.assertEqual(tuple(sorted(result_templates.template(stage, 1, {}))),
+                                 tuple(sorted(blocks)))
+        for stage, extras in stages.CONDITIONAL_BLOCKS.items():
+            with self.subTest(stage=stage, conditional=True):
+                result = set(result_templates.template(stage, 1, {}))
+                self.assertLessEqual(result, set(stages.BLOCKS.get(stage, ())) | set(extras))
+        # A combined world dispatch adds exactly the contract block and nothing else; this is
+        # the block a repair dispatch once omitted, leaving the fix with nowhere to live.
+        skeleton = result_templates.template('world_model', 1, {})
+        combined = result_templates.template('world_model', 1, {}, extra=('opening_contract',))
+        self.assertEqual(set(combined) - set(skeleton), {'contract'})
+        # Completeness is the point: a stage with no declaration would be a stage whose
+        # deliverable shape nobody agreed on.
+        declared = set(stages.BLOCKS) | set(stages.CONDITIONAL_BLOCKS) | set(stages.DYNAMIC_BLOCKS)
+        self.assertEqual(set(stages.STAGES) - declared, set())
+
     def test_causal_frontier_is_iterative_and_bounded(self):
         from novel_ledger import design_queries as queries
         size = 5000
