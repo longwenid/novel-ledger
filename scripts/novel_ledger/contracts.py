@@ -102,8 +102,8 @@ VOLUME_TURNS = (
 #   chapters       recommended total chapters for the tier
 #   chapter_window the chapter counts at which the tier's band is actually reachable
 SCALE_TIERS = (
-    {'id': 't0', 'name': '微型', 'word_range': [42000, 68000], 'chapter_min': 2000, 'chapter_aim': 2600,
-     'chapter_max': 3500, 'volume_count': 1, 'chapters': 17, 'chapter_window': [14, 20],
+    {'id': 't0', 'name': '微型', 'word_range': [42000, 66500], 'chapter_min': 2000, 'chapter_aim': 2600,
+     'chapter_max': 3500, 'volume_count': 1, 'chapters': 17, 'chapter_window': [14, 19],
      'note': '单一事件的完整闭环：一条主线、两三个人物，没有卷内转折与支线并行的余地'},
     {'id': 't1', 'name': '短篇', 'word_range': [100000, 200000], 'chapter_min': 1800, 'chapter_aim': 2500,
      'chapter_max': 3500, 'volume_count': 2, 'chapters': 50, 'chapter_window': [40, 57],

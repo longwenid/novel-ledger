@@ -816,15 +816,20 @@ class StructuralGateTests(unittest.TestCase):
                                      ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim', 'volume_count')}}
                 choices['scale'].update(tier=tier['id'], chapters=tier['chapters'], chapter_window=list(tier['chapter_window']))
                 creation.validate_value('scale', choices['scale'], 2, choices)
-                total = tier['chapter_window'][0]
-                raw = contract()
-                raw.update({key: copy.deepcopy(tier[key]) for key in ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim')})
-                raw['volumes'] = [{'id': 'v' + str(i + 1), 'purpose': '查明来源并面对后果。',
-                                   'end': total * (i + 1) // tier['volume_count']} for i in range(tier['volume_count'])]
-                checked = planning.validate_contract(raw)
-                self.assertEqual(checked['volumes'][-1]['end'], total)
-                self.assertGreaterEqual(total, tier['chapter_window'][0])
-                self.assertLessEqual(total, tier['chapter_window'][1])
+                # Every chapter count the window declares must survive the contract rules, not just
+                # the shortest one: the band, the per-chapter aim and the declared maximum have to
+                # hold together at each end of the window, or the ladder offers a size nobody can
+                # actually write at that length.
+                for total in range(tier['chapter_window'][0], tier['chapter_window'][1] + 1):
+                    with self.subTest(tier=tier['id'], chapters=total):
+                        raw = contract()
+                        raw.update({key: copy.deepcopy(tier[key]) for key in
+                                    ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim')})
+                        raw['volumes'] = [{'id': 'v' + str(i + 1), 'purpose': '查明来源并面对后果。',
+                                           'end': total * (i + 1) // tier['volume_count']}
+                                          for i in range(tier['volume_count'])]
+                        checked = planning.validate_contract(raw)
+                        self.assertEqual(checked['volumes'][-1]['end'], total)
 
 
 class OpeningDecisionTests(unittest.TestCase):
