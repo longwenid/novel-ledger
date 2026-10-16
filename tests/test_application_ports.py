@@ -139,7 +139,7 @@ class ApplicationPortsTests(unittest.TestCase):
 
     def test_guided_world_opening_delivers_through_the_injected_channel(self):
         app, repo, presentation, _, _ = self.make_app(preparing=True)
-        repo.save(workflow.preparing_book('作者按当前开书协议提供完整方向。', guided=True))
+        repo.save(workflow.preparing_book('作者按当前开书协议提供完整方向。', guided=True, opening_version=2))
         tier = SCALE_TIERS[0]
         raw = contract(tier['chapter_window'][0], tier['volume_count'])
         raw.update({key: copy.deepcopy(tier[key]) for key in ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim')})

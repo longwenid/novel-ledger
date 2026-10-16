@@ -16,7 +16,7 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 
 | 当前任务 | 首先读取 | 何时补读 |
 |---|---|---|
-| 从零开书、导入已有设定 | [逐门开书](references/opening.md) | 换组或方案同质化读 [创意工具箱](references/hatch.md)；世界任务读 [世界模型](references/world.md)。 |
+| 从零开书、导入已有设定 | [逐门开书](references/opening.md) | 当前是 `creation/3` 十门（起点/番茄男频长篇网文方向：金手指与成长线、对抗梯度、爽点兑现是一等决定，并落成约定字段）；换组或方案同质化读 [创意工具箱](references/hatch.md)；世界任务读 [世界模型](references/world.md)。已有项目保留自己的门序（creation/2、creation/1），不迁移。 |
 | 续写、恢复、暂停、改变作者约定 | [运行与恢复](references/runtime.md) | 沿当前状态和原授权接续，不重新创建项目或重问已定事项。 |
 | 规划、人物设计、执笔、审稿或返修 | [创作与写审](references/craft.md) | 节点、多线、卷纲或范围核验读 [叙事推进](references/narrative.md)。 |
 | 历史修订、影响分析、候选采纳或撤销 | [修订影响分析](references/runtime.md#修订影响分析) | 阅读关联与重读读 [叙事工作台](references/workbench.md)；补丁与独立改案读 [编辑能力](references/editorial.md)。 |

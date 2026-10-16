@@ -173,6 +173,40 @@ class DomainBoundaryTests(unittest.TestCase):
             result_templates.template('not_a_stage', 1, {})
         self.assertEqual(stages.require_stage('write'), 'write')
 
+    def test_opening_three_gates_own_every_alignment_field_they_claim(self):
+        """The male-channel redesign is a gate set, so its ownership must close without a project."""
+        from novel_ledger import creation
+        from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS, OPENING_DIRECTION_GATES,
+                                            alignment_for, opening_source)
+        gates = [ident for ident, _title in creation.GATE_SETS[3]]
+        self.assertEqual(len(gates), 10)
+        self.assertEqual(set(OPENING_DIRECTION_GATES), set(gates),
+                         'every gate of the redesign must say what the default direction means for it')
+        self.assertEqual(creation.SYSTEM_GATES[3], ('scale',))
+        for gate in gates:
+            with self.subTest(gate=gate):
+                self.assertIn(gate, creation.VALUE_RULES[3])
+                self.assertTrue(creation.value_fields(gate, 3), 'a gate must own at least one field')
+                self.assertTrue(creation.value_rules(3, gate).strip())
+        owned = {row['key'] for row in CONTRACT_FIELDS
+                 if opening_source(row, 3) and row['key'] not in DERIVED_FIELDS}
+        derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}
+        self.assertEqual(owned | derived, set(alignment_for(3)))
+        self.assertEqual(owned & derived, set())
+        # A field a later protocol re-sources must still resolve for the versions before it, and a
+        # field a version never decided (since > version) must not be sourced from it either.
+        # opening/1 predates this ownership table (its contract is projected by hand), so it is not
+        # read through it — only the versions that actually derive from the table are checked.
+        for row in CONTRACT_FIELDS:
+            for version in (2, 3):
+                if row.get('since', 1) > version:
+                    continue
+                with self.subTest(field=row['key'], version=version):
+                    source = opening_source(row, version)
+                    if source:
+                        self.assertIn(source[0], creation.gate_ids(version),
+                                      'a version may only source fields from gates it actually has')
+
     def test_the_author_channel_is_declared_for_pre_prose_reviews_only(self):
         from novel_ledger import briefs, stages
         self.assertTrue(AUTHOR_CHANNEL_STAGES <= stages.STAGES,

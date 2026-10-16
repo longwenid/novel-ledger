@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import creation, planning, world, workflow
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import RESULT, digest
+from novel_ledger.contracts import OPENING_VERSION, RESULT, digest
 from novel_ledger.result_templates import template
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import contract
@@ -228,14 +228,14 @@ class LegacyOpeningTests(unittest.TestCase):
         self.assertEqual(digest(checked), digest(self.repo.load()['contract']))
 
     def test_a_project_that_says_version_one_is_the_only_one_on_the_old_gate_set(self):
-        """`init` starts on the new protocol; version 1 is an explicit, remembered choice."""
+        """`init` starts on the current protocol; older versions are explicit, remembered choices."""
         path = Path(self.temp.name) / 'fresh'
         initialized = SQLiteRepository.initialize(path, workflow.preparing_book(guided=True))
         initialized.close()
         repo = SQLiteRepository(path)
         try:
             book = repo.load()
-            self.assertEqual(creation.opening_version(book['creation']), 2)
+            self.assertEqual(creation.opening_version(book['creation']), OPENING_VERSION)
             self.assertEqual(len(creation.gates(book['creation'])), 10)
         finally:
             repo.close()

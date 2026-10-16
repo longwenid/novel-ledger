@@ -450,7 +450,7 @@ class EditorialTests(unittest.TestCase):
         self.assertCode('path_time', facts.settle, moved, [travel], '次日', 1)
 
     def test_partial_intake_skips_only_already_decided_gates(self):
-        state = creation.begin()
+        state = creation.begin(version=2)
         value = {'ending': '退件来源公开，承担后果。', 'theme': '责任怎样在人之间传递。'}
         state = creation.intake(state, {'ending': value, 'title': {'title': '夜班退件'}}, '作者已给结局、母题和书名。')
         self.assertEqual(creation.current(state)['id'], 'genre')

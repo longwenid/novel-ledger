@@ -101,7 +101,7 @@ class BookPageTests(unittest.TestCase):
                              'fit_reason': '承接夜班题材，把推进压在一件具体物件上。', 'value': entry})
             return {'gate': gate, 'options': rows}
 
-        state = creation.begin('工程夹具。')
+        state = creation.begin('工程夹具。', version=2)
         state = creation.offer(state, offered('genre', {'genre': '都市生活', 'reader_promise': '在退件里查清责任。',
                                                        'tone': '冷硬的夜班底色。'}, 'reader_promise'))
         state = creation.pick(state, 'A', state['board']['hash'], 'A')
@@ -109,7 +109,7 @@ class BookPageTests(unittest.TestCase):
         state = creation.pick(state, 'A', state['board']['hash'], 'A')
         board = state['board']                                     # the structural gate answered itself
         state = creation.pick(state, board['options'][0]['id'], board['hash'], '选它。')
-        book = workflow.preparing_book(guided=True)
+        book = workflow.preparing_book(guided=True, opening_version=2)
         book['creation'] = state
         self.repo.save(book)
         page = bookpage.render(self.repo)
