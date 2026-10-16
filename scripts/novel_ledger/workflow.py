@@ -169,9 +169,10 @@ def choose(book, headers):
         return Job('revision_review', revision['reading_task'], 'revision')
     if head:
         volume = planning.volume_for(contract, head)
-        # Tracked projects keep bounded chunks even in fast mode; fast only skips intervals.
-        # A merged fast block is still capped by FAST_REVIEW_BLOCK, so skipping the interval
-        # review never hands a whole volume (or the whole book) to one worker.
+        # Every project reviews through the bounded tree. The flat scheme used to hand a whole
+        # volume (or a whole book) to one synthesis worker, so a basic project's dispatch grew
+        # with its length; the tree caps each task at one block plus child digests regardless.
+        # Fast verification keeps its merged blocks where it had them: bigger leaves, same bound.
         fast = contract.get('verification') == 'fast'
         review_scopes = []
         if head % contract['review_interval'] == 0 and not fast:
@@ -189,15 +190,11 @@ def choose(book, headers):
         for scope, first, last in review_scopes:
             key = review_key(scope, first, last, headers, editorial.context_hash(book) if editorial.enabled(book) else None)
             if key not in book['reviews']:
-                if contract.get('narrative_tracking'):
-                    return scopes.next_review(book, headers, scope, first, last, key)
-                parts = book['scope_parts'].get(key, [])
-                next_first = parts[-1]['last'] + 1 if parts else first
-                if next_first <= last:
-                    span = FAST_REVIEW_BLOCK if fast else contract['review_chunk']
-                    block_last = min(last, next_first + span - 1)
-                    return Job('scope_review', last, scope, next_first, block_last, {'review_key': key, 'scope_first': first, 'scope_last': last})
-                return Job('scope_synthesis', last, scope, first, last, {'review_key': key})
+                # Frozen tasks dispatched under the flat scheme keep their protocol in apply();
+                # only new dispatches change. Parts stored without part_id are not reusable
+                # leaves, so an in-flight scope re-reviews its blocks once.
+                chunk = FAST_REVIEW_BLOCK if fast and not contract.get('narrative_tracking') else contract['review_chunk']
+                return scopes.next_review(book, headers, scope, first, last, key, chunk)
         if revision and head >= revision['last']:
             return {'action': 'revision_ready'}
     if head >= book['target']:

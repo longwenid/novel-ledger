@@ -118,6 +118,51 @@ class LongformTests(unittest.TestCase):
         self.assertEqual(self.repo.load()['status'], 'completed')
         self.assertEqual(len(self.repo.headers('main')), 4)
 
+    def test_basic_project_scope_reviews_stay_bounded_through_the_tree(self):
+        # The flat scheme handed a whole volume to one synthesis worker, so a basic project's
+        # dispatch grew with its length. Every project now reviews through the bounded tree.
+        raw = contract(7, 1)
+        raw['review_chunk'] = 2
+        self.repo.save(workflow.new_book(raw))
+        owner = self.app.run(finish=True, source='工程夹具授权写完。')['owner']
+        scope_tasks = []
+        for _ in range(200):
+            handoff = self.app.advance(owner=owner)
+            if handoff['action'] == 'await_author':
+                self.app.approve(handoff['prose_hash'], '工程夹具作者明确认可当前版本。', owner)
+                continue
+            if handoff['action'] != 'task_ready':
+                break
+            work = self.repo.task(handoff['task']['task_id'])['input']
+            if work['stage'] in ('scope_review', 'scope_synthesis'):
+                scope_tasks.append(work)
+            self.app.submit(response(self.app))
+        self.assertEqual(handoff['action'], 'ready_to_complete')
+        self.assertTrue(any(w['stage'] == 'scope_synthesis' and w['payload'].get('children')
+                            for w in scope_tasks))
+        fanout = self.repo.load()['contract']['review_fanout']
+        for work in scope_tasks:
+            # A leaf reads one chunk; a synthesis reads at most its children's boundary chapters,
+            # so no dispatch ever carries the whole 7-chapter volume the way the flat scheme did.
+            self.assertLessEqual(len(work['prose']), 2 * fanout)
+            self.assertLess(len(work['prose']), 7)
+
+    def test_frozen_flat_synthesis_receipt_keeps_its_legacy_protocol(self):
+        # Tasks frozen before the tree still submit through the per-chapter coverage branch.
+        book = workflow.new_book(contract(2, 1))
+        sources = {1: '第一章正文。', 2: '第二章正文。'}
+        task = {'stage': 'scope_synthesis', 'chapter': 2, 'scope': 'volume:v1', 'first': 1, 'last': 2,
+                'payload': {'review_key': 'legacy-key'}, 'blind': False, 'obligations': [],
+                'checks_version': 1, 'capabilities': {}, 'narrative_tracking': False}
+        from novel_ledger.contracts import checks_for
+        data = {'verdict': 'pass', 'checks_version': 1, 'findings': [], 'obligations': [],
+                'checks': [{'id': ident, 'result': 'pass', 'reason': '工程夹具。',
+                            'evidence': [{'chapter': 1, 'quote': sources[1]}]} for ident in checks_for(1, 'long')],
+                'coverage': [{'chapter': k, 'reason': '工程覆盖。', 'evidence': {'chapter': k, 'quote': v}}
+                             for k, v in sources.items()]}
+        outcome = workflow.apply(book, task, data, 'legacy-reviewer', sources)
+        self.assertIn('legacy-key', outcome.book['reviews'])
+
     def test_scene_dependencies_reject_forward_links_and_preserve_explicit_identity(self):
         first = plan_extras({'chapter': 1, 'goal': '追问。'})
         first['scenes'][0].update(id='c1:warehouse', reads=[], depends_on=[])

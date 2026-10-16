@@ -82,7 +82,7 @@ reader.pacing 独立填写实际节奏五项和单个 evidence；引擎将这份
 
 ## 分层范围核验
 
-review_chunk 限制叶块章数；review_fanout 为 2～8，限制每个综合者的子报告数。fast 只省去固定间隔审，跟踪项目仍保持有界分块。树的叶覆盖完整正文，父覆盖连续子范围，节点指纹绑定章节链和检查版本；相同指纹的已审子树可复用，根仍独立接受当前范围。
+review_chunk 限制叶块章数；review_fanout 为 2～8，限制每个综合者的子报告数。fast 只省去固定间隔审；所有项目（含未开叙事跟踪的基础流程）的范围审都经有界覆盖树分块，基础项目在 fast 档把叶块合并为不超过 12 章的大块，任何派工都不随卷长增长。树的叶覆盖完整正文，父覆盖连续子范围，节点指纹绑定章节链和检查版本；相同指纹的已审子树可复用，根仍独立接受当前范围。
 
 叶块交逐章 coverage=[{chapter,reason,evidence}]；综合交 coverage=[{part_id,reason,evidence}]，与冻结 children 一一对应，证据须来自对应子范围。每层还交 handoff={causal_bridge,thread_changes,character_changes,disclosures,rhythm,open_questions,evidence}：六项具体文字，每项≤800字，evidence 1～8条、每条引文≤240字。记录无变化/无疑点也说明依据。完整报告和正文不截断，以上限制针对新写的交接摘要。
 

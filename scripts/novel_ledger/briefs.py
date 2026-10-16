@@ -135,7 +135,9 @@ def stage(name, payload=None):
     if name in AUTHOR_CHANNEL_STAGES:
         authority = (' 若某一项确实是作者约定本身的问题、任何改写都无法解决，把该发现标为 severity=author 并给'
                      ' decision={id,question,options}：id 是这条裁决的稳定身份，question 写成一个作者能直接回答的问题，'
-                     'options 至少两个，每项 label/impact 说明取舍后果。程序会暂停项目、把问题交给作者，不安排写作端返修。'
+                     'options 至少两个，每项 label/impact 说明取舍后果。程序会暂停项目、把问题交给作者，不安排写作端返修；'
+                     '作者在选项内作答即记录并按新前提重拟候选，只有要改约定本身的答案才走改约——已有正文时改约会在'
+                     '新分支自第 1 章重写重审，把该代价如实写进 options 的 impact 让作者知情。'
                      '一份回执最多上交一条；能由改写解决的缺陷仍用 blocker/quality 并给 target_chapter 与 repair_scope。')
     memory = ''
     if payload.get('understanding'):
