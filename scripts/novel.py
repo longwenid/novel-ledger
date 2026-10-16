@@ -11,7 +11,7 @@ from novel_ledger.contracts import Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'first-read', 'claim', 'run', 'renew', 'approve',
-          'pause', 'resume', 'revise', 'revision-impact', 'workbench', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
+          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'workbench', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
 WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'first-read'}
 # Prose, frozen records and the first read belong to a dispatched task; the controller role never executes them.
@@ -85,6 +85,10 @@ def parser():
             group.add_argument('--through', type=int)
             group.add_argument('--complete', action='store_true')
             sub.add_argument('--source', default='')
+        if command == 'answer':
+            sub.add_argument('--decision-id', required=True, help='待作者裁决的问题 id，与 status 的 author_decision.id 一致。')
+            sub.add_argument('--option', required=True, help='作者选定的选项 label，须是已展示选项之一。')
+            sub.add_argument('--source', required=True, help='作者答复的原话。')
         if command in ('pause', 'revise', 'replan'):
             sub.add_argument('--reason', required=True)
         if command == 'pause':
@@ -208,6 +212,8 @@ def dispatch(args, open_runtime=open_local_runtime):
             return app.pause(args.reason, args.cancel, owner)
         if command == 'resume':
             return app.resume(owner)
+        if command == 'answer':
+            return app.answer(args.decision_id, args.option, args.source, owner)
         if command == 'revise':
             # An unscoped author revision silently rewrites from the start chapter to the last
             # one. Require an explicit scope so "change chapter 2" never means "rewrite the

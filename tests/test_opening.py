@@ -232,6 +232,36 @@ class OpeningTests(unittest.TestCase):
         self.app.submit(receipt(self.app, review_data(self.app)))
         return self.app.advance()
 
+    def test_an_author_level_finding_waits_for_the_author_and_then_redrafts(self):
+        """A premise conflict is the author's to settle, not a repair round for a writer."""
+        self.select_gates()
+        self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
+        self.app.submit(receipt(self.app, combined(self.app)))
+        self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
+        work = self.repo.pending()['input']
+        source = next(iter(self.app._sources(work).values()))
+        data = review_data(self.app)
+        row = data['checks'][0]
+        row.update(result='fix', reason='禁令与录音事实互相冲突。')
+        data['verdict'] = 'fix'
+        data['findings'] = [{'criterion': row['id'], 'severity': 'author',
+                             'reason': '两条世界规则冲突，任何改写都无法同时满足。',
+                             'evidence': {'chapter': 0, 'quote': source},
+                             'decision': {'id': 'rule-conflict', 'question': '铁门内的内容能不能被录音带出？',
+                                          'options': [{'label': '不能被带出', 'impact': '录音须改写。'},
+                                                      {'label': '可以被带出', 'impact': '禁令改写为另一条。'}]}}]
+        self.app.submit(receipt(self.app, data))
+        book = self.repo.load()
+        self.assertEqual(book['status'], 'paused')
+        self.assertEqual(book['author_block']['id'], 'rule-conflict')
+        self.assertEqual(book['proposal']['attempts'], 0, 'the author\'s premise is not a writer\'s failure')
+        self.assertTrue(book['proposal']['needs_repair'], 'the candidate must be re-drafted, not re-reviewed')
+        # Nothing is dispatched while the question is pending: the halt is real.
+        self.assertEqual(self.app.advance()['action'], 'paused')
+        self.app.answer('rule-conflict', '不能被带出', '铁门内不留记录，录音也不能例外。')
+        self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
+        self.assertIn('不能被带出', ' '.join(self.repo.load()['feedback']))
+
     def test_opening_contract_template_carries_every_alignment_field(self):
         self.select_gates()
         task = self.app.advance()['task']

@@ -7,7 +7,7 @@ pays for the current gate's rules and lens, not for the entire toolbox on every 
 from __future__ import annotations
 
 from .creation import gate_note, gate_title, value_rules
-from .contracts import OPENING_VERSION, OPTION_CONTRACT
+from .contracts import AUTHOR_CHANNEL_STAGES, OPENING_VERSION, OPTION_CONTRACT
 from . import stages
 BRIEFS = {
     'opening_options': '开书方案简报',
@@ -131,9 +131,15 @@ def stage(name, payload=None):
                     'scope_synthesis': ' root 若含 closure 按六项职责裁决；remedies 逐项验收原目标，末轮额度为零也先验。'}.get(name, '')
         if name == 'scope_synthesis' and payload.get('closure', {}).get('revision_policy'):
             enhanced += ' 优先保留已验收前文；确有历史缺陷才 revise_range，range 从最早 target_chapter 起，changes 区分 expression/reading/semantic 并声明真实变更坐标。程序先分析影响，超出近期窗口或触及已关闭的验收范围时只保存修复方案，不自动扩大重写。'
+    authority = ''
+    if name in AUTHOR_CHANNEL_STAGES:
+        authority = (' 若某一项确实是作者约定本身的问题、任何改写都无法解决，把该发现标为 severity=author 并给'
+                     ' decision={id,question,options}：id 是这条裁决的稳定身份，question 写成一个作者能直接回答的问题，'
+                     'options 至少两个，每项 label/impact 说明取舍后果。程序会暂停项目、把问题交给作者，不安排写作端返修。'
+                     '一份回执最多上交一条；能由改写解决的缺陷仍用 blocker/quality 并给 target_chapter 与 repair_scope。')
     memory = ''
     if payload.get('understanding'):
         memory = ' creative_memory 是可修订的理解及原文表达样本，结合反证和适用范围使用；不把解释直接当世界事实，也不必模仿样本句式。unavailable_refs 是当前缺失或已失效的旧理解，须核对原文或重规划，不照搬失效解释。'
         if name in ('chapter_review', 'scope_review', 'scope_synthesis', 'revision_review'):
             memory += ' 有值得延续的新理解时交 understanding 数组（无新增用空数组），按 workbench 指南给 id/kind/claim/subjects/topics/status/reason/evidence/counterevidence；保留多种解释，不为完成表格强行提炼结论。'
-    return rule + time_rule + extra + handoff + enhanced + memory + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，来源不足时按冻结哈希补读，不读源码猜格式。'
+    return rule + time_rule + extra + handoff + enhanced + authority + memory + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，来源不足时按冻结哈希补读，不读源码猜格式。'

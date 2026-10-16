@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import digest, require, text
+from .contracts import AUTHOR_SEVERITY, digest, require, text
 
 CLOSURE_CHECKS = ('scope_question', 'dramatized_process', 'character_choice', 'cost', 'aftermath', 'handoff')
 REVISION_BOUNDS = 'revision-bounds/1'
@@ -184,7 +184,7 @@ def closure(book, task, data, evidence):
                 and task['first'] <= span[0] <= span[1] <= task['last'], 'closure', '修订 range=[起点,终点] 须在已核验范围内。')
         bounded = payload.get('revision_policy', {}).get('schema') == REVISION_BOUNDS
         if bounded:
-            targets = [f['target_chapter'] for f in data['findings'] if f['severity'] != 'note']
+            targets = [f['target_chapter'] for f in data['findings'] if f['severity'] not in ('note', AUTHOR_SEVERITY)]
             require(targets and span[0] == min(targets) and span[1] >= max(targets),
                     'revision_range', '修订须从明确缺陷的最早章开始，并覆盖本轮全部实质缺陷。')
             require(isinstance(value.get('changes'), dict), 'revision_impact', '历史修订须声明 changes，区分 expression、reading 与 semantic。')

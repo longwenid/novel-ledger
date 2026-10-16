@@ -8,16 +8,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import design_queries, entities, facts, planning, quality, result_templates, workflow
-from novel_ledger.contracts import CHECKS_VERSION, Error
+from novel_ledger.contracts import AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, Error
 from novel_ledger.evidence import evidence
 from architecture_table import ADAPTERS, ALLOWED, CORE_EXTERNAL
 from support import contract
 
 
 class DomainBoundaryTests(unittest.TestCase):
-    def assertCode(self, code, fn, *args):
+    def assertCode(self, code, fn, *args, **kwargs):
         with self.assertRaises(Error) as caught:
-            fn(*args)
+            fn(*args, **kwargs)
         self.assertEqual(caught.exception.code, code)
 
     def test_design_query_needs_only_design_values(self):
@@ -165,6 +165,67 @@ class DomainBoundaryTests(unittest.TestCase):
         with self.assertRaises(Error):
             result_templates.template('not_a_stage', 1, {})
         self.assertEqual(stages.require_stage('write'), 'write')
+
+    def test_the_author_channel_is_declared_for_pre_prose_reviews_only(self):
+        from novel_ledger import briefs, stages
+        self.assertTrue(AUTHOR_CHANNEL_STAGES <= stages.STAGES,
+                        'author channel names a stage the engine does not dispatch')
+        for name in sorted(AUTHOR_CHANNEL_STAGES):
+            with self.subTest(stage=name):
+                stages.require_stage(name)
+                self.assertIn('decision={id,question,options}', briefs.stage(name, {}),
+                              'reviewers cannot use an option the brief never mentions')
+        # A chapter is already committed prose: its review must describe work a writer can do now.
+        self.assertFalse(AUTHOR_CHANNEL_STAGES & {'write', 'chapter_review', 'revision_review', 'repair', 'redesign'})
+
+    def test_author_level_findings_are_structured_and_bounded(self):
+        source = {3: '门已经锁上。'}
+        decision = {'id': 'death-detail', 'question': '铁门里的内容能不能被录音带出去？',
+                    'options': [{'label': '不能被带出', 'impact': '录音与转述都须改写。'},
+                                {'label': '可以被带出', 'impact': '禁令改写为另一条。'}]}
+
+        def receipt(severity, **extra):
+            finding = {'criterion': 'continuity', 'severity': severity, 'reason': '作者约定本身互相冲突。',
+                       'evidence': {'chapter': 3, 'quote': source[3]}, **extra}
+            return {'verdict': 'fix', 'checks_version': CHECKS_VERSION,
+                    'checks': [{'id': 'continuity', 'result': 'fix', 'reason': '冲突。',
+                                'evidence': [{'chapter': 3, 'quote': source[3]}]}], 'findings': [finding]}
+
+        # A chapter-level review has no author channel: that question is a writer's repair.
+        self.assertCode('author_decision', quality.checks, receipt('author', decision=decision), ['continuity'], source)
+        checked = quality.checks(receipt('author', decision=decision), ['continuity'], source, author_channel=True)
+        self.assertEqual(quality.author_decision(checked['findings'])['id'], 'death-detail')
+        self.assertEqual(quality.repairable(checked['findings']), [],
+                         'an author decision must never become a worker repair target')
+        # The question must be answerable, and only an author-level finding may carry it.
+        self.assertCode('author_decision', quality.checks, receipt('author'), ['continuity'], source, author_channel=True)
+        self.assertCode('author_decision', quality.checks, receipt('author', decision=dict(decision, options=decision['options'][:1])),
+                        ['continuity'], source, author_channel=True)
+        self.assertCode('author_decision', quality.checks,
+                        receipt('blocker', decision=decision, target_chapter=3, repair_scope='local'),
+                        ['continuity'], source, author_channel=True)
+        # `resume` refuses to bypass one pending question, so a receipt may hand up only one.
+        two = receipt('author', decision=decision)
+        two['findings'].append(dict(copy.deepcopy(two['findings'][0]), decision=dict(decision, id='voice-range')))
+        self.assertCode('author_decision', quality.checks, two, ['continuity'], source, author_channel=True)
+
+    def test_an_author_decision_pauses_the_book_instead_of_a_repair_round(self):
+        review = {'verdict': 'fix', 'findings': [{
+            'criterion': 'world_rules', 'severity': 'author', 'reason': '两条规则冲突。',
+            'evidence': {'chapter': 0, 'quote': '铁门内不留记录。'},
+            'decision': {'id': 'death-detail', 'question': '录音能不能带出铁门内的内容？',
+                         'options': [{'label': '不能', 'impact': '录音须改写。'}, {'label': '能', 'impact': '禁令改写。'}]}}]}
+        book = {'status': 'running'}
+        holder = {'attempts': 0}
+        self.assertTrue(workflow.hold_for_author(book, review, holder))
+        self.assertEqual(book['status'], 'paused')
+        self.assertEqual(book['pause_reason'], book['author_block']['question'])
+        self.assertEqual(book['author_block']['id'], 'death-detail')
+        self.assertEqual(len(book['author_block']['options']), 2)
+        self.assertEqual(holder['attempts'], 0, 'a premise no writer can change must not burn a repair attempt')
+        # One pending question at a time: the registered decision keeps priority.
+        self.assertFalse(workflow.hold_for_author(book, review, holder))
+        self.assertEqual(book['author_block']['id'], 'death-detail')
 
     def test_domain_modules_cannot_reintroduce_adapter_or_cross_layer_imports(self):
         # The boundary table is maintained once in architecture_table; this derives

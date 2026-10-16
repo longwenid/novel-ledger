@@ -52,6 +52,22 @@ def checks_for(version, kind):
             {'known_versions': sorted(CHECK_SETS), 'recover': '回执按下发的模板版本填写，不要沿用旧版本号。'})
     return table[kind]
 FIRST_READ = ('desire', 'obstacle', 'change', 'read_on_reason')
+# Findings a reviewer may raise. The first three describe work a writer can repair; 'author' means
+# no rewrite can settle it — the premise itself must be decided, so it is routed to the author
+# instead of becoming a repair target (and it is the only severity that carries `decision`).
+FINDING_SEVERITIES = ('blocker', 'quality', 'note', 'author')
+AUTHOR_SEVERITY = 'author'
+# Same shape as the author block this engine already pauses on, plus an id for provenance.
+AUTHOR_DECISION_FIELDS = ('id', 'question', 'options')
+DECISION_OPTION_FIELDS = ('label', 'impact')
+# One pending decision at a time is the engine's existing invariant (a single author_block that
+# `resume` refuses to bypass), so a receipt may hand up at most this many author-level findings.
+AUTHOR_DECISIONS_PER_RECEIPT = 1
+# Reviews taken while the book may still be paused for the author, before prose is committed to a
+# chapter: only there can a design question be handed up and answered. Chapter-level reviews keep
+# the strict default, so a finding there always describes work a writer can do right now.
+AUTHOR_CHANNEL_STAGES = frozenset({'world_review', 'outline_review', 'design_review', 'contract_review',
+                                   'alignment_review', 'scope_review', 'scope_synthesis'})
 REPAIRS = 2
 REDESIGNS = 1
 # Fast verification merges block reviews by design, but a merged block still stays bounded:

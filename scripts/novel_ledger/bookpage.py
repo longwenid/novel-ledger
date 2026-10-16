@@ -249,6 +249,12 @@ def _overview(book, contract, rows, state, open_hooks, report, written):
         pieces.append('<p class="note">故事累计经过 ' + str(state['clock']) + ' 天</p>')
     if book.get('pause_reason'):
         pieces.append('<p class="note">暂停原因：' + _esc(book['pause_reason']) + '</p>')
+    block = book.get('author_block')
+    if block:
+        pieces.append('<div class="card" style="border-color:var(--bad)"><b>待作者裁决</b><p class="note">'
+                      + _esc(block.get('question', '')) + '</p><ul class="tight">'
+                      + ''.join('<li>' + _esc(o.get('label', '')) + '：' + _esc(o.get('impact', '')) + '</li>'
+                                for o in block.get('options') or []) + '</ul></div>')
     if report['problems']:
         pieces.append('<div class="card" style="border-color:var(--bad)"><b>核验发现的问题</b><ul class="tight">'
                       + ''.join('<li>' + _esc(p) + '</li>' for p in report['problems']) + '</ul></div>')

@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (CHECKS_VERSION, FAST_REVIEW_BLOCK, OPENING_VERSION, REPAIRS, REDESIGNS, Job, Outcome,
-                        checks_for, digest, han_count, require, text)
+from .contracts import (AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, FAST_REVIEW_BLOCK, OPENING_VERSION, REPAIRS, REDESIGNS,
+                        Job, Outcome, checks_for, digest, han_count, require, text)
 from . import creation, facts, narrative, planning, quality, scopes, world, craft, editorial, understanding, design_queries
 from .evidence import evidence
 
@@ -42,6 +42,26 @@ def repair_stage(budget):
     if budget.get('redesigns', 0) >= REDESIGNS:
         return 'exhausted'
     return 'repair' if budget.get('repairs', 0) < REPAIRS else 'redesign'
+
+
+def hold_for_author(book, review, holder=None):
+    """Hand an author-level finding up through the existing author channel.
+
+    No writer can repair a premise the author has not settled, so such a finding must not consume a
+    repair round: it becomes the pending question `resume` refuses to bypass. The caller decides how
+    its own candidate is disposed of, since only it knows what the next dispatch should re-draft.
+    Returns True when held.
+    """
+    decision = quality.author_decision(review.get('findings'))
+    if decision is None or book.get('author_block'):
+        # One pending question at a time; an already-registered decision keeps priority.
+        return False
+    if holder is not None:
+        holder['findings'] = review['findings']
+    book['author_block'] = {'id': decision['id'], 'question': decision['question'],
+                            'options': copy.deepcopy(decision['options'])}
+    book.update(status='paused', pause_reason=decision['question'])
+    return True
 
 
 def next_outline(book, volume, chapter=None):
@@ -283,8 +303,10 @@ def apply(book, task, data, actor, sources):
     elif stage == 'world_review':
         proposal = book['proposal']
         require(actor != proposal['producer'], 'review_independence', '世界模型须由独立核验者检查。')
-        review = quality.checks(data, checks_for(version, 'world'), sources, expected_version=version)
-        if review['verdict'] == 'pass':
+        review = quality.checks(data, checks_for(version, 'world'), sources, expected_version=version, author_channel=stage in AUTHOR_CHANNEL_STAGES)
+        if hold_for_author(book, review, proposal):
+            proposal['needs_repair'] = True
+        elif review['verdict'] == 'pass':
             book['world'] = proposal['data']
             book['world_review'] = {'receipt': review, 'producer': proposal['producer'], 'reviewer': actor}
             book['proposal'] = book.get('contract_draft') or None
@@ -326,8 +348,10 @@ def apply(book, task, data, actor, sources):
     elif stage == 'outline_review':
         proposal = book['proposal']
         require(actor != proposal['producer'], 'review_independence', '逐章卷纲批次须由独立核验者检查。')
-        review = quality.checks(data, checks_for(version, 'design'), sources, expected_version=version)
-        if review['verdict'] == 'pass':
+        review = quality.checks(data, checks_for(version, 'design'), sources, expected_version=version, author_channel=stage in AUTHOR_CHANNEL_STAGES)
+        if hold_for_author(book, review, proposal):
+            proposal['needs_repair'] = True
+        elif review['verdict'] == 'pass':
             design = book['designs'][proposal['scope']]
             existing = design.setdefault('chapters', [])
             volume = planning.volume_for(editorial.effective_contract(book), chapter)
@@ -347,8 +371,11 @@ def apply(book, task, data, actor, sources):
     elif stage == 'design_review':
         proposal = book['proposal']
         require(proposal is not None and actor != proposal['producer'], 'review_independence', '设计核验须独立于提案者。')
-        review = quality.checks(data, checks_for(version, 'design'), sources, expected_version=version)
-        if review['verdict'] == 'pass':
+        review = quality.checks(data, checks_for(version, 'design'), sources, expected_version=version, author_channel=stage in AUTHOR_CHANNEL_STAGES)
+        if hold_for_author(book, review, proposal):
+            # The answer changes the premise, so re-draft it rather than re-review the same candidate.
+            proposal['needs_repair'] = True
+        elif review['verdict'] == 'pass':
             book['designs'][proposal['scope']] = proposal['data']
             book['proposal'] = None
         else:
@@ -361,8 +388,11 @@ def apply(book, task, data, actor, sources):
     elif stage == 'contract_review':
         proposal = book['proposal']
         require(actor != proposal['producer'], 'review_independence', '改约核验须独立于作者要求整理者。')
-        review = quality.checks(data, checks_for(version, 'design'), sources, expected_version=version)
-        if review['verdict'] == 'pass':
+        review = quality.checks(data, checks_for(version, 'design'), sources, expected_version=version, author_channel=stage in AUTHOR_CHANNEL_STAGES)
+        if hold_for_author(book, review, proposal):
+            # A contract has no draft stage of its own: the answer arrives through recontract.
+            pass
+        elif review['verdict'] == 'pass':
             if task['payload'].get('author_question_hash'):
                 resolution = data.get('blocked_resolution')
                 require(isinstance(resolution, dict) and resolution.get('question_hash') == task['payload']['author_question_hash']
@@ -412,8 +442,11 @@ def apply(book, task, data, actor, sources):
     elif stage == 'alignment_review':
         proposal = book['alignment_proposal']
         require(actor != proposal['producer'], 'review_independence', '改案须由新独立核验者审查。')
-        review = quality.checks(data, checks_for(version, 'design'), sources, expected_version=version)
-        if review['verdict'] == 'pass':
+        review = quality.checks(data, checks_for(version, 'design'), sources, expected_version=version, author_channel=stage in AUTHOR_CHANNEL_STAGES)
+        if hold_for_author(book, review, proposal):
+            # Drop this candidate so the next dispatch plans a new one against the author's answer.
+            book.pop('alignment_proposal', None)
+        elif review['verdict'] == 'pass':
             require(proposal['basis'] == editorial.context_hash(book), 'alignment', '改案来源已变化。')
             book['designs'] = proposal['designs']
             book['plans'] = {n: p for n, p in book['plans'].items() if int(n) < chapter}
@@ -571,7 +604,7 @@ def apply(book, task, data, actor, sources):
                      'producer': 'historical', 'history': [], 'findings': []}
             route_repair(book, draft, findings)
     elif stage in ('scope_review', 'scope_synthesis'):
-        review = quality.checks(data, checks_for(version, 'long'), sources, expected_version=version)
+        review = quality.checks(data, checks_for(version, 'long'), sources, expected_version=version, author_channel=stage in AUTHOR_CHANNEL_STAGES)
         coverage = data.get('coverage')
         tree_task = task['payload'].get('review_tree')
         children = task['payload'].get('children', [])
@@ -595,7 +628,9 @@ def apply(book, task, data, actor, sources):
             editorial.remedy_review(book, data, task['scope'], lambda r: evidence(r, sources))
             if task['payload'].get('closure'):
                 editorial.closure(book, task, data, lambda r: evidence(r, sources))
-        if review['verdict'] == 'pass':
+        if hold_for_author(book, review):
+            book['scope_findings'] = review['findings']
+        elif review['verdict'] == 'pass':
             accepted = {'scope': task['scope'], 'first': task['first'], 'last': task['last'], 'receipt': review, 'coverage': copy.deepcopy(coverage)}
             if tree_task:
                 accepted.update({k: task['payload'][k] for k in ('part_id', 'level', 'children')})

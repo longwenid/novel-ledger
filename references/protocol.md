@@ -92,6 +92,8 @@ checks 恰好覆盖模板，各项 {id,result:pass或fix,reason,evidence:[...]}�
 
 findings=[{criterion,severity:blocker或quality或note,reason,evidence,target_chapter,repair_scope:local或chapter}]。实质 finding 与 fix 检查一致，须给 target_chapter 与 repair_scope；note 可省修复范围。修复起点不从举证位置猜。reason 说明具体问题、影响和修订建议，evidence 保留精确原文，不另加字段。义务逐项回 {id,result,reason,evidence}，未履行者须关联带 obligation_id 的实质 finding。
 
+severity=author 表示问题出在作者约定本身，任何改写都无法解决：它不写 target_chapter/repair_scope，改带 decision={id,question,options:[{label,impact}]}，question 须是作者能直接回答的问题，options 至少两个并说明取舍后果。程序把该发现挂到既有作者通道（暂停项目、pause_reason 取 question、resume 拒绝绕过），不安排写作端返修，也不消耗返修额度；作者选定选项后记录进 author_decision_history 并并入作者原话，候选按新前提重新起草，改约定本身的问题仍走改约核验。只有世界模型、设计、卷纲、改约、改案与跨章核验这些正文未定型的阶段有该通道，章内审稿仍只报能由改写解决的缺陷。一份回执最多上交一条 author 发现（一次只有一个待决问题），且只有 author 级发现可以携带 decision。
+
 事实核对正文覆盖、连续性、资源、知情、时间、世界规则和空间；阅读核对追读、人物、变化、情绪代价、语言、重复和有效展开。跨章核对因果、人物弧线、兑现、节奏、世界规则和覆盖。程序检查协议及证据，独立审稿者负责判断语义。
 
 ## 事件

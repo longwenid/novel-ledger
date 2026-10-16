@@ -2,8 +2,20 @@
 from __future__ import annotations
 
 import copy
-from .contracts import CHECK_SETS, CHECKS_VERSION, FIRST_READ, checks_for, require, text
+from .contracts import (AUTHOR_DECISION_FIELDS, AUTHOR_DECISIONS_PER_RECEIPT, AUTHOR_SEVERITY, CHECK_SETS,
+                        CHECKS_VERSION, DECISION_OPTION_FIELDS, FINDING_SEVERITIES, FIRST_READ, checks_for, require, text)
 from .evidence import evidence
+
+
+def author_decision(findings):
+    """The one author-level finding of a receipt, if any: no rewrite settles it, the author must decide."""
+    rows = [f for f in findings or [] if isinstance(f, dict) and f.get('severity') == AUTHOR_SEVERITY]
+    return rows[0]['decision'] if rows else None
+
+
+def repairable(findings):
+    """Findings a writer can act on: notes are advisory, author-level ones wait on the author."""
+    return [f for f in findings or [] if f.get('severity') not in ('note', AUTHOR_SEVERITY)]
 
 
 def first_read(data, sources):
@@ -18,7 +30,7 @@ def first_read(data, sources):
     return copy.deepcopy(data)
 
 
-def checks(receipt, required, sources, obligations=(), challenge_ids=(), expected_version=None):
+def checks(receipt, required, sources, obligations=(), challenge_ids=(), expected_version=None, author_channel=False):
     require(isinstance(receipt, dict) and receipt.get('verdict') in ('pass', 'fix'), 'review', '审稿需要 pass/fix 结论。')
     version = receipt.get('checks_version', 1)
     require(expected_version is None or version == expected_version, 'checks_version', '回执版本与冻结任务不一致。',
@@ -47,19 +59,40 @@ def checks(receipt, required, sources, obligations=(), challenge_ids=(), expecte
     require(isinstance(findings, list), 'finding', '审稿须提供 findings 数组，无问题用空数组。')
     failed = {r['id'] for r in normalized['checks'] if r['result'] == 'fix'}
     blocking = set()
+    decisions = []
     for finding in findings:
         require(isinstance(finding, dict) and finding.get('criterion') in required, 'finding', '发现须挂在本任务检查项上。',
                 {'valid_criteria': list(required)})
-        require(finding.get('severity') in ('blocker', 'quality', 'note') and text(finding.get('reason')), 'finding',
+        require(finding.get('severity') in FINDING_SEVERITIES and text(finding.get('reason')), 'finding',
                 '发现须有严重度和具体原因。',
-                {'expect': {'criterion': 'valid_criteria 之一', 'severity': 'blocker|quality|note', 'reason': 'str',
+                {'expect': {'criterion': 'valid_criteria 之一', 'severity': '|'.join(FINDING_SEVERITIES), 'reason': 'str',
                             'evidence': '单个 {chapter,quote,start?} 对象', 'target_chapter': 'int（note 级可省）',
-                            'repair_scope': 'local|chapter'}})
+                            'repair_scope': 'local|chapter', 'decision': 'severity=author 时必填 {id,question,options}'}})
         finding['evidence'] = evidence(finding.get('evidence'), sources)
+        if finding['severity'] == AUTHOR_SEVERITY:
+            require(author_channel, 'author_decision', '本章节审稿没有作者裁决通道：能由改写解决的缺陷请用 blocker/quality 并给出修复章。',
+                    {'recover': '需要作者拍板的设计问题，在世界模型、设计或跨章核验阶段上交。'})
+            decision = finding.get('decision')
+            require(isinstance(decision, dict) and all(k in decision for k in AUTHOR_DECISION_FIELDS)
+                    and text(decision.get('id')) and text(decision.get('question'))
+                    and isinstance(decision.get('options'), list) and len(decision['options']) >= 2
+                    and all(isinstance(o, dict) and all(text(o.get(k)) for k in DECISION_OPTION_FIELDS) for o in decision['options']),
+                    'author_decision', '需作者拍板的发现须带 id、具体 question 与至少两个 label/impact 选项。',
+                    {'expect': {'id': 'str（同一裁决跨轮保持同一 id）', 'question': 'str',
+                                'options': [{'label': 'str', 'impact': 'str'}, {'label': 'str', 'impact': 'str'}]},
+                     'recover': '把设计问题连同取舍写成 question/选项交给作者，不要用 blocker 让写作端去改。'})
+            decisions.append(finding)
+            blocking.add(finding['criterion'])
+            continue
+        require('decision' not in finding, 'author_decision', '只有 severity=author 的发现可以携带裁决选项。',
+                {'recover': '能由改写解决的缺陷删掉 decision 并给出 target_chapter/repair_scope。'})
         if finding['severity'] != 'note':
             blocking.add(finding['criterion'])
             require(type(finding.get('target_chapter')) is int and finding['target_chapter'] in sources
                     and finding.get('repair_scope') in ('local', 'chapter'), 'repair_scope', '缺陷须明确修复章和 local/chapter 范围。')
+    require(len(decisions) <= AUTHOR_DECISIONS_PER_RECEIPT, 'author_decision', '一份回执一次只能上交一个作者裁决。',
+            {'got': [f['decision']['id'] for f in decisions], 'limit': AUTHOR_DECISIONS_PER_RECEIPT,
+             'recover': '把其余问题合并成同一问题的选项，或在下一轮核验中另交。'})
     require(blocking == failed and receipt['verdict'] == ('fix' if failed else 'pass'), 'review_consistency', '结论、检查与实质缺陷必须一致。')
     rows = normalized.get('obligations', [])
     require(isinstance(rows, list) and len(rows) == len(obligations) and all(isinstance(r, dict) and text(r.get('id')) for r in rows)

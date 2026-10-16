@@ -30,6 +30,9 @@ class ContractActivation:
             book['repair_cases'] = copy.deepcopy(old['repair_cases'])
         if old.get('author_decision_history'):
             book['author_decision_history'] = copy.deepcopy(old['author_decision_history'])
+        if old.get('author_block'):
+            # An unanswered question must not be lost by re-contracting: it stays pending.
+            book['author_block'] = copy.deepcopy(old['author_block'])
         if old.get('remedy_exhausted'):
             book['remedy_exhausted'] = copy.deepcopy(old['remedy_exhausted'])
         book['carry_findings'] = copy.deepcopy(old.get('carry_findings', [])) + copy.deepcopy(old.get('scope_findings', []))
