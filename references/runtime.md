@@ -73,7 +73,9 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 ## 任务交接
 
-advance --compact 的 task 只含任务身份、阶段、task_path、claim 和 review_session 等派工信息；完整 task.json 仍按原协议写入 task_path，作者选择板与非派工动作保持完整。主干把 task_path 交给子 agent，由它完整读取本任务。commands 为 argv 数组，按数组执行，不拼 shell 字符串。
+advance --compact 的 task 只含任务身份、阶段、task_path、identity_path、claim 和 review_session 等派工信息；完整 task.json 仍按原协议写入 task_path，作者选择板与非派工动作保持完整。主干把 task_path 交给子 agent，由它完整读取本任务。commands 为 argv 数组，按数组执行，不拼 shell 字符串。
+
+每个任务目录另写 identity.json：该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、review_session、入口与版本，以及 worker_env 里应注入的变量名）。它供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：read/recall/patch/first-read 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示本次由新会话自行命名。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
 
 新任务派真实新 Worker，填真实 session；委派只给角色、task_path、一句背景和简短提交状态要求。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。review_session 非空时 requires_new_worker=false，须沿原审稿会话继续；它不允许复用该会话处理另一个任务。需要执行认领时调用 `claim --task ID --session ID`，将返回 token 的裸字符串填入回执顶层 execution_claim，首读与提交均附带。
 

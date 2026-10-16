@@ -116,15 +116,37 @@ def parser():
     return root
 
 
+def dispatch_identity(project, task_id):
+    """The dispatch's own identity copy, when it can be located from --project/--task.
+
+    Reported in failures so the asker learns what to inject and where to check it, instead of
+    concluding the path is broken. It grants nothing: the credential itself stays in the host's
+    environment, and is never written by the worker.
+    """
+    if not project or not task_id:
+        return None
+    path = Path(str(project)) / 'work' / str(task_id) / 'identity.json'
+    try:
+        return {'path': str(path), **json.loads(path.read_text(encoding='utf-8'))}
+    except (OSError, ValueError):
+        return {'path': str(path), 'readable': False}
+
+
 def role_guard(args):
     """A dispatched worker and the controller are different roles; prose is worker-only."""
     if args.command in WORKER_ONLY:
         task = os.environ.get('NOVEL_TASK_ID')
+        asked = getattr(args, 'task', None)
         require(task, 'role_boundary',
                 '正文与冻结资料只经派工任务读取；主控不直接读取正文。',
-                {'recover': '把这条命令交给被派的任务执行（它带 NOVEL_TASK_ID 与 NOVEL_SESSION）；'
+                {'task_id': asked, 'identity': dispatch_identity(args.project, asked),
+                 'recover': '把这条命令交给被派的任务执行：宿主为该进程注入 NOVEL_TASK_ID 与 '
+                            'NOVEL_SESSION（identity.json 记录了同一个 task_id 与是否需要新会话）；'
                             '主控要核对进度用 status，要补资料用 read --record 交由该任务完成。'})
-        require(getattr(args, 'task', task) == task, 'worker_boundary', 'Worker 只能访问自己的任务。')
+        require((asked or task) == task, 'worker_boundary', 'Worker 只能访问自己的任务。',
+                {'asked_task': asked or task, 'worker_task': task,
+                 'recover': '按本进程被派的任务执行：命令里的 --task 必须等于宿主注入的 NOVEL_TASK_ID '
+                            '（identity.json 与本任务目录里的 task.json 是同一身份）。'})
 
 
 def worker_guard(app, args):

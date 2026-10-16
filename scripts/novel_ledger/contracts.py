@@ -16,6 +16,8 @@ SCHEMA = 'novel-ledger/3'
 OPENING_VERSION = 2
 TASK = 'novel-ledger.task/1'
 RESULT = 'novel-ledger.result/1'
+# The dispatch's own copy of who it is: data for cross-checking, never a permission.
+IDENTITY = 'novel-ledger.identity/1'
 FACT_CHECKS = ('coverage', 'continuity', 'resources', 'knowledge', 'time', 'world_rules', 'space')
 READER_CHECKS = ('read_on', 'character', 'change', 'emotion_cost', 'language', 'repetition', 'substance')
 LONG_CHECKS = ('causality', 'character_arcs', 'payoffs', 'pacing', 'world_rules', 'coverage')
