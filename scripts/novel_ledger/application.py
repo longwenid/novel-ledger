@@ -488,7 +488,10 @@ class Application:
                     {'expected': block.get('id'), 'got': decision_id})
             labels = [row['label'] for row in block.get('options') or []]
             require(option in labels, 'author_decision', '答复须是已展示的选项之一；作者另有第三条路时走改约或重新提案。',
-                    {'options': labels, 'got': option})
+                    {'options': labels, 'got': option,
+                     'recover': '把第三条路整理成完整候选后执行 recontract --file 并附作者原话，经独立核验回答本问题；'
+                                '注意已有正文的改约会在新分支自第 1 章重写重审全书（父分支保留，可 discard 恢复），'
+                                '先向作者说明该代价再动手。'})
             book.setdefault('author_decision_history', []).append(
                 {'question': copy.deepcopy(block),
                  'resolution': {'result': 'answered', 'option': option, 'reason': source}, 'reviewer': owner})

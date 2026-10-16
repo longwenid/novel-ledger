@@ -108,7 +108,7 @@ continue_scope/revise_range 还需 repair_case={root_ref,goal,verification_condi
 
 范围 root 若 payload.remedies 非空，填写 remedy_review，恰好覆盖 case_id/round_id，每项 result=pass|fix/reason/evidence。最后一轮仍须先验收；最后失败回执实际保存后暂停，不靠第三轮提案拒绝丢掉验收。当前版本不嵌套修订，先完成或撤销当前候选。
 
-作者问题只由具体改约进入独立核验来回答。contract_review 模板中的 blocked_resolution 绑定原 question_hash，result=answered，并说明实际变化如何回答问题；没有回答不能解除阻断。根问题预算不会由此清零。
+作者问题有两条回答通道，代价不同：作者在已展示选项内选定，由 `answer` 记录（问题、选项与原话进 author_decision_history，候选按新前提重新起草，见 [运行](runtime.md#动作分支)）；要改约定本身的答案走具体改约进入独立核验——contract_review 模板中的 blocked_resolution 绑定原 question_hash，result=answered，并说明实际变化如何回答问题，没有回答不能解除阻断。已有正文时改约在新分支自第 1 章重写重审全书（父分支保留），needs_author 交上的 question 与 options 须让作者在知情该代价差的前提下选择。根问题预算不会由此清零。
 
 ## 终审与精确交付
 

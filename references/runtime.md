@@ -106,10 +106,10 @@ await_author 给准确 prose_hash；已获得该版本认可时由主干 `approv
 | 未写窗口重规划 | replan --from-chapter N --reason 原因 | 已有草稿或正式稿的计划不能直接删除。 |
 | 字面规则修改 | lexical --file 规则.json --source 原话 | 逐版记录，执行及恢复见 [字面规则](#字面规则)。 |
 | 回收不可达文档 | compact | 只删除任何活动记录都到不了的内容寻址文档并回收空间；不改故事与账本状态，重复执行无副作用。 |
-| 完整约定修改 | recontract --file 完整候选.json --source 原话 | 取消旧任务留档，独立核验后在父稿保留的分支重新规划写审；开书导入的状态条件见 [入口选择](opening.md#入口选择)。 |
-| 答复作者裁决 | answer --decision-id ID --option 选项 --source 原话 | 只回答 status 的 author_decision 里已展示的选项，记录问题、选择与原话后清除 author_block；选项之外的新决定走 recontract 或重新提案。 |
+| 完整约定修改 | recontract --file 完整候选.json --source 原话 | 取消旧任务留档，独立核验后重新规划写审；已有正文时在继承父稿的新分支**自第 1 章重写重审全书**（父分支保留，可 discard 恢复），代价随已写章数线性增长——先向作者说明再执行；开书导入的状态条件见 [入口选择](opening.md#入口选择)。 |
+| 答复作者裁决 | answer --decision-id ID --option 选项 --source 原话 | 只回答 status 的 author_decision 里已展示的选项，记录问题、选择与原话后清除 author_block，按新前提重拟候选；选项之外的新决定走 recontract（代价见上行）或重新提案。 |
 
-作者明确改约时，暂时停用旧回改指令及改案调度，先完成约定核验；原缺陷、根案例和已耗额度保留，撤销改约候选时恢复父稿原问题。不能借改约绕过修复额度或作者边界。
+作者明确改约时，暂时停用旧回改指令及改案调度，先完成约定核验；原缺陷、根案例和已耗额度保留，撤销改约候选时恢复父稿原问题。不能借改约绕过修复额度或作者边界。改约是方向性决定而非答疑通道：已写 N 章的项目改约会在新分支重写重审 N 章，选项内可答的作者裁决用 answer 记录即可，不付这笔代价。
 
 ### 字面规则
 
@@ -173,7 +173,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" --owner "$OWNER" answer \
   --decision-id 待决问题ID --option '作者选定的选项label' --source '作者答复的原话'
 ```
 
-答复须是已展示选项之一，否则以 author_decision 拒绝：作者另有第三条路时那是新决定，走改约核验（blocked_resolution 回答准确问题）或重新提案。记录写入 author_decision_history（同一问题、所选选项与作者原话），答复同时进入作者原话（author_feedback），清除 author_block；暂停原因就是该问题时项目恢复 running，否则保持暂停待处理其他停点。下一步按新前提重新起草候选：世界、全书或卷设计交 world_model/book_plan/volume_plan 返修，卷纲批次重交 volume_outline，改案丢弃旧候选重新 alignment_plan；改约定本身的问题仍走 recontract。没有作者答复时 resume 会以 author_decision 拒绝，不能用改约或重发绕过。
+答复须是已展示选项之一，否则以 author_decision 拒绝：作者另有第三条路时那是新决定，走改约核验（blocked_resolution 回答准确问题）或重新提案。记录写入 author_decision_history（同一问题、所选选项与作者原话），答复同时进入作者原话（author_feedback），清除 author_block；暂停原因就是该问题时项目恢复 running，否则保持暂停待处理其他停点。下一步按新前提重新起草候选：世界、全书或卷设计交 world_model/book_plan/volume_plan 返修，卷纲批次重交 volume_outline，改案丢弃旧候选重新 alignment_plan；改约定本身的问题仍走 recontract，其全书重写代价见[动作表](#动作分支)——主干转述问题时一并告知作者两条路径的代价差。没有作者答复时 resume 会以 author_decision 拒绝，不能用改约或重发绕过。
 
 作者明确授权准确方案后，保存其原话并执行：
 

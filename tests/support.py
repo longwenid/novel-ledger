@@ -1,6 +1,7 @@
 """Synthetic engineering receipts. These are never literary judgments."""
 import copy
 import uuid
+from novel_ledger import scopes
 from novel_ledger.contracts import RESULT, digest
 from novel_ledger.result_templates import template
 
@@ -97,7 +98,23 @@ def response(app, task_id=None, session=None, claim=None):
         else:
             fill(data)
             if stage in ('scope_review', 'scope_synthesis'):
-                data['coverage'] = [{'chapter': k, 'reason': '工程覆盖样本。', 'evidence': {'chapter': k, 'quote': p}} for k, p in sources.items()]
+                payload = work['payload']
+                if payload.get('children'):
+                    # The engine reuses accepted leaves across scopes (same span and chain), so
+                    # children may be filed under a different review key: look them up the same
+                    # way context.build does, through the merged report index.
+                    spans = scopes.reports(app.repo.load())
+                    data['coverage'] = [{'part_id': ident, 'reason': '工程覆盖样本。',
+                                         'evidence': {'chapter': spans[ident]['last'], 'quote': sources[spans[ident]['last']]}}
+                                        for ident in payload['children']]
+                else:
+                    data['coverage'] = [{'chapter': k, 'reason': '工程覆盖样本。', 'evidence': {'chapter': k, 'quote': p}} for k, p in sources.items()]
+                if payload.get('review_tree') and isinstance(data.get('handoff'), dict):
+                    sample = min(sources)
+                    for field in data['handoff']:
+                        if field != 'evidence':
+                            data['handoff'][field] = '工程交接样本：块间因果、人物与披露的接缝说明。'
+                    data['handoff']['evidence'] = [{'chapter': sample, 'quote': sources[sample]}]
     result = {'schema': RESULT, 'task_id': task['id'], 'input_hash': task['input_hash'], 'session': session, 'data': data}
     if claim:
         result['execution_claim'] = claim

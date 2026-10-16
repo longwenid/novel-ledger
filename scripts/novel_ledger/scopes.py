@@ -34,9 +34,10 @@ def reports(book):
     return result
 
 
-def next_review(book, headers, scope, first, last, key):
+def next_review(book, headers, scope, first, last, key, chunk=None):
     contract = book['contract']
-    parts = tree(headers, first, last, contract['review_chunk'], contract['review_fanout'], context=key if contract.get('editorial_features') else None)
+    parts = tree(headers, first, last, contract['review_chunk'] if chunk is None else chunk,
+                 contract['review_fanout'], context=key if contract.get('editorial_features') else None)
     existing = reports(book)
     for part in parts:
         # A root always needs its own scope acceptance even when its complete tree is reusable.
