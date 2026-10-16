@@ -29,32 +29,41 @@
 
 ## 门序与字段归属
 
-新项目门序由 `creation.GATES_V2` 定义；直接选择字段由 `contracts.CONTRACT_FIELDS.opening` 声明，推导输入由 `creation.DERIVATION_INPUTS` 声明。下表供理解，实际交付以本任务简报列出的允许字段为准：
+新项目门序由 `creation.GATES_V3` 定义（男频长篇网文重设：`genre → voice → scale → edge → protagonist → relationships → world → opposition → payoff → title`）；直接选择字段由 `contracts.CONTRACT_FIELDS.opening` 按版本声明，推导输入由 `creation.DERIVATION_INPUTS` 声明。**已有项目保留自己的门序**：`creation/2`（`GATES_V2`）与 `creation/1`（`GATES_V1`）继续按各自协议运行，不迁移、不按新门重读旧选择。下表供理解当前版本，实际交付以本任务简报列出的允许字段为准：
 
 | # | 门 | 类型 | 作者要回答的一件事 | value |
 |---|---|---|---|---|
-| 1 | `genre` 题材、承诺与基调 | 创意门 | 写给谁、是什么故事、给读者什么感觉 | genre/reader_promise/tone |
-| 2 | `pov` 叙述视角与人称 | 创意门 | 谁在讲、能看多远 | pov |
+| 1 | `genre` 题材、频道与读者承诺 | 创意门 | 卖什么、谁看、爽点承诺是什么、什么基调 | genre/reader_promise/tone |
+| 2 | `voice` 叙述人称与语感 | 创意门 | 谁在讲、能看多远、读起来是什么质地 | pov/voice/style_traits |
 | 3 | `scale` 体量与分卷 | **结构门（引擎即时）** | 这本书多大、多少卷、每章多长 | tier/chapter_min/chapter_max/chapter_aim/volume_count/chapters/chapter_window（总字数区间 word_range 是派生结果：章数 × 每章区间，作者与 Worker 都不用填） |
-| 4 | `world` 世界前提、机制与禁区 | 创意门 | 世界是什么样、有无特殊机制及其代价、绝不写什么 | world_premise、mechanism{mode,principle,cost,limits}、red_lines、allow_special_mechanism |
-| 5 | `protagonist` 主角身份、欲望与底线 | 创意门 | 谁、要什么、底线在哪 | id/name/identity/desire/limit |
-| 6 | `relationships` 核心关系与人物张力 | 创意门 | 身边与对面有谁、张力在哪 | relationships（至少一条） |
-| 7 | `engine` 持续推进与主要对抗 | 创意门 | 靠什么持续、谁在挡 | story_engine/opposition |
-| 8 | `ending` 终局与母题 | 创意门 | 落在哪里、这本书关于什么 | ending/theme |
-| 9 | `voice` 文风与节奏 | 创意门 | 什么腔调、什么节奏 | voice/style_traits |
+| 4 | `edge` 核心优势与成长线 | 创意门 | 他靠什么赢、怎么变强、代价与上限 | advantage/origin/growth/cost/ceiling（约定字段 `core_edge`） |
+| 5 | `protagonist` 主角身份、处境与底线 | 创意门 | 他从哪开始、要什么、底线在哪 | id/name/identity/desire/limit |
+| 6 | `relationships` 核心关系与情感线 | 创意门 | 助力与背叛风险在哪、感情线多重 | relationships（至少一条） |
+| 7 | `world` 世界前提、机制与禁区 | 创意门 | 世界怎么持续供料、有无特殊机制及其代价、绝不写什么 | world_premise、mechanism{mode,principle,cost,limits}、red_lines、allow_special_mechanism |
+| 8 | `opposition` 主要对抗与冲突梯度 | 创意门 | 第一卷谁挡着、怎么逐卷抬高、终局面对谁 | opposition/story_engine |
+| 9 | `payoff` 爽点兑现与终局 | 创意门 | 读者一路拿到什么、怎么兑现、最后兑现成什么 | plan{ways,cadence,hooks}（约定字段 `payoff_plan`）、ending、theme |
 | 10 | `title` 书名 | 创意门 | 叫什么 | title |
 
-视角在世界、人物与推进前确定；题材门的画面发生在视角选择前，只作体验预览，不替作者锁定视角。世界限制约束后续人物与对抗，关系门为推进提供人物张力，书名承接已选终局与文风。
+人称与视角在人物、世界与对抗之前定下来，所以 `voice` 排在最前：后续各门的 scene 都用该方案的人称写。题材门的画面发生在人称选择前，只作体验预览，不替作者锁定人称。世界规则约束后续对抗的加码方式，关系门同时提供助力和背叛风险，书名承接已选题材与核心优势。
 
 无预填、换组或回退时，十门包含 9 次创意方案派工与 10 次作者选择；结构门当次给板、不派 Worker。已有要求跳过相应门，实际次数随作者操作变化，不作为固定用量承诺。
 
-方案字段以当前 brief 和模板为准，构思方法见 [创意工具箱](hatch.md)。`pov` 与 `title` 这类单一决定门另有专门交付要求：视角门的每个 scene 用该方案的人称展示实际效果，书名门给真正可用的候选名，不交占位符。
+方案字段以当前 brief 和模板为准，构思方法见 [创意工具箱](hatch.md)。`voice` 与 `title` 这类单一决定门另有专门交付要求：叙述门的每个 scene 用该方案的人称展示实际效果，书名门给真正可用的候选名，不交占位符。
+
+## 默认方向（起点/番茄男频长篇网文）
+
+十门的默认方向是**起点/番茄男频长篇网文**，声明在 `contracts.OPENING_DIRECTION`（共用做法）与 `contracts.OPENING_DIRECTION_GATES`（每门要点），由 `briefs.opening_options` 与 `briefs.world_model` 逐门渲染进简报，所以冷启动的方案 Worker 不必猜市场口味：
+
+- 开篇三章内给压力与第一个可见收益；主角有可升级的稀缺优势或金手指，升级有条件与代价；每卷对手与舞台抬高一级；短线小兑现与长线悬念交替，章末留钩；冲突落到资源、名额、地位、复仇、守护、真相这类具体利益；题材走男频主流落点；语感短句推进、对白带信息；体量按长篇连载预期起步。
+- 每门还有一条要点：题材连承诺一起给（爽点是什么、看谁赢谁），视角便于持续给爽点与信息差，世界机制持续供料，主角身份自带上升通道，关系同时给出助力与背叛风险，推进动力能反复加码，终局兑现开篇承诺的那场胜利，书名按男频搜索习惯点出看点。
+
+这是**默认而非硬要求**：作者原话或已选方向与它冲突时一律以作者为准，方案与核验都不因为"不合男频"判错；作者要的是别的方向时，简报里这句话和这条约束同时存在。要改这个默认，改 `contracts` 里那两张表即可，其余文档与简报随之变化。
 
 `init` 新建项目使用 `novel-ledger.creation/2` 十门协议，creation 状态保存所用门序版本；存储布局另使用 novel-ledger/3。协议版本与数据库版本各自负责自己的结构，不能通过修改版本号转换旧库。
 
 ## 结构门（体量与分卷）
 
-档位唯一权威是 `contracts.SCALE_TIERS`：六档阶梯（微型 / 短篇 / 精简 / 标准 / 长篇 / 超长），每档给出总字数区间、章幅上下限与目标、卷数、推荐总章数与该档可写完的章数区间。板子取阶梯上连续三档，默认窗口为“精简/标准/长篇”。
+档位唯一权威是 `contracts.SCALE_TIERS`：六档阶梯（微型 / 短篇 / 精简 / 标准 / 长篇 / 超长），每档给出总字数区间、章幅上下限与目标、卷数、推荐总章数与该档可写完的章数区间。板子取阶梯上连续三档，默认窗口为“标准/长篇/超长”（男频连载常见体量，`SCALE_DEFAULT_WINDOW=3`）；短篇与微型换一组即可取到。
 
 - 游标落到体量门时，主控直接把档位板写进展示状态并返回 await_choice：**没有任务、没有 Worker、没有等待**。
 - 只向作者展示档位名、总字数区间、卷数、每章字数与章数，以及这一档比相邻档多买到什么、少买到什么。**不要求 pitch 与 scene**，也不要求 Worker 编造数字；方案回执的 pitch/scene/driver 硬要求只适用于创意门。

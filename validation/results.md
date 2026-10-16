@@ -290,3 +290,14 @@
 - 重新测量为 37 个核心模块、131 条内部依赖边、无环，核心及 CLI 7,434 行（当前工作区，含同期未提交的派工身份副本改动）。材料夹具与 20/100/500 章历史度量保持，见 metrics.json。
 
 本轮为工程行为与文档修复；未改变数据库 schema、作者授权范围，不作为文学质量或真实费用验收。改动保留在工作区，未提交或推送。
+
+## 2026-10-16 开书协议 creation/3：十门按男频长篇网文重设
+
+- 默认开书协议由 creation/2 升为 creation/3：十门改为 `genre → voice → scale → edge → protagonist → relationships → world → opposition → payoff → title`，把男频长篇真正决定成不成的三件事提为一等决定——金手指与成长线（`edge`）、对抗与逐卷抬高（`opposition`）、爽点兑现与终局（`payoff`）。原 `pov` 并入 `voice`（人称与视角 + 语感），原 `engine` 拆入 `opposition` 与 `protagonist`，`ending`/`theme` 归入 `payoff`。
+- 约定字段新增 `core_edge`（advantage/origin/growth/cost/ceiling，`since: 3`）与 `payoff_plan`（ways/cadence/hooks，`since: 3`），两者 `optional` 以便旧约定继续可读。字段来源改为**按版本取源**：`contracts.opening_source(row, version)` 支持元组（全版本）与字典（按版本 + `'*'` 兜底），`ending`/`theme`/`story_engine`/`opposition`/`pov` 在 v3 改由新门拥有，v1/v2 仍读旧门。
+- 声明层同时新增 `OPENING_DIRECTION`（起点/番茄男频长篇网文的八条做法）与 `OPENING_DIRECTION_GATES`（每门要点），由 `briefs.opening_options` 与 `briefs.world_model` 逐门渲染进简报；体量默认窗口由"精简/标准/长篇"改为"标准/长篇/超长"（`SCALE_DEFAULT_WINDOW=3`），短篇与微型换组可取。方向是**默认而非硬要求**：作者原话或已选选择与之冲突时以作者为准。
+- 旧项目不受影响：creation/2 与 creation/1 保留各自门序与取源，novel-1 等在建项目继续按原协议运行；`test_opening_v2.py` 钉住 `opening_version=2` 作为在途项目回归，`test_opening_legacy.py` 覆盖 v1 与"引导开书使用当前协议"。
+- 新增静态守卫（不需要起项目即复现运行时不变量）：v3 对齐字段 = 各门所有权 ∪ 派生集且互不相交；每个版本只能从它真正拥有的门取源（当场抓到 v1 无 `pov` 门、v2 无 `payoff` 门两处 `since` 过滤缺失）。新增 `test_opening.py` 覆盖 v3：方向进入简报、结构门默认档位、逐门所有权与结构化必填、走完十门形成约定并拒绝被偷改的决定、intake 只给档位。
+- 实测：fast 98 项通过；full 401 项、0 failures、11 errors（全部为无符号链接特权环境的 WinError 1314）、1 skipped。
+
+本轮未改数据库 schema（仍为 novel-ledger/3），不迁移旧项目，不作为文学质量或真实费用验收。

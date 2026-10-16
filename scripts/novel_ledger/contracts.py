@@ -13,7 +13,7 @@ SCHEMA = 'novel-ledger/3'
 # database schema: a new gate set only changes a JSON document inside the book record, so raising the
 # storage version would lock every existing project out for no benefit. A project whose creation state
 # is version 1 keeps the gate set it was opened with.
-OPENING_VERSION = 2
+OPENING_VERSION = 3
 TASK = 'novel-ledger.task/1'
 RESULT = 'novel-ledger.result/1'
 # The dispatch's own copy of who it is: data for cross-checking, never a permission.
@@ -139,8 +139,39 @@ SCALE_TIERS = (
      'chapter_max': 6000, 'volume_count': 10, 'chapters': 600, 'chapter_window': [489, 666],
      'note': '群像规模的多线交织、反复的势力更替与长期伏笔回收；对节奏控制要求最高'},
 )
+# The default direction of the ten opening gates: male-channel long-form web fiction as it is
+# serialised on 起点/番茄. It says how a cold option writer should shape a proposal, never what the
+# author is allowed to choose — the author's own words, or an option already chosen, always win over
+# this default, and a gate that conflicts with it is not a protocol error.
+OPENING_DIRECTION = (
+    '开篇三章内给出明确压力与第一个可见收益（脱困、打脸、拿到资源或关键线索），不开长篇设定铺垫。',
+    '主角有一条稀缺优势或可升级的金手指，升级有明确条件与代价，不靠忽然变强。',
+    '承诺读者看他怎么赢：每卷对手与舞台抬高一级（局部→势力→体系），冲突梯度能持续加码。',
+    '爽点与悬念交替：短线三到五章一个小兑现，长线留一个更大的目标；章末留钩，静章也要有信息或关系变化。',
+    '冲突落到具体利益与身份处境（资源、名额、地位、复仇、守护、真相），少写纯理念之争。',
+    '题材走男频主流落点：玄幻修真、都市异能或职场逆袭、历史权谋、科幻末世、悬疑探案及其混搭。',
+    '语感偏连载网文：短句推进、对白带信息、解释服从场景；不用纯文学式的氛围铺陈与心理长段。',
+    '体量按长篇连载预期起步，默认窗口落在标准到超长之间，需要短篇或微型时换组向下取。',
+)
+# Per-gate emphasis. Every gate of the current gate set declares one, so the gate set cannot be
+# redesigned without saying what the default direction means for each gate (a guard test derives
+# that requirement from the gate table itself).
+OPENING_DIRECTION_GATES = {
+    'genre': '男频题材要连承诺一起给：爽点是什么、读者看谁赢谁、他在这个故事里想要什么。',
+    'voice': '叙述先定人称与视角范围：贴住主角的限知视角便于持续给爽点与信息差；语感短句推进、对白带信息。',
+    'scale': '长篇连载体量：这一门只选档位，别在这里讨论剧情；相邻档的差别要落到节奏与线索数量上。',
+    'edge': '金手指或稀缺优势要能被反复使用并升级：说清它怎么来、分几层、每层的条件与代价、上限在哪。',
+    'protagonist': '主角处境要自带压力与上升通道，欲望具体可量化，底线会在关键选择上真的挡住他。',
+    'relationships': '关系要同时给出助力和背叛风险（兄弟、师徒、对手绑定、家族），感情线定分量与处理方式，不是围着主角转的配角团。',
+    'world': '世界机制要为冲突持续供料：规则清楚、边界可验证，能不断产出对手、资源与身份差，不做纯氛围设定。',
+    'opposition': '对抗要能逐卷抬高一级（局部→势力→体系）：第一卷对手挡着什么利益、每次胜利换来多强的对手、终局面对谁。',
+    'payoff': '兑现方式写清楚（脱困、打脸、升级、资源、地位、基建、复仇、争霸），短线三五章一个小兑现，章末留钩，终局要兑现开篇承诺的那场胜利。',
+    'title': '书名按男频搜索习惯给：关键词直接点出题材与金手指或身份优势，一眼能看懂看点，不用意象化短名。',
+}
 SCALE_WINDOW = 3          # how many consecutive tiers one board shows
-SCALE_DEFAULT_WINDOW = 2  # start on 精简/标准/长篇; the smallest 微型 tier is reached by regrouping
+# Male-channel serials live in the long tiers, so the first board opens on 标准/长篇/超长; 精简 and
+# 微型 stay one 换组 away for an author who wants something shorter.
+SCALE_DEFAULT_WINDOW = 3
 # What a structural option hands the author: a size ladder, never raw numbers to invent.
 STRUCTURAL_CONTRACT = ('每个方案给 id、title 档位名（含卷数与字数区间）、premise 用一句话写清总字数、卷数、'
                        '每章字数与章数、tradeoff 说明这一档比相邻档多买到什么、少买到什么，value 照档位表逐字填。'
@@ -162,18 +193,30 @@ CONTRACT_TYPES = {
 CONTRACT_FIELDS = (
     {'key': 'title', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('title', 'title')},
     {'key': 'reader_promise', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('genre', 'reader_promise')},
-    {'key': 'ending', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('ending', 'ending')},
+    {'key': 'ending', 'kind': 'text', 'default': '', 'alignment': True,
+     'opening': {'*': ('ending', 'ending'), 3: ('payoff', 'ending')}},
     {'key': 'genre', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('genre', 'genre')},
-    {'key': 'story_engine', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('engine', 'story_engine')},
-    {'key': 'opposition', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('engine', 'opposition')},
+    {'key': 'story_engine', 'kind': 'text', 'default': '', 'alignment': True,
+     'opening': {'*': ('engine', 'story_engine'), 3: ('opposition', 'story_engine')}},
+    {'key': 'opposition', 'kind': 'text', 'default': '', 'alignment': True,
+     'opening': {'*': ('engine', 'opposition'), 3: ('opposition', 'opposition')}},
+    # opening/3 makes the two decisions male-channel serials live on first-class contract terms: what
+    # the protagonist's edge is and how it grows, and how the reader's payoff is scheduled. Optional
+    # like every later field, so contracts written before opening/3 stay loadable.
+    {'key': 'core_edge', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 3,
+     'shape': ('advantage', 'origin', 'growth', 'cost', 'ceiling'), 'opening': ('edge', None)},
+    {'key': 'payoff_plan', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 3,
+     'shape': ('ways', 'cadence', 'hooks'), 'opening': ('payoff', 'plan')},
     {'key': 'world_premise', 'kind': 'text', 'default': '', 'alignment': True},
     {'key': 'voice', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('voice', 'voice')},
     # Decided by the author at the opening gates since opening/2. Optional keeps a hand-written
     # `init --contract` file and every contract written before opening/2 loadable; a guided opening of
     # version 2 still has to carry them, because its gates chose them.
     {'key': 'tone', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2, 'opening': ('genre', 'tone')},
-    {'key': 'theme', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2, 'opening': ('ending', 'theme')},
-    {'key': 'pov', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2, 'opening': ('pov', 'pov')},
+    {'key': 'theme', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2,
+     'opening': {'*': ('ending', 'theme'), 3: ('payoff', 'theme')}},
+    {'key': 'pov', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2,
+     'opening': {'*': ('pov', 'pov'), 3: ('voice', 'pov')}},
     {'key': 'allow_special_mechanism', 'kind': 'bool', 'default': None, 'alignment': True, 'opening': ('world', 'allow_special_mechanism')},
     {'key': 'red_lines', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True},
     {'key': 'style_traits', 'kind': 'rows', 'default': [], 'alignment': True, 'opening': ('voice', 'style_traits')},
@@ -214,6 +257,19 @@ CONTRACT_KEYS = tuple(row['key'] for row in CONTRACT_FIELDS)
 # The version-aware view is alignment_for(version); this one answers "which fields
 # ever participate", which the opening tests assert the template covers.
 CONTRACT_ALIGNMENT = tuple(row['key'] for row in CONTRACT_FIELDS if row['alignment'])
+
+
+def opening_source(row, version):
+    """Which gate and value key decide a contract field for one opening version.
+
+    A tuple means every version; a dict keys by version with `'*'` as the fallback, so a gate can be
+    redesigned in a later protocol without re-reading an old project's choices through the new gates.
+    Returns None when this version does not decide the field at all.
+    """
+    source = row.get('opening')
+    if isinstance(source, dict):
+        source = source.get(version, source.get('*'))
+    return source
 
 
 def alignment_for(version):

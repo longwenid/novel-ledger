@@ -7,12 +7,30 @@ pays for the current gate's rules and lens, not for the entire toolbox on every 
 from __future__ import annotations
 
 from .creation import gate_note, gate_title, value_rules
-from .contracts import AUTHOR_CHANNEL_STAGES, OPENING_VERSION, OPTION_CONTRACT
+from .contracts import (AUTHOR_CHANNEL_STAGES, OPENING_DIRECTION, OPENING_DIRECTION_GATES, OPENING_VERSION,
+                        OPTION_CONTRACT)
 from . import stages
 BRIEFS = {
     'opening_options': '开书方案简报',
     'world_model': '世界与约定简报',
 }
+
+
+def direction_block(gates=()):
+    """The house default the ten gates aim at, rendered for the worker drafting this dispatch.
+
+    It is a default, not a constraint: the brief says so next to the rules, because a worker that
+    treats the market lean as a requirement would refuse an author who wants something else.
+    """
+    lines = ['## 默认方向（起点/番茄男频长篇网文）',
+             '按这些做法给方案；作者原话或已选方向与它冲突时，一律以作者为准，本方向不是硬要求。', '']
+    lines.extend('- ' + rule for rule in OPENING_DIRECTION)
+    for gate in gates:
+        emphasis = OPENING_DIRECTION_GATES.get(gate)
+        if emphasis:
+            lines.append('- ' + emphasis)
+    lines.append('')
+    return lines
 
 
 def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
@@ -27,6 +45,7 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
         lines.append('## 已选方向（不要推翻，只在此之上给方案）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
         lines.append('')
+    lines.extend(direction_block([gate.get('id')]))
     lines.extend(['## 本轮创意透镜（用来想，不要写进方案文本）', lens_brief, ''])
     lines.extend(['## 交付契约', OPTION_CONTRACT])
     lines.append('')
@@ -53,6 +72,7 @@ def world_model(lens_brief=None, previous=()):
         lines.append('## 已选方向（不得改动）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
         lines.append('')
+    lines.extend(direction_block(('world', 'protagonist', 'engine', 'ending')))
     lines.extend(['## 同一份提交里还要给约定', OPTION_CONTRACT,
                   '约定必须逐字保留已选字段；模板里 contract 一节的字段骨架照填。', ''])
     return '\n'.join(lines)
