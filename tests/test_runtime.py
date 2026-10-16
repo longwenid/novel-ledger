@@ -852,6 +852,33 @@ class RuntimeTests(unittest.TestCase):
                                   encoding='utf-8', errors='replace', env=foreign)
         self.assertEqual(json.loads(outsider.stdout)['error'], 'worker_boundary')
 
+    def test_dispatch_identity_travels_with_the_task_and_explains_the_credential(self):
+        """Identity is data the dispatch can be checked against, while the credential stays ambient."""
+        task = self.app.advance()['task']
+        identity_path = Path(task['identity_path'])
+        self.assertTrue(identity_path.is_file())
+        identity = json.loads(identity_path.read_text(encoding='utf-8'))
+        self.assertEqual((identity['task_id'], identity['input_hash'], identity['stage']),
+                         (task['task_id'], task['input_hash'], task['stage']))
+        self.assertTrue(identity['requires_new_worker'])
+        self.assertEqual(identity['worker_env'], {'NOVEL_TASK_ID': task['task_id'], 'NOVEL_SESSION': None})
+        self.assertEqual(Path(identity['task_path']), Path(task['task_path']))
+        # The compact view a controller forwards names the same file, so it can be handed on.
+        self.assertEqual(Path(self.app.advance(compact=True)['task']['identity_path']), identity_path)
+        # The refusal teaches what to inject instead of leaving the asker to guess.
+        import argparse
+        import importlib
+        cli = importlib.import_module('novel')
+        args = argparse.Namespace(command='read', task=task['task_id'], project=str(self.project))
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('NOVEL_TASK_ID', None)
+            os.environ.pop('NOVEL_SESSION', None)
+            with self.assertRaises(Error) as caught:
+                cli.role_guard(args)
+        self.assertEqual(caught.exception.code, 'role_boundary')
+        self.assertIn('NOVEL_TASK_ID', caught.exception.details['recover'])
+        self.assertEqual(caught.exception.details['identity']['task_id'], task['task_id'])
+
     def test_legacy_database_is_refused_after_the_schema_change(self):
         older = Path(self.temp.name) / 'v1'
         older.mkdir()

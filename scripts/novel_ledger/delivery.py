@@ -6,12 +6,12 @@ import json
 import sys
 import time
 from pathlib import Path
-from .contracts import FIRST_READ, FORM_ARTIFACTS, RESULT, VERSION, digest, require
+from .contracts import FIRST_READ, FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, digest, require
 from .result_templates import template
 from .ports import PublicationReader
 from .publication import publication
 from .workspace import LocalWorkspace, atomic_write
-from .envelope import validate_task
+from .envelope import validate_identity, validate_task
 from . import store_keys
 
 
@@ -98,6 +98,23 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     if names:
         envelope['guides'] = [str(reference_dir / name) for name in names]
     envelope['stages'] = [work['stage'], *also]
+    # Who this dispatch is belongs in the dispatch, not only in the host's environment: the worker
+    # and the controller can then cross-check identity against the task instead of guessing. It
+    # grants nothing — prose stays behind the host-injected credential.
+    identity = {'schema': IDENTITY, 'task_id': task['id'], 'input_hash': task['input_hash'],
+                'stage': work['stage'], 'stages': envelope['stages'], 'chapter': work['chapter'],
+                'scope': work['scope'], 'delivery_phase': envelope['delivery_phase'],
+                'requires_new_worker': envelope['requires_new_worker'], 'review_session': task['reviewer'],
+                'project_path': str(workspace.project), 'task_path': envelope['task_path'],
+                'entry': str(entry), 'version': VERSION,
+                'worker_env': {'NOVEL_TASK_ID': task['id'], 'NOVEL_SESSION': task['reviewer']},
+                'note': '本文件是派工身份的可核对副本，不授予权限：read/recall/patch/first-read 仍只对'
+                        '宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放；NOVEL_SESSION 为空表示'
+                        '本次由新会话自行命名。'}
+    validate_identity(identity)
+    identity_file = artifact('identity.json')
+    json_write(identity_file, identity)
+    envelope['identity_path'] = str(identity_file)
     # The commands below are rendered from this process, so they work as long as this installation
     # does. Say so, and say what to do when it has moved: a stale path is refreshed by another
     # `advance`, never by rewriting the command by hand.
@@ -148,7 +165,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     if compact:
         # Keep the controller's context small; workers always receive the complete on-disk envelope.
         keys = ('schema', 'version', 'task_id', 'input_hash', 'stage', 'chapter', 'scope',
-                'delivery_phase', 'task_path', 'requires_new_worker', 'review_session', 'claim')
+                'delivery_phase', 'task_path', 'identity_path', 'requires_new_worker', 'review_session', 'claim')
         return {key: envelope[key] for key in keys}
     return envelope
 

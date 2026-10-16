@@ -157,6 +157,13 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertIs(envelope.validate_task(task), task)
         with self.assertRaises(Error):
             envelope.validate_task(dict(task, guides=['x'], unexpected=1))
+        # Dispatch identity is declared the same way: data to check against, never a permission.
+        identity = {name: None for name in envelope.IDENTITY_FIELDS}
+        self.assertIs(envelope.validate_identity(identity), identity)
+        with self.assertRaises(Error):
+            envelope.validate_identity(dict(identity, credential='forge-me'))
+        with self.assertRaises(Error):
+            envelope.validate_identity({k: v for k, v in identity.items() if k != 'worker_env'})
 
     def test_unknown_task_stage_is_rejected_instead_of_degrading(self):
         from novel_ledger import stages
