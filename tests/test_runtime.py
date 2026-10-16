@@ -228,6 +228,11 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn('baseline', compact)
         self.assertNotIn('records', compact)
         self.assertNotIn('commands', compact)
+        # The render counter and the material size are meant to move between renders; everything
+        # else about the preserved material and the untouched form must not.
+        for key in ('redispatch_count', 'material_bytes'):
+            stored.pop(key, None)
+            full.pop(key, None)
         self.assertEqual(stored, full)
         self.assertTrue(Path(stored['input_path']).is_file())
         self.assertEqual(self.repo.pending()['input'], frozen)

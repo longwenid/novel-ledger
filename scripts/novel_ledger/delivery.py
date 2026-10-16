@@ -132,8 +132,19 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
                                        work['obligations'], also, work.get('checks_version', 1), work['payload'], work.get('narrative_tracking', False))}
             json_write(template_path, result)
         envelope.update(input_path=str(artifact('input.json')), template_path=str(template_path), records=work['records'], required=work['required'])
+    # Two facts a controller cannot otherwise see: how many times this dispatch view has been
+    # rendered (a second render for one task is a double dispatch, and used to be invisible), and
+    # what it costs to read. Both are read off the artifacts themselves, so the read-only
+    # delivery surface needs no new persistence capability.
+    task_file = artifact('task.json')
+    previous = json.loads(task_file.read_text(encoding='utf-8')) if task_file.exists() else None
+    envelope['redispatch_count'] = (previous.get('redispatch_count', 0) + 1
+                                    if previous and previous.get('input_hash') == envelope['input_hash'] else 1)
+    envelope['material_bytes'] = sum(path.stat().st_size for path in
+                                     (artifact('input.json'), artifact('result.template.json'))
+                                     if path.exists())
     validate_task(envelope)
-    json_write(artifact('task.json'), envelope)
+    json_write(task_file, envelope)
     if compact:
         # Keep the controller's context small; workers always receive the complete on-disk envelope.
         keys = ('schema', 'version', 'task_id', 'input_hash', 'stage', 'chapter', 'scope',
