@@ -204,8 +204,8 @@ def closure(book, task, data, evidence):
     require(type(through) is int and target['end'] < through <= target['end'] + contract['scope_append_limit'], 'closure', '补写终点须有界，遵守 scope_append_limit。')
     require(book['finish'] or book['target'] >= through, 'target', '补写不能超出作者授权章节范围。')
     delta = through - target['end']
-    require(book['written_han'] + (contract['volumes'][-1]['end'] - task['last'] + delta) * contract['chapter_min'] <= contract['word_range'][1],
-            'word_budget', '补写后总篇幅无法成立，须作者改约。')
+    # 补写的章数上限由 scope_append_limit 与作者目标共同限定（见上），总字数是章数与章幅的
+    # 派生结果，不再另设一道基于旧章数的上限；否则一次合法的追加会被陈旧的总量挡下。
     book['scope_ends'] = {v['id']: v['end'] + (delta if v['end'] >= target['end'] else 0) for v in contract['volumes']}
     if book['finish']:
         book['target'] += delta

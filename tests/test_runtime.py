@@ -559,15 +559,17 @@ class RuntimeTests(unittest.TestCase):
         self.repo.db.execute('UPDATE documents SET value=? WHERE hash=?', (dump('被篡改的正文。'), row['prose']))
         self.assertCode('source_integrity', self.app.audit)
 
-    def test_complete_never_relaxes_word_target(self):
-        # both fixed chapters fit their own budget, but together they stay under the author's total
+    def test_completion_reads_the_derived_band_not_a_hand_entered_total(self):
+        """The author decides chapters and the per-chapter range; the total cannot gate completion."""
         raw = contract(2, 1)
         raw['word_range'] = [200, 300]
         raw['chapter_min'], raw['chapter_max'], raw['chapter_aim'] = 71, 150, 90
         self.repo.save(workflow.new_book(raw))
+        # the hand-entered band is replaced by the projection of the two real decisions
+        self.assertEqual(self.repo.load()['contract']['word_range'], [2 * 71, 2 * 150])
         owner = self.finish()
-        self.assertCode('word_target', self.app.complete, owner)
-        self.assertEqual(self.repo.load()['contract']['word_range'], [200, 300])
+        self.assertTrue(self.app.complete(owner)['completed'])
+        self.assertEqual(self.repo.load()['status'], 'completed')
 
     def test_lexical_enforcement_scope_is_declared_and_exercised(self):
         """The declared coverage and the enforced coverage come from one table, at every stage."""
@@ -837,24 +839,19 @@ class RuntimeTests(unittest.TestCase):
         allowed = delivery.export_book(self.repo, output=Path(self.temp.name) / 'plain.html', workspace=local_workspace(self.repo))
         self.assertEqual(Path(allowed['path']).name, 'plain.html')
 
-    def test_contract_must_be_finishable_inside_the_author_word_band(self):
-        """A fixed chapter count plus a per-chapter cap decides whether the book can land in the band."""
+    def test_contract_derives_its_total_band_from_chapters_and_the_per_chapter_range(self):
+        """The author decides the chapter count and the per-chapter range; the total follows."""
         raw = contract(2, 1)
-        # the numbers from a real session: 47 chapters, cap 2600, band upper bound 110000
         raw['volumes'] = [{'id': 'v1', 'purpose': '查明来源并面对后果。', 'end': 47}]
         raw['chapter_min'], raw['chapter_max'], raw['chapter_aim'] = 2000, 2600, 2300
+        # An incoming band is ignored rather than argued with: the projection is the authority.
         raw['word_range'] = [90000, 110000]
-        with self.assertRaises(Error) as caught:
-            planning.validate_contract(raw)
-        self.assertEqual(caught.exception.code, 'scale')
-        self.assertEqual(caught.exception.details['per_chapter_range'], [1915, 2340])
-        # with the cap inside the budget the contract holds; raising only the cap breaks it again
-        raw['chapter_max'] = 2340
-        self.assertEqual(planning.validate_contract(raw)['chapter_max'], 2340)
+        self.assertEqual(planning.validate_contract(raw)['word_range'], [47 * 2000, 47 * 2600])
         raw['chapter_max'] = 2500
-        with self.assertRaises(Error) as caught:
-            planning.validate_contract(raw)
-        self.assertIn('每章平均最多', caught.exception.message)
+        self.assertEqual(planning.validate_contract(raw)['word_range'], [47 * 2000, 47 * 2500])
+        # A contract that names no band at all is still complete: it is derived, not required.
+        raw.pop('word_range')
+        self.assertEqual(planning.validate_contract(raw)['word_range'], [94000, 117500])
 
     def test_dispatch_material_carries_its_own_path_self_check(self):
         self.repo.save(workflow.preparing_book(guided=True))

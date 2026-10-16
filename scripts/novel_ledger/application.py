@@ -781,7 +781,11 @@ class Application:
                 return {'completed': True, 'idempotent': True}
             require(self.repo.pending() is None and workflow.choose(book, self.repo.headers(book['branch'])) == {'action': 'ready_to_complete'}, 'completion', '目标、作者定调、卷审或全书复核尚未完成。')
             report = self._audit(book)
-            require(book['contract']['word_range'][0] <= book['written_han'] <= book['contract']['word_range'][1], 'word_target', '实际总汉字数不在作者目标区间，不能降低目标冒充完本。')
+            written = self.repo.headers(book['branch'])
+            # 完本看两件事：章数写到位，且每一章都已在提交时落在章幅区间内（见章节验收）。
+            # 总字数是这两者的派生结果，不再单独作为门槛。
+            require(written and written[-1]['n'] == editorial.effective_contract(book)['volumes'][-1]['end'],
+                    'chapter_target', '章节数未达到约定章数，不能降低目标冒充完本。')
             require(not any(h['status'] == 'open' for h in book['state']['hooks'].values()), 'payoffs', '仍有未交代承诺。')
             if book['contract'].get('narrative_tracking'):
                 narrative.closure(book)

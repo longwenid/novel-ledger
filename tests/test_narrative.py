@@ -181,23 +181,27 @@ class NarrativeTests(unittest.TestCase):
         b=self.repo.load(); b['designs']['book']={'nodes':[story_node('end',6)],'threads':[{'id':'main','kind':'main','required':True}]}
         self.assertCode('story_closure',narrative.closure,b)
 
-    def test_dynamic_budget_detects_unreachable_total_before_dispatch(self):
+    def test_budget_reads_the_derived_band(self):
         raw=json.loads((Path(__file__).resolve().parents[1]/'assets/contract.example.json').read_text())
         c=planning.validate_contract(raw)
-        self.assertCode('word_budget',narrative.word_budget,c,1200000,451)
-        budget=narrative.word_budget(c,1497000,500)
-        self.assertEqual(budget['minimum'],3000)
+        last=c['volumes'][-1]['end']
+        self.assertEqual(c['word_range'],[last*c['chapter_min'],last*c['chapter_max']])
+        budget=narrative.word_budget(c,last*c['chapter_min'],last)
+        self.assertEqual(budget['minimum'],c['chapter_min'])
+        self.assertGreaterEqual(budget['maximum'],c['chapter_aim'])
 
-    def test_variable_chapter_cap_can_exceed_average_budget(self):
+    def test_budget_cap_is_the_derived_band_not_an_average(self):
         raw=tracked_contract(2); raw.update(chapter_min=20,chapter_aim=70,chapter_max=150,word_range=[100,200])
         c=planning.validate_contract(raw)
-        self.assertEqual(narrative.word_budget(c,140,2)['maximum'],60)
+        self.assertEqual(c['word_range'],[2*20,2*150])
+        self.assertEqual(narrative.word_budget(c,140,2)['maximum'],150)
 
     def test_narrow_revision_budget_reserves_unchanged_suffix(self):
         raw=tracked_contract(3); raw.update(chapter_min=20,chapter_aim=50,chapter_max=100,word_range=[120,180])
         c=planning.validate_contract(raw)
+        self.assertEqual(c['word_range'],[3*20,3*100])
         budget=narrative.word_budget(c,50,2,60,1)
-        self.assertEqual((budget['minimum'],budget['maximum']),(20,70))
+        self.assertEqual((budget['minimum'],budget['maximum']),(20,100))
 
     def test_normalized_plan_does_not_mutate_receipt_or_break_idempotence(self):
         drive_tracked(self.app,until='plan')
