@@ -102,22 +102,22 @@ VOLUME_TURNS = (
 #   chapters       recommended total chapters for the tier
 #   chapter_window the chapter counts at which the tier's band is actually reachable
 SCALE_TIERS = (
-    {'id': 't0', 'name': '微型', 'word_range': [42000, 66500], 'chapter_min': 2000, 'chapter_aim': 2600,
+    {'id': 't0', 'name': '微型', 'word_range': [34000, 59500], 'chapter_min': 2000, 'chapter_aim': 2600,
      'chapter_max': 3500, 'volume_count': 1, 'chapters': 17, 'chapter_window': [14, 19],
      'note': '单一事件的完整闭环：一条主线、两三个人物，没有卷内转折与支线并行的余地'},
-    {'id': 't1', 'name': '短篇', 'word_range': [100000, 200000], 'chapter_min': 1800, 'chapter_aim': 2500,
+    {'id': 't1', 'name': '短篇', 'word_range': [90000, 175000], 'chapter_min': 1800, 'chapter_aim': 2500,
      'chapter_max': 3500, 'volume_count': 2, 'chapters': 50, 'chapter_window': [40, 57],
      'note': '一次完整的因果闭环；没有中段铺陈与多线并行的余地'},
-    {'id': 't2', 'name': '精简', 'word_range': [250000, 450000], 'chapter_min': 2200, 'chapter_aim': 3000,
+    {'id': 't2', 'name': '精简', 'word_range': [220000, 400000], 'chapter_min': 2200, 'chapter_aim': 3000,
      'chapter_max': 4000, 'volume_count': 4, 'chapters': 100, 'chapter_window': [84, 112],
      'note': '一条主线的完整起落与两三处关系变化；卷内很难安排中期翻盘'},
-    {'id': 't3', 'name': '标准', 'word_range': [500000, 900000], 'chapter_min': 2500, 'chapter_aim': 3500,
+    {'id': 't3', 'name': '标准', 'word_range': [450000, 810000], 'chapter_min': 2500, 'chapter_aim': 3500,
      'chapter_max': 4500, 'volume_count': 6, 'chapters': 180, 'chapter_window': [143, 200],
      'note': '两三条线索交错、一次卷中转折与中期对手揭露；群像与代际铺陈仍要克制'},
-    {'id': 't4', 'name': '长篇', 'word_range': [1000000, 1800000], 'chapter_min': 3000, 'chapter_aim': 4000,
+    {'id': 't4', 'name': '长篇', 'word_range': [900000, 1500000], 'chapter_min': 3000, 'chapter_aim': 4000,
      'chapter_max': 5000, 'volume_count': 8, 'chapters': 300, 'chapter_window': [250, 360],
      'note': '多线并行、次要人物弧线与多次代价递进；再多的人物网需要更长篇幅'},
-    {'id': 't5', 'name': '超长', 'word_range': [2200000, 4000000], 'chapter_min': 3000, 'chapter_aim': 4500,
+    {'id': 't5', 'name': '超长', 'word_range': [1800000, 3600000], 'chapter_min': 3000, 'chapter_aim': 4500,
      'chapter_max': 6000, 'volume_count': 10, 'chapters': 600, 'chapter_window': [489, 666],
      'note': '群像规模的多线交织、反复的势力更替与长期伏笔回收；对节奏控制要求最高'},
 )
@@ -167,7 +167,7 @@ CONTRACT_FIELDS = (
     {'key': 'initial_resources', 'kind': 'rows', 'default': [], 'alignment': False},
     {'key': 'volumes', 'kind': 'rows', 'default': [], 'alignment': True,
      'shape': ('id', 'purpose', 'end'), 'blank': False, 'count': 1},
-    {'key': 'word_range', 'kind': 'band', 'default': [], 'alignment': True, 'opening': ('scale', 'word_range')},
+    {'key': 'word_range', 'kind': 'band', 'default': [], 'alignment': False, 'opening': ('scale', 'word_range')},
     {'key': 'chapter_min', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_min')},
     {'key': 'chapter_max', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_max')},
     {'key': 'chapter_aim', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_aim')},
@@ -187,6 +187,10 @@ CONTRACT_FIELDS = (
     {'key': 'placements', 'kind': 'map', 'default': {}, 'alignment': False, 'optional': True},
     {'key': 'arcs', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
 )
+# Fields the engine projects instead of the author deciding them. They may still travel in an
+# opening choice so the board can show them, but no alignment check compares them: comparing a
+# projection against the decision it was projected from is how a derived field becomes a conflict.
+DERIVED_FIELDS = ('word_range',)
 CONTRACT_KEYS = tuple(row['key'] for row in CONTRACT_FIELDS)
 # Every field declared as an alignment decision, regardless of opening version.
 # The version-aware view is alignment_for(version); this one answers "which fields
@@ -270,6 +274,10 @@ def contract_errors(raw):
             continue
         value = raw[key]
         if kind == 'band':
+            # An empty band means "not decided here": the total is a projection of the chapter
+            # count and the per-chapter range, and validate_contract derives it from those.
+            if value == []:
+                continue
             if not isinstance(value, list) or len(value) != 2 or not all(type(n) is int and n > 0 for n in value) \
                     or value[0] > value[1]:
                 complaints.append('word_range 须为有效总汉字区间。')

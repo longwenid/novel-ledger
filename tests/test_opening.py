@@ -593,7 +593,8 @@ class OpeningTests(unittest.TestCase):
         # Each attempt drafts the world plus a contract that breaks one closed choice: the combined
         # dispatch must refuse the contract half without accepting the world half either.
         for mutate, label in ((lambda value: value.update(voice='另一个文风。'), 'voice'),
-                              (lambda value: value.update(word_range=[300000, 460000]), 'word_range'),
+                              (lambda value: value.update(chapter_aim=value['chapter_min'] if value['chapter_aim'] != value['chapter_min']
+                                                   else value['chapter_max']), 'chapter_aim'),
                               (lambda value: value.update(story_engine='换一个推进引擎。'), 'story_engine'),
                               (lambda value: value.update(title='换一个书名。'), 'title'),
                               (lambda value: value.update(tone='换一个基调。'), 'tone'),
@@ -839,6 +840,8 @@ class StructuralGateTests(unittest.TestCase):
                                           for i in range(tier['volume_count'])]
                         checked = planning.validate_contract(raw)
                         self.assertEqual(checked['volumes'][-1]['end'], total)
+                        self.assertEqual(checked['word_range'],
+                                         [total * tier['chapter_min'], total * tier['chapter_max']])
 
 
 class OpeningDecisionTests(unittest.TestCase):

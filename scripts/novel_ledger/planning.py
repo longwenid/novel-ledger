@@ -161,7 +161,6 @@ def validate_contract(raw):
             and type(policy.get('words')) is int and policy['words'] > 0
             and type(policy.get('tolerance')) is int and 0 <= policy['tolerance'] < policy['words'],
             'volume_outline', 'volume_outline 为 {} 或 {scope:rolling|current|all,words:正整数,tolerance:非负整数且小于 words}。')
-    band = contract['word_range']
     volumes = contract['volumes']
     seen, last = set(), 0
     for volume in volumes:
@@ -174,27 +173,11 @@ def validate_contract(raw):
         require(type(volume['end']) is int and volume['end'] > last, 'volume', '卷末章号须严格递增。')
         volume['first'] = last + 1
         last = volume['end']
-    require(last * contract['chapter_max'] >= band[0] and last * contract['chapter_min'] <= band[1],
-            'scale', '章节范围与总篇幅不能同时成立，请调整卷预算或章篇幅。')
-    # The limits above only say the book *could* reach the band. What decides whether it can be
-    # finished inside it is the per-chapter budget over the fixed chapter count, so a contract whose
-    # target or cap cannot fit is rejected here instead of surfacing two revisions later.
-    low = math.ceil(band[0] / last)
-    high = band[1] // last
-    detail = {'chapters': last, 'word_range': band, 'per_chapter_range': [low, high] if high >= low else [],
-              'chapter_aim': contract['chapter_aim'], 'chapter_max': contract['chapter_max']}
-    require(high >= low, 'scale', '章数与总篇幅不能同时成立：固定 %d 章时每章需 %.0f~%.0f 字，区间为空。' % (last, band[0] / last, band[1] / last),
-            {**detail, 'recover': '增加卷末章号，或放宽总篇幅区间。'})
-    require(contract['narrative_tracking'] or contract['chapter_aim'] <= high, 'scale',
-            '章幅目标偏大：固定 %d 章、总上限 %d 字时，每章平均最多 %d 字（当前目标 %d），全书完成时会超出篇幅上限。'
-            % (last, band[1], high, contract['chapter_aim']),
-            {**detail, 'recover': '把 chapter_aim 降到 %d 以内，或把卷末章号上调到至少 %d 章。'
-             % (high, -(-band[1] // contract['chapter_aim']))})
-    require(contract['narrative_tracking'] or contract['chapter_max'] <= high, 'scale',
-            '章幅上限偏大：固定 %d 章、总上限 %d 字时每章平均最多 %d 字（当前上限 %d），每一章都写满就会超篇幅。'
-            % (last, band[1], high, contract['chapter_max']),
-            {**detail, 'recover': '把 chapter_max 降到 %d 以内，或把卷末章号上调到至少 %d 章。'
-             % (high, -(-band[1] // contract['chapter_max']))})
+    # The total band is a projection of the two things the author actually decides: how many
+    # chapters the book has, and the per-chapter range the size class proves writable. Deriving it
+    # here replaces the arithmetic that checked a hand-entered band against the count — arithmetic
+    # that could still be internally inconsistent, and did not survive a new size class.
+    contract['word_range'] = [last * contract['chapter_min'], last * contract['chapter_max']]
     for key in ('world_rules', 'red_lines', 'arcs'):
         require(isinstance(contract[key], list) and all(text(v) for v in contract[key]), 'contract', key + ' 须为字符串数组。')
     return contract

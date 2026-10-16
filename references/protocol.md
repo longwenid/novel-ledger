@@ -10,7 +10,7 @@
 
 ## 作者约定
 
-核心字段包括 title/reader_promise/ending/genre、word_range=[总汉字下限,上限]、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism，完整必填项按模板检查。`tone`/`theme`/`pov` 在 opening/2 中由作者选择并逐字保留；自备约定可缺省，不追溯要求补选。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。
+核心字段包括 title/reader_promise/ending/genre、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism，完整必填项按模板检查。`tone`/`theme`/`pov` 在 opening/2 中由作者选择并逐字保留；自备约定可缺省，不追溯要求补选。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。总字数区间 word_range 是派生字段：由章数与每章区间算出，作者与派工材料都不填，也不参与开书对齐。
 
 | 设置 | 默认与作用 |
 |---|---|
@@ -22,7 +22,7 @@
 
 启用编辑能力时检查清单为 3，约定另有 pov 时为 4（增加 reader.pov_consistency）；未启用编辑能力时为 2。具体版本随任务冻结，已保存回执按自己的版本复核，不追补后来新增的检查项。
 
-跟踪项目按每章 word_budget 动态约束剩余总预算，允许长短章共同收口；关闭叙事跟踪时的静态规则如下。篇幅必须**写得完**：固定章数 last 后，每章平均可用区间是 `[ceil(word_range[0]/last), floor(word_range[1]/last)]`；`chapter_aim` 与 `chapter_max` 都必须落在该区间内，否则报 `scale`（区间为空报"章数与总篇幅不能同时成立"）。错误详情里带 `per_chapter_range` 与可执行的修正建议（降低章幅或上调卷末章号），例如 47 章 × 上限 2600 配 11 万上限会被拒，因为每章平均最多只能 2340 字。
+跟踪项目按每章 word_budget 动态约束剩余总预算，允许长短章共同收口；关闭叙事跟踪时的静态规则如下。作者只定两件事：**章数**（落在档位窗口内）与**每章字数区间**（来自档位表）。总字数区间由二者派生（`章数 × [chapter_min, chapter_max]`），因此不会再出现"表自己算不平"或"固定章数装不下总区间"的问题。完本核对的也是这两件事：章数写到位，且每一章都在区间内（后者在章节提交时逐章检查）。
 
 entities=[{id,name,kind,aliases?}]、initial_facts=[{entity,key,value}]、initial_resources=[{holder,asset,unit,quantity}]、places=[{id,name,parent?}]、placements={entity:place} 只放已成立事实。quantity 为十进制字符串。world_rules/red_lines/arcs 是字符串数组，voice 保存文风。字面规则不属于约定：它是项目级 book.lexical_policy 的版本记录，用 `lexical --file 规则.json --source 原话` 修改，约定里出现 lexical_policy 会被结构校验拒绝。候选人物放计划 new_entities，经正文事实核验后成立。
 

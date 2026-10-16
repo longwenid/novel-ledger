@@ -178,9 +178,13 @@ def budget_for(book, chapter, through=None):
 
 
 def word_budget(contract, written, chapter, reserved_han=0, reserved_chapters=0):
-    remaining = contract['volumes'][-1]['end'] - chapter + 1 - reserved_chapters
+    last = contract['volumes'][-1]['end']
+    remaining = last - chapter + 1 - reserved_chapters
     effective = written + reserved_han
-    lo, hi = contract['word_range']
+    # The total is a projection of the chapter count and the per-chapter range, so it is derived
+    # here from the count in force: an authorized append or revision moves the count and the band
+    # together, and a budget read off a stale frozen band would refuse a legal extension.
+    lo, hi = last * contract['chapter_min'], last * contract['chapter_max']
     minimum = max(contract['chapter_min'], lo - effective - max(0, remaining - 1) * contract['chapter_max'])
     maximum = min(contract['chapter_max'], hi - effective - max(0, remaining - 1) * contract['chapter_min'])
     require(remaining > 0 and minimum <= maximum, 'word_budget', '剩余章数已无法达到总篇幅约定。',

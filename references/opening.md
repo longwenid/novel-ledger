@@ -35,7 +35,7 @@
 |---|---|---|---|---|
 | 1 | `genre` 题材、承诺与基调 | 创意门 | 写给谁、是什么故事、给读者什么感觉 | genre/reader_promise/tone |
 | 2 | `pov` 叙述视角与人称 | 创意门 | 谁在讲、能看多远 | pov |
-| 3 | `scale` 体量与分卷 | **结构门（引擎即时）** | 这本书多大、多少卷、每章多长 | tier/word_range/chapter_min/chapter_max/chapter_aim/volume_count/chapters/chapter_window |
+| 3 | `scale` 体量与分卷 | **结构门（引擎即时）** | 这本书多大、多少卷、每章多长 | tier/chapter_min/chapter_max/chapter_aim/volume_count/chapters/chapter_window（总字数区间 word_range 是派生结果：章数 × 每章区间，作者与 Worker 都不用填） |
 | 4 | `world` 世界前提、机制与禁区 | 创意门 | 世界是什么样、有无特殊机制及其代价、绝不写什么 | world_premise、mechanism{mode,principle,cost,limits}、red_lines、allow_special_mechanism |
 | 5 | `protagonist` 主角身份、欲望与底线 | 创意门 | 谁、要什么、底线在哪 | id/name/identity/desire/limit |
 | 6 | `relationships` 核心关系与人物张力 | 创意门 | 身边与对面有谁、张力在哪 | relationships（至少一条） |

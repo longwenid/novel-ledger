@@ -163,7 +163,7 @@ def current(state):
 VALUE_RULES = {
     1: {
         'genre': 'genre 题材、reader_promise 读者承诺、red_lines 禁区数组、allow_special_mechanism 布尔',
-        'scale': 'word_range=[总汉字下限,上限]、chapter_min/chapter_max/chapter_aim、volume_count',
+        'scale': 'chapter_min/chapter_max/chapter_aim、volume_count（总字数区间由章数与章幅派生）',
         'protagonist': 'id、name、identity 身份、desire 欲望、limit 底线',
         'engine': 'story_engine 持续推进的动力、opposition 主要对抗',
         'relationships': 'relationships 具体关系数组，独行方案可为空数组',
@@ -174,7 +174,7 @@ VALUE_RULES = {
     2: {
         'genre': 'genre 题材、reader_promise 读者承诺、tone 基调（给读者的情绪与温度）',
         'pov': 'pov 叙述视角与人称：谁在讲、能看多远、换视角时怎样交代；scene 必须用该方案的人称写出来，让作者读到人称的实际效果',
-        'scale': 'tier 档位 ID（intake 时只给 tier 即可，引擎补齐已证明的数字）、word_range、chapter_min/chapter_max/chapter_aim、volume_count、chapters、chapter_window（本门由系统按档位表即时给定，照抄不要改数）',
+        'scale': 'tier 档位 ID（intake 时只给 tier 即可，引擎补齐已证明的数字）、chapter_min/chapter_max/chapter_aim、volume_count、chapters、chapter_window（本门由系统按档位表即时给定，照抄不要改数；总字数区间是派生结果，不用填）',
         'world': 'world_premise 世界前提、mechanism={mode:none或bounded, principle, cost, limits:数组}、red_lines 禁区数组、allow_special_mechanism 布尔（必须等于 mode=="bounded"）',
         'protagonist': 'id、name、identity 身份、desire 欲望、limit 底线',
         'relationships': 'relationships 具体关系数组，至少一条：独行主角也要写清最关键的那段张力，不能交空数组',
@@ -493,7 +493,7 @@ def _v2_groups(choices):
     """Project each decision from its declared owner, never merge entire option values."""
     expected = {}
     for row in contracts.CONTRACT_FIELDS:
-        if 'opening' in row:
+        if 'opening' in row and row['key'] not in contracts.DERIVED_FIELDS:
             gate, key = row['opening']
             expected[row['key']] = copy.deepcopy(choices[gate] if key is None else choices[gate][key])
     derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}
