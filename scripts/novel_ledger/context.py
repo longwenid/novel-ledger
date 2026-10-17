@@ -338,6 +338,10 @@ def build(repo: ContextStore, book, job):
     if stage in ('design_review', 'outline_review', 'contract_review', 'world_review'):
         add('proposal', book['proposal'])
         prose = [{'chapter': 0, 'hash': repo.document(dump(book['proposal']['data']))}]
+        if stage == 'contract_review' and book['proposal'].get('amendment'):
+            # A re-contract changes a field or two of a candidate that was already reviewed. The
+            # reviewer checks the delta, so a second, quieter amendment cannot ride along unseen.
+            add('contract_amendment', book['proposal']['amendment'])
     elif stage == 'chapter_review':
         prose = [{'chapter': chapter, 'hash': repo.document(book['draft']['prose'])}]
     elif stage == 'revision_review':

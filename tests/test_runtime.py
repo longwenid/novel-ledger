@@ -815,7 +815,12 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(self.app.advance()['task']['stage'], 'book_plan')
                 self.app.submit(response(self.app))
         self.assertEqual(self.app.status()['status'], 'paused')
-        self.assertCode('repair_budget', self.app.resume)
+        # The spent budget is no longer a wall: resume hands the decision to the author, and the
+        # engine keeps the budget unless the author explicitly grants one more round.
+        status = self.app.resume()
+        self.assertEqual(status['status'], 'paused')
+        self.assertEqual(status['author_decision']['id'], 'repair-exhausted:design_review')
+        self.assertEqual(self.repo.load()['proposal']['attempts'], 3)
 
     def test_fact_fix_and_short_repair_share_one_budget(self):
         self.review_task()

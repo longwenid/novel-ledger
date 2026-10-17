@@ -175,7 +175,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" --owner "$OWNER" answer \
   --decision-id 待决问题ID --option '作者选定的选项label' --source '作者答复的原话'
 ```
 
-答复须是已展示选项之一，否则以 author_decision 拒绝：作者另有第三条路时那是新决定，走改约核验（blocked_resolution 回答准确问题）或重新提案。记录写入 author_decision_history（同一问题、所选选项与作者原话），答复同时进入作者原话（author_feedback），清除 author_block；暂停原因就是该问题时项目恢复 running，否则保持暂停待处理其他停点。下一步按新前提重新起草候选：世界、全书或卷设计交 world_model/book_plan/volume_plan 返修，卷纲批次重交 volume_outline，改案丢弃旧候选重新 alignment_plan；改约定本身的问题仍走 recontract，其全书重写代价见[动作表](#动作分支)——主干转述问题时一并告知作者两条路径的代价差。没有作者答复时 resume 会以 author_decision 拒绝，不能用改约或重发绕过。
+答复须是已展示选项之一，否则以 author_decision 拒绝：作者另有第三条路时那是新决定，走改约核验（blocked_resolution 回答准确问题）或重新提案。记录写入 author_decision_history（同一问题、所选选项与作者原话），答复同时进入作者原话（author_feedback），清除 author_block；暂停原因就是该问题时项目恢复 running，否则保持暂停待处理其他停点。**顺序要求**：先 `answer` 记录裁决，再 `advance`/`recontract`。裁决会推进项目版本，派工在裁决之前冻结的任务随即失效（stale_task，只能取消重派），先派工后答复等于白派一个 Worker。下一步按新前提重新起草候选：世界、全书或卷设计交 world_model/book_plan/volume_plan 返修，卷纲批次重交 volume_outline，改案丢弃旧候选重新 alignment_plan；改约定本身的问题仍走 recontract，其全书重写代价见[动作表](#动作分支)——主干转述问题时一并告知作者两条路径的代价差。没有作者答复时 resume 会以 author_decision 拒绝，不能用改约或重发绕过。
 
 作者明确授权准确方案后，保存其原话并执行：
 

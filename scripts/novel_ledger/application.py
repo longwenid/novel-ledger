@@ -760,6 +760,18 @@ class Application:
                     # keep dispatching gate tasks for a book that already has its contract.
                     book['creation'] = None
             planning.check_contract_names(candidate, planning.policy_of(book))
+            # A re-contract usually changes one or two fields of an already reviewed candidate.
+            # Handing the reviewer the delta is what lets it check the amendment instead of
+            # re-reading 40 unchanged fields (and it cannot quietly become a second amendment).
+            base = ((book.get('pending_contract') or {}).get('data')
+                    or (book['proposal'].get('data') if book.get('proposal') and book['proposal'].get('scope') == 'contract' else None)
+                    or (book.get('contract') if not opening else None))
+            amendment = {}
+            if isinstance(base, dict):
+                for key in sorted(set(base) | set(candidate)):
+                    before, after = base.get(key), candidate.get(key)
+                    if before != after:
+                        amendment[key] = {'before': dump(before)[:400], 'after': dump(after)[:400]}
             if not book['proposal'] or book['proposal']['scope'] != 'contract':
                 self.repo.put(store_keys.AMENDMENT_BASE, book)
             self._cancel_pending(source)
@@ -769,7 +781,8 @@ class Application:
                 book.pop(key, None)
             producer = book.get('controller_owner') or owner or 'controller'
             book.update(status='running', revision=book['revision'] + 1,
-                        proposal={'scope': 'contract', 'chapter': 1, 'data': candidate, 'producer': producer, 'source': source})
+                        proposal={'scope': 'contract', 'chapter': 1, 'data': candidate, 'producer': producer,
+                                  'source': source, 'amendment': amendment})
             if owner:
                 book['controller_owner'] = owner
             self.repo.save(book)
