@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 from .contracts import (AUTHOR_CHANNEL_STAGES, CHECK_SETS, POLICY_FIELDS, REPAIRS, RESULT, SCALE_TIERS, VERSION, Error,
                         checks_for, digest, dump, han_count, require, text)
-from . import creation, facts, narrative, planning, quality, workflow, world, craft, editorial, store_keys, story_memory, understanding
+from . import book_state, creation, facts, narrative, planning, quality, workflow, world, craft, editorial, store_keys, story_memory, understanding
 from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
 from .contract_activation import ContractActivation
@@ -32,6 +32,8 @@ class Application:
 
     def status(self):
         book = self.repo.load()
+        # A contradictory state is reported by the command that produced it, not discovered later.
+        book_state.check_state(book)
         rows = self.repo.headers(book['branch'])
         official = self.repo.get(store_keys.OFFICIAL_BRANCH, 'main')
         formal = self.repo.headers(official)

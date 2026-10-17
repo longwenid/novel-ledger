@@ -37,7 +37,10 @@ ALLOWED = {
     'workflow': {'contracts', 'creation', 'facts', 'narrative', 'planning', 'quality',
                  'scopes', 'world', 'craft', 'editorial', 'understanding',
                  'design_queries', 'evidence'},
-    'application': {'contracts', 'ports', 'store_keys', 'creation', 'facts', 'narrative', 'planning',
+    # book_state declares the four-partition field ownership and the invariants between those fields,
+    # so the application reads it to check the state it owns (the same way it reads store_keys for the
+    # key space). book_state stays a pure declaration module: it imports nothing but contracts.
+    'application': {'contracts', 'ports', 'store_keys', 'book_state', 'creation', 'facts', 'narrative', 'planning',
                     'quality', 'workflow', 'world', 'craft', 'editorial',
                     'story_memory', 'understanding', 'revision_service', 'contract_activation'},
     'revision_service': {'contracts', 'ports', 'store_keys', 'editorial', 'facts', 'narrative', 'revision_impact',

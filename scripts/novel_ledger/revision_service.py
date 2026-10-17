@@ -187,6 +187,9 @@ class RevisionService:
         self.repo.put(store_keys.branch_book(parent), book)
         branch = self.repo.fork(parent, first)
         old = self.repo.chapter(parent, first)
+        # The暂停 that led here is over: the branch and its first task now carry the work, and leaving
+        # the old reason behind makes status read as paused to every consumer of pause_reason.
+        book.pop('pause_reason', None)
         book.update(branch=branch, state=self.replay(parent, book['contract'], first - 1),
                     written_han=sum(r['han'] for r in rows if r['n'] < first), status='running',
                     target=book_last, finish=False, revision=book['revision'] + 1)

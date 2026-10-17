@@ -177,8 +177,12 @@
 
 - **已做**：记录裁决时直接作废裁决前派出的任务并在返回值里回报 `retired_task`；恢复路径统一清暂停原因；
   改约预览保留完整值、截断显式标注。
-- **还应当做**：一组**状态不变量**（`running ⇒ 无 pause_reason`；在途任务的 `revision` 必须等于当前 `revision`；
-  `accepted_findings` 的形状），在单一出口校验，让"两个字段必须一起改"变成引擎保证而不是纪律。
+- **已做（不变量）**：`book_state.check_state` 在每次读 `status` 时校验
+  "运行中不得带暂停原因、暂停必须有原因、接受过的条目必须有阶段/范围/意见、候选稿必须指向章号"。
+  **这条不变量落地当时就抓出第四处同类残留**：review 驱动的修订路径（`revision_service.begin`）
+  同样把状态改成 running 却留着上一处暂停原因——说明"靠纪律记得成对修改"确实是不可靠的，必须由引擎保证。
+- **还应当做**：把不变量扩到在途任务（`pending.revision == book.revision`），
+  让"派工与状态版本必须一致"也由引擎而不是由顺序纪律保证。
 
 ### 根因 E：主控与引擎的分工没有可核对的接口
 
@@ -211,6 +215,7 @@ Worker 按 `task.json` 与冻结材料纠正了我（该任务没有 closure、�
 | 7 | 接受过的条目在 `status` 与完本篇审计显式列出 | `application.status` / `_audit` | 接受不等于通过 |
 | 8 | 记录裁决时作废裁决前派出的任务并回报 `retired_task` | `application.answer` | 一次白派 Worker（`stale_task`） |
 | 9 | 恢复路径统一清暂停原因；裁决与派工顺序写进运行指南 | `application.resume` / `recontract`、`references/runtime.md` | `status=running` 却留 `pause_reason` |
+| 10 | 状态不变量在每次读 `status` 时校验（运行中不得带暂停原因、暂停必须有原因、接受条目有阶段/范围/意见） | `book_state.check_state`、`application.status`；新增 `application → book_state` 依赖作为显式架构决定 | 落地当场抓出第四处同类残留（`revision_service.begin`），已修；`test_book_state_invariants_are_checked_where_the_state_is_read` |
 
 ## 五、建议但未做的修复（按结构收益排序）
 
@@ -218,8 +223,8 @@ Worker 按 `task.json` 与冻结材料纠正了我（该任务没有 closure、�
    预计砍掉审稿位一半以上材料（来源 3），并把以后的裁剪变成改表。
 2. **体量档位决定管线与额度（根因 B）**：小档合并产出比低的层、返修额度按产出规模给；守卫要求新阶段声明档位归属。
 3. **停止点声明 + 守卫（根因 C）**：列出所有停止点，测试断言每个停止点都能生成作者决定——防止下一个新停止点漏接通道。
-4. **状态不变量（根因 D）**：`running ⇒ 无 pause_reason`、在途任务 `revision` 等于当前 `revision`，
-   在单一出口校验，把"两个字段必须一起改"变成引擎保证。
+4. **状态不变量扩展（根因 D）**：把在途任务与状态版本的一致性也纳入校验，
+   让"派工与状态必须一致"由引擎保证（现状：已保证命中"运行/暂停"与"接受条目"两组）。
 5. **改约审默认核差异（来源 5）**：`contract_amendment` 升为唯一必读，原候选转按需。
 6. **派工描述由任务自身渲染（根因 E）**：把 `stage/scope/chapter/first/last/required` 的标准说明放进派工模板，主控照念。
 

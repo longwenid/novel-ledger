@@ -237,6 +237,26 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertEqual(context.thin_required({'world_model': 'h1', 'world_core': 'h2'},
                                                ['world_model', 'world_core']), ['world_model'])
 
+    def test_book_state_invariants_are_checked_where_the_state_is_read(self):
+        """Two fields that must move together are how a project ends up running while still paused.
+
+        The check runs on every status read, so the command that produced the contradiction reports
+        it instead of a later command discovering it.
+        """
+        from novel_ledger import book_state
+        good = {'status': 'running', 'draft': None, 'accepted_findings': []}
+        self.assertIs(book_state.check_state(good), good)
+        with self.assertRaises(Error) as caught:
+            book_state.check_state(dict(good, pause_reason='上一步的暂停原因'))
+        self.assertEqual(caught.exception.code, 'book_state')
+        with self.assertRaises(Error):
+            book_state.check_state({'status': 'paused'})
+        with self.assertRaises(Error):
+            book_state.check_state(dict(good, status='whatever'))
+        with self.assertRaises(Error):
+            book_state.check_state(dict(good, accepted_findings=[{'stage': 'x'}]))
+        book_state.check_state(dict(good, status='paused', pause_reason='等作者', draft={'chapter': 2}))
+
     def test_frozen_capability_values_are_checked_instead_of_degrading(self):
         """A task frozen with an unknown protocol version must fail, not read as an older project."""
         from novel_ledger import contracts
