@@ -486,6 +486,9 @@ class Application:
             require(not book.get('remedy_exhausted'), 'remedy_exhausted', '根问题最后一轮失败，不能 resume 重发。')
             require(not book.get('alignment_hold') or book['alignment_hold'].get('attempts', 0) < 2, 'remedy_exhausted', '同一改案额度已耗尽。')
             book['status'] = 'running'
+            # The stop is over; leaving its reason on the book makes status read as paused to every
+            # consumer that looks at pause_reason first.
+            book.pop('pause_reason', None)
             self.repo.save(book)
         return self.status()
 
@@ -800,6 +803,7 @@ class Application:
             for key in ('revision_directive', 'alignment_hold', 'alignment_proposal'):
                 book.pop(key, None)
             producer = book.get('controller_owner') or owner or 'controller'
+            book.pop('pause_reason', None)
             book.update(status='running', revision=book['revision'] + 1,
                         proposal={'scope': 'contract', 'chapter': 1, 'data': candidate, 'producer': producer,
                                   'source': source, 'amendment': amendment})
