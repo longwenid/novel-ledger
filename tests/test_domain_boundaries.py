@@ -143,6 +143,11 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertEqual(world.required_sections('t0'),
                          ('rules', 'society', 'everyday', 'characters', 'mysteries', 'mechanisms'))
         self.assertEqual(world.required_sections('t3'), world.ALL_SECTIONS)
+        for tier, names in world.TIER_SECTIONS.items():
+            with self.subTest(tier=tier):
+                self.assertTrue(set(names) <= set(world.SECTIONS), '档位域表只能用已登记的领域')
+                self.assertEqual(len(names), len(set(names)))
+                self.assertIn('mechanisms', names)
         with self.assertRaises(Error) as caught:
             world.validate(dict(model, rules=[]), choices, 'h', sections='t0')
         self.assertEqual(caught.exception.code, 'world_section')
