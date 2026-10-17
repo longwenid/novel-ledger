@@ -112,7 +112,7 @@ continue_scope/revise_range 还需 repair_case={root_ref,goal,verification_condi
 
 ## 终审与精确交付
 
-全书 closure 的 completion_coverage 恰好覆盖 payload.sources：作者读者承诺、终局、母题（约定声明时）、世界规则、禁区、风格、核心关系、弧线与反馈，以及设计节点、线路、已登记承诺及根问题。每项 id/result/reason/evidence；核心项必须 fulfilled，非必要节点/线路可有依据地 permitted_open。仍须 prose_hashes 完整对应准确章号及哈希，并声明 source_coverage_checked/cross_chunk_checked，从正文发现列表之外的漏项。
+全书 closure 的 completion_coverage 恰好覆盖 payload.sources：作者读者承诺、终局、母题（约定声明时）、世界规则、禁区、风格、核心关系、弧线与反馈，以及设计节点、线路、已登记承诺、**人物成长记录（development:人物ID:序号）、读者认知话题（reader_knowledge:话题）与作者世界隐秘（mystery:ID）**，以及根问题。前三类新来源按"已有登记就必须逐项回应"进入枚举：成长与读者认知可为非必要项，有依据地 permitted_open；世界隐秘是必要项，不能留在开放状态。每项 id/result/reason/evidence；核心项必须 fulfilled，非必要节点/线路可有依据地 permitted_open。仍须 prose_hashes 完整对应准确章号及哈希，并声明 source_coverage_checked/cross_chunk_checked，从正文发现列表之外的漏项。
 
 complete 核对当前全部卷关闭、全书来源覆盖、根问题、首章认可、实际篇幅和事件链，再保存不可变 completion_snapshot。`deliver` 从该快照导出 book.md/book.html/delivery.json，清单含快照引用、章节哈希及文件内容哈希（规范 JSON 字符串的 SHA256）。导出失败只重试 deliver，内容完成状态与快照不变。已完本的 export/html 同样使用冻结版本。
 

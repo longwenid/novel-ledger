@@ -8,8 +8,8 @@ from . import scopes, editorial
 
 
 def template(stage, chapter, sources, obligations=(), extra=(), version=CHECKS_VERSION, payload=None, tracking=False):
-    stages.require_stage(stage)
     """The blank result for a stage. `extra` carries stages a combined dispatch also answers."""
+    stages.require_stage(stage)
     def review(ids, obs=(), challenges=()):
         return {'verdict': '', 'checks_version': version,
                 'checks': [dict(id=ident, result='', reason='', evidence=[],

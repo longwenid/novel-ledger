@@ -6,6 +6,21 @@ from novel_ledger.contracts import RESULT, digest
 from novel_ledger.result_templates import template
 
 
+def link_or_skip(case, link, target, target_is_directory=False):
+    """Create a symbolic link, or report the host's missing capability as a skip.
+
+    Windows only creates symbolic links with SeCreateSymbolicLinkPrivilege (Developer Mode or an
+    elevated token). The alias and escape regressions that need one cannot be executed without it,
+    and failing them would blame the engine for a host setting it does not own. Hard links need no
+    privilege, so they are never guarded this way. The created link is returned for chaining.
+    """
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except (OSError, NotImplementedError) as exc:
+        case.skipTest('此宿主不能创建符号链接：' + str(exc))
+    return link
+
+
 def contract(chapters=2, volumes=1):
     return {'narrative_tracking': False, 'editorial_features': False, 'volume_outline': {}, 'title': '夜班退件', 'genre': '都市生活',
             'reader_promise': '一个夜班工人查清退件来源并承担自己的选择。',

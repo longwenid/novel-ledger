@@ -52,7 +52,53 @@ def checks_for(version, kind):
     table = CHECK_SETS.get(version)
     require(table is not None, 'checks_version', '未知的检查清单版本。',
             {'known_versions': sorted(CHECK_SETS), 'recover': '回执按下发的模板版本填写，不要沿用旧版本号。'})
-    return table[kind]
+    entries = table.get(kind)
+    require(entries is not None, 'checks_kind', '未知的检查类别。',
+            {'kind': kind if isinstance(kind, str) else type(kind).__name__, 'known_kinds': sorted(table)})
+    return entries
+
+
+# Frozen task capabilities: which version of a protocol a dispatch was planned under. A consumer reads
+# them to keep interpreting a field the way that task was written. Each capability declares every
+# version this build understands, so an undeclared value is an error instead of a silent downgrade to
+# "old project" — a misspelled reading protocol would otherwise stop reading_refs being interpreted
+# without anyone noticing.
+EDITORIAL_CAPABILITY = 'editorial/1'
+UNDERSTANDING_CAPABILITY = 'understanding/1'
+SCENE_IDENTITY_V1 = 'scene-identity/1'
+SCENE_IDENTITY_CAPABILITY = 'scene-identity/2'
+READING_DEPENDENCIES_CAPABILITY = 'reading-dependencies/1'
+OPENING_BOUNDS_CAPABILITY = 'opening-bounds/1'
+VOLUME_OUTLINE_CAPABILITY = 'volume-outline/1'
+SCENE_MEMORY_CAPABILITY = 'scene-memory/1'
+HOOK_LINKS_CAPABILITY = 'hook-links/1'
+CAPABILITIES = {
+    'editorial': (EDITORIAL_CAPABILITY,),
+    'understanding': (UNDERSTANDING_CAPABILITY,),
+    'scene_identity': (SCENE_IDENTITY_V1, SCENE_IDENTITY_CAPABILITY),
+    'reading_dependencies': (READING_DEPENDENCIES_CAPABILITY,),
+    'opening_bounds': (OPENING_BOUNDS_CAPABILITY,),
+    'volume_outline': (VOLUME_OUTLINE_CAPABILITY,),
+    'scene_memory': (SCENE_MEMORY_CAPABILITY,),
+    'hook_links': (HOOK_LINKS_CAPABILITY,),
+}
+
+
+def capabilities_for(task):
+    """A frozen task's capabilities, with every value checked against this build.
+
+    Absent means the dispatch predates that capability; a present but undeclared value means the task
+    was frozen by a version that knows a protocol this build does not, which is a dispatch error
+    rather than an invitation to reuse the older interpretation.
+    """
+    frozen = (task or {}).get('capabilities') or {}
+    require(isinstance(frozen, dict), 'capability', '任务 capabilities 须为对象。')
+    unknown = sorted(str(key) + '=' + str(value) for key, value in frozen.items()
+                     if value not in CAPABILITIES.get(key, ()))
+    require(not unknown, 'capability', '任务冻结了本版本无法解释的能力值。',
+            {'unknown': unknown, 'known': {key: list(values) for key, values in CAPABILITIES.items()},
+             'recover': '该任务由不识别这些协议的版本冻结；用原版本继续执行，或取消后按当前协议重新派工。'})
+    return frozen
 FIRST_READ = ('desire', 'obstacle', 'change', 'read_on_reason')
 # Findings a reviewer may raise. The first three describe work a writer can repair; 'author' means
 # no rewrite can settle it — the premise itself must be decided, so it is routed to the author
@@ -72,9 +118,9 @@ AUTHOR_CHANNEL_STAGES = frozenset({'world_review', 'outline_review', 'design_rev
                                    'alignment_review', 'scope_review', 'scope_synthesis'})
 REPAIRS = 2
 REDESIGNS = 1
-# Fast verification merges block reviews by design, but a merged block still stays bounded:
-# one review task may cover at most this many chapters, so a whole volume never lands in
-# a single worker just because the interval review was skipped.
+# Fast verification merges block reviews by design: a basic project's fast mode sets the review block
+# to exactly this size instead of reading the author's review_chunk, so one review task never covers
+# more than this many chapters and a whole volume never lands in a single worker.
 FAST_REVIEW_BLOCK = 12
 TIME_MARKERS = tuple('日天夜晨早晚午时年月春夏秋冬晓暮昏宵旬翌昨今明') + ('星期', '分钟', '秒钟')
 DEFAULT_TERMS = ['账本', '入账', '回执']

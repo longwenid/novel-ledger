@@ -5,7 +5,7 @@
 仅依赖 Python 3.9+ 标准库，无第三方依赖、无需联网（调用模型的宿主由你自己提供）。
 
 - **定位**：写作流程的**治理层**，不是提示词集合，也不是文本生成器。它不产生一个字，但决定谁能写、写完谁审、事实怎么入账、改稿怎么不毁原稿。
-- **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 34 个模块（核心规则与流程处理普通值，具体存储、文件交付和进程在外层装配）+ 一个 SQLite 项目库。
+- **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 38 个模块（核心规则与流程处理普通值，具体存储、文件交付和进程在外层装配）+ 一个 SQLite 项目库。
 - **当前版本**：`1.5.0`，数据库 schema `novel-ledger/3`（已有 v3 可继续使用，v2 及更早库显式拒绝，不做隐式升级）。
 
 1.5.0 在四分区、滚动规划和独立写审之上加入叙事工作台：作品理解独立于事实与未来方案保存，保留原文表达样本、反证与适用范围；场景身份不绑定章号，支持移动时保留身份；修订区分保留、重读、局部修改和重写。重读通过保留原文，发现实质问题才进入返修及完整独立章审。存储 schema 保持 novel-ledger/3；已有 v3 直接续写保持原能力，可在章节边界显式启用；重新激活的约定按新项目默认启用。新能力不追补旧冻结任务或重解释旧计划；执行层的自动回改范围保护仍适用于旧冻结根审。完整说明见 [叙事工作台](references/workbench.md)。
@@ -68,7 +68,7 @@ flowchart TD
     DOMAIN --> C
 ```
 
-上图表示层级间的主要源码依赖。`novel.py` 只依赖基础契约与组合根，`bootstrap` 通过 LocalRuntime 统一提供初始化、用例、导出与宿主入口。组合根将具体存储、冻结编译、文件交付、时钟和 ID 生成器接到应用端口，`Application` 只使用注入的能力。图中“纯领域规则”合并展示规则模块；完整模块依赖由白名单与无环守护检查。渲染图见 [docs/architecture.svg](docs/architecture.svg)，真源为 [references/architecture.md](references/architecture.md)；README 和 mmd 快照逐字一致，SVG 节点与连线也由测试核对。
+上图表示层级间的主要源码依赖。`novel.py` 只依赖基础契约与组合根，`bootstrap` 通过 LocalRuntime 统一提供初始化、用例、导出与宿主入口。组合根将具体存储、冻结编译、文件交付、时钟和 ID 生成器接到应用端口，`Application` 只使用注入的能力。图中“纯领域规则”合并展示规则模块；完整模块依赖由白名单与无环守护检查。渲染图见 [docs/architecture.svg](docs/architecture.svg)，真源为 [references/architecture.md](references/architecture.md)；README 和 mmd 快照逐字一致，测试核对“画出的边必须被白名单允许、画出的节点必须解析到真实模块或已声明的聚合组”，但图是摘要，不画出全部允许边。
 
 ### 分层与职责
 
@@ -199,7 +199,7 @@ novel-ledger/
 ├── SKILL.md              技能入口（DSH 等宿主的加载说明与执行边界）
 ├── scripts/
 │   ├── novel.py          CLI：参数、访问分级、主控/Worker 边界
-│   └── novel_ledger/     34 个模块（contracts 为字段权威；ports 定义层级接口；bootstrap 集中装配）
+│   └── novel_ledger/     38 个模块（contracts 为字段权威；ports 定义层级接口；bootstrap 集中装配）
 │       └── templates/   页面 HTML/CSS/JS，导出时内嵌为单文件
 ├── references/           按任务取用，协议要求与写作建议分开说明
 │   ├── opening.md        逐门开书、字段归属与恢复
@@ -299,7 +299,7 @@ python3 validation/measure.py --out validation/metrics.json          # 依赖图
 
 快速组保留关键边界，完整组自动收集新增测试；两种入口均可从其他目录运行，失败返回非零状态，可接入 CI。页面模板位于 `scripts/novel_ledger/templates/`，随技能安装，导出时内嵌为离线单文件。
 
-测试使用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。当前全量 372 项工程测试通过，详细记录见 [验收记录](validation/results.md)。当前工程度量见 [metrics.json](validation/metrics.json)，包含所有函数内导入；纯规则依赖仍无环。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
+测试使用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。全量项数以本机运行为准（`python3 validation/run_tests.py full`，当前约 400 项，另有无符号链接特权的宿主会跳过的项），详细记录见 [验收记录](validation/results.md)。当前工程度量见 [metrics.json](validation/metrics.json)，包含所有函数内导入；纯规则依赖仍无环。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
 
 Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与 CLI 均可用；若运行外部校验脚本报编码错误，加 `PYTHONUTF8=1`。
 

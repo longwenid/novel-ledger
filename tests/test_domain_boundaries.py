@@ -148,11 +148,18 @@ class DomainBoundaryTests(unittest.TestCase):
     def test_task_envelopes_reject_undeclared_fields(self):
         from novel_ledger import envelope
         work = {name: None for name in envelope.WORK_FIELDS}
+        work['payload'] = {}
         self.assertEqual(envelope.validate_work(dict(work, brief='x'))['brief'], 'x')
         with self.assertRaises(Error):
             envelope.validate_work(dict(work, surprise=1))
         with self.assertRaises(Error):
             envelope.validate_work({k: v for k, v in work.items() if k != 'stage'})
+        # The stage's own decision travels in `payload`, so an undeclared key there is rejected for
+        # the same reason an undeclared envelope field is: the consumers read it blind.
+        self.assertEqual(envelope.validate_work({**work, 'payload': {'gate': {}}})['payload'], {'gate': {}})
+        with self.assertRaises(Error) as caught:
+            envelope.validate_work({**work, 'payload': {'gate': {}, 'invented': 1}})
+        self.assertEqual(caught.exception.details['unknown_fields'], ['invented'])
         task = {name: None for name in envelope.TASK_FIELDS}
         self.assertIs(envelope.validate_task(task), task)
         with self.assertRaises(Error):
@@ -206,6 +213,28 @@ class DomainBoundaryTests(unittest.TestCase):
                     if source:
                         self.assertIn(source[0], creation.gate_ids(version),
                                       'a version may only source fields from gates it actually has')
+
+    def test_frozen_capability_values_are_checked_instead_of_degrading(self):
+        """A task frozen with an unknown protocol version must fail, not read as an older project."""
+        from novel_ledger import contracts
+        task = {'capabilities': {'reading_dependencies': contracts.READING_DEPENDENCIES_CAPABILITY}}
+        self.assertEqual(contracts.capabilities_for(task)['reading_dependencies'],
+                         contracts.READING_DEPENDENCIES_CAPABILITY)
+        # A dispatch that predates the capability map declared nothing, and that is not an error.
+        self.assertEqual(contracts.capabilities_for({'capabilities': {}}), {})
+        with self.assertRaises(Error) as caught:
+            contracts.capabilities_for({'capabilities': {'scene_identity': 'scene-idenity/2'}})
+        self.assertEqual(caught.exception.code, 'capability')
+        self.assertEqual(caught.exception.details['unknown'], ['scene_identity=scene-idenity/2'])
+        # Every version still in flight stays readable, so the guard cannot lock out frozen work.
+        contracts.capabilities_for({'capabilities': {'scene_identity': contracts.SCENE_IDENTITY_V1}})
+        contracts.capabilities_for({'capabilities': {'scene_identity': contracts.SCENE_IDENTITY_CAPABILITY}})
+        # The producer builds the same strings the consumer compares against.
+        source = (ROOT / 'scripts' / 'novel_ledger' / 'context.py').read_text(encoding='utf-8')
+        for literal in ("'editorial/1'", "'understanding/1'", "'scene-identity/2'", "'reading-dependencies/1'",
+                        "'opening-bounds/1'", "'volume-outline/1'", "'scene-memory/1'", "'hook-links/1'"):
+            with self.subTest(literal=literal):
+                self.assertNotIn(literal, source, 'capability strings belong to contracts, not to a second copy')
 
     def test_the_author_channel_is_declared_for_pre_prose_reviews_only(self):
         from novel_ledger import briefs, stages

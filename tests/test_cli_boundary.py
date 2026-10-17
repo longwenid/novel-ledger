@@ -57,6 +57,25 @@ class CommandBoundaryTests(unittest.TestCase):
             result, _ = self.dispatch(['check', '--task', 'opaque-task'], AlternateRuntime())
         self.assertEqual(result, {'payload': payload, 'task_id': 'opaque-task', 'session': None})
 
+    def test_piped_bytes_are_decoded_as_utf8_whatever_the_console_codepage_is(self):
+        """A Windows console is not UTF-8: decoding the pipe through the locale mangles Chinese
+        and then reports a field error for text the worker never wrote. The bytes are the contract."""
+        payload = {'schema': 'receipt', 'session': 'reader', 'data': {'intent': '中文收据，标点：。？'}}
+        for raw in (json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+                    json.dumps(payload, ensure_ascii=False).encode('utf-8-sig')):
+            with self.subTest(bom=raw[:3] == b'\xef\xbb\xbf'):
+                with patch.object(sys, 'stdin', io.BytesIO(raw)):
+                    result, _ = self.dispatch(['check', '--task', 'opaque-task'], AlternateRuntime())
+                self.assertEqual(result['payload'], payload)
+
+    def test_a_pipe_that_is_not_utf8_names_the_fix_instead_of_guessing(self):
+        payload = json.dumps({'schema': 'receipt', 'data': {'intent': '中文'}}, ensure_ascii=False)
+        with patch.object(sys, 'stdin', io.BytesIO(payload.encode('gbk'))):
+            with self.assertRaises(novel.Error) as caught:
+                self.dispatch(['check', '--task', 'opaque-task'], AlternateRuntime())
+        self.assertEqual(caught.exception.code, 'stdin_encoding')
+        self.assertIn('--file', caught.exception.details['recover'])
+
 
 if __name__ == '__main__':
     unittest.main()

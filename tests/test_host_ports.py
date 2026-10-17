@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import host
 from novel_ledger.contracts import Error
+from support import link_or_skip
 
 
 class PublicApplication:
@@ -100,7 +101,7 @@ class HostPortTests(unittest.TestCase):
                 with self.subTest(kind=kind):
                     log.unlink(missing_ok=True)
                     if kind == 'symbolic':
-                        log.symlink_to(external)
+                        link_or_skip(self, log, external)
                     else:
                         os.link(external, log)
                     result = host.step(PublicApplication(project), [sys.executable, '-c', 'print("worker log")'])

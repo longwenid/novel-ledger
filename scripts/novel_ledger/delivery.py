@@ -59,14 +59,19 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         prose_files.append({**ref, 'path': str(path)})
     command = [sys.executable, str(entry), '--project', str(workspace.project)]
     lease = repo.get(store_keys.claim(task['id']))
-    envelope = {'schema': work['schema'], 'task_id': task['id'], 'input_hash': task['input_hash'],
-                'stage': work['stage'], 'chapter': work['chapter'], 'scope': work['scope'],
-                'delivery_phase': 'first_read' if locked else 'formal', 'prose_files': prose_files,
+    # The envelope, its identity copy and the compact controller view all describe the same dispatch.
+    # They are derived from one mapping so a shared field cannot be added to one of them and forgotten
+    # in the others — which is how a controller ends up reading a stage the worker never got.
+    shared = {'task_id': task['id'], 'input_hash': task['input_hash'], 'stage': work['stage'],
+              'chapter': work['chapter'], 'scope': work['scope'],
+              'delivery_phase': 'first_read' if locked else 'formal',
+              'requires_new_worker': task['reviewer'] is None, 'review_session': task['reviewer']}
+    envelope = {'schema': work['schema'], **shared, 'prose_files': prose_files,
                 'task_path': str(artifact('task.json')), 'result_path': str(artifact('result.json')),
                 'project_path': str(workspace.project), 'host_log_path': str(artifact('host.log')),
                 'process': {'project_path': str(workspace.project), 'task_path': str(artifact('task.json')),
                             'log_path': str(artifact('host.log'))},
-                'requires_new_worker': task['reviewer'] is None, 'review_session': task['reviewer'], 'version': VERSION,
+                'version': VERSION,
                 # A live claim blocks re-dispatch. Expiry permits reclaiming only after checking
                 # the existing worker and any frozen reviewer session.
                 'claim': ({'session': lease['session'], 'expired': lease['until'] <= time.time()}
@@ -101,10 +106,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     # Who this dispatch is belongs in the dispatch, not only in the host's environment: the worker
     # and the controller can then cross-check identity against the task instead of guessing. It
     # grants nothing — prose stays behind the host-injected credential.
-    identity = {'schema': IDENTITY, 'task_id': task['id'], 'input_hash': task['input_hash'],
-                'stage': work['stage'], 'stages': envelope['stages'], 'chapter': work['chapter'],
-                'scope': work['scope'], 'delivery_phase': envelope['delivery_phase'],
-                'requires_new_worker': envelope['requires_new_worker'], 'review_session': task['reviewer'],
+    identity = {'schema': IDENTITY, **shared, 'stages': envelope['stages'],
                 'project_path': str(workspace.project), 'task_path': envelope['task_path'],
                 'entry': str(entry), 'version': VERSION,
                 'worker_env': {'NOVEL_TASK_ID': task['id'], 'NOVEL_SESSION': task['reviewer']},
@@ -164,8 +166,8 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     json_write(task_file, envelope)
     if compact:
         # Keep the controller's context small; workers always receive the complete on-disk envelope.
-        keys = ('schema', 'version', 'task_id', 'input_hash', 'stage', 'chapter', 'scope',
-                'delivery_phase', 'task_path', 'identity_path', 'requires_new_worker', 'review_session', 'claim')
+        # The shared dispatch fields are listed from the same mapping the envelope was built from.
+        keys = ('schema', 'version', *shared, 'task_path', 'identity_path', 'claim')
         return {key: envelope[key] for key in keys}
     return envelope
 

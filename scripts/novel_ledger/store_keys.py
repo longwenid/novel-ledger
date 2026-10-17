@@ -14,16 +14,32 @@ KEYS = {
     'official_branch': {'owner': 'application', 'readers': ('application', 'delivery')},
     'amendment_base': {'owner': 'application', 'readers': ('contract_activation',)},
     'completion_delivery': {'owner': 'application', 'readers': ('application',)},
+    'schema': {'owner': 'sqlite_store', 'readers': ('sqlite_store',)},
 }
 CONTROLLER = 'controller'
 OFFICIAL_BRANCH = 'official_branch'
 AMENDMENT_BASE = 'amendment_base'
 COMPLETION_DELIVERY = 'completion_delivery'
+SCHEMA_KEY = 'schema'
 # The four-partition root is storage-owned: the concrete store owns the layout
 # of the ledger it writes, so this one is declared but built by the adapter.
 BOOK_ROOT = 'book'
 
 PREFIXES = ('claim:', 'branch-book:', 'history_head:')
+
+# The journal row an actual read leaves behind. It is written by the application and summed by the
+# storage adapter's `usage`, so the shape is declared here instead of being an implicit agreement
+# between two layers: renaming `chars` would otherwise make reported usage silently wrong.
+READ_RECORD = ('task', 'records', 'chars')
+
+
+def read_record(task_id, names, chars):
+    return {'task': task_id, 'records': list(names), 'chars': chars}
+
+
+def read_chars(value):
+    """The character count of one recorded read, from the declared shape."""
+    return value['chars']
 
 
 def claim(task_id):

@@ -16,6 +16,25 @@ WORK_FIELDS = ('schema', 'stage', 'chapter', 'scope', 'first', 'last', 'payload'
                'revision', 'records', 'required', 'checks_version', 'narrative_tracking',
                'capabilities', 'policy', 'prose', 'blind', 'obligations')
 WORK_OPTIONAL = ('brief', 'first_read', 'first_read_hash')
+# `payload` is the one work field whose contents a stage decides on, so its keys are declared as
+# well. Without this, "an undeclared field is rejected" held for the envelope but not for the
+# container everything else travels in: the compiler wrote keys the consumers (briefs, result
+# templates, workflow, editorial) read blind, and a rename would have failed at dispatch time.
+WORK_PAYLOAD_FIELDS = (
+    'gate', 'round', 'creative_lens', 'lens_brief',            # one opening gate's board
+    'also',                                                    # combined world + contract dispatch
+    'entities',                                                # profiles for these participants
+    'mode', 'repair', 'proposed_chapter',                       # re-design and alignment dispatch
+    'replan', 'unmet',                                         # why a window is planned again
+    'understanding', 'editorial',                               # capability flags the brief reads
+    'original_plan', 'prior_sessions', 'original_prose_hash',   # revision_review carry
+    'volume_outline',                                           # outline policy for this batch
+    'node_ids', 'node_criteria',                                # chapter_review node contracts
+    'author_question_hash',                                     # contract_review author question
+    'review_key', 'scope_first', 'scope_last', 'review_tree', 'root',
+    'part_id', 'level', 'children', 'first', 'last',            # bounded coverage tree
+    'remedies', 'closure',                                      # root scope closure
+)
 
 # Fields the local delivery adapter renders for one dispatch. Guides are attached
 # per stage, so a stage without reference documents legitimately omits them.
@@ -48,7 +67,13 @@ def _validate(value, fields, optional, code, label):
 
 def validate_work(value):
     """The frozen input a task is dispatched with."""
-    return _validate(value, WORK_FIELDS, WORK_OPTIONAL, 'envelope_input', '冻结输入')
+    _validate(value, WORK_FIELDS, WORK_OPTIONAL, 'envelope_input', '冻结输入')
+    payload = value['payload']
+    require(isinstance(payload, dict), 'envelope_input', '冻结输入的 payload 必须是对象。')
+    unknown = sorted(set(payload) - set(WORK_PAYLOAD_FIELDS))
+    require(not unknown, 'envelope_input', '冻结输入的 payload 出现未声明字段，需先登记再使用。',
+            {'unknown_fields': unknown})
+    return value
 
 
 def validate_task(value):

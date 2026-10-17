@@ -110,7 +110,8 @@ def _normalize_intake(gate, value, version):
         return value
     tier = next((row for row in SCALE_TIERS if row['id'] == value.get('tier')), None)
     require(tier is not None, 'opening_option', '体量要求须给出档位表里的档位 ID。',
-            {'valid_tiers': [row['id'] for row in SCALE_TIERS], 'recover': '用 tier:t1～t5 的档位 ID 重写要求文件。'})
+            {'valid_tiers': [row['id'] for row in SCALE_TIERS],
+             'recover': '用档位 ID 重写要求文件：' + '～'.join(row['id'] for row in SCALE_TIERS) + '（t0 最小）。'})
     return {'tier': tier['id'], 'word_range': list(tier['word_range']), 'chapter_min': tier['chapter_min'],
             'chapter_max': tier['chapter_max'], 'chapter_aim': tier['chapter_aim'],
             'volume_count': tier['volume_count'], 'chapters': tier['chapters'],

@@ -25,6 +25,33 @@ def load(path):
         raise Error('file', '无法读取 JSON 文件。', {'path': str(path), 'recover': str(exc)})
 
 
+def stdin_json():
+    """Read a piped candidate receipt as UTF-8, whatever the console code page is.
+
+    A worker pipes a draft receipt in instead of writing a file first. The console default encoding
+    is not UTF-8 on Windows, so decoding through the locale would mangle Chinese and then report a
+    field error for text the worker never wrote — a rejection that says nothing about the receipt.
+    The bytes are UTF-8 with an optional BOM; anything else names the fix instead of guessing.
+    """
+    stream = getattr(sys.stdin, 'buffer', None)
+    if stream is not None:
+        raw = stream.read()
+    else:
+        data = sys.stdin.read()
+        raw = data if isinstance(data, bytes) else data.encode('utf-8')
+    try:
+        payload = raw.decode('utf-8-sig')
+    except UnicodeDecodeError as exc:
+        raise Error('stdin_encoding', '标准输入的候选回执不是 UTF-8 编码。',
+                    {'recover': '把候选写成 UTF-8 文件，再用 check --file 候选.json 传入。',
+                     'detail': str(exc)})
+    try:
+        return json.loads(payload)
+    except ValueError as exc:
+        raise Error('stdin_json', '标准输入不是有效 JSON。',
+                    {'recover': '修好 JSON 语法重试，或改用 check --file 候选.json。', 'detail': str(exc)})
+
+
 def parser():
     root = argparse.ArgumentParser(description='长篇小说账本')
     root.add_argument('--version', action='version', version=VERSION)
@@ -204,7 +231,7 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'check':
             # Same validation as submit, but the receipt may omit task identity and may be piped in:
             # a worker learns which field is wrong without reading the engine's source.
-            payload = load(args.file) if args.file else json.load(sys.stdin)
+            payload = load(args.file) if args.file else stdin_json()
             return app.check(payload, getattr(args, 'task', None), session=os.environ.get('NOVEL_SESSION'))
         if command == 'read':
             return app.read(args.task, args.record)

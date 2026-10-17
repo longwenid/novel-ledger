@@ -13,6 +13,12 @@ from .contracts import SCHEMA, digest, dump, require
 from . import store_keys
 from . import book_state
 
+# The two documents this adapter writes for a branch's history index. They are declared once because
+# the values are compared in three places here and mirrored by the in-memory adapter; a literal per
+# site is how a schema rename turns into a silent integrity failure.
+HISTORY_SCHEMA = 'novel-ledger.history/1'
+HISTORY_PAGE_SCHEMA = 'novel-ledger.history-page/1'
+
 DDL = '''
 CREATE TABLE kv(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE documents(hash TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -38,7 +44,7 @@ class SQLiteRepository:
         self.db.execute('PRAGMA foreign_keys=ON')
         self._after_commit_callbacks = None
         try:
-            schema = self.db.execute("SELECT value FROM kv WHERE key='schema'").fetchone()
+            schema = self.db.execute("SELECT value FROM kv WHERE key='" + store_keys.SCHEMA_KEY + "'").fetchone()
             require(schema is not None and json.loads(schema['value']) == SCHEMA, 'schema', '不支持该数据库版本，禁止隐式转换。')
         except sqlite3.DatabaseError:
             self.db.close()
@@ -57,12 +63,12 @@ class SQLiteRepository:
         db = sqlite3.connect(str(temporary))
         try:
             db.executescript(DDL)
-            db.execute('INSERT INTO kv VALUES (?,?)', ('schema', dump(SCHEMA)))
+            db.execute('INSERT INTO kv VALUES (?,?)', (store_keys.SCHEMA_KEY, dump(SCHEMA)))
             parts = book_state.split(book)
             references = {name: digest(value) for name, value in parts.items()}
             db.executemany('INSERT OR IGNORE INTO documents VALUES (?,?)',
                            [(references[name], dump(value)) for name, value in parts.items()])
-            db.execute('INSERT INTO kv VALUES (?,?)', ('book', dump({'schema': book_state.BOOK_SCHEMA, 'parts': references})))
+            db.execute('INSERT INTO kv VALUES (?,?)', (store_keys.BOOK_ROOT, dump({'schema': book_state.BOOK_SCHEMA, 'parts': references})))
             db.execute("INSERT INTO branches VALUES ('main',NULL,1,'active')")
             db.commit()
             db.close()
@@ -242,7 +248,7 @@ class SQLiteRepository:
         """
         cache_key = store_keys.history_head(branch)
         cached = self.get(cache_key)
-        snapshot = cached or {'schema': 'novel-ledger.history/1', 'head': None,
+        snapshot = cached or {'schema': HISTORY_SCHEMA, 'head': None,
                                          'through': 0, 'chain': 'genesis'}
         self._validate_history(snapshot)
         if snapshot['through']:
@@ -254,9 +260,9 @@ class SQLiteRepository:
                                (branch, snapshot['through'])).fetchall()
         for row in rows:
             require(row['n'] == snapshot['through'] + 1, 'history_integrity', '历史目录的章节不连续。')
-            page = {'schema': 'novel-ledger.history-page/1', 'previous': snapshot['head'],
+            page = {'schema': HISTORY_PAGE_SCHEMA, 'previous': snapshot['head'],
                     **{k: row[k] for k in ('n', 'prose', 'events', 'summary', 'chain')}}
-            snapshot = {'schema': 'novel-ledger.history/1', 'head': self.document(page),
+            snapshot = {'schema': HISTORY_SCHEMA, 'head': self.document(page),
                         'through': row['n'], 'chain': row['chain']}
         if snapshot != cached:
             self.put(cache_key, snapshot)
@@ -268,7 +274,7 @@ class SQLiteRepository:
         ident, number = snapshot['head'], snapshot['through']
         while ident:
             page = self.read_document(ident)
-            require(page.get('schema') == 'novel-ledger.history-page/1' and page['n'] == number
+            require(page.get('schema') == HISTORY_PAGE_SCHEMA and page['n'] == number
                     and (number != snapshot['through'] or page['chain'] == snapshot['chain'])
                     and bool(page['previous']) == (number > 1), 'history_integrity', '冻结历史目录链不一致。')
             if before is None or number < before:
@@ -278,7 +284,7 @@ class SQLiteRepository:
 
     @staticmethod
     def _validate_history(snapshot):
-        require(isinstance(snapshot, dict) and snapshot.get('schema') == 'novel-ledger.history/1'
+        require(isinstance(snapshot, dict) and snapshot.get('schema') == HISTORY_SCHEMA
                 and type(snapshot.get('through')) is int and snapshot['through'] >= 0
                 and isinstance(snapshot.get('chain'), str)
                 and (snapshot.get('head') is None and snapshot['through'] == 0 and snapshot['chain'] == 'genesis'
@@ -312,7 +318,7 @@ class SQLiteRepository:
 
     def fork(self, parent, first):
         snapshot = self.history_snapshot(parent)
-        prefix = {'schema': 'novel-ledger.history/1', 'head': None, 'through': 0, 'chain': 'genesis'}
+        prefix = {'schema': HISTORY_SCHEMA, 'head': None, 'through': 0, 'chain': 'genesis'}
         if first > 1:
             for ident, page in self.history_pages(snapshot):
                 if page['n'] == first - 1:
@@ -344,6 +350,6 @@ class SQLiteRepository:
         reads = self.db.execute("SELECT value FROM journal WHERE action='read'").fetchall()
         return {'tasks': len(rows), 'task_input_chars': sum(len(r['input']) for r in rows),
                 'accepted_receipt_chars': sum(len(r['result'] or '') for r in rows),
-                'supplemental_read_chars': sum(json.loads(r['value'])['chars'] for r in reads),
+                'supplemental_read_chars': sum(store_keys.read_chars(json.loads(r['value'])) for r in reads),
                 'attempted_receipt_chars': None, 'billed_tokens': None,
                 'basis': '仅冻结信封、已接受回执和 CLI 实际读取；不含宿主历史、工具包装与缓存计费。'}

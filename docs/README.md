@@ -35,6 +35,6 @@
 
 ## 核对与交付
 
-真源、mmd 快照、README 中的 Mermaid 块保持一致；SVG 的节点与连线对应同一版本。`tests/test_runtime.py` 中的架构图守护验证源码快照和 README 一致性；`tests/test_architecture.py` 继续核对 SVG 的完整节点与连线。工程验证入口见 [验证](../references/validation.md)。
+真源、mmd 快照、README 中的 Mermaid 块保持一致；SVG 的节点与连线对应同一版本。`tests/test_runtime.py` 中的架构图守护验证源码快照和 README 一致性；`tests/test_architecture.py` 核对两件事：**画出来的每条边**都必须在依赖白名单内，**每个画出来的节点**都必须解析到真实模块或已声明的聚合组（例如"纯领域规则"）。图是**摘要**而非白名单的完整投影：它不画出全部允许边，因此白名单新增一条边不会要求重绘图；反过来，图里多一条边或写错一个模块名都会当场失败。工程验证入口见 [验证](../references/validation.md)。
 
 新增其他图表时按 `名称.mmd + 名称.svg` 成对存放，源码块仍在对应 references 文档中维护。

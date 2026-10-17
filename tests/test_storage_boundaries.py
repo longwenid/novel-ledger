@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger.sqlite_store import SQLiteRepository
+from support import link_or_skip
 
 
 class StorageBoundaryTests(unittest.TestCase):
@@ -123,9 +124,9 @@ class StorageBoundaryTests(unittest.TestCase):
         database = self.project / 'novel.sqlite3'
         external = Path(self.temp.name) / 'actual.sqlite3'
         database.rename(external)
-        database.symlink_to(external)
+        link_or_skip(self, database, external)
         alias = Path(self.temp.name) / 'project-alias'
-        alias.symlink_to(self.project, target_is_directory=True)
+        link_or_skip(self, alias, self.project, target_is_directory=True)
         self.repo = SQLiteRepository(alias)
 
         expected = {(self.project / ('novel.sqlite3' + suffix)).resolve()
