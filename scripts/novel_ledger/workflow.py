@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, FAST_REVIEW_BLOCK, OPENING_VERSION, REPAIRS, REDESIGNS,
-                        Job, Outcome, checks_for, digest, han_count, require, text)
+from .contracts import (AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, FAST_REVIEW_BLOCK, HOOK_LINKS_CAPABILITY,
+                        OPENING_BOUNDS_CAPABILITY, OPENING_VERSION, READING_DEPENDENCIES_CAPABILITY, REPAIRS, REDESIGNS,
+                        SCENE_IDENTITY_CAPABILITY, UNDERSTANDING_CAPABILITY,
+                        Job, Outcome, capabilities_for, checks_for, digest, han_count, require, text)
 from . import creation, facts, narrative, planning, quality, scopes, world, craft, editorial, understanding, design_queries
 from .evidence import evidence
 
@@ -267,17 +269,20 @@ def apply(book, task, data, actor, sources):
     stage, chapter = task['stage'], task['chapter']
     version = task.get('checks_version', 1)
     tracking = bool((book.get('contract') or {}).get('narrative_tracking'))
-    enhanced = bool(task.get('capabilities', {}).get('editorial'))
-    workbench = task.get('capabilities', {}).get('understanding') == 'understanding/1'
+    # Every capability is read through the declared table: a value this build does not know fails
+    # here instead of quietly selecting the older protocol's interpretation of the same fields.
+    caps = capabilities_for(task)
+    enhanced = bool(caps.get('editorial'))
+    workbench = caps.get('understanding') == UNDERSTANDING_CAPABILITY
     require('understanding' not in data or workbench and stage in ('chapter_review', 'scope_review', 'scope_synthesis', 'revision_review'),
             'understanding', '作品理解仅由带冻结能力的独立阅读任务更新。')
-    identity_version = 2 if task.get('capabilities', {}).get('scene_identity') == 'scene-identity/2' else 1
-    reading_version = 1 if task.get('capabilities', {}).get('reading_dependencies') == 'reading-dependencies/1' else 0
+    identity_version = 2 if caps.get('scene_identity') == SCENE_IDENTITY_CAPABILITY else 1
+    reading_version = 1 if caps.get('reading_dependencies') == READING_DEPENDENCIES_CAPABILITY else 0
     row = None
     if stage == 'opening_options':
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         book['creation'] = creation.offer(book['creation'], data,
-                                         strict_bounds=task.get('capabilities', {}).get('opening_bounds') == 'opening-bounds/1')
+                                         strict_bounds=caps.get('opening_bounds') == OPENING_BOUNDS_CAPABILITY)
     elif stage == 'world_model':
         opening = book['creation']
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
@@ -531,7 +536,7 @@ def apply(book, task, data, actor, sources):
                 pace = reader.get('pacing')
                 require(isinstance(pace, dict) and all(text(pace.get(k)) for k in narrative.PACE_FIELDS) and pace.get('role') in narrative.PACE_ROLES, 'pacing', '阅读审稿须独立记录实际 pacing 五项及 evidence。')
                 raw_events.append({'op': 'pace', **{k: pace[k] for k in narrative.PACE_FIELDS}, 'evidence': pace.get('evidence')})
-            raw_events = facts.prepare_hook_links(raw_events, task.get('capabilities', {}).get('hook_links') == 'hook-links/1')
+            raw_events = facts.prepare_hook_links(raw_events, caps.get('hook_links') == HOOK_LINKS_CAPABILITY)
             state, events = facts.settle(book['state'], raw_events, draft['prose'], chapter)
             if tracking:
                 nodes, _ = narrative.registry(book)

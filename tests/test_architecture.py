@@ -61,6 +61,14 @@ def diagram():
     return re.search(r'```mermaid\n(.*?)```', source, re.S).group(1).strip()
 
 
+def resolve_label(label):
+    """The module a diagram node names, or None for an aggregate group."""
+    for name in sorted(ALLOWED, key=len, reverse=True):
+        if re.search(r'(?<![\w])' + re.escape(name) + r'(?![\w])', label):
+            return name
+    return None
+
+
 def diagram_edges():
     """Resolve documented edges whose endpoints name a concrete module.
 
@@ -72,14 +80,9 @@ def diagram_edges():
     labels = {}
     for match in re.finditer(r'(\w+)\[([^\]]+)\]', source):
         labels.setdefault(match.group(1), match.group(2))
-    names = sorted(ALLOWED, key=len, reverse=True)
 
     def resolve(node):
-        label = labels.get(node, '')
-        for name in names:
-            if re.search(r'(?<![\w])' + re.escape(name) + r'(?![\w])', label):
-                return name
-        return None
+        return resolve_label(labels.get(node, ''))
 
     resolved = []
     for match in re.finditer(r'(\w+)(?:\[[^\]]+\])?\s*-->\s*(\w+)(?:\[[^\]]+\])?\s*$', source, re.M):
@@ -117,7 +120,9 @@ class ArchitectureTests(unittest.TestCase):
         from novel_ledger import store_keys
         fixed = set(store_keys.KEYS) | {store_keys.BOOK_ROOT}
         for name, tree in self.trees.items():
-            if name in ('store_keys', 'sqlite_store'):
+            # The declaring module is where the keys are written down; the SQLite adapter builds its
+            # own layout but names every key through that table, so it is not exempt either.
+            if name == 'store_keys':
                 continue
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call) or not node.args:
@@ -237,6 +242,24 @@ def hidden():
         # rather than silently weakening this check.
         self.assertTrue(any(label.strip() == '纯领域规则' for label in labels.values()),
                         'The pure-rule group node must remain an aggregate.')
+
+    def test_diagram_nodes_are_concrete_modules_or_declared_aggregates(self):
+        """A misspelled module is skipped by the edge check, so it has to be caught here.
+
+        The diagram is a summary: it draws the main edges and one aggregate group, and does not
+        draw every allowed edge. What it may not do is invent a node — an unresolved label is
+        either the declared aggregate or a typo that would silently escape the check above.
+        """
+        _, labels = diagram_edges()
+        aggregates = {'纯领域规则'}
+        unresolved = sorted({node for node, label in labels.items()
+                             if resolve_label(label) is None and label.strip() not in aggregates})
+        self.assertEqual(unresolved, [], 'every diagram node must name a module or a declared aggregate')
+        for node, label in labels.items():
+            if label.strip() in aggregates:
+                continue
+            with self.subTest(node=node):
+                self.assertIn(resolve_label(label), ALLOWED)
 
     def test_host_uses_public_application_capabilities(self):
         for name in ('host', 'novel'):

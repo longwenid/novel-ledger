@@ -5,6 +5,9 @@ import re
 
 from novel_ledger import book_state
 from novel_ledger.contracts import digest, dump, require
+# The replacement adapter reads the same declared schema names as the SQLite one, so a rename
+# cannot leave this double silently accepting a shape the real adapter rejects.
+from novel_ledger.sqlite_store import HISTORY_PAGE_SCHEMA, HISTORY_SCHEMA
 
 
 class MemoryRepository:
@@ -173,18 +176,18 @@ class MemoryRepository:
         previous = None
         rows = self.headers(branch)
         for row in rows:
-            previous = self.document({'schema': 'novel-ledger.history-page/1', 'previous': previous,
+            previous = self.document({'schema': HISTORY_PAGE_SCHEMA, 'previous': previous,
                                       **{key: row[key] for key in ('n', 'prose', 'events', 'summary', 'chain')}})
-        return {'schema': 'novel-ledger.history/1', 'head': previous,
+        return {'schema': HISTORY_SCHEMA, 'head': previous,
                 'through': rows[-1]['n'] if rows else 0,
                 'chain': rows[-1]['chain'] if rows else 'genesis'}
 
     def history_pages(self, snapshot, before=None):
-        require(snapshot.get('schema') == 'novel-ledger.history/1', 'history_integrity', 'Unknown history snapshot.')
+        require(snapshot.get('schema') == HISTORY_SCHEMA, 'history_integrity', 'Unknown history snapshot.')
         ident, number = snapshot['head'], snapshot['through']
         while ident:
             page = self.read_document(ident)
-            require(page['schema'] == 'novel-ledger.history-page/1' and page['n'] == number
+            require(page['schema'] == HISTORY_PAGE_SCHEMA and page['n'] == number
                     and (number != snapshot['through'] or page['chain'] == snapshot['chain'])
                     and bool(page['previous']) == (number > 1), 'history_integrity', 'Broken history page.')
             if before is None or number < before:

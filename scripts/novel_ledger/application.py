@@ -191,7 +191,7 @@ class Application:
     def _observe_read(self, task_id, names, result):
         """Count actual supplemental output, including recall; this is not billed usage."""
         with self.repo.transaction():
-            self.repo.record('read', {'task': task_id, 'records': names, 'chars': len(dump(result))})
+            self.repo.record('read', store_keys.read_record(task_id, names, len(dump(result))))
         return result
 
     def seal(self, result):
@@ -218,6 +218,10 @@ class Application:
         A worker can ask "would this be accepted, and if not which field is wrong" against the current
         pending task, so it never has to read the engine's source to learn the format. Nothing is
         committed: the task comes straight from the repository and the receipt is only previewed.
+
+        The answer separates two questions a worker used to have to guess between: `valid` says the
+        receipt passed every check, `committed` says the ledger changed. A preview is never committed,
+        so `accepted` stays false here — it means "nothing was accepted into the book", not "rejected".
         """
         task = self.repo.task(task_id) if task_id else self.repo.pending()
         require(task is not None, 'task', '项目当前没有在途任务可供试算。',
@@ -237,7 +241,7 @@ class Application:
             require(session == caller, 'session', '试算身份与会话不符。')
         self._session(task, session, check_lease=False)
         preview = self.submit({**payload, 'session': session}, preview=True)
-        return {'accepted': True, 'checked': True, 'session_used': session, **preview}
+        return {**preview, 'valid': True, 'session_used': session}
 
     def submit(self, result, preview=False):
         require(isinstance(result, dict) and result.get('schema') == RESULT, 'schema', '回执协议无效。')
@@ -245,8 +249,8 @@ class Application:
             task = self.repo.task(result.get('task_id'))
             if task['status'] == 'done':
                 require(task['result_hash'] == digest(result), 'replay_conflict', '同一任务不能提交不同内容。')
-                return {'accepted': not preview, 'checked': preview, 'idempotent': True, 'task_id': task['id'],
-                        'worker_boundary': 'finished'}
+                return {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
+                        'idempotent': True, 'task_id': task['id'], 'worker_boundary': 'finished'}
             book = self._live(task)
             require(book['status'] == 'running' or (book['status'] == 'preparing' and task['input']['stage'] == 'opening_options'),
                     'paused', '项目暂停，保留回执并由主控恢复。')
@@ -286,7 +290,8 @@ class Application:
                 updated = self._revisions.start_review(updated, directive)
             self.repo.save(updated)
             self.repo.record('submit', {'task': task['id'], 'stage': work['stage'], 'committed_chapter': outcome.chapter is not None})
-            response = {'accepted': not preview, 'checked': preview, 'task_id': task['id'], 'worker_boundary': 'finished',
+            response = {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
+                        'task_id': task['id'], 'worker_boundary': 'finished',
                         'committed_chapter': outcome.chapter['n'] if outcome.chapter else None,
                         'next_stage': updated['draft']['stage'] if updated['draft'] else None,
                         'rework': updated['rework'].get(str(work['chapter'])), 'status': updated['status']}

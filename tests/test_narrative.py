@@ -299,6 +299,34 @@ class NarrativeTests(unittest.TestCase):
         self.assertIn('真正退件人是主管',dump(self.repo.read_document(w['records']['world_author_records'])))
         self.assertEqual(self.repo.read_document(w['records']['disclosure_boundary'])['allowed_changes'],[])
 
+    def test_basic_project_never_receives_the_author_truth_as_required_material(self):
+        """Turning tracking off changes node bookkeeping, not who may read the ending.
+
+        The basic branch used to hand the whole world closure — including `mysteries` — to the
+        writer as required reading, and dropped the disclosure boundary with it. A writer who is
+        told the answer cannot be judged on whether the prose discloses it properly.
+        """
+        from support import drive
+        self.repo.save(workflow.new_book(contract(2)))
+        drive(self.app, until='write')
+        self.repo.cancel_pending('工程隐秘材料')
+        b = self.repo.load(); b['plans']['1']['world_refs'] = ['characters:shen']
+        b['world'] = {'premise': '仓库', 'rules': [], 'story_capacity': '工程模型',
+                      'characters': [{'id': 'shen', 'links': ['mysteries:source']}],
+                      'mysteries': [{'id': 'source', 'truth': '真正退件人是主管', 'disclosure': '卷末',
+                                     'causal_role': '追查责任', 'links': []}]}
+        self.repo.save(b); self.app.advance(); w = self.repo.pending()['input']
+        required = {k: self.repo.read_document(w['records'][k]) for k in w['required']}
+        self.assertNotIn('真正退件人是主管', dump(required))
+        self.assertIn('world_records', w['required'])
+        boundary = self.repo.read_document(w['records']['disclosure_boundary'])
+        self.assertEqual([row['id'] for row in boundary['author_secrets']], ['mysteries:source'])
+        self.assertNotIn('真正退件人是主管', dump(boundary))
+        # The bounded `story` slice carries the nodes this dispatch decides on, so the complete
+        # design scope stays available to read without being required material.
+        self.assertNotIn('design:book', w['required'])
+        self.assertIn('design:book', w['records'])
+
     def test_review_tree_bounds_parent_fanout_and_invalidates_changed_chain(self):
         headers=[{'n':i,'chain':str(i)} for i in range(1,501)]
         parts=scopes.tree(headers,1,500,3,3)

@@ -207,6 +207,10 @@ class ApplicationPortsTests(unittest.TestCase):
         result = app.check(receipt, session='review-preview')
         self.assertTrue(result['checked'])
         self.assertFalse(result['accepted'])
+        # A preview answers two different questions, and says so: the receipt itself is valid,
+        # while nothing was committed. A worker must not have to infer validity from a missing error.
+        self.assertTrue(result['valid'])
+        self.assertFalse(result['committed'])
         self.assertEqual(result['committed_chapter'], 1)
         self.assertEqual(repo.snapshot(), before)
         self.assertEqual(presentation.effects, effects)

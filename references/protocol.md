@@ -18,9 +18,9 @@
 | narrative_tracking / review_fanout | true / 3；节点推进和有界综合见 [叙事推进](narrative.md) |
 | editorial_features / scope_append_limit | true / 3；编辑能力要求叙事跟踪，关闭跟踪时也须关闭编辑能力；人物、改案和关闭字段见 [编辑能力](editorial.md) |
 | volume_outline | rolling 近期卷纲；配置、批次与 current/all 范围统一见 [叙事推进](narrative.md) |
-| verification | full；fast 省去固定间隔审，跟踪项目两档都保持有界范围分块；基础流程 fast 合并成块，单块至多 `contracts.FAST_REVIEW_BLOCK` 章，不会把整卷或全书交给一个任务；均保留章审、首读和事实核验 |
+| verification | full；fast 省去固定间隔审，跟踪项目两档都保持有界范围分块；基础流程 fast 把叶块固定为 `contracts.FAST_REVIEW_BLOCK`（12）章（该组合不读 review_chunk），任何档位的范围任务都不会拿到整卷或全书；均保留章审、首读和事实核验 |
 
-启用编辑能力时检查清单为 3，约定另有 pov 时为 4（增加 reader.pov_consistency）；未启用编辑能力时为 2。具体版本随任务冻结，已保存回执按自己的版本复核，不追补后来新增的检查项。
+检查清单版本按用途各有自己的编号，`CHECK_SETS` 同时保留四套：1 为最初清单，2 起加入叙事、披露与节奏等项（`CHECKS_VERSION`），3 起为编辑能力清单（`EDITORIAL_VERSION`），4 起在作者选定了叙述视角的约定上再加 reader.pov_consistency（`POV_CHECKS_VERSION`）。启用编辑能力时为 3、约定另有 pov 时为 4、未启用编辑能力时为 2；回执按冻结版本复核，不追补后来新增的检查项，"v2 及更早数据库拒绝打开"说的是存储 schema，与检查清单编号不是一回事。
 
 跟踪项目按每章 word_budget 动态约束剩余总预算，允许长短章共同收口；关闭叙事跟踪时的静态规则如下。作者只定两件事：**章数**（落在档位窗口内）与**每章字数区间**（来自档位表）。总字数区间由二者派生（`章数 × [chapter_min, chapter_max]`），因此不会再出现"表自己算不平"或"固定章数装不下总区间"的问题。完本核对的也是这两件事：章数写到位，且每一章都在区间内（后者在章节提交时逐章检查）。
 

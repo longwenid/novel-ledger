@@ -3,12 +3,30 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, TASK, Job, checks_for, dump, digest, require
+from .contracts import (CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, TASK, Job, checks_for, dump, digest, require)
+from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
+                        SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
 from . import briefs, creation, narrative, scopes, world, editorial, story_memory, understanding
 from .planning import outline_policy, policy_material, volume_for
 from .design_queries import BASIC_DEPTH, TRACKED_DEPTH, frontier, node_map
 from .ports import ContextStore
 from .envelope import validate_work
+
+# Capability names as they appear in a frozen task's capability map.
+EDITORIAL = 'editorial'
+UNDERSTANDING = 'understanding'
+SCENE_IDENTITY = 'scene_identity'
+READING_DEPENDENCIES = 'reading_dependencies'
+OPENING_BOUNDS = 'opening_bounds'
+VOLUME_OUTLINE = 'volume_outline'
+SCENE_MEMORY = 'scene_memory'
+HOOK_LINKS = 'hook_links'
+
+# Stages whose decision needs the volume boundary table (which volume a chapter belongs to). A scene
+# dispatch does not: the chapter is already named by the task, so requiring the table there would be
+# the one piece of required material that grows with the book's structure for no decision of its own.
+LAYOUT_STAGES = ('book_plan', 'volume_plan', 'volume_outline', 'outline_review', 'design_review',
+                 'scope_review', 'scope_synthesis', 'plan', 'alignment_plan', 'alignment_review')
 
 
 def scoped_state(state, participants, plan=None, chapter=0, horizon=3):
@@ -146,7 +164,7 @@ def build(repo: ContextStore, book, job):
         add('profile_history', book.get('profile_history', []), False)
         if stage in ('scope_review', 'scope_synthesis'):
             add('scope_profiles', {p: book['profiles'][p] for p in participants if p in book['profiles']})
-        add('effective_layout', editorial.effective_contract(book)['volumes'])
+        add('effective_layout', editorial.effective_contract(book)['volumes'], stage in LAYOUT_STAGES)
         if book.get('style_anchor'):
             add('style_anchor', book['style_anchor'])
     if book.get('author_block'):
@@ -177,15 +195,21 @@ def build(repo: ContextStore, book, job):
                         if not tracking:
                             todo.append(ref)
             original = {key: records_by_id[key] for key in sorted(selected_world)}
+            # The author's backstage truth is never required reading for a scene, with or without
+            # narrative tracking. A writer who can read the answer writes the reveal away, and a
+            # reviewer who can read it stops judging whether the prose discloses it properly; the
+            # tracking switch decides node bookkeeping, not who may see the ending.
+            visible = {k: v for k, v in original.items() if not k.startswith('mysteries:')}
+            add('world_records', visible)
             if tracking:
                 add('world_author_records', original, False)
-                visible = {k: v for k, v in original.items() if not k.startswith('mysteries:')}
-                add('world_records', visible)
-                add('disclosure_boundary', {'allowed_changes': plan['disclosures'], 'reader_current': scoped_state(book['state'], participants, plan, chapter)['reader_knowledge'],
-                     'author_secrets': [{'id': k, 'disclosure': v['disclosure'], 'causal_role': v['causal_role']} for k, v in original.items() if k.startswith('mysteries:')],
-                     'source': '幕后真相见可选 world_author_records；作者真相不能自动成为人物知情或本章披露。'})
-            else:
-                add('world_records', original)
+            add('disclosure_boundary', {'allowed_changes': plan.get('disclosures', []),
+                 # A basic project keeps no reader-knowledge ledger, so the boundary states the
+                 # secrets and the plan's allowed changes and leaves reader state empty rather
+                 # than inventing one.
+                 'reader_current': scoped_state(book['state'], participants, plan, chapter).get('reader_knowledge', {}),
+                 'author_secrets': [{'id': k, 'disclosure': v['disclosure'], 'causal_role': v['causal_role']} for k, v in original.items() if k.startswith('mysteries:')],
+                 'source': '幕后真相见可选 world_author_records；作者真相不能自动成为人物知情或本章披露。'})
     if plan:
         add('plan', plan, not scene_task)
         if scene_task:
@@ -217,12 +241,16 @@ def build(repo: ContextStore, book, job):
         add('story', [nodes[ident] for ident in sorted(selected)])
     for scope, design in book['designs'].items():
         needed = stage in ('volume_plan', 'plan', 'alignment_plan', 'alignment_review') and scope in ('book', 'volume:' + volume_for(editorial.effective_contract(book), chapter)['id'])
-        add('design:' + scope, design, needed and not tracking)
         if needed and tracking:
             end = job.last or chapter + book['contract']['planning_window'] - 1
             add('frontier:' + scope, {**{k: v for k, v in design.items() if k not in ('nodes', 'chapters', 'outline_reviews')},
                 'nodes': [n for n in design['nodes'] if narrative.progress(book['state'], n['id']) != 'resolved'
                           and n['window'][0] <= end and chapter <= n['window'][1]]})
+        # A design scope is reference material, not required reading: the bounded `story`/`frontier`
+        # slice already carries the nodes this dispatch decides on, so requiring the whole design
+        # would make every task's material grow with the outline. volume_plan is the one stage with
+        # no chapter plan, hence no bounded slice, so it reads its two design scopes directly.
+        add('design:' + scope, design, needed and stage == 'volume_plan')
     if tracking and stage in ('plan', 'volume_plan'):
         nodes, threads = narrative.registry(book)
         end = job.last or chapter + book['contract']['planning_window'] - 1
@@ -335,13 +363,17 @@ def build(repo: ContextStore, book, job):
             'first': job.first, 'last': job.last, 'payload': payload, 'branch': book['branch'],
             'revision': book['revision'], 'records': records, 'required': required,
             'checks_version': version, 'narrative_tracking': tracking,
-            'capabilities': {**({'editorial': 'editorial/1'} if enhanced else {}),
-                             **({'understanding': 'understanding/1', 'scene_identity': 'scene-identity/2',
-                                 'reading_dependencies': story_memory.READING_SCHEMA} if 'understanding' in book else {}),
-                             **({'opening_bounds': 'opening-bounds/1'} if stage == 'opening_options' else {}),
-                             **({'volume_outline': 'volume-outline/1'} if (book.get('contract') or {}).get('volume_outline') else {}),
-                             **({'scene_memory': 'scene-memory/1'} if scene_task else {}),
-                             **({'hook_links': 'hook-links/1'} if tracking else {})},
+            # Built from the declared capability table: the producers and the consumers of a frozen
+            # protocol version string must be reading the same constant, or a rename degrades into
+            # "this project is old" instead of failing.
+            'capabilities': {**({EDITORIAL: EDITORIAL_CAPABILITY} if enhanced else {}),
+                             **({UNDERSTANDING: UNDERSTANDING_CAPABILITY,
+                                 SCENE_IDENTITY: SCENE_IDENTITY_CAPABILITY,
+                                 READING_DEPENDENCIES: story_memory.READING_SCHEMA} if 'understanding' in book else {}),
+                             **({OPENING_BOUNDS: OPENING_BOUNDS_CAPABILITY} if stage == 'opening_options' else {}),
+                             **({VOLUME_OUTLINE: VOLUME_OUTLINE_CAPABILITY} if (book.get('contract') or {}).get('volume_outline') else {}),
+                             **({SCENE_MEMORY: SCENE_MEMORY_CAPABILITY} if scene_task else {}),
+                             **({HOOK_LINKS: HOOK_LINKS_CAPABILITY} if tracking else {})},
             # The active lexical policy travels with the task material, together with the fields
             # this dispatch actually inspects, so a worker never has to guess either one.
             'policy': policy_material(book.get('lexical_policy'), [stage, *tuple(payload.get('also', ()))]),
