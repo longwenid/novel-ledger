@@ -154,6 +154,8 @@
 | 4 | 改约只交差异，截断显式标注 | `application.recontract`（`contract_amendment`） | 42 次读取 935K 的改约审现在可只核差异 |
 | 5 | 设计/章级死路交作者决定 | `workflow.hold_for_exhaustion` / `hold_for_draft_exhaustion` / `resolve_draft_exhaustion`、`application.resume/answer` | 两次实机死路都可继续；两条回归 |
 | 6 | 裁决与派工的顺序写进运行指南 | `references/runtime.md` | 一次被 `stale_task` 挡下的回执 |
+| 7 | 记录裁决时直接作废裁决前派出的任务，并在返回值里回报 `retired_task` | `application.answer` | 同一处：worker 不再需要在 read 时才发现失效 |
+| 8 | “接受并把意见记为未解决项”在 `status.accepted_findings` 与完本篇审计里显式列出 | `application.status` / `_audit` | 接受不等于通过；接受过的条目不会再读成干净通过 |
 
 ## 五、建议但未做的修复（需协议/端口变更，按收益排序）
 
@@ -162,7 +164,7 @@
 2. **体量档位决定管线与额度**：小档合并/跳过产出比低的阶段与审查层（来源 4）。
 3. **改约审默认核差异**：`contract_amendment` 升为唯一必读，原候选转按需（来源 5）。
 4. **返修接受路径的完成度**：作者选“接受并把意见记为未解决项”后，完本审计与全书视图要把这些条目显式列出
-   （`accepted_findings` 已入账本，尚需在 `book.html` 与完本篇审计里可见）。
+   （本轮已让 `status` 与完本篇审计列出 `accepted_findings`；`book.html` 上的呈现仍待补）。
 
 ## 六、复现
 
