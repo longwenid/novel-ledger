@@ -39,12 +39,12 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 ## 主干循环（默认执行路径）
 
-主干执行治理命令，子 agent 负责读取材料、规划、执笔或审稿；workflow 决定下一任务，SQLite 保存实际状态。主干只保留授权目标、owner、当前 task_id 与宿主子 agent 会话的对应关系，以及简短执行状态。
+主干执行治理命令，子 agent 负责读取材料、规划、执笔或审稿；workflow 决定下一任务，SQLite 保存实际状态。开书门任务（opening_options）例外：无独立性要求，主干在同一会话内自执（实测每门省一个冷子 agent 的 0.4M～1M input token 与 2～5 分钟等待，换组即同会话连续生成）；世界门及之后恢复派工。主干只保留授权目标、owner、当前 task_id 与宿主子 agent 会话的对应关系，以及简短执行状态。
 
 | 交接点 | 主干动作 | 核实依据 |
 |---|---|---|
 | 取当前状态 | advance --compact，已有 owner 时继续携带。 | 当前 action，不预猜阶段或自行拼任务。 |
-| task_ready | 按任务交接规则派新 Worker、恢复原会话或等待。 | 原执行者状态、claim、review_session；新任务用空历史会话，沿用当前模型设置。 |
+| task_ready | **开书门任务（opening_options）由主干自执**：读 task_path 的 task.json，`read --task` 取必读，一次成稿写 result.json 后 check/submit（session 填主干身份，门任务不绑定会话）。其余阶段按任务交接规则派新 Worker、恢复原会话或等待。 | 原执行者状态、claim、review_session；新任务用空历史会话，沿用当前模型设置。门任务对主控放行 read/recall（contracts.CONTROLLER_STAGES），正文与审读阶段不在此列。 |
 | Worker 结束 | 接收身份和状态摘要，正文与完整回执留在项目。 | task_id、真实 session、accepted/checked、worker_boundary 或错误码及原因。 |
 | 核实提交 | 无人值守用 `watch --owner ID`（默认一步：等当前任务提交后直接取下一派工）；需要显式核实时 advance --compact --after 该任务ID。 | wait_for_submit 表示未提交，resync 表示重取状态；不能仅凭 accepted_chapters 判断规划或核验任务是否完成。watch 的等待发生在引擎进程里，主干会话不为等待付费。 |
 | 接续 | 按下面的动作表继续。 | 章节、窗口、Worker 和卷末均非授权目标停点，修订采纳、完本与交付也在循环内。 |

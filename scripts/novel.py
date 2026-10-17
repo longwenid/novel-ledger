@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from novel_ledger.contracts import Error, VERSION, require
+from novel_ledger.contracts import CONTROLLER_STAGES, Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'first-read', 'claim', 'run', 'renew', 'approve',
@@ -175,12 +175,22 @@ def role_guard(args):
     if args.command in WORKER_ONLY:
         task = os.environ.get('NOVEL_TASK_ID')
         asked = getattr(args, 'task', None)
-        require(task, 'role_boundary',
-                '正文与冻结资料只经派工任务读取；主控不直接读取正文。',
-                {'task_id': asked, 'identity': dispatch_identity(args.project, asked),
-                 'recover': '把这条命令交给被派的任务执行：宿主为该进程注入 NOVEL_TASK_ID 与 '
-                            'NOVEL_SESSION（identity.json 记录了同一个 task_id 与是否需要新会话）；'
-                            '主控要核对进度用 status，要补资料用 read --record 交由该任务完成。'})
+        if not task:
+            # 开书门任务没有独立性要求：无正文、无首读封印、无审写分离。主干自执是默认路径
+            # （v3 向导已验证的内联选择链），所以对声明在 CONTROLLER_STAGES 里的阶段放行
+            # read/recall——按任务自身渲染的身份核对阶段，而不是按环境变量。正文与冻结审读
+            # 阶段不在此列，主控仍不能读它们。
+            identity = dispatch_identity(args.project, asked)
+            require(asked and isinstance(identity, dict) and identity.get('stage') in CONTROLLER_STAGES
+                    and args.command in ('read', 'recall'),
+                    'role_boundary',
+                    '正文与冻结资料只经派工任务读取；主控不直接读取正文。',
+                    {'task_id': asked, 'identity': identity,
+                     'recover': '把这条命令交给被派的任务执行：宿主为该进程注入 NOVEL_TASK_ID 与 '
+                                'NOVEL_SESSION（identity.json 记录了同一个 task_id 与是否需要新会话）；'
+                                '主控要核对进度用 status，要补资料用 read --record 交由该任务完成。'
+                                '开书门任务（opening_options）例外：主干可自执，read/recall 用 --task 直接调用。'})
+            task = asked
         require((asked or task) == task, 'worker_boundary', 'Worker 只能访问自己的任务。',
                 {'asked_task': asked or task, 'worker_task': task,
                  'recover': '按本进程被派的任务执行：命令里的 --task 必须等于宿主注入的 NOVEL_TASK_ID '

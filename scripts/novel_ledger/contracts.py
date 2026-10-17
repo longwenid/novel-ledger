@@ -116,6 +116,36 @@ AUTHOR_DECISIONS_PER_RECEIPT = 1
 # the strict default, so a finding there always describes work a writer can do right now.
 AUTHOR_CHANNEL_STAGES = frozenset({'world_review', 'outline_review', 'design_review', 'contract_review',
                                    'alignment_review', 'scope_review', 'scope_synthesis'})
+# Stages the controller session may execute itself. They carry no prose, no blind first read and
+# no review-to-writer independence -- the opening gates are creative proposals the author judges
+# live -- so the cold-session rule buys nothing here while costing a subagent per gate (measured:
+# 0.4M~1M input tokens and 2~5 minutes each, for a 3.6K-character envelope). Everything else,
+# starting with world_model, keeps the new-worker rule. Mirrors the guided-hatching design the
+# v3 line proved: the choice chain runs inline, creative artefacts are dispatched.
+CONTROLLER_STAGES = frozenset({'opening_options'})
+# The male-channel category ladder shown whole when the author starts with no direction: a genre
+# decision should begin from the full menu, not from three cold samples (the first gate of a real
+# run regrouped twice before the author ever saw a category list).
+GENRE_CATALOG = (
+    ('玄幻', '东方超凡体系：境界、宗门与天材地宝，爽点是层层升格与越阶碾压。'),
+    ('仙侠修真', '求长生的修行世道：功法、因果与劫数，爽点是道途逆旅与斩断宿命。'),
+    ('都市异能', '现代城市里的超凡觉醒：能力、组织与隐秘规则，爽点是能力变现与身份反转。'),
+    ('都市职场', '现实赛道里的逆袭：行业、编制或商战，爽点是步步登高与打脸收权。'),
+    ('历史权谋', '王朝与庙堂的博弈：出身、站位与大势，爽点是以小博大局局翻盘。'),
+    ('科幻末世', '技术或灾变后的新秩序：舰队、废土或进化，爽点是文明级翻盘与重建。'),
+    ('悬疑探案', '灵异或罪案的层层解谜：规则怪谈或刑侦流，爽点是真相反转与恶有恶报。'),
+    ('游戏电竞', '游戏系统或电竞赛场：副本、排位或全服竞争，爽点是登顶与版本答案。'),
+    ('武侠', '江湖门派与恩怨情仇：武功、侠义与门派倾轧，爽点是快意恩仇与称雄江湖。'),
+    ('军事战争', '铁血战场与军旅生涯：命令、兄弟与家国，爽点是战役翻盘与建功授勋。'),
+    ('体育竞技', '赛场内外的热血成长：天赋、苦练与团队，爽点是夺冠路与绝地逆转。'),
+    ('二次元轻小说', '日常幻想或异世界轻改：人设、梗与羁绊，爽点是设定趣味与情绪价值。'),
+)
+# AI-generated names cluster on these: the cliche surname x mystical single char pair covers most
+# model-produced two-character names, and readers spot the batch instantly (a real run kept
+# producing a specific rare char in new names). The combination is flagged as an advisory on the
+# board; a hard ban stays the author's lexical rule.
+CLICHE_SURNAMES = '叶林萧楚顾沈陆苏秦'
+CLICHE_GIVEN = '辰尘轩言夜寒渊冥烬煜珩枫炎离砚'
 REPAIRS = 2
 REDESIGNS = 1
 # Fast verification merges block reviews by design: a basic project's fast mode sets the review block
@@ -150,6 +180,13 @@ LENSES = (
      '写清绑定的机制，以及双方各自被限制的动作。'),
     ('闭环', '让终局与初始预期形成有据可依的反转，全程伏笔支撑；临时改口不算。',
      '写清初始预期、终局事实与中间需要埋设的线索。'),
+    # 从 v3 的创意方法移植：格局与商业化是实机换组意见里最常缺的两样（「格局太小」）。
+    ('生态位', '把故事放进一个被垄断的生态位：谁垄断什么、主角撬动哪一环、新平衡由谁付账；只换皮不换生态位不算。',
+     '写清垄断者、被撬动的环节，以及主角介入后的新秩序。'),
+    ('阶梯', '让第一卷到终局的赌注逐级抬高，每级都走已建立的规则与代价；只在中段抬高不算。',
+     '写出三级赌注、每级的兑现物与对手升格方式。'),
+    ('商业化倒推', '从读者要的爽点节奏倒推设定：短线兑现密度、章末钩与卷内高潮先定，设定为节奏服务；设定好看而节奏空转不算。',
+     '列出短线兑现的密度、两个卷内高潮的位置与开篇三章的第一个爽点。'),
 )
 # Volume-level turn methods: what makes a volume mid-point change direction instead of
 # stacking everything on the finale. Used when planning the current volume.
@@ -378,9 +415,10 @@ POLICY_NOTE = ('本块是当前生效的项目字面约定：只覆盖上方 sco
 # shapes how an option is found; it never appears in what the author reads.
 OPTION_CONTRACT = ('每个方案给 id、title 短标题（真正可用的名字，不是「待定」这类占位符）、pitch 一句能记住的话（≤40字，不得出现透镜名或方法词）、'
                    'scene 2～3 个可落笔的具体画面（谁、在哪、什么东西、正要做什么，每条≥12字）、'
-                   'premise 具体内容、driver 这一版如何推进（只写故事动作）、'
-                   'tradeoff 选它要放弃什么（与同组另外两案相比的代价）、'
+                   'premise 写清这一版的结果与收益（读者拿到什么、格局到哪一级：一条街、一座城还是一个秩序）、driver 这一版如何推进（只写故事动作）、'
+                   'tradeoff 写清两半：确定要付出的代价，与可能发生的风险（与同组另外两案相比）、'
                    'fit_reason 与已选方向的具体接口（承接哪条选择、因此改变了什么）、value 按本门字段。'
+                   ' 同组方案必须在格局与生态位上拉开差距，不能只是同一格局里的三种情节。'
                    ' 方案里出现的数字必须前后自洽：次数、每次的量与总量要对得上（每次扣三岁、全书六次，总量就是十八年），'
                    ' 不要断言别的门才决定的数量，也不要让观感描述冒充算术。')
 

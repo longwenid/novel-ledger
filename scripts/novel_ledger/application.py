@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (AUTHOR_CHANNEL_STAGES, CHECK_SETS, POLICY_FIELDS, REPAIRS, RESULT, SCALE_TIERS, VERSION, Error,
+from .contracts import (AUTHOR_CHANNEL_STAGES, CHECK_SETS, CONTROLLER_STAGES, POLICY_FIELDS, REPAIRS, RESULT, SCALE_TIERS, VERSION, Error,
                         checks_for, digest, dump, han_count, require, text)
 from . import book_state, creation, facts, narrative, planning, quality, workflow, world, craft, editorial, store_keys, story_memory, understanding, lint
 from .ports import Presentation, Repository, TaskCompiler
@@ -320,7 +320,13 @@ class Application:
                 require(row['n'] == (previous[-1]['n'] + 1 if previous else 1), 'chapter_order', '正式章节只能顺序提交。')
                 row['chain'] = facts.chain(previous[-1]['chain'] if previous else 'genesis', row, digest(book['contract']))
                 self.repo.add_chapter(book['branch'], row)
-            self.repo.bind_session(result['session'], task['id'])
+            if work['stage'] not in CONTROLLER_STAGES:
+                # Session binding exists for independence: reviews must not be written by their
+                # producers and first reads must stay with their reader. An opening gate has no
+                # prose, no blind phase and no independence requirement, and the inline choice
+                # chain (the controller executing its own gates) is the cheap, fast path a real
+                # run needed — one subagent per gate bought nothing here.
+                self.repo.bind_session(result['session'], task['id'])
             self.repo.finish_task(task['id'], result)
             revision = updated.get('revision_run')
             if revision and ((outcome.chapter and revision['last'] <= outcome.chapter['n']

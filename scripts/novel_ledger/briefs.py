@@ -7,7 +7,7 @@ pays for the current gate's rules and lens, not for the entire toolbox on every 
 from __future__ import annotations
 
 from .creation import gate_note, gate_title, value_rules
-from .contracts import (AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, OPENING_DIRECTION, OPENING_DIRECTION_GATES,
+from .contracts import (AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, GENRE_CATALOG, OPENING_DIRECTION, OPENING_DIRECTION_GATES,
                         OPENING_VERSION, OPTION_CONTRACT, checks_for)
 from . import stages, world
 BRIEFS = {
@@ -41,12 +41,22 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
     note = gate_note(version, gate.get('id'))
     if note:
         lines.extend(['## 本门的交付要求', note, ''])
+    if gate.get('id') == 'genre' and not previous:
+        lines.extend(['## 全类目目录（作者未给方向时第一轮先铺开）',
+                      '把下面十二个类目逐项列为方案基础（可按相近合并，但不许只挑三四个）：',
+                      *['- %s：%s' % (name, hook) for name, hook in GENRE_CATALOG],
+                      '每案给该类目下的一个具体落点（不是类目说明）：主角生态位、第一卷压力与开篇三章的第一个爽点。'
+                      '作者点了大方向后，下一轮回到 2～3 个深化方案。', ''])
     if previous:
         lines.append('## 已选方向（不要推翻，只在此之上给方案）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
         lines.append('')
     lines.extend(direction_block([gate.get('id')]))
     lines.extend(['## 本轮创意透镜（用来想，不要写进方案文本）', lens_brief, ''])
+    lines.extend(['## 换组纪律（本轮若是因为换组重新生成）',
+                  '- 新一组必须与被拒的旧组方向实质不同：不得换名、改写收益或微调细节冒充新组；',
+                  '- 吸收作者随换组补充的偏好（原因里写了「格局太小」就把格局拉高一级：从个人恩怨到生态位，从一条街到一座城、一个秩序）；',
+                  '- 已拒方向见 opening_rejections 记录，逐条避开其思路而不只是避开其措辞。', ''])
     lines.extend(['## 交付契约', OPTION_CONTRACT])
     lines.append('')
     lines.append('完整方法表与选项格式见 guides 里的文件；本简报已含本门所需规则，不必为格式再读全文。')

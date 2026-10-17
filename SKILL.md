@@ -44,7 +44,7 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 |---|---|---|
 | 取当前动作 | 主干 | `advance --compact`，已有 owner 时继续携带；按返回动作执行，不自行拼下一任务。 |
 | 派工或恢复 | 主干 | 核对原执行者、claim 和 `review_session`；仍运行或认领有效时等待，冻结首读沿原会话恢复，其余新任务派空历史 Worker。未认领或租约过期不证明旧执行者已停止。 |
-| 交给 Worker | 主干 | 只给角色、`task_path`、一句背景与简短提交状态要求；不复述信封或改写 `commands/guides`。 |
+| 交给 Worker | 主干 | 开书门任务（opening_options）不派 Worker：主干自执（读 task.json → `read --task` → 写 result.json → submit，session 填主干身份）。其余阶段只给角色、`task_path`、一句背景与简短提交状态要求；不复述信封或改写 `commands/guides`。 |
 | 完成冻结任务 | Worker | 读 `task.json`，按首读阶段及 `brief/required` 读取材料；按模板写结果并执行 `commands.submit`。填真实 `session`，使用认领时附 token 裸字符串 `execution_claim`。 |
 | 核实提交 | 主干 | 无人值守连写用 `watch --owner ID`：等待与续租在引擎进程内完成，任务提交后直接带回下一 task_ready；需要显式核实时再 `advance --compact --after 该任务ID`。只收身份、提交状态或错误摘要，正文与完整回执留在项目。进程退出或口头完成不替代数据库提交。 |
 | 接续或交付 | 主干 | 按 [运行动作表](references/runtime.md#动作分支) 处理选择、认可、修订、暂停和交付；章节、窗口和卷末不是授权目标的停点。 |

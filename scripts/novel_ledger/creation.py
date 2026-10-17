@@ -216,9 +216,11 @@ GATE_NOTES = {
         'title': '本门只决定书名。每个方案给一个真正可用的候选名，并在 premise 里说清它承诺了什么、与终局如何相称；不要给"待定""暂名一"这类占位符，也不要重新讨论故事内容。',
     },
     3: {
+        'genre': '作者没有给方向时，第一轮先把 GENRE_CATALOG 全类目铺开（十二个男频类目各配一句网文化读者承诺），让作者先挑类目或自定义；作者点了大方向后，再在类目内给 2～3 个具体方案。作者已给方向时直接在方向内出案。',
         'voice': '本门只决定"怎么讲"：人称与视角范围是硬决定，语感是同一门的阅读质地。每个方案的 scene 与 pitch 都用该方案的人称写出来，让作者读到的不是解释，而是这个人称讲出来的样子；不要在本门讨论情节走向。',
         'edge': '本门只决定核心优势与成长线：advantage 优势是什么、origin 怎么得到、growth 分几层与每层升级条件、cost 每次使用的代价、ceiling 上限在哪。写清楚它在开篇三章内第一次怎么用上；不要写成世界观说明或力量体系百科，也不要替作者决定题材。本门排在主角门之前，主角的姓名与身份还没决定：用「主角」指代，不要在本门给他起名、定职业或写编制——本门文本会被约定逐字保留，写进去的名字会与主角门后来选定的人冲突。',
         'opposition': '本门只决定对抗与梯度：第一卷谁挡着他、挡着什么具体利益、每次胜利换来多强的对手、终局面对谁。梯度必须是可执行的加码方式，不靠误会或临时改设定维持；不要在本门重述世界规则。',
+        'protagonist': '本门决定主角身份、处境与底线，并执行反套路命名纪律：姓氏贴世界与阶层（市井用常见姓与俗字，世家才配行辈雅字，别扎堆潇洒姓）、俗字与双字名优先（单字玄乎名是重灾区）、称呼链一次想好（全名→日常称呼→诨名/职衔）、口语测试三遍（放进街坊对白念着像网文签名档就换）。套路组合（潇洒姓×玄乎单字）会以 name_warnings 出现在板面上。',
         'payoff': '本门只决定读者一路拿到什么以及最后兑现成什么：plan 里的兑现方式、短线密度与章末钩、卷内高潮位置，以及终局兑现开篇承诺的那场胜利与母题。不要写成章节大纲，也不要在这里改对抗梯度。',
         'title': '本门只决定书名。按男频搜索习惯给真正可用的候选名：关键词直接点出题材与核心优势或身份优势，一眼能看懂看点；不要给"待定""暂名一"这类占位符，不要意象化短名，也不要重新讨论故事内容。',
     },
@@ -484,6 +486,26 @@ def _require_keys(value, keys, label):
             {'missing': missing, 'expect': list(keys)})
 
 
+def name_warnings(gate, options):
+    """Advisory flags for AI-cliché protagonist names; the author's lexical rule stays the hard ban.
+
+    Model-produced names cluster on 潇洒姓×玄乎单字, and a real run kept reusing one rare char
+    across new names. The board carries the warning so the author sees it with the option; the
+    choice stays the author's (the v3 line proved warning-not-blocking is the right severity).
+    """
+    warnings = []
+    if gate['id'] != 'protagonist':
+        return warnings
+    for option in options:
+        name = str((option.get('value') or {}).get('name') or '')
+        given = name[1:]
+        if len(name) == 2 and name[0] in contracts.CLICHE_SURNAMES and given in contracts.CLICHE_GIVEN:
+            warnings.append({'option': option.get('id'), 'code': 'protagonist_name_cliche',
+                             'message': '「%s」是 AI 起名重灾组合（潇洒姓×玄乎单字），读者一眼批量脸；'
+                                        '按主角门的命名纪律换贴世界与阶层的名字。' % name})
+    return warnings
+
+
 def offer(state, data, strict_bounds=True):
     require(state['phase'] == 'choosing', 'opening_state', '当前没有待生成的选择门。')
     version = opening_version(state)
@@ -508,6 +530,9 @@ def offer(state, data, strict_bounds=True):
             'opening_diversity', '方案应有实质差异，不能只换标签或措辞。')
     state = copy.deepcopy(state)
     board = {'gate': gate, 'round': state['round'], 'basis': basis(state), 'options': copy.deepcopy(options)}
+    warnings = name_warnings(gate, options)
+    if warnings:
+        board['name_warnings'] = warnings
     board['hash'] = digest(board)
     state['board'] = board
     state['history'].append({'action': 'offer', 'board': board})
