@@ -373,11 +373,13 @@ class OpeningTests(unittest.TestCase):
 
     def test_single_read_delivers_the_exact_gate_and_brainstorm_lens(self):
         task = self.app.advance()['task']
-        material = self.app.read(task['task_id'])
-        self.assertEqual(material['payload']['gate']['id'], 'genre')
-        self.assertEqual(material['payload']['creative_lens'], creation.LENSES[0])
-        # the brief is delivered with the task; the choices record is reference, read on demand
         view = json.loads(Path(task['input_path']).read_text(encoding='utf-8'))
+        # The gate and its lens arrive with the task envelope; `read` turns record hashes into values.
+        self.assertEqual(view['payload']['gate']['id'], 'genre')
+        self.assertEqual(view['payload']['creative_lens'], creation.LENSES[0])
+        material = self.app.read(task['task_id'])
+        self.assertNotIn('payload', material, 'the envelope is not repeated by read')
+        self.assertNotIn('brief', material)
         self.assertIn(creation.LENSES[0], view['brief'])
         self.assertIn('opening_choices', material['on_demand'])
         single = self.app.read(task['task_id'], 'opening_choices')
@@ -387,7 +389,7 @@ class OpeningTests(unittest.TestCase):
         self.assertNotIn('brief', single)
         self.assertNotIn('payload', single)
         self.assertIn('on_demand', single)
-        self.assertIn('payload', material)
+        self.assertIn('on_demand', material)
 
     def test_single_decision_gates_carry_their_own_delivery_requirement(self):
         self.choose_board(self.board())                                  # 定位
@@ -482,7 +484,8 @@ class OpeningTests(unittest.TestCase):
         self.assertEqual(head['task']['chapter'], 1)
         material = self.app.read(task['id'])
         self.assertIn('world_model', task['input']['required'])
-        self.assertEqual(material['payload']['volume_outline']['last'], first_volume['end'])
+        self.assertEqual(task['input']['payload']['volume_outline']['last'], first_volume['end'])
+        self.assertIn('world_model', material['records'])
         template_path = Path(head['task']['template_path'])
         blank = json.loads(template_path.read_text(encoding='utf-8'))['data']
         self.assertNotIn('chapters', blank)

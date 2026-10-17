@@ -181,18 +181,15 @@ class Application:
         else:
             records = {n: {'hash': work['records'][n], 'value': self.repo.read_document(work['records'][n])} for n in names}
         result = {'task_id': task_id, 'input_hash': task['input_hash'], 'complete_records': True,
+                  'stage': work['stage'], 'chapter': work['chapter'],
                   'records': records,
                   'on_demand': {n: h for n, h in work['records'].items() if n not in names}}
         if not record:
-            # The whole dispatch view is only for "read everything this task may read". A single
-            # named record returns that record: re-sending the brief, payload and policy the worker
-            # already holds in input.json made one tiny record cost kilobytes — a real opening run
-            # spent more characters on single-record reads than on every frozen envelope together.
-            result.update({key: work[key] for key in ('stage', 'chapter', 'scope', 'first', 'last',
-                                                      'payload', 'branch', 'revision')})
-            result.update({'prose': work['prose'], 'first_read': task['first_read'],
-                           'obligations': work['obligations'], 'brief': work.get('brief'),
-                           'policy': work['policy'], 'checks_version': work.get('checks_version', 1)})
+            # The whole dispatch view is only for "read everything this task may read", and even
+            # then the envelope itself is not repeated: brief, payload, policy, prose and
+            # obligations already live in input.json, which the worker read to get here. A real
+            # design run paid ~100 KB per full read largely for a second copy of those.
+            result.update({'first_read': task['first_read']})
         return self._observe_read(task_id, names, result)
 
     def _observe_read(self, task_id, names, result):
