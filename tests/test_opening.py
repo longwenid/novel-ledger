@@ -133,6 +133,28 @@ class OpeningThreeTests(unittest.TestCase):
         self.assertIn('起点/番茄男频长篇网文', pending['brief'])
         self.assertIn('男频题材要连承诺一起给', pending['brief'])
 
+    def test_every_later_gate_receives_the_direction_already_chosen(self):
+        """A promise without its channel and setting is how a later gate drifts into another era.
+
+        The protagonist gate once produced three consistent-sounding people from the wrong century
+        because the selection line read exactly one field of the genre choice and that field was the
+        promise. The line now carries the deciding fields under a fixed budget.
+        """
+        from novel_ledger import context
+        chosen = {'title': '夜半验尸人',
+                  'value': {'genre': '都市悬疑 + 妖异民俗，起点/番茄男频悬疑探案频道',
+                            'reader_promise': '看一个没有执法权的法医助理把案子钉死。',
+                            'tone': '冷、紧、潮湿'}}
+        line = context._selection_line(chosen)
+        self.assertIn('都市悬疑', line)
+        self.assertIn('reader_promise=', line)
+        self.assertLessEqual(len(line), len('夜半验尸人') + 121)
+        # A gate whose value is a row of relations still contributes its first relation, and a gate
+        # that decided nothing contributes only its title.
+        relations = {'title': '关系', 'value': {'relationships': ['同门互相依赖又各自怕担责。']}}
+        self.assertIn('同门互相依赖', context._selection_line(relations))
+        self.assertEqual(context._selection_line({'title': '空门', 'value': {}}), '空门')
+
     def test_the_structural_gate_shows_serial_length_classes_without_a_dispatch(self):
         state = creation.begin('工程夹具。')
         while creation.current(state)['id'] != 'scale':

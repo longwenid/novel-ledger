@@ -82,28 +82,33 @@ def _brief(book, job):
     return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book)})
 
 
-def _selection_line(option):
+def _selection_line(option, budget=120):
     """One compact line per closed choice: the direction, not a copy of the record.
 
-    The worker needs to know which way the book is already committed; the exact values live in
-    opening_choices/opening_basis and are checked by `creation.validate_contract` at the contract
-    stage, so repeating every field here would double the material for no added signal.
+    A later gate builds on everything already decided, so the line has to carry the fields that
+    decide direction — the channel and setting, the promise, the edge, the view — not whichever
+    single field happened to come first. Reading only one field is how a protagonist gate produced
+    three consistent-sounding people in another era: the chosen genre text never reached it. The
+    exact values still live in opening_choices and are re-checked when the contract is formed, so
+    this line stays a summary under a fixed budget rather than a second copy of the record.
     """
     value = option.get('value', {})
-    gist = ''
-    for key in ('reader_promise', 'ending', 'story_engine', 'world_premise', 'identity', 'pov', 'voice',
-                'title', 'tone', 'relationships'):
+    parts = []
+    for key in ('genre', 'reader_promise', 'advantage', 'identity', 'opposition', 'world_premise',
+                'story_engine', 'ending', 'pov', 'voice', 'tone', 'title', 'relationships'):
         entry = value.get(key)
         # A relation gate's gist is its first relation: an empty list is never a chosen direction.
         if isinstance(entry, list) and entry and isinstance(entry[0], str) and entry[0].strip():
-            gist = entry[0].strip()
-            break
-        if isinstance(entry, str) and entry.strip():
-            gist = entry.strip()
+            entry = entry[0]
+        if not isinstance(entry, str) or not entry.strip():
+            continue
+        parts.append(key + '=' + entry.strip())
+        if sum(len(part) for part in parts) >= budget:
             break
     line = option.get('title', '')
-    if gist:
-        line += '：' + (gist[:60] + '…' if len(gist) > 60 else gist)
+    if parts:
+        joined = '；'.join(parts)
+        line += '：' + (joined[:budget] + '…' if len(joined) > budget else joined)
     return line
 
 
