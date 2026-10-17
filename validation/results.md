@@ -301,3 +301,37 @@
 - 实测：fast 98 项通过；full 401 项、0 failures、11 errors（全部为无符号链接特权环境的 WinError 1314）、1 skipped。
 
 本轮未改数据库 schema（仍为 novel-ledger/3），不迁移旧项目，不作为文学质量或真实费用验收。
+
+## 2026-10-17 独立架构复审与修复批次（含 Windows 宿主能力）
+
+在 `main` @ `fae8bee` 上做了一次独立只读复审（逐模块读源码 + 依赖闭包复算 + 仓库外探针实测 `context.build` 的真实 `required`），随后按复审结论修复。修复分两次提交：`b3fbe3d`（宿主能力与文档一致性）、`cd9f8df`（复审发现的问题），合并为 `b45e380`。
+
+### 宿主能力：符号链接回归由"失败"改为"跳过"
+
+- 现象：无符号链接特权（未开开发者模式/非管理员）的 Windows 宿主上，11 项跨模块回归以 `OSError WinError 1314` 失败，被读成代码缺陷。此类用例验证的是**别名与逃逸保护**（存储别名、工作目录父级逃逸、最终链接替换、宿主日志替身），宿主不具备该能力时无法执行，而不是引擎错。
+- 修复：`tests/support.py` 新增 `link_or_skip(case, link, target, target_is_directory=False)`——创建符号链接失败即 `skipTest` 并给出宿主原因；硬链接不需要特权，因此从不走该分支。9 处用例与 1 处子测试改为经该助手创建链接，`test_output_repairs` 原有的行内 `try/except skipTest` 也合并到同一处声明。
+- 实测：本机 `python -m pytest tests` → **397 passed, 12 skipped, 835 subtests, 0 failed**（修复前为 392 passed / 11 failed，跳过项全部标注 `此宿主不能创建符号链接：...WinError 1314`）。跳过数是宿主机能力的直接读数，不再伪装成通过或失败。
+
+### 复审核验：11 项既有问题的处置
+
+已修复并复核：kv 键空间声明（`store_keys`）+ 守卫、冻结信封字段表（`envelope`）、阶段注册表（`stages`）、`CONTRACT_ALIGNMENT` 死导入、守护测试的模块分类与内建绕过、整本书进单 Worker 的路径、`dependency_coverage` 默认值与保守扩大上报、`revise` 默认区间、完本覆盖来源。
+
+### 本轮新修（复审新增问题）
+
+- **【高】非追踪项目把作者幕后真相交给执笔与审稿**：`context.py` 原来只在追踪分支过滤 `mysteries:` 并把幕后真相放进非必读的 `world_author_records`，非追踪分支直接把含 `mysteries` 的完整世界闭包列为**必读**，且不再生成 `disclosure_boundary`。现改为两条分支都过滤，`disclosure_boundary` 两条分支都给（基础项目无读者认知账本时 `reader_current` 取空对象，而不是抛 `KeyError`）。回归：`test_narrative.test_basic_project_never_receives_the_author_truth_as_required_material` 断言必读材料中不含真相原文、`author_secrets` 只给 id/披露/causal_role。
+- **【高】`payload` 无形状权威**：`envelope.WORK_PAYLOAD_FIELDS` 现在声明冻结输入 `payload` 的全部键（含各阶段与覆盖树字段），`validate_work` 递归拒绝未声明键。该守卫在落地当场抓到两个此前无人登记的键（`replan`、`unmet`）——正是它要防的漂移。
+- **【中高】能力字符串未知值静默降级**：`contracts.CAPABILITIES` 声明每项能力的全部已知版本，`contracts.capabilities_for(task)` 对未声明值报 `capability` 错，`context` 用 `*_CAPABILITY` 常量生产、`workflow` 用同一常量消费；`scene-identity/1` 与 `/2` 都保留为可读版本，在途冻结任务不受影响。
+- **【中】同一字段在多于一处构造**：`delivery.materialize` 用一张 `shared` 映射同时产出派工信封、身份副本与 compact 视图的共有字段，避免新增字段只改一处。
+- **【中】schema 与日志形状散落**：`sqlite_store.HISTORY_SCHEMA/HISTORY_PAGE_SCHEMA` 成为历史目录的唯一来源（内存替身适配器改为 import 同一常量）；`store_keys.SCHEMA_KEY` 纳入键空间表并让键空间守卫不再整模块豁免 `sqlite_store`；`store_keys.READ_RECORD/read_record/read_chars` 声明读取日志形状，应用层写入与存储层汇总共用。
+- **【中】`check` 对合法回执报 `accepted:false`**：`application.check` 原先把 `accepted: True` 写在 `**preview` 之前，被预览结果覆盖成 `False`，Worker 只能靠"没有 error 字段"猜是否合格（真实会话中已发生，并为此额外做了探针）。现在 `check` 与预览式 `submit` 都显式返回 `valid`（回执合格）与 `committed`（账本是否变化），`accepted` 只表示"是否入库"。
+- **【中】标准输入按控制台编码解码**：`novel.py` 的 `check` 从 `json.load(sys.stdin)` 改为 `stdin_json()`，按 UTF-8（容忍 BOM）解码管道内容，非 UTF-8 时以 `stdin_encoding` 报错并指明改用 `--file`。此前 Windows 上按本地代码页解码会把中文候选回执变成乱码或代理字符，再报一个与被检文本无关的字段错。回归：`test_cli_boundary` 覆盖 UTF-8、带 BOM 与 GBK 三种管道输入。
+- **【中】架构图守护只单向**：新增 `test_diagram_nodes_are_concrete_modules_or_declared_aggregates`——图里每个节点必须解析到真实模块或已声明的聚合组（"纯领域规则"），写错模块名不再静默跳过；文档同步说明"图是摘要，画出的边必须被允许、画出的节点必须解析，但不画出全部允许边"。
+- **【中】必读材料里随结构增长的一项**：`effective_layout`（全卷章界表）原先对启用编辑能力的每个阶段都必读，现只在真正需要卷界的阶段（`context.LAYOUT_STAGES`）必读，其余阶段仍可显式补读。`design:<scope>` 同理：`plan`/`alignment_*` 已有有界的 `story`/`frontier` 切片，整份设计改为可补读；只有没有章计划的 `volume_plan` 仍必读其两份设计。
+- **【低】`checks_for` 未校验类别**（拼错即 `KeyError`）、`result_templates.template` 的说明写在语句之后（`__doc__` 为空）、`narrative.md` 关于 fast 档叶块的表述与代码相反、`editorial.md` 完本覆盖漏列三类来源、`protocol.md` 检查清单版本叙述、`README` 模块数与测试数过期——均按当前代码订正。
+
+### 明示保留（本轮不做，属独立变更）
+
+- `tasks` 表与 `work/<task>/` **没有回收路径**：已终结任务永久保留冻结输入与完整回执，工作目录保留 task.json/input.json/result.json/identity.json 与日志。`compact` 只回收内容寻址的 `documents`。本轮把这一容量边界写成 `architecture.md` 的显式条目（量级、保留理由、要变成可回收项需要先定义的保留窗口与重建保证），不再只是隐含行为。
+- 单次提交仍要序列化整个分区（写入成本由分区大小决定），需要把增长集合拆成可寻址部件并提升根格式版本，仍按实测收益与风险比留作待办。
+
+本轮不改变数据库 schema（仍为 novel-ledger/3）、不迁移旧项目、不动作者授权范围；工程测试通过不等于文学质量或真实费用验收。改动已提交到本地 `main`（`b45e380`），未推送。
