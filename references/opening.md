@@ -59,7 +59,7 @@
 
 这是**默认而非硬要求**：作者原话或已选方向与它冲突时一律以作者为准，方案与核验都不因为"不合男频"判错；作者要的是别的方向时，简报里这句话和这条约束同时存在。要改这个默认，改 `contracts` 里那两张表即可，其余文档与简报随之变化。
 
-`init` 新建项目使用 `novel-ledger.creation/2` 十门协议，creation 状态保存所用门序版本；存储布局另使用 novel-ledger/3。协议版本与数据库版本各自负责自己的结构，不能通过修改版本号转换旧库。
+`init` 新建项目使用 `novel-ledger.creation/3` 十门协议（男频长篇方向），creation 状态保存所用门序版本；存储布局另使用 novel-ledger/3。协议版本与数据库版本各自负责自己的结构，不能通过修改版本号转换旧库。
 
 ## 结构门（体量与分卷）
 
@@ -106,7 +106,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 
 ## 操作与恢复
 
-已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"ending":{"ending":"作者指定结局。","theme":"母题。"},"title":{"title":"书名"},"scale":{"tier":"t3"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t1`～`t5`），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前 creation 协议；新项目的 `novel-ledger.creation/2` 使用上表十门。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
+已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"payoff":{"ending":"作者指定结局。","theme":"母题。"},"title":{"title":"书名"},"scale":{"tier":"t0"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t0`～`t5`，`t0` 为五万字级的微型档），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前 creation 协议；新项目的 `novel-ledger.creation/3` 使用上表十门（`payoff` 承担终局与母题，`edge` 承担核心优势）。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
 
 ```bash
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" init

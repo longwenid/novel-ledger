@@ -15,6 +15,7 @@ from novel_ledger.contracts import Error, digest, han_count
 from novel_ledger.presentation import LocalPresentation
 from novel_ledger.publication import publication
 from novel_ledger.workspace import LocalWorkspace
+from support import link_or_skip
 
 
 class MemoryReader:
@@ -103,7 +104,7 @@ class PresentationBoundaryTests(unittest.TestCase):
         work = self.workspace.project / 'work'
         work.mkdir(parents=True)
         revision = work / 'revision-abc123.json'
-        revision.symlink_to(external)
+        link_or_skip(self, revision, external)
         plan = {'plan_hash': 'abc123', 'blocked': True}
         self.presentation.revision(plan)
         self.assertFalse(revision.is_symlink())
@@ -113,7 +114,7 @@ class PresentationBoundaryTests(unittest.TestCase):
         work.rmdir()
         outside = self.root / 'outside-work'
         outside.mkdir()
-        work.symlink_to(outside, target_is_directory=True)
+        link_or_skip(self, work, outside, target_is_directory=True)
         with self.assertRaises(Error) as caught:
             self.presentation.revision(plan)
         self.assertEqual(caught.exception.code, 'output')
@@ -127,7 +128,7 @@ class PresentationBoundaryTests(unittest.TestCase):
         external = self.root / 'external-world.txt'
         external.write_text('external world content', encoding='utf-8')
         for name in ('world.json', 'book.html'):
-            (self.workspace.project / name).symlink_to(external)
+            link_or_skip(self, self.workspace.project / name, external)
         result = self.presentation.world()
         self.assertEqual(external.read_text(encoding='utf-8'), 'external world content')
         self.assertFalse((self.workspace.project / 'world.json').is_symlink())
@@ -174,7 +175,7 @@ class PresentationBoundaryTests(unittest.TestCase):
         external = self.root / 'external-completion.txt'
         external.write_text('external completion content', encoding='utf-8')
         for name in ('book.md', 'book.html', 'delivery.json'):
-            (self.workspace.project / name).symlink_to(external)
+            link_or_skip(self, self.workspace.project / name, external)
 
         result = delivery.deliver_completion(self.repo, bookpage.render, workspace=self.workspace)
 
@@ -202,9 +203,9 @@ class PresentationBoundaryTests(unittest.TestCase):
         transaction = self.root / 'opaque-transaction.chunk'
         workspace = LocalWorkspace(self.workspace.project, (protected, transaction))
         symbolic = self.root / 'symbolic-output.html'
-        symbolic.symlink_to(protected)
+        link_or_skip(self, symbolic, protected)
         dangling = self.root / 'transaction-alias.html'
-        dangling.symlink_to(transaction)
+        link_or_skip(self, dangling, transaction)
         hard_link = self.root / 'hard-linked-output.html'
         os.link(protected, hard_link)
         for target in (protected, transaction, symbolic, dangling, hard_link):
@@ -224,7 +225,7 @@ class PresentationBoundaryTests(unittest.TestCase):
         workspace = LocalWorkspace(self.workspace.project, (protected,))
         base = workspace.project / 'work/opaque-task'
         base.mkdir(parents=True)
-        (base / 'input.json').symlink_to(protected)
+        link_or_skip(self, base / 'input.json', protected)
         presentation = LocalPresentation(self.repo, workspace, ROOT / 'scripts/novel.py')
         for operation in (lambda: presentation.task(self.task()), lambda: presentation.retire('opaque-task')):
             with self.assertRaises(Error) as caught:
@@ -238,7 +239,7 @@ class PresentationBoundaryTests(unittest.TestCase):
         base = self.workspace.project / 'work/opaque-task'
         base.mkdir(parents=True)
         alias = base / 'input.json'
-        alias.symlink_to(outside)
+        link_or_skip(self, alias, outside)
 
         self.presentation.retire('opaque-task')
 
@@ -252,7 +253,7 @@ class PresentationBoundaryTests(unittest.TestCase):
         base.mkdir(parents=True)
         aliases = [base / name for name in ('input.json', 'chapter-1.txt', 'task.json')]
         for alias in aliases:
-            alias.symlink_to(outside)
+            link_or_skip(self, alias, outside)
 
         view = self.presentation.task(self.task())
 
@@ -271,7 +272,7 @@ class PresentationBoundaryTests(unittest.TestCase):
                 original.write_text('项目外原稿', encoding='utf-8')
                 link = project / parent
                 link.parent.mkdir(parents=True)
-                link.symlink_to(outside, target_is_directory=True)
+                link_or_skip(self, link, outside, target_is_directory=True)
                 workspace = LocalWorkspace(project)
                 presentation = LocalPresentation(self.repo, workspace, ROOT / 'scripts/novel.py')
                 for operation in (lambda: presentation.task(self.task()), lambda: presentation.retire('opaque-task')):

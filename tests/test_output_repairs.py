@@ -14,7 +14,7 @@ from novel_ledger import bookpage, delivery, workflow
 from novel_ledger.bootstrap import local_application as Application, local_workspace
 from novel_ledger.contracts import Error, digest, dump
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, drive, response
+from support import contract, drive, link_or_skip, response
 
 
 class OutputRepairTests(unittest.TestCase):
@@ -51,10 +51,7 @@ class OutputRepairTests(unittest.TestCase):
         original = (self.project / 'novel.sqlite3').read_bytes()
         for index, suffix in enumerate(('', '-wal', '-shm', '-journal')):
             alias = self.base / ('alias-' + str(index) + '.html')
-            try:
-                alias.symlink_to(self.project / ('novel.sqlite3' + suffix))
-            except (OSError, NotImplementedError) as exc:
-                self.skipTest('此宿主不能创建符号链接：' + str(exc))
+            link_or_skip(self, alias, self.project / ('novel.sqlite3' + suffix))
             self.rejected_output(alias)
             self.assertTrue(alias.is_symlink())
         bookpage.write(self.repo, workspace=local_workspace(self.repo))
