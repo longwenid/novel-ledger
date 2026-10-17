@@ -45,6 +45,11 @@ class Application:
                 'pending_task': task['id'] if task else None, 'stage': task['input']['stage'] if task else None,
                 'pause_reason': None if sealed else book.get('pause_reason'),
                 'author_decision': None if sealed else copy.deepcopy(book.get('author_block')),
+                # What the author accepted while a review still asked for changes, so a project never
+                # looks clean just because someone chose to go on.
+                'accepted_findings': [{'stage': row['stage'], 'scope': row.get('scope'),
+                                       'count': len(row.get('findings') or [])}
+                                      for row in book.get('accepted_findings') or []],
                 'workbench': {'enabled': 'understanding' in book},
                 'opening': {'phase': book['creation']['phase'], 'selected_gates': len(book['creation']['selections']),
                             'total_gates': len(creation.gates(book['creation'])),
@@ -895,7 +900,14 @@ class Application:
         if 'understanding' in book:
             require(understanding.rebase(book['understanding'], {r['n']: r['prose'] for r in rows}) == book['understanding'],
                     'understanding_source', '作品理解包含不属于当前正文版本的依据。')
-        return {'ok': True, 'chapters': len(rows), 'state_hash': digest(state), 'written_han': book['written_han']}
+        # Anything the author accepted while a reviewer was still asking for changes stays on the
+        # closing record: an accepted candidate must never read as a clean pass.
+        accepted = [{'stage': row['stage'], 'scope': row.get('scope'), 'findings': row['findings']}
+                    for row in book.get('accepted_findings') or []]
+        return {'ok': True, 'chapters': len(rows), 'state_hash': digest(state), 'written_han': book['written_han'],
+                'accepted_findings': accepted,
+                'accepted_findings_note': ('这些是作者在返修额度用尽后选择“接受并把意见记为未解决项”的条目；'
+                                           '它们不是 pass，完本后仍以未解决状态保留。' if accepted else '')}
 
     def audit(self):
         self.content_guard()
