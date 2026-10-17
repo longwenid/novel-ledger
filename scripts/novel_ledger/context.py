@@ -39,8 +39,74 @@ PROJECTIONS = (
 )
 
 
+# What each stage must read to make its own decision, as opposed to what it may read if it needs to.
+# Measured from what the engine actually hands out, and written down here so that giving a stage more
+# material is a visible decision rather than one more `add(...)` line: the guard in tests/support.py
+# compares every frozen dispatch against this table, so an undeclared record fails the suite that
+# covers that stage. Records that several stages share (contract, state, story, profiles, ...) are
+# still listed per stage — "why does this stage read this" is exactly what the table is for.
+STAGE_MATERIAL = {
+    'opening_options': ('opening_rejections',),
+    'world_model': ('author_feedback', 'opening_basis', 'opening_choices', 'previous_proposal'),
+    'world_review': ('opening_basis', 'opening_choices', 'proposal'),
+    'opening_contract': ('author_feedback', 'opening_basis', 'opening_choices', 'world_model'),
+    'contract_review': ('contract_amendment', 'opening_basis', 'opening_choices', 'plan', 'profiles',
+                        'proposal', 'story', 'world_model'),
+    'book_plan': ('author_feedback', 'contract', 'disclosure_boundary', 'effective_layout', 'plan',
+                  'previous_proposal', 'profiles', 'revision_instruction', 'state', 'story',
+                  'world_model', 'world_records'),
+    'design_review': ('author_feedback', 'contract', 'effective_layout', 'proposal',
+                      'revision_instruction', 'state', 'world_model'),
+    'volume_plan': ('author_feedback', 'contract', 'design:book', 'effective_layout',
+                    'progress_frontier', 'revision_instruction', 'state', 'world_model'),
+    'volume_outline': ('author_feedback', 'contract', 'outline_bridge', 'state', 'volume_design',
+                       'world_model'),
+    'outline_review': ('author_feedback', 'contract', 'outline_bridge', 'proposal', 'state',
+                       'volume_design', 'world_model'),
+    'plan': ('author_feedback', 'contract', 'creative_memory', 'effective_layout', 'frontier:book',
+             'frontier:volume:v1', 'frontier:volume:v2', 'plan', 'previous_chapters', 'profiles',
+             'progress_frontier', 'revision_instruction', 'state', 'story', 'volume_outline_window',
+             'word_budget', 'world_core'),
+    'profiles': ('author_feedback', 'contract', 'disclosure_boundary', 'plan', 'profiles',
+                 'revision_instruction', 'state', 'story', 'style_anchor', 'world_core',
+                 'world_records'),
+    'write': ('author_feedback', 'chapter_outline', 'contract', 'creative_memory',
+              'disclosure_boundary', 'plan', 'previous_chapters', 'profiles', 'scene_context',
+              'scene_sources', 'state', 'story', 'style_anchor', 'word_budget', 'world_core',
+              'world_records'),
+    'chapter_review': ('author_feedback', 'chapter_outline', 'contract', 'creative_memory',
+                       'disclosure_boundary', 'plan', 'prior_candidate', 'profiles',
+                       'revision_impact', 'revision_instruction', 'scene_context', 'scene_sources',
+                       'state', 'story', 'style_anchor', 'world_core', 'world_records'),
+    'repair': ('author_feedback', 'base_draft', 'contract', 'creative_memory', 'plan',
+               'previous_chapters', 'prior_candidate', 'profiles', 'revision_impact',
+               'revision_instruction', 'scene_context', 'scene_sources', 'state', 'story',
+               'style_anchor', 'word_budget'),
+    'redesign': ('base_draft', 'contract', 'plan', 'previous_chapters', 'profiles', 'state', 'story'),
+    'revision_review': ('contract', 'plan', 'previous_chapters', 'profiles', 'revision_impact',
+                        'revision_instruction', 'state', 'story'),
+    'scope_review': ('author_feedback', 'contract', 'creative_memory', 'effective_layout', 'plan',
+                     'profiles', 'revision_impact', 'revision_instruction', 'state', 'story',
+                     'style_anchor'),
+    'scope_synthesis': ('author_feedback', 'contract', 'creative_memory', 'effective_layout', 'plan',
+                        'profiles', 'revision_impact', 'revision_instruction', 'scope_parts', 'state',
+                        'story', 'style_anchor'),
+    'alignment_plan': ('alignment_hold', 'contract', 'effective_layout', 'frontier:book',
+                       'frontier:volume:v1', 'profiles', 'scene_context', 'state', 'story',
+                       'style_anchor'),
+    'alignment_review': ('alignment_hold', 'alignment_proposal', 'contract', 'effective_layout',
+                         'frontier:book', 'frontier:volume:v1', 'profiles', 'scene_context', 'state',
+                         'story', 'style_anchor'),
+}
+
+
+def undeclared_material(stage, required):
+    """Required records this stage never declared, as a sorted list of names."""
+    declared = set(STAGE_MATERIAL.get(stage) or ())
+    return sorted(name for name in required if name not in declared)
+
+
 def projects_from(name):
-    """The wider record a narrow one is a view of, or None when it stands on its own."""
     for narrow, wide in PROJECTIONS:
         if narrow.endswith(':'):
             if name.startswith(narrow):
@@ -121,9 +187,21 @@ def _brief(book, job):
         return briefs.opening_options(payload.get('gate', {}), payload.get('lens_brief', ''), previous,
                                       creation.opening_version(book['creation']))
     if job.stage == 'world_model':
+        # The brief and the validator read the same tier declaration, so the world the worker is
+        # asked for is the world the check accepts.
+        tier = scale_tier(book)
         return briefs.world_model(previous=previous, repair=bool(payload.get('repair')),
-                                  scale=_scale_line(book))
+                                  scale=_scale_line(book),
+                                  sections=world.required_sections(tier['id'] if tier else None))
     return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book)})
+
+
+def scale_tier(book):
+    """The tier row this project was sized to, or None when the contract came in without a tier."""
+    contract = book.get('contract') or {}
+    return next((row for row in SCALE_TIERS
+                 if row['chapter_min'] == contract.get('chapter_min')
+                 and row['chapter_max'] == contract.get('chapter_max')), None)
 
 
 def _scale_line(book):
@@ -132,9 +210,7 @@ def _scale_line(book):
     volumes = contract.get('volumes') or []
     if not volumes:
         return ''
-    tier = next((row for row in SCALE_TIERS
-                 if row['chapter_min'] == contract.get('chapter_min')
-                 and row['chapter_max'] == contract.get('chapter_max')), None)
+    tier = scale_tier(book)
     last = volumes[-1]['end']
     return '%s，%d 卷共 %d 章，每章 %s～%s 汉字' % (
         (tier['name'] + '档') if tier else '已定体量', len(volumes), last,
@@ -244,7 +320,13 @@ def build(repo: ContextStore, book, job):
             add('opening_rejections', [r for r in book['creation']['rejections'] if r['gate'] == job.payload['gate']['id']])
     if book.get('world'):
         model = book['world']
-        add('world_model', model, stage in ('book_plan', 'volume_plan', 'volume_outline', 'outline_review', 'design_review', 'opening_contract', 'contract_review'))
+        # An amendment review judges a change against the author's choices and the world's rules, so
+        # it reads the world's core and the diff; the full model stays on demand. The first contract
+        # review still reads the whole world, because that is where the contract is born.
+        amended = stage == 'contract_review' and bool((book.get('proposal') or {}).get('amendment'))
+        full_world = stage in ('book_plan', 'volume_plan', 'volume_outline', 'outline_review',
+                               'design_review', 'opening_contract') or (stage == 'contract_review' and not amended)
+        add('world_model', model, full_world)
         add('world_core', {'premise': model['premise'], 'rules': model['rules'], 'story_capacity': model['story_capacity']})
         if plan:
             records_by_id = world.index(model)

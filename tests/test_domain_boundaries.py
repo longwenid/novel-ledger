@@ -116,6 +116,60 @@ class DomainBoundaryTests(unittest.TestCase):
         declared = set(stages.BLOCKS) | set(stages.CONDITIONAL_BLOCKS) | set(stages.DYNAMIC_BLOCKS)
         self.assertEqual(set(stages.STAGES) - declared, set())
 
+    def test_world_only_fills_the_sections_its_tier_requires(self):
+        """A micro book's world floor is the world its line walks through, not ten domains.
+
+        The brief and the validator read the same tier declaration; before that, a micro project was
+        asked to keep the world small while the check demanded every domain, and paid with four
+        repair rounds and 55 records.
+        """
+        from novel_ledger import world
+        choices = {'world': {'world_premise': '一座仓库的夜班退件纠纷。', 'mechanism': {'mode': 'none'}},
+                   'protagonist': {'id': 'shen', 'name': '沈桐', 'desire': '查清责任。', 'limit': '不牵连无关同事。'}}
+        character = {'id': 'shen', 'name': '沈桐', 'role': '夜班工人', 'desire': '查清责任。',
+                     'limit': '不牵连无关同事。', 'knowledge_boundary': '只知道自己经手的单子。', 'links': []}
+        model = {'selection_hash': 'h', 'premise': '一座仓库的夜班退件纠纷。', 'story_capacity': '一条主线走三章。',
+                 'rules': [{'id': 'r1', 'principle': '退件必须登记负责人。', 'scope': '全库', 'limits': '夜班',
+                            'consequences': '漏记就查夜班', 'links': []}],
+                 'society': [{'id': 's1', 'institution': '交接班', 'norm': '当班签字', 'enforcement': '主管抽查',
+                              'pressure': '谁签谁担', 'links': []}],
+                 'everyday': [{'id': 'e1', 'practice': '夜班清点', 'constraint': '只有一个人', 'story_use': '制造时间压力',
+                               'links': []}],
+                 'characters': [character],
+                 'mysteries': [{'id': 'm1', 'truth': '退件是主管放的', 'disclosure': '卷末', 'causal_role': '追查责任',
+                                'links': []}],
+                 'mechanisms': [], 'geography': [], 'history': [], 'factions': [], 'economy': []}
+        self.assertEqual(world.validate(model, choices, 'h', sections='t0'), model)
+        self.assertEqual(world.required_sections('t0'),
+                         ('rules', 'society', 'everyday', 'characters', 'mysteries', 'mechanisms'))
+        self.assertEqual(world.required_sections('t3'), world.ALL_SECTIONS)
+        with self.assertRaises(Error) as caught:
+            world.validate(dict(model, rules=[]), choices, 'h', sections='t0')
+        self.assertEqual(caught.exception.code, 'world_section')
+        # A long tier still needs the sections a micro book may leave empty.
+        with self.assertRaises(Error):
+            world.validate(model, choices, 'h', sections='t3')
+
+    def test_every_stage_declares_the_material_it_must_read(self):
+        """The same completeness rule as deliverable blocks, for the other half of a dispatch.
+
+        A stage whose required material nobody agreed on is how a run's cost stops being a decision:
+        a real one paid 90 KB of required records per design dispatch, including a world and its own
+        projection. Adding material to a stage now means editing the table, and the fixture check in
+        `support.check_dispatch` compares every frozen dispatch against it.
+        """
+        from novel_ledger import context, stages
+        self.assertEqual(sorted(set(stages.STAGES) - set(context.STAGE_MATERIAL)), [],
+                         '每个阶段都要声明必读材料')
+        self.assertEqual(sorted(set(context.STAGE_MATERIAL) - set(stages.STAGES)), [],
+                         '材料表里出现了未登记阶段')
+        for stage, names in context.STAGE_MATERIAL.items():
+            with self.subTest(stage=stage):
+                self.assertEqual(len(names), len(set(names)), '同一份材料不要写两次')
+                self.assertTrue(all(isinstance(name, str) and name for name in names))
+        self.assertEqual(context.undeclared_material('write', ['contract', 'world_model']), ['world_model'])
+        self.assertEqual(context.undeclared_material('write', ['contract', 'plan']), [])
+
     def test_causal_frontier_is_iterative_and_bounded(self):
         from novel_ledger import design_queries as queries
         size = 5000

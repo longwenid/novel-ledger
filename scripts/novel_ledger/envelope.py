@@ -52,7 +52,7 @@ TASK_OPTIONAL = ('brief', 'first_read_path', 'guides', 'input_path', 'template_p
 # It grants nothing: reading prose still requires the host-injected NOVEL_TASK_ID/NOVEL_SESSION.
 IDENTITY_FIELDS = ('schema', 'task_id', 'input_hash', 'stage', 'stages', 'chapter', 'scope',
                    'delivery_phase', 'requires_new_worker', 'review_session', 'project_path',
-                   'task_path', 'entry', 'version', 'worker_env', 'note')
+                   'task_path', 'entry', 'version', 'worker_env', 'task_line', 'note')
 
 
 def _validate(value, fields, optional, code, label):

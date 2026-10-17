@@ -33,7 +33,11 @@ ALLOWED = {
     'story_memory': {'contracts'},
     'understanding': {'contracts'},
     'world': {'contracts'},
-    'briefs': {'contracts', 'creation', 'stages'},
+    # briefs renders what a stage must produce, so it reads the same declarations the checks do:
+    # the stage registry and the world section table. Keeping the requirement and its check on one
+    # declaration is the point — a brief asking for a small world while the validator demanded ten
+    # domains is what a real micro project paid four repair rounds for.
+    'briefs': {'contracts', 'creation', 'stages', 'world'},
     'workflow': {'contracts', 'creation', 'facts', 'narrative', 'planning', 'quality',
                  'scopes', 'world', 'craft', 'editorial', 'understanding',
                  'design_queries', 'evidence'},

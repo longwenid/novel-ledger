@@ -1,7 +1,7 @@
 """Synthetic engineering receipts. These are never literary judgments."""
 import copy
 import uuid
-from novel_ledger import scopes
+from novel_ledger import context, scopes
 from novel_ledger.contracts import RESULT, digest
 from novel_ledger.result_templates import template
 
@@ -151,6 +151,16 @@ def required_material(work):
     return kept
 
 
+def check_dispatch(work):
+    """Two invariants every frozen dispatch must satisfy, checked wherever a flow is driven."""
+    if len(required_material(work)) != len(work['required']):
+        raise AssertionError('必读记录里有内容完全相同的两份：' + ','.join(work['required']))
+    undeclared = context.undeclared_material(work['stage'], work['required'])
+    if undeclared:
+        raise AssertionError('阶段 %s 的必读未在 context.STAGE_MATERIAL 里声明：%s'
+                             % (work['stage'], ','.join(undeclared)))
+
+
 def drive(app, owner=None, until=None):
     for _ in range(100):
         handoff = app.advance(owner=owner)
@@ -161,8 +171,6 @@ def drive(app, owner=None, until=None):
             return handoff
         if until and handoff['task']['stage'] == until:
             return handoff
-        work = app.repo.pending()['input']
-        if len(required_material(work)) != len(work['required']):
-            raise AssertionError('必读记录里有内容完全相同的两份：' + ','.join(work['required']))
+        check_dispatch(app.repo.pending()['input'])
         app.submit(response(app))
     raise AssertionError('工程流程没有在有限步骤内停止')

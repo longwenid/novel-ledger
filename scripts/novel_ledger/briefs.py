@@ -9,7 +9,7 @@ from __future__ import annotations
 from .creation import gate_note, gate_title, value_rules
 from .contracts import (AUTHOR_CHANNEL_STAGES, OPENING_DIRECTION, OPENING_DIRECTION_GATES, OPENING_VERSION,
                         OPTION_CONTRACT)
-from . import stages
+from . import stages, world
 BRIEFS = {
     'opening_options': '开书方案简报',
     'world_model': '世界与约定简报',
@@ -61,13 +61,22 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
     return '\n'.join(lines)
 
 
-def world_model(lens_brief=None, previous=(), repair=False, scale=None):
+def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections=None):
     """World plus contract in one dispatch: what the world owes, and what the contract must keep."""
     lines = ['# ' + BRIEFS['world_model'], '',
-             '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。十个领域的字段按当前模板与世界指南填写，'
-             '完整记录须有稳定 id 与 links=[领域:id]；同时给 premise、story_capacity 与准确的 selection_hash。',
-             '除 mechanisms 外每个领域至少一条实写记录；已选无特殊机制时 mechanisms 必须为空数组，有限机制时至少一条。'
-             '不要写"待补"，地域、日常、人物与隐秘都要能落到具体场景。', '']
+             '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。'
+             '完整记录须有稳定 id 与 links=[领域:id]；同时给 premise、story_capacity 与准确的 selection_hash。'
+             '不要写"待补"，写进去的域都要能落到具体场景。', '']
+    if sections:
+        # Same declaration the validator uses: asking for ten domains while the check happens to
+        # accept a smaller world is how a micro project ends up writing records nobody reads and
+        # repairing four times.
+        labels = '、'.join('%s（%s）' % (name, world.LABELS[name]) for name in sections)
+        empty = '、'.join(name for name in world.SECTIONS if name not in sections)
+        lines.extend(['## 本档位要填的领域', '本项目按体量只需要：' + labels + '。'
+                      + ('其余领域（' + empty + '）保留为空数组，不要为凑数写进来；' if empty else '')
+                      + '除 mechanisms 外，列出的每个领域至少一条实写记录；'
+                        '已选无特殊机制时 mechanisms 必须为空数组，有限机制时至少一条。', ''])
     if scale:
         # A world is read by every later dispatch, so its size is a recurring cost, not a one-off.
         # Ten domains at "at least one record" is a floor, not a target: a single-volume micro book

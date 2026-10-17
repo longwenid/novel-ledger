@@ -9,6 +9,37 @@ from .contracts import (AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, FAST_REVIEW_BLOCK
 from . import creation, facts, narrative, planning, quality, scopes, world, craft, editorial, understanding, design_queries
 from .evidence import evidence
 
+# Where the engine stops moving on its own, and who decides what happens next. The value of this
+# table is that no stop is a bare refusal with nowhere to go: a real run hit the same dead end three
+# times (a design candidate, one chapter, and a revision whose own scope review flagged a chapter
+# outside its range), which is why the author channel is now a declared part of every stop rather
+# than something each stopping point has to remember to add.
+STOP_POINTS = {
+    'author_block': 'answer',                       # an open question is answered; nothing moves first.
+    'repair-exhausted:world_review': 'author_decision',
+    'repair-exhausted:design_review': 'author_decision',
+    'repair-exhausted:outline_review': 'author_decision',
+    'repair-exhausted:chapter_repair': 'author_decision',
+    'scope-findings:open-revision': 'author_decision',
+    'revision-blocked': 'plan_authorization',       # revise --proposal-hash with the author's own words
+    'scope-fix': 'review_driven_revision',          # revise --from-chapter N covers the findings
+    'remedy-exhausted': 'recontract',               # the remedy budget is spent: change the premise
+}
+# What each channel means, for readers of the table and for the test that keeps it honest.
+AUTHOR_CHANNELS = {
+    'answer': '问题已在等作者回答，answer 记录选择后流程才继续。',
+    'author_decision': '额度/范围/未决导致停下：engine 生成三选（再一轮／接受并记为未解决项／重开或撤销），answer 落库。',
+    'plan_authorization': '方案超出自动回改范围：作者用 revise --proposal-hash 绑定准确 plan_hash 授权。',
+    'review_driven_revision': '审稿发现的缺陷由 revise --from-chapter 开一次覆盖它们的修订。',
+    'recontract': '改案额度已尽：改的是前提，走 recontract 并重新独立核验。',
+}
+
+
+def tier_id(opening):
+    """The size class this opening was decided at, for requirements declared per tier."""
+    scale = (creation.selected(opening) or {}).get('scale') or {}
+    return scale.get('tier')
+
 
 def new_book(contract, source=''):
     contract = planning.validate_contract(contract)
@@ -459,7 +490,8 @@ def apply(book, task, data, actor, sources):
         # own contract, so the world half is split off before world.validate sees it.
         draft = {key: value for key, value in data.items() if key != 'contract'} \
             if 'opening_contract' in (task.get('payload') or {}).get('also', ()) else data
-        model = world.validate(draft, creation.selected(opening), opening['selection_hash'])
+        model = world.validate(draft, creation.selected(opening), opening['selection_hash'],
+                               sections=world.required_sections(tier_id(opening)))
         old = book['proposal'] or {}
         book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': model, 'producer': actor, 'attempts': old.get('attempts', 0)}
         if 'opening_contract' in (task.get('payload') or {}).get('also', ()):  # combined dispatch

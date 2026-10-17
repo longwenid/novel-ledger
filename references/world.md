@@ -8,7 +8,7 @@
 
 ## 创建内容
 
-模型包含 premise/story_capacity/selection_hash 和完整记录数组。领域及记录字段以 `world.SECTIONS` 和当前任务模板为准；各领域须有实际内容，mechanisms 按所选机制方向为空或实写，不用记录数量替代丰富度判断。
+模型包含 premise/story_capacity/selection_hash 和完整记录数组。领域及记录字段以 `world.SECTIONS` 和当前任务模板为准；**本档位要求填写的领域由 `world.TIER_SECTIONS` 按体量决定（微型档只要求规则、社会、日常、人物、隐秘与机制），列表之外的领域保留为空数组，不要为凑数写进来**——世界被之后每一次派工读取，它的规模是持续成本而不是一次性成本。mechanisms 按所选机制方向为空或实写，不用记录数量替代丰富度判断。
 
 | 领域 | 说明 |
 |---|---|

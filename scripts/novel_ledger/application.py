@@ -38,6 +38,12 @@ class Application:
         official = self.repo.get(store_keys.OFFICIAL_BRANCH, 'main')
         formal = self.repo.headers(official)
         task = self.repo.pending()
+        # A frozen task belongs to the revision it was built from. If the book moved on without
+        # retiring it, the next worker would only discover that on its first read.
+        require(task is None or task['input']['revision'] == book['revision'], 'book_state',
+                '在途任务冻结自另一个项目版本：先作废再派工。',
+                {'task_revision': None if task is None else task['input']['revision'],
+                 'book_revision': book['revision']})
         sealed = task and task['input']['blind'] and task['first_read'] is None
         revision = book['revision_run']
         return {'version': VERSION, 'status': book['status'], 'branch': book['branch'], 'formal_branch': official,
@@ -872,7 +878,8 @@ class Application:
                 {'recover': '先完成开书约定与其独立核验。'})
         if book.get('world'):
             opening = book['creation']
-            world.validate(book['world'], creation.selected(opening), opening['selection_hash'])
+            world.validate(book['world'], creation.selected(opening), opening['selection_hash'],
+                           sections=world.required_sections(workflow.tier_id(opening)))
             creation.validate_contract(book['contract'], opening, book['world'])
             approval = book['world_review']
             review = quality.checks(approval['receipt'], checks_for(approval['receipt'].get('checks_version', 1), 'world'), {0: dump(book['world'])},

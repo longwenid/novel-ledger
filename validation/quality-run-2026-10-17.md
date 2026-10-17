@@ -216,17 +216,24 @@ Worker 按 `task.json` 与冻结材料纠正了我（该任务没有 closure、�
 | 8 | 记录裁决时作废裁决前派出的任务并回报 `retired_task` | `application.answer` | 一次白派 Worker（`stale_task`） |
 | 9 | 恢复路径统一清暂停原因；裁决与派工顺序写进运行指南 | `application.resume` / `recontract`、`references/runtime.md` | `status=running` 却留 `pause_reason` |
 | 10 | 状态不变量在每次读 `status` 时校验（运行中不得带暂停原因、暂停必须有原因、接受条目有阶段/范围/意见） | `book_state.check_state`、`application.status`；新增 `application → book_state` 依赖作为显式架构决定 | 落地当场抓出第四处同类残留（`revision_service.begin`），已修；`test_book_state_invariants_are_checked_where_the_state_is_read` |
+| 11 | **投递材料声明表**：每个阶段必须声明它判断所必需的记录，与目录 shape 一样作为完整性要求 | `context.STAGE_MATERIAL` / `undeclared_material`；守卫在 `support.check_dispatch`（每次派工）与 `test_every_stage_declares_the_material_it_must_read`（阶段完整性） | 给一个阶段多带材料从此要改表；表由 19 个阶段的实测必读集固化 |
+| 12 | **世界丰富度下限按档位**：域表由 `world.TIER_SECTIONS` 按体量决定，简报与校验读同一份声明 | `world.required_sections`、`briefs.world_model(sections=...)`、`context.scale_tier`、两处 `world.validate`、`references/world.md` | 微型档只要求 6 个域；`test_world_only_fills_the_sections_its_tier_requires` |
+| 13 | **停止点登记表 + 守卫**：每个停止点必须声明作者通道，且通道本身要被解释 | `workflow.STOP_POINTS` / `AUTHOR_CHANNELS`、`test_every_stop_point_declares_where_the_author_decides` | 下一个新停止点漏配通道会当场红 |
+| 14 | **派工说明由任务自身渲染**：`identity.task_line` 由冻结任务生成，主控照念而不是按流程位置想象 | `delivery.task_line`、`envelope.IDENTITY_FIELDS` | 一次把 `scope=revision` 说成"全书终审"的描述错误 |
+| 15 | **改约审只核差异**：改约审读世界核心与 `contract_amendment`，整份世界模型转按需 | `context.build`（`amended` 分支） | 契约审的必读里最大一份（47,636 字符）不再默认投递 |
+| 16 | **在途任务与项目版本一致性**：`status` 校验 `pending.input.revision == book.revision` | `application.status` | 与修复 8 同源；白派 Worker 在引擎侧不再可能 |
 
-## 五、建议但未做的修复（按结构收益排序）
+## 五、还剩什么（按结构收益排序）
 
-1. **投递声明表（根因 A）**：`阶段 → 判据记录集`，与背景材料分开；守卫断言必读 ⊆ 判据 ∪ 明示背景、且无投影/源重复对。
-   预计砍掉审稿位一半以上材料（来源 3），并把以后的裁剪变成改表。
-2. **体量档位决定管线与额度（根因 B）**：小档合并产出比低的层、返修额度按产出规模给；守卫要求新阶段声明档位归属。
-3. **停止点声明 + 守卫（根因 C）**：列出所有停止点，测试断言每个停止点都能生成作者决定——防止下一个新停止点漏接通道。
-4. **状态不变量扩展（根因 D）**：把在途任务与状态版本的一致性也纳入校验，
-   让"派工与状态必须一致"由引擎保证（现状：已保证命中"运行/暂停"与"接受条目"两组）。
-5. **改约审默认核差异（来源 5）**：`contract_amendment` 升为唯一必读，原候选转按需。
-6. **派工描述由任务自身渲染（根因 E）**：把 `stage/scope/chapter/first/last/required` 的标准说明放进派工模板，主控照念。
+1. **管线形状随档位收缩（根因 B 的另一半）**：世界域表已经按档位（修复 12），剩下的层数问题——
+   单卷小书要不要把骨架与卷设计合成一次派工——需要改协议并做一次实机验证才敢动。
+   一条判断不变：合并只能在"产出与判据同源"的层之间做，别把"约定对齐"与"事实核验"并成一次审。
+2. **停止点守卫再往前一步**：现在登记表保证"声明过的停止点有通道"；下一步是让新增停止点**必须**登记
+   （例如把生成 `author_block` 的位置收成一个函数，未登记 id 直接拒绝）。
+3. **审稿位的判据集继续收窄**：`chapter_review` 仍是 16.6 倍于被审文本；材料表现在让这件事可见且可改，但还没有改。
+4. **体量与额度的关系**：返修轮数目前按阶段固定；小书真正贵的是返修轮数（实测世界 4 轮、第三章 3 轮），
+   而额度收紧只会造成死路——正确方向是"让第一稿的规模与档位相称"（修复 12 是这条路的第一步）。
+5. **派工模板化**：修复 14 给了 `task_line`，还可以把主控派工说明整段交由引擎渲染。
 
 ## 六、复现
 

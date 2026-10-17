@@ -25,6 +25,26 @@ def output_path(workspace: LocalWorkspace, output, default):
             else workspace.artifact_path(workspace.project / default))
 
 
+def task_line(work):
+    """One line that says what this dispatch actually is, read off the frozen task.
+
+    The controller hands this line on instead of describing the work from the pipeline it assumes:
+    a revision-scope review announced as the book's final review is a description error the worker
+    can only discover after reading the frozen material.
+    """
+    parts = ['stage=' + str(work.get('stage'))]
+    if work.get('scope'):
+        parts.append('scope=' + str(work['scope']))
+    if work.get('chapter'):
+        chapter = ('chapter=%s' % work['chapter'] if work.get('first') in (None, work.get('chapter'))
+                   else 'chapters=%s-%s' % (work['first'], work['last']))
+        parts.append(chapter)
+    parts.append('required=' + ','.join(work.get('required') or ()) or 'required=(无)')
+    if work.get('blind'):
+        parts.append('blind=先首读封印')
+    return '本任务：' + '；'.join(parts) + '。派工说明以此为准，不要按流程位置想象。'
+
+
 # Work directory ownership. `work/<task>/` mixes two kinds of file:
 #   controller-authored, rebuildable: task.json, input.json, chapter-*.txt
 #   worker-authored, never rewritten: result.template.json (the form) and result.json (the receipt)
@@ -110,6 +130,11 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
                 'project_path': str(workspace.project), 'task_path': envelope['task_path'],
                 'entry': str(entry), 'version': VERSION,
                 'worker_env': {'NOVEL_TASK_ID': task['id'], 'NOVEL_SESSION': task['reviewer']},
+                # What this dispatch is, rendered from the frozen task itself. A controller that
+                # describes the work from an assumed pipeline position instead of from here can hand a
+                # worker a task it is not (a revision-scope review announced as the book's final
+                # review); reading this line prevents that, and costs one sentence per dispatch.
+                'task_line': task_line(work),
                 'note': '本文件是派工身份的可核对副本，不授予权限：read/recall/patch/first-read 仍只对'
                         '宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放；NOVEL_SESSION 为空表示'
                         '本次由新会话自行命名。'}

@@ -13,6 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / 'scripts' / 'novel_ledger'
 
 
+def package_source():
+    return '\n'.join(path.read_text(encoding='utf-8') for path in PACKAGE.glob('*.py'))
+
+
 def imports(tree):
     """Return all internal and external edges, including nested/absolute imports."""
     internal, external = set(), set()
@@ -113,6 +117,25 @@ class ArchitectureTests(unittest.TestCase):
                 internal, _ = imports(tree)
                 self.assertFalse(internal - ALLOWED[name],
                                  f'{name} crosses its layer: {sorted(internal - ALLOWED[name])}')
+
+    def test_every_stop_point_declares_where_the_author_decides(self):
+        """A stop with no declared channel is how a converging project dead-ends.
+
+        The table in `workflow` is the registry; this checks it still names the points that exist in
+        the code, that every channel is explained, and that the shapes a real run hit are all in it.
+        """
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        from novel_ledger import workflow
+        source = package_source()
+        for ident, channel in workflow.STOP_POINTS.items():
+            with self.subTest(stop=ident):
+                self.assertIn(channel, workflow.AUTHOR_CHANNELS,
+                              'stop point must name a channel that is explained')
+                self.assertIn(ident.split(':')[0], source, 'declared stop point no longer exists in the code')
+        for ident in ('repair-exhausted:world_review', 'repair-exhausted:design_review',
+                      'repair-exhausted:outline_review', 'repair-exhausted:chapter_repair',
+                      'scope-findings:open-revision'):
+            self.assertIn(ident, workflow.STOP_POINTS)
 
     def test_kv_keys_are_built_only_in_the_declared_module(self):
         """A raw 'claim:' + id in an adapter would make the key space part of the adapter."""
