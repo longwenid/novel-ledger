@@ -9,6 +9,16 @@ from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
 from .contract_activation import ContractActivation
 
+# An amendment preview is a JSON-encoded value, not prose: if it is cut, it says so, because a
+# silently truncated preview reads as a valid value and would let a reviewer (or a script) compare
+# against something the author never wrote.
+AMENDMENT_PREVIEW_LIMIT = 4000
+
+
+def _amendment_side(value, limit=AMENDMENT_PREVIEW_LIMIT):
+    rendered = dump(value)
+    return rendered if len(rendered) <= limit else rendered[:limit] + '…truncated'
+
 
 class Application:
     def __init__(self, repo: Repository, *, compile_task: TaskCompiler, presentation: Presentation, clock, new_id):
@@ -791,7 +801,7 @@ class Application:
                 for key in sorted(set(base) | set(candidate)):
                     before, after = base.get(key), candidate.get(key)
                     if before != after:
-                        amendment[key] = {'before': dump(before)[:400], 'after': dump(after)[:400]}
+                        amendment[key] = {'before': _amendment_side(before), 'after': _amendment_side(after)}
             if not book['proposal'] or book['proposal']['scope'] != 'contract':
                 self.repo.put(store_keys.AMENDMENT_BASE, book)
             self._cancel_pending(source)
