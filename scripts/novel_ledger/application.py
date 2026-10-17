@@ -547,6 +547,10 @@ class Application:
             # every task reads author_feedback, so the premise is re-drafted against it, not guessed.
             book['feedback'].append('作者裁决：' + block['question'] + ' → ' + option + '（作者原话：' + source + '）')
             book.pop('author_block', None)
+            # Recording an answer moves the project on, so a task dispatched before the answer can
+            # never be submitted again (its frozen revision is now old). Retiring it here turns a
+            # worker that would only discover staleness on read into an explicit, immediate signal.
+            stale = self._cancel_pending('作者裁决已记录：此前派出的任务随之失效。')
             if book.get('pause_reason') == block.get('question'):
                 book.pop('pause_reason', None)
                 book['status'] = 'running'
@@ -566,7 +570,11 @@ class Application:
             book['revision'] += 1
             self.repo.save(book)
             self.repo.record('author_decision', book['author_decision_history'][-1])
-        return self.status()
+        answer = self.status()
+        if stale:
+            answer['retired_task'] = stale
+            answer['retired_task_note'] = '该派工在裁决之前冻结，已作废；按当前状态重新 advance 再派 Worker。'
+        return answer
 
     def set_lexical(self, override, source, owner=None):
         """The author's lexical rules live on the book, not inside a contract; each change is a version."""
