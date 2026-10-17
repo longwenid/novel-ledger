@@ -355,6 +355,7 @@
 | 9 | 先派工后记录作者裁决 → 裁决推进了项目版本，刚派出去的任务当场失效（`stale_task`），白派一个 Worker | 运行指南写明顺序：先 `answer`，再 `advance`/`recontract`；改约时把改动字段作为 `contract_amendment` 交给核验者，核验只需核差异 | `d6e5a94` |
 | 10 | 手工改 18 KB 约定 JSON 改一句，把补上的句子抄成重复句（核验者当场抓出） | 新增 `recontract --patch`：文件只列要改的字段，其余沿用当前候选或生效约定 | `0972353` |
 | 11 | 恢复与改约后 `pause_reason` 残留，`status` 与暂停原因互相矛盾 | 两条恢复路径统一清掉暂停原因 | `8e66210` |
+| 12 | 连**整份**读取也在重发信封：设计阶段一次 `read` 返回 8–10 万字符，required 里有 `contract` + `world_model` + `world_core` + `design:book` + `previous_proposal`，其中 brief/payload/policy/prose 与 input.json 逐字重复 | `read` 只做"把记录哈希换成值"：信封里的字段不再重复；单条读取同样只回该记录与 `on_demand` 哈希索引 | `7a87c28` |
 
 ### 独立核验确实在拦截
 
@@ -372,6 +373,8 @@
 | contract_review | 3 | 约 6,000 | 约 26,000 | 含一次被 stale 挡下的回执 |
 
 补充读取 33 次共 **665,656 字符**——是全部冻结信封加回执的两倍多，主要来自每一轮世界核验/返修重读已核验世界与上一版候选。这两项（世界规模、整份返修）正是上表第 6、7 条修掉的。字符量不能换算 token 或费用；真实计费需要宿主日志（`scripts/observe.py`）。
+
+跑到全书骨架与卷内方案之后再看同一口径（35 个任务）：冻结输入 109,621 字符、回执 396,342 字符、**补充读取 2,372,489 字符**（65 次，均次约 3.7 万）。按阶段拆分读取字符：design_review 615,557 / book_plan 397,890 / volume_plan 391,982 / contract_review 382,970 / world_review 333,584 / world_model 267,533 / opening_options 64,539。单次最大的读取是 99,290 字符——同一个设计任务读了两次，每次把 contract、world_model、world_core、design:book、previous_proposal 连同 brief/payload/policy 全部重发一遍。这就是上表第 12 条的实测来源：**设计阶段的读取里，真正新增的信息远少于重复送达的信封**。
 
 ### 本轮边界
 
