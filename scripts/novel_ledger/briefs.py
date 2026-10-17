@@ -124,8 +124,8 @@ SELF_CHECK_HINTS = {
     'character': '人物是可记住的具体的人，不是功能。',
     'change': '这一章确实改变了什么：处境、关系、认知或代价。',
     'emotion_cost': '情绪有来处，代价落在人身上且可查。',
-    'language': '句子干净、不啰嗦、不用形容词报幕；同一动作不重复描写。',
-    'repetition': '句式、动作组与解释不与自己或前文重复；换写法而不是换词。',
+    'language': '句子干净、不啰嗦、不用形容词报幕；同一动作不重复描写。机械项：全书中文声线不留西文单词，对白引号用全书同一套体例（提交时直接判）。',
+    'repetition': '句式、动作组与解释不与自己或前文重复；换写法而不是换词。机械项：与已核验章节逐字相同的连续文段（≥25 字）提交时直接判，跨章照抄会被拒。',
     'substance': '每一场都在推进或改变，没有为凑字数存在的段落。',
     'disclosure': '披露顺序正确：读者现在该知道的知道，不该知道的没提前漏。',
     'pacing': '张弛有分配，静章也承担余波、关系或暗线。',
@@ -218,6 +218,10 @@ def stage(name, payload=None):
                  ' dependency_coverage=complete 表示每场已列全依赖（无依赖也给空数组）；未核清用 partial，修订时将保守扩大范围。')
         if payload.get('understanding'):
             rule += ' understanding_refs 可显式补读场外作品理解；reading_refs 按人物/关系/母题/声线/披露声明阅读关联。reading_coverage=complete 须每场列 reading_refs，无额外关联也给空数组；未核清用 partial。'
+    if name in ('book_plan', 'volume_plan', 'volume_outline', 'plan'):
+        rule += (' 可交可选 ledger 账目行（每行 {key,value,sum_of|product_of|equals|ratio_of:[整数]}）：'
+                 '数字与数量关系一旦写成账目行，提交时机械验算，后续工件同键必须同值；'
+                 '不声明就省略字段，不要把观感描述写成账目。')
     if name in ('write', 'repair', 'redesign'):
         rule += ' 若有 chapter_outline，承接该章情节推动说明，按当前计划展开场景；卷纲不是正文，避免复制概要腔。'
         rule += ' scene_context 按场交付目标、依赖与准确前态，scene_sources 绑定历史原文版本；依赖缺失先补读或重规划，不把人物误信当世界真相。'

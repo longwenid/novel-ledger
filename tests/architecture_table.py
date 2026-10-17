@@ -17,6 +17,12 @@ ALLOWED = {
     'ports': {'contracts'},
     'book_state': {'contracts'},
     'craft': {'contracts'},
+    # lint judges mechanical prose defects (verbatim reuse, quote family, foreign residue) against
+    # text the caller supplies; it is pure arithmetic on strings, like book_state's invariants.
+    'lint': {'contracts'},
+    # ledger validates the optional structured account blocks a design or plan may declare; pure
+    # arithmetic over declared rows, same layer as lint.
+    'ledger': {'contracts'},
     'creation': {'contracts'},
     'design_queries': set(),
     'editorial': {'contracts'},
@@ -40,13 +46,13 @@ ALLOWED = {
     'briefs': {'contracts', 'creation', 'stages', 'world'},
     'workflow': {'contracts', 'creation', 'facts', 'narrative', 'planning', 'quality',
                  'scopes', 'world', 'craft', 'editorial', 'understanding',
-                 'design_queries', 'evidence'},
+                 'design_queries', 'evidence', 'lint', 'ledger'},
     # book_state declares the four-partition field ownership and the invariants between those fields,
     # so the application reads it to check the state it owns (the same way it reads store_keys for the
     # key space). book_state stays a pure declaration module: it imports nothing but contracts.
     'application': {'contracts', 'ports', 'store_keys', 'book_state', 'creation', 'facts', 'narrative', 'planning',
                     'quality', 'workflow', 'world', 'craft', 'editorial',
-                    'story_memory', 'understanding', 'revision_service', 'contract_activation'},
+                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'lint'},
     'revision_service': {'contracts', 'ports', 'store_keys', 'editorial', 'facts', 'narrative', 'revision_impact',
                          'story_memory', 'understanding', 'workflow'},
     'contract_activation': {'contracts', 'ports', 'store_keys', 'workflow'},
@@ -61,8 +67,11 @@ ALLOWED = {
     'presentation': {'ports', 'bookpage', 'delivery', 'workspace'},
     'sqlite_store': {'contracts', 'book_state', 'store_keys'},
     'host': {'contracts', 'ports'},
+    # unattended owns the wait between dispatch and external submission; like host it sees only
+    # the public application protocol, so the loop stays an adapter even though it runs long.
+    'unattended': {'contracts', 'ports'},
     'bootstrap': {'contracts', 'application', 'context', 'presentation', 'sqlite_store',
-                  'workspace', 'workflow', 'host', 'delivery', 'bookpage'},
+                  'workspace', 'workflow', 'host', 'unattended', 'delivery', 'bookpage'},
     'novel': {'contracts', 'bootstrap'},
 }
 
@@ -77,6 +86,8 @@ CORE_EXTERNAL = {
     'ports': {'__future__', 'typing'},
     'book_state': {'__future__', 'copy'},
     'craft': {'__future__', 'copy'},
+    'lint': {'__future__', 're'},
+    'ledger': {'__future__'},
     'creation': {'__future__', 'copy'},
     'design_queries': {'__future__'},
     'editorial': {'__future__', 'copy'},
@@ -106,7 +117,7 @@ CORE_EXTERNAL = {
 # discover resources or start processes, but only through the injected surface.
 ADAPTERS = {
     'workspace', 'delivery', 'bookpage', 'presentation',
-    'sqlite_store', 'host', 'bootstrap', 'novel',
+    'sqlite_store', 'host', 'unattended', 'bootstrap', 'novel',
 }
 
 FORBIDDEN_CORE_NAMES = {'open', '__import__', 'eval', 'exec', 'Path',

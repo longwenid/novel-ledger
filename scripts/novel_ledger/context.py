@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, SCALE_TIERS, TASK, Job, checks_for, dump, digest, require)
+from .contracts import (CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, SCALE_TIERS, TASK, Job, checks_for, dump, digest, require, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
 from . import briefs, creation, narrative, scopes, world, editorial, story_memory, understanding
@@ -74,10 +74,8 @@ STAGE_MATERIAL = {
               'disclosure_boundary', 'plan', 'previous_chapters', 'profiles', 'scene_context',
               'scene_sources', 'state', 'story', 'style_anchor', 'word_budget', 'world_core',
               'world_records'),
-    'chapter_review': ('author_feedback', 'chapter_outline', 'contract', 'creative_memory',
-                       'disclosure_boundary', 'plan', 'prior_candidate', 'profiles',
-                       'revision_impact', 'revision_instruction', 'scene_context', 'scene_sources',
-                       'state', 'story', 'style_anchor', 'world_core', 'world_records'),
+    'chapter_review': ('author_feedback', 'chapter_outline', 'contract', 'plan', 'profiles',
+                       'revision_impact', 'revision_instruction', 'state'),
     'repair': ('author_feedback', 'base_draft', 'contract', 'creative_memory', 'plan',
                'previous_chapters', 'prior_candidate', 'profiles', 'revision_impact',
                'revision_instruction', 'scene_context', 'scene_sources', 'state', 'story',
@@ -98,6 +96,18 @@ STAGE_MATERIAL = {
                          'frontier:book', 'frontier:volume:v1', 'profiles', 'scene_context', 'state',
                          'story', 'style_anchor'),
 }
+
+
+# What a chapter review decides on, as opposed to the background a scene dispatch reads. The
+# reviewer judges this chapter against its plan, the scoped state, the participants and the
+# author's terms; the world, the scene packet, the style anchor and the creative memory stay
+# available on demand (`read --record`). Measured before this split, one 3,375-character chapter
+# was reviewed against 56,031 characters of required material — 16.6 times the text under review,
+# most of it background the reviewer never cites. STAGE_MATERIAL is the required half of this
+# same decision; this tuple is the demoted half, so the two cannot drift apart silently.
+CHAPTER_REVIEW_ON_DEMAND = ('creative_memory', 'disclosure_boundary', 'prior_candidate',
+                            'scene_context', 'scene_sources', 'story', 'style_anchor',
+                            'world_core', 'world_records')
 
 
 def undeclared_material(stage, required):
@@ -198,10 +208,7 @@ def _brief(book, job, version=CHECKS_VERSION):
 
 def scale_tier(book):
     """The tier row this project was sized to, or None when the contract came in without a tier."""
-    contract = book.get('contract') or {}
-    return next((row for row in SCALE_TIERS
-                 if row['chapter_min'] == contract.get('chapter_min')
-                 and row['chapter_max'] == contract.get('chapter_max')), None)
+    return tier_of(book.get('contract') or {})
 
 
 def _scale_line(book):
@@ -249,10 +256,17 @@ def _selection_line(option, budget=120):
 
 def build(repo: ContextStore, book, job):
     records, required, prose = {}, [], []
+
     def add(name, value, needed=True):
         records[name] = repo.document(value)
         if needed:
             required.append(name)
+
+    # A chapter review reads its judgement basis; the background a scene dispatch needs stays on
+    # demand, declared in CHAPTER_REVIEW_ON_DEMAND next to the required half of the same decision.
+    def need(name):
+        return not (job.stage == 'chapter_review' and name in CHAPTER_REVIEW_ON_DEMAND)
+
     stage, chapter = job.stage, job.chapter
     plan = book['plans'].get(str(chapter))
     if stage == 'revision_review':
@@ -298,7 +312,8 @@ def build(repo: ContextStore, book, job):
             if selected_memory or unavailable_refs:
                 add('creative_memory', {'interpretations': selected_memory,
                     'unavailable_refs': unavailable_refs,
-                    'boundary': '这是可修订的作品理解，含原文样本和反证，不是事实或写作命令；作者约定仍为方向来源。'})
+                    'boundary': '这是可修订的作品理解，含原文样本和反证，不是事实或写作命令；作者约定仍为方向来源。'},
+                    need('creative_memory'))
     if enhanced:
         add('complete_profiles', book['profiles'], False)
         add('profile_history', book.get('profile_history', []), False)
@@ -306,7 +321,7 @@ def build(repo: ContextStore, book, job):
             add('scope_profiles', {p: book['profiles'][p] for p in participants if p in book['profiles']})
         add('effective_layout', editorial.effective_contract(book)['volumes'], stage in LAYOUT_STAGES)
         if book.get('style_anchor'):
-            add('style_anchor', book['style_anchor'])
+            add('style_anchor', book['style_anchor'], need('style_anchor'))
     if book.get('author_block'):
         add('author_block', book['author_block'])
     if book.get('creation'):
@@ -327,7 +342,8 @@ def build(repo: ContextStore, book, job):
         full_world = stage in ('book_plan', 'volume_plan', 'volume_outline', 'outline_review',
                                'design_review', 'opening_contract') or (stage == 'contract_review' and not amended)
         add('world_model', model, full_world)
-        add('world_core', {'premise': model['premise'], 'rules': model['rules'], 'story_capacity': model['story_capacity']})
+        add('world_core', {'premise': model['premise'], 'rules': model['rules'], 'story_capacity': model['story_capacity']},
+            need('world_core'))
         if plan:
             records_by_id = world.index(model)
             selected_world = set(plan.get('world_refs', []))
@@ -346,7 +362,7 @@ def build(repo: ContextStore, book, job):
             # reviewer who can read it stops judging whether the prose discloses it properly; the
             # tracking switch decides node bookkeeping, not who may see the ending.
             visible = {k: v for k, v in original.items() if not k.startswith('mysteries:')}
-            add('world_records', visible)
+            add('world_records', visible, need('world_records'))
             if tracking:
                 add('world_author_records', original, False)
             add('disclosure_boundary', {'allowed_changes': plan.get('disclosures', []),
@@ -355,11 +371,12 @@ def build(repo: ContextStore, book, job):
                  # than inventing one.
                  'reader_current': scoped_state(book['state'], participants, plan, chapter).get('reader_knowledge', {}),
                  'author_secrets': [{'id': k, 'disclosure': v['disclosure'], 'causal_role': v['causal_role']} for k, v in original.items() if k.startswith('mysteries:')],
-                 'source': '幕后真相见可选 world_author_records；作者真相不能自动成为人物知情或本章披露。'})
+                 'source': '幕后真相见可选 world_author_records；作者真相不能自动成为人物知情或本章披露。'},
+                need('disclosure_boundary'))
     if plan:
-        add('plan', plan, not scene_task)
+        add('plan', plan, not scene_task or stage == 'chapter_review')
         if scene_task:
-            add('scene_context', story_memory.packet(plan, book['state']))
+            add('scene_context', story_memory.packet(plan, book['state']), need('scene_context'))
             dependencies = []
             references = {ident for scene in plan.get('scenes', []) for ident in scene.get('depends_on', [])}
             local_ids = {s['id'] for s in plan['scenes']}
@@ -376,7 +393,7 @@ def build(repo: ContextStore, book, job):
                         'story_dependency', '场景依赖不在已提交章节版本中，须重新规划。')
                 dependencies.append({'chapter': n, 'scenes': scenes, 'plan_hash': row['plan'],
                                      'prose_hash': row['prose'], 'events_hash': row['events'], 'chain': row['chain']})
-            add('scene_sources', dependencies, bool(dependencies))
+            add('scene_sources', dependencies, bool(dependencies) and need('scene_sources'))
         add('profiles', {p: book['profiles'][p] for p in participants if p in book['profiles']})
         nodes = node_map(book['designs'])
         # Tracked projects read their target plus direct prerequisites; a basic project has no
@@ -384,7 +401,7 @@ def build(repo: ContextStore, book, job):
         # whole ancestry. Both are bounded and neither recurses.
         depth = TRACKED_DEPTH if tracking else BASIC_DEPTH
         selected = frontier(nodes, plan['node_ids'], depth)
-        add('story', [nodes[ident] for ident in sorted(selected)])
+        add('story', [nodes[ident] for ident in sorted(selected)], need('story'))
     for scope, design in book['designs'].items():
         needed = stage in ('volume_plan', 'plan', 'alignment_plan', 'alignment_review') and scope in ('book', 'volume:' + volume_for(editorial.effective_contract(book), chapter)['id'])
         if needed and tracking:
@@ -504,7 +521,7 @@ def build(repo: ContextStore, book, job):
     if book['feedback']:
         add('author_feedback', book['feedback'])
     if book.get('prior_candidate') and book['prior_candidate']['chapter'] == chapter:
-        add('prior_candidate', book['prior_candidate'], stage in ('repair', 'redesign', 'chapter_review'))
+        add('prior_candidate', book['prior_candidate'], stage in ('repair', 'redesign'))
     # A frozen head addresses shared immutable chapter pages. Re-dispatching another role
     # neither copies every summary nor re-reads every historical event.
     add('history_source', repo.history_snapshot(book['branch']), False)

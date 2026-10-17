@@ -244,6 +244,24 @@
 <path fill="none" stroke="#7a8998" d="M692.04,-287.85C695.38,-250.21 703.37,-160.2 707.28,-116.15"/>
 <polygon fill="#7a8998" stroke="#7a8998" points="709.54,-116.42 707.85,-109.74 705.01,-116.01 709.54,-116.42"/>
 </g>
+<!-- WATCH -->
+<g id="node57" class="node">
+<title>WATCH</title>
+<path fill="#f2f6fa" stroke="#8fa5b7" d="M880,-324C880,-324 750,-324 750,-324 744,-324 738,-318 738,-312 738,-312 738,-300 738,-300 738,-294 744,-288 750,-288 750,-288 880,-288 880,-288 886,-288 892,-294 892,-300 892,-300 892,-312 892,-312 892,-318 886,-324 880,-324"/>
+<text xml:space="preserve" text-anchor="middle" x="815" y="-303.43" font-family="PingFang SC" font-size="11.00">无人值守等待 unattended</text>
+</g>
+<!-- BOOT&#45;&gt;WATCH -->
+<g id="edge56" class="edge">
+<title>BOOT&#45;&gt;WATCH</title>
+<path fill="none" stroke="#7a8998" d="M752,-377.2C779,-374.6 815,-362 815,-330"/>
+<polygon fill="#7a8998" stroke="#7a8998" points="817.3,-330.4 815,-323.9 812.7,-330.4 817.3,-330.4"/>
+</g>
+<!-- WATCH&#45;&gt;PORT -->
+<g id="edge57" class="edge">
+<title>WATCH&#45;&gt;PORT</title>
+<path fill="none" stroke="#7a8998" d="M815,-287.8C815,-230 745,-140 711.5,-108.4"/>
+<polygon fill="#7a8998" stroke="#7a8998" points="713.5,-110.9 707.2,-106.2 712.6,-113.4 713.5,-110.9"/>
+</g>
 <!-- PORT&#45;&gt;C -->
 <g id="edge36" class="edge">
 <title>PORT&#45;&gt;C</title>

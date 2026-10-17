@@ -5,6 +5,7 @@ flowchart TD
     BOOT --> VIEW[交付适配器 presentation]
     BOOT --> SQL[存储适配器 sqlite_store]
     BOOT --> HOST[进程适配器 host]
+    BOOT --> WATCH[无人值守等待 unattended]
     BOOT --> DEL
     BOOT --> PAGE
     BOOT --> WF
@@ -34,6 +35,7 @@ flowchart TD
     SQL --> BS[四区归属 book_state]
     SQL --> C[基础契约 contracts]
     HOST --> PORT
+    WATCH --> PORT
     PORT --> C
     BS --> C
     DOMAIN --> C

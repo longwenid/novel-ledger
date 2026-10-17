@@ -83,14 +83,28 @@ def response(app, task_id=None, session=None, claim=None):
     elif stage == 'plan':
         book = app.repo.load()
         volume_id = next(v['id'] for v in book['contract']['volumes'] if v['first'] <= n <= v['end'])
-        data = {'plans': [dict(chapter=k, goal='查清退件。', obstacle='开箱违规。', choice='核对封条。', cost='承担责任。', change='发现来源。', ending='追问签字人。', node_ids=['volume:' + volume_id], participants=['shen'], obligations=[]) for k in range(work['first'], work['last'] + 1)]}
+        # A tier that merges the volume design into the book design has no volume-scope node, so
+        # the plan references the node that actually exists instead of the scope it would expect.
+        known = {node['id'] for design in book['designs'].values() for node in design.get('nodes', [])}
+        anchor = 'volume:' + volume_id if 'volume:' + volume_id in known else 'book'
+        data = {'plans': [dict(chapter=k, goal='查清退件。', obstacle='开箱违规。', choice='核对封条。', cost='承担责任。', change='发现来源。', ending='追问签字人。', node_ids=[anchor], participants=['shen'], obligations=[]) for k in range(work['first'], work['last'] + 1)]}
         if book.get('world'):
             for plan in data['plans']:
                 plan['world_refs'] = ['rules:r1', 'geography:g1']
     elif stage == 'profiles':
         data = {'profiles': [dict(entity=e, desire='查清责任。', fear='丢掉工作。', limit='不牵连同事。', voice='直接追问具体事。', knowledge_boundary='只知自己经手的货物。') for e in work['payload']['entities']]}
     elif stage in ('write', 'repair', 'redesign'):
-        data = {'title': '封条' + str(n), 'prose': '次日，沈桐把退回的箱子放在桌上，指给主管看封条上的签字。他翻开夜班登记册，找出自己经手的那一页，又把空白的责任栏推到主管面前，要求先核对退件人的名字再开箱。',
+        # The old sentence set is kept verbatim (many tests quote fragments of it as evidence);
+        # a short chapter-numbered marker between sentences makes every 25-character window
+        # chapter-unique, so the engine's cross-chapter duplication check stays quiet for the
+        # default fixture. Tests that want it loud copy a prior chapter's span deliberately.
+        mark = '（记%d）' % n
+        prose = ('次日，沈桐把退回的箱子放在桌上，' + mark
+                 + '指给主管看封条上的签字。' + mark
+                 + '他翻开夜班登记册，找出自己经手的那一页，' + mark
+                 + '又把空白的责任栏推到主管面前，' + mark
+                 + '要求先核对退件人的名字再开箱。')
+        data = {'title': '封条' + str(n), 'prose': prose,
                 'summary': '沈桐要求核对退件来源。', 'self_check': '工程夹具：动作和证据均在场，事件由独立审稿重建。'}
     else:
         def fill(receipt):

@@ -6,11 +6,12 @@ paths, concrete storage, clocks, or the caller's environment.
 """
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from pathlib import Path
 from .application import Application
-from . import bookpage, context, delivery, host, workflow
+from . import bookpage, context, delivery, host, unattended, workflow
 from .contracts import require
 from .presentation import LocalPresentation
 from .sqlite_store import SQLiteRepository
@@ -55,6 +56,22 @@ class LocalRuntime:
 
     def host_loop(self, command, owner, limit=100, timeout=300):
         return host.loop(self.app, command, owner, limit, timeout)
+
+    def watch(self, owner, steps=1, poll=20.0, idle_limit=1800.0):
+        """Unattended progression with a local dispatch journal.
+
+        The engine waits for externally executed workers itself; each dispatch it oversees is
+        appended to work/watch.jsonl so a thin non-LLM dispatcher (or a later reader) can see
+        what was handed out and when, without re-deriving it from the ledger.
+        """
+        log = self.workspace.artifact_path(self.workspace.project / 'work' / 'watch.jsonl')
+
+        def on_dispatch(row):
+            with open(log, 'a', encoding='utf-8') as stream:
+                stream.write(json.dumps({'ts': time.time(), **row}, ensure_ascii=False) + '\n')
+
+        return unattended.watch(self.app, owner, steps=steps, poll=poll, idle_limit=idle_limit,
+                                on_dispatch=on_dispatch)
 
     def close(self):
         self.repo.close()

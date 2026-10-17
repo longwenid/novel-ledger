@@ -4,9 +4,9 @@ from __future__ import annotations
 import copy
 from .contracts import (AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, FAST_REVIEW_BLOCK, HOOK_LINKS_CAPABILITY,
                         OPENING_BOUNDS_CAPABILITY, OPENING_VERSION, READING_DEPENDENCIES_CAPABILITY, REPAIRS, REDESIGNS,
-                        SCENE_IDENTITY_CAPABILITY, UNDERSTANDING_CAPABILITY,
+                        SCENE_IDENTITY_CAPABILITY, UNDERSTANDING_CAPABILITY, PIPELINE_SHAPES, tier_of,
                         Job, Outcome, capabilities_for, checks_for, digest, han_count, require, text)
-from . import creation, facts, narrative, planning, quality, scopes, world, craft, editorial, understanding, design_queries
+from . import creation, facts, narrative, planning, quality, scopes, world, craft, editorial, understanding, design_queries, ledger
 from .evidence import evidence
 
 # Where the engine stops moving on its own, and who decides what happens next. The value of this
@@ -20,6 +20,7 @@ STOP_POINTS = {
     'repair-exhausted:design_review': 'author_decision',
     'repair-exhausted:outline_review': 'author_decision',
     'repair-exhausted:chapter_repair': 'author_decision',
+    'repair-stalled:chapter_repair': 'author_decision',
     'scope-findings:open-revision': 'author_decision',
     'revision-blocked': 'plan_authorization',       # revise --proposal-hash with the author's own words
     'scope-fix': 'review_driven_revision',          # revise --from-chapter N covers the findings
@@ -39,6 +40,34 @@ def tier_id(opening):
     """The size class this opening was decided at, for requirements declared per tier."""
     scale = (creation.selected(opening) or {}).get('scale') or {}
     return scale.get('tier')
+
+
+def merges_volume_design(book):
+    """Whether this project's single volume reuses the book design instead of a second dispatch.
+
+    The decision is declared per tier in PIPELINE_SHAPES and requires a one-volume contract:
+    with one volume there is no boundary for a volume design to own that the book design has
+    not already been reviewed against.
+    """
+    contract = book.get('contract') or {}
+    tier = tier_of(contract)
+    volumes = contract.get('volumes') or []
+    return (tier is not None and len(volumes) == 1
+            and bool(PIPELINE_SHAPES.get(tier['id'], {}).get('merge_volume_design')))
+
+
+def install_merged_volume_design(book, scope, data):
+    """On tiers that merge, the accepted book design is also the single volume's design.
+
+    The copy is deliberate: outline batches accumulate `chapters` on the volume design, and the
+    book design must not mutate along with them. Returns the alias key when one was installed.
+    """
+    if scope != 'book' or not merges_volume_design(book):
+        return None
+    volumes = editorial.effective_contract(book)['volumes']
+    key = 'volume:' + volumes[0]['id']
+    book['designs'][key] = copy.deepcopy(data)
+    return key
 
 
 def new_book(contract, source=''):
@@ -163,6 +192,7 @@ def accept_with_findings(book, stage):
             book['creation']['phase'] = 'contract'
     elif stage == 'design_review':
         book['designs'][proposal['scope']] = proposal['data']
+        install_merged_volume_design(book, proposal['scope'], proposal['data'])
         book['proposal'] = None
     elif stage == 'outline_review':
         design = book['designs'][proposal['scope']]
@@ -205,6 +235,30 @@ def hold_for_draft_exhaustion(book):
     return book['author_block']
 
 
+# A finding that survives this many repair rounds is a stall, not slow convergence: the next
+# identical round only spends budget and an independent re-review. A real chapter went four
+# rounds on the same two findings before anyone could see the loop was not converging at all.
+STALL_AFTER_ROUNDS = 2
+
+
+def hold_for_stalled_repeat(book, draft, stalled):
+    """Hand a non-converging repair loop to the author while budget still remains.
+
+    The spent-budget stop catches loops that ran out of rounds; this one catches loops that are
+    burning them without moving: the same findings, verbatim, after a repair that claimed to fix
+    them. The options are the spent-budget three, and one more granted round resets the counter
+    for the findings named here, so an author who sees actual movement can keep going.
+    """
+    draft['stage'] = 'stalled'
+    book['author_block'] = {
+        'id': 'repair-stalled:chapter_repair',
+        'question': '第 %d 章的同 %d 条意见已连续 %d 轮返修未解决，再按原样返修不会收敛，接下来怎么处理？'
+                    % (draft['chapter'], len(stalled), STALL_AFTER_ROUNDS),
+        'options': copy.deepcopy(list(EXHAUSTION_OPTIONS))}
+    book.update(status='paused', pause_reason=book['author_block']['question'])
+    return book['author_block']
+
+
 def resolve_draft_exhaustion(book, option):
     """Apply the author's answer for a spent chapter repair budget."""
     draft = book['draft']
@@ -214,6 +268,9 @@ def resolve_draft_exhaustion(book, option):
     if option == REPAIR_AGAIN:
         budget['repairs'] = max(0, budget.get('repairs', 0) - 1)
         draft['stage'] = 'repair'
+        # A granted round is a new lease on convergence: the counter that stalled the loop
+        # starts over for the findings the author just voted to keep trying on.
+        draft.pop('recurrence', None)
         book['status'] = 'running'
     elif option == ACCEPT_OPEN:
         findings = copy.deepcopy(draft.get('findings') or [])
@@ -448,12 +505,26 @@ def spend(book, chapter, stage):
         budget['redesigns'] += 1
 
 
-def route_repair(book, draft, findings):
+def route_repair(book, draft, findings, after_repair=False):
     budget = book['rework'].setdefault(str(draft['chapter']), {'repairs': 0, 'redesigns': 0})
+    prior = {digest(f) for f in draft.get('findings', [])}
     combined = draft.get('findings', []) + copy.deepcopy(findings)
     draft['findings'] = list({digest(f): f for f in combined}.values())
     next_stage = repair_stage(budget)
-    if next_stage == 'exhausted':
+    recurrence = draft.setdefault('recurrence', {})
+    stalled = []
+    if after_repair:
+        # Only findings raised again after a repair round that was told to fix them count as
+        # recurring; first-round findings and author feedback start at zero.
+        for finding in findings:
+            key = digest(finding)
+            if key in prior:
+                recurrence[key] = recurrence.get(key, 0) + 1
+                if recurrence[key] >= STALL_AFTER_ROUNDS:
+                    stalled.append(finding)
+    if stalled and next_stage != 'exhausted':
+        hold_for_stalled_repeat(book, draft, stalled)
+    elif next_stage == 'exhausted':
         book['status'] = 'paused'
         book['pause_reason'] = '修复耗尽，保留候选正文与全部失败记录。'
         draft['stage'] = 'exhausted'
@@ -597,6 +668,7 @@ def apply(book, task, data, actor, sources):
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         design = planning.validate_design(data, known, tracking, narrative.registry(book)[1],
                                           task.get('payload', {}).get('volume_outline'), book.get('world'))
+        ledger.check(data.get('ledger'))
         if tracking and task['scope'] == 'book':
             require(any(t['kind'] == 'main' and t['required'] for t in design['threads']), 'story_threads', '全书设计至少要有一条必须完成的主线。')
             require(any(n['required'] for n in design['nodes']), 'story_node', '全书设计须有必要终局节点。')
@@ -608,6 +680,7 @@ def apply(book, task, data, actor, sources):
         policy = task['payload']['volume_outline']
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         planning.validate_chapter_outlines(data, policy, book.get('world'), node_map(book))
+        ledger.check(data.get('ledger'))
         old = book['proposal'] or {}
         if task.get('payload', {}).get('repair'):
             require_narrow_repair(old.get('data') or {}, data, old.get('findings') or [])
@@ -646,6 +719,7 @@ def apply(book, task, data, actor, sources):
             proposal['needs_repair'] = True
         elif review['verdict'] == 'pass':
             book['designs'][proposal['scope']] = proposal['data']
+            install_merged_volume_design(book, proposal['scope'], proposal['data'])
             book['proposal'] = None
         else:
             proposal['attempts'] += 1
@@ -737,7 +811,13 @@ def apply(book, task, data, actor, sources):
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         plans = planning.validate_plans(data, task['first'], task['last'], node_map(book), book['state'], editorial.effective_contract(book),
                                         book.get('world'), planning.active_policy(book.get('lexical_policy')), book['plans'], identity_version, reading_version)
+        volume = planning.volume_for(editorial.effective_contract(book), chapter)
+        prior_ledger = list((book['designs'].get('book') or {}).get('ledger') or [])
+        if volume:
+            prior_ledger += (book['designs'].get('volume:' + volume['id']) or {}).get('ledger') or []
         for plan in plans:
+            ledger.check(plan.get('ledger'))
+            ledger.cross_check(plan.get('ledger'), prior_ledger)
             book['plans'][str(plan['chapter'])] = plan
     elif stage == 'profiles':
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
@@ -760,7 +840,9 @@ def apply(book, task, data, actor, sources):
         draft = {'chapter': chapter, 'title': data['title'], 'prose': data['prose'], 'producer': actor,
                  'summary': data['summary'], 'self_check': data['self_check'], 'stage': 'chapter_review',
                  'history': old.get('history', []) + ([{'stage': old['stage'], 'prose': old['prose'], 'findings': old.get('findings', [])}] if old else []),
-                 'findings': old.get('findings', []) if old else [f for f in book.get('carry_findings', []) if f.get('target_chapter') == chapter]}
+                 'findings': old.get('findings', []) if old else [f for f in book.get('carry_findings', []) if f.get('target_chapter') == chapter],
+                 # The convergence counter survives a repair, the way the findings it counts do.
+                 'recurrence': old.get('recurrence', {}) if old else {}}
         if patch:
             draft['patch'] = patch
         count = han_count(data['prose'])
@@ -778,7 +860,7 @@ def apply(book, task, data, actor, sources):
         if fact_review['verdict'] != 'pass' or reader['verdict'] != 'pass':
             findings = [f for review in (fact_review, reader) for f in review['findings'] if f['severity'] != 'note']
             require(all(f['target_chapter'] == chapter for f in findings), 'repair_scope', '本章审稿只能安排当前章返修，历史缺陷走修订。')
-            route_repair(book, draft, findings)
+            route_repair(book, draft, findings, after_repair=True)
         else:
             plan = book['plans'][str(chapter)]
             raw_events = fact_review['events']

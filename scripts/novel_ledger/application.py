@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 from .contracts import (AUTHOR_CHANNEL_STAGES, CHECK_SETS, POLICY_FIELDS, REPAIRS, RESULT, SCALE_TIERS, VERSION, Error,
                         checks_for, digest, dump, han_count, require, text)
-from . import book_state, creation, facts, narrative, planning, quality, workflow, world, craft, editorial, store_keys, story_memory, understanding
+from . import book_state, creation, facts, narrative, planning, quality, workflow, world, craft, editorial, store_keys, story_memory, understanding, lint
 from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
 from .contract_activation import ContractActivation
@@ -131,6 +131,16 @@ class Application:
         if work.get('payload', {}).get('review_tree') and work['stage'] == 'scope_synthesis':
             refs = self.repo.read_document(work['records']['scope_catalog'])
         return {ref['chapter']: self.repo.read_document(ref['hash']) for ref in refs}
+
+    def _lint_draft(self, book, chapter):
+        """Mechanical prose defects of a fresh candidate, against the nearest committed chapters."""
+        rows = [row for row in self.repo.headers(book['branch']) if row['n'] != chapter]
+        rows.sort(key=lambda row: abs(row['n'] - chapter))
+        priors = [(row['n'], self.repo.read_document(row['prose']))
+                  for row in rows[:lint.DUPLICATE_WINDOW]]
+        findings = lint.draft_findings(book['draft']['prose'], priors, chapter)
+        if findings:
+            workflow.route_repair(book, book['draft'], findings)
 
     def _baseline(self, book, task=None):
         """A read-only projection of what stands right now, so a dispatcher never hand-summarizes
@@ -295,6 +305,12 @@ class Application:
             work['first_read'] = task['first_read']
             outcome = workflow.apply(book, work, result.get('data'), result['session'], self._sources(work))
             updated = outcome.book
+            if work['stage'] in ('write', 'repair', 'redesign') and updated.get('draft') \
+                    and updated['draft'].get('stage') == 'chapter_review':
+                # Mechanical prose defects are judged here, before the first reviewer is paid for
+                # them; preflight runs the same code in preview, so the producer sees the finding
+                # without spending a review round. Same routing as the length band.
+                self._lint_draft(updated, work['chapter'])
             updated['last_task'] = task['id']
             if outcome.chapter:
                 row = copy.deepcopy(outcome.chapter)
@@ -577,8 +593,9 @@ class Application:
                 else:
                     book.update(status='paused',
                                 pause_reason='作者选择先撤销本次修订；执行 discard 后重新 advance 开一次范围更大的修订。')
-            elif decision.startswith('repair-exhausted:'):
-                # The question was "the repair budget is spent", so the answer decides the budget:
+            elif decision.startswith(('repair-exhausted:', 'repair-stalled:')):
+                # The question was "the repair budget is spent" or "the same findings keep coming
+                # back"; either way the answer decides what happens to this chapter's loop:
                 # one more round, accepting the candidate with the findings kept open, or stopping
                 # here so the author can redo the stage themselves.
                 stage = decision.split(':', 1)[-1]

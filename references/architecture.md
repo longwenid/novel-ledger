@@ -39,6 +39,7 @@ flowchart TD
     BOOT --> VIEW[交付适配器 presentation]
     BOOT --> SQL[存储适配器 sqlite_store]
     BOOT --> HOST[进程适配器 host]
+    BOOT --> WATCH[无人值守等待 unattended]
     BOOT --> DEL
     BOOT --> PAGE
     BOOT --> WF
@@ -68,6 +69,7 @@ flowchart TD
     SQL --> BS[四区归属 book_state]
     SQL --> C[基础契约 contracts]
     HOST --> PORT
+    WATCH --> PORT
     PORT --> C
     BS --> C
     DOMAIN --> C
@@ -85,7 +87,7 @@ flowchart TD
 
 | 文件 | 权威职责 |
 |---|---|
-| contracts | 协议标识、约定字段表与按版本过滤的对齐字段、结构门档位表、检查点与检查清单版本、修复上限、发现严重度与作者通道阶段表、错误形状；约定形状与阶段权限的唯一权威 |
+| contracts | 协议标识、约定字段表与按版本过滤的对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、检查点与检查清单版本、修复上限、发现严重度与作者通道阶段表、错误形状；约定形状与阶段权限的唯一权威 |
 | ports | 持久化、只读查询、冻结编译、交付与宿主用例的能力契约；只依赖 contracts，不持有具体资源 |
 | creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；门序按协议版本冻结（creation/1 八门、creation/2 十门、creation/3 十门男频方向），结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
 | world | 丰富世界记录、关联及选择一致性，保持设计与事实分离 |
@@ -98,7 +100,7 @@ flowchart TD
 | editorial | 正文实现裁决、根修复案例、卷末职责、关闭验收范围、自动回改策略与终审覆盖；只依赖 contracts |
 | facts | 原文定位、事件前值、资源、时钟、站位与历史断言的纯结算 |
 | quality | 首读与独立审稿回执的完整性、一致性、证据核验；作者级发现的形状与“写作端可修”的区分 |
-| workflow | 下一任务和状态转换，内容与篇幅共享修复额度 |
+| workflow | 下一任务和状态转换，内容与篇幅共享修复额度；窄返修守卫、返修复发计数与 repair-stalled 停止点；按 PIPELINE_SHAPES 在微型档单卷项目安装合并卷设计 |
 | briefs / result_templates | 按阶段生成任务说明与交付模板；不承担回执核验 |
 | context | 面向 ContextStore 编译冻结来源、必读选择和按需资料，不依赖 workflow |
 | publication | 面向 PublicationReader 的只读交付快照查询 |
@@ -110,6 +112,9 @@ flowchart TD
 | delivery | 任务目录物化、表单保留与回收、正文和世界导出 |
 | bookpage | 统一 book.html 的只读数据准备、转义与渲染；templates/ 保存 HTML 外壳及 CSS/JS，导出时全部内嵌 |
 | host | 面向 HostApplication 的外部进程执行、超时终止和实际提交核实，不访问应用内部 Repository |
+| unattended | 面向 WatchApplication 的无人值守等待循环：派工后由引擎进程等待外部提交并续租，仅在下一派工、作者决定、暂停、终点或 idle 时返回；本地组合根附写 work/watch.jsonl 派工日志 |
+| lint | 正文机械判据（跨章逐字重复、对白引号体例、西文残留），在提交与 preflight 同套执行；只依赖 contracts |
+| ledger | 可选结构化账目行的形状与四则关系验算、跨工件同键同值；只依赖 contracts |
 | book_state | 项目分区的字段所有权与事务内组装；只依赖 contracts |
 | story_memory | 不绑定章号的场景身份、事实/阅读关联及带来源的场景材料；旧任务按冻结身份协议；只依赖 contracts |
 | revision_impact | 根据已提交计划、事件与版本指纹保守传播事实和阅读影响，输出 keep/review/local/rewrite；只依赖 contracts/story_memory |

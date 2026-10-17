@@ -11,7 +11,7 @@ from novel_ledger.contracts import Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'first-read', 'claim', 'run', 'renew', 'approve',
-          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'workbench', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop'}
+          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'workbench', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
 WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'first-read'}
 # Prose, frozen records and the first read belong to a dispatched task; the controller role never executes them.
@@ -145,6 +145,12 @@ def parser():
             sub.add_argument('--timeout', type=int, default=300)
             if command == 'host-loop':
                 sub.add_argument('--limit', type=int, default=100)
+        if command == 'watch':
+            sub.add_argument('--steps', type=int, default=1,
+                             help='监督并等待多少轮派工（默认 1：等当前任务完成后取下一派工）；0 表示一直运行到作者边界、暂停或目标终点。')
+            sub.add_argument('--poll', type=float, default=20.0)
+            sub.add_argument('--idle-limit', type=float, default=1800.0,
+                             help='Worker 未提交的最长等待秒数，超过即返回 idle 交给主控处置。')
     return root
 
 
@@ -309,6 +315,9 @@ def dispatch(args, open_runtime=open_local_runtime):
             return runtime.host_step(load(args.command_json), owner, args.timeout)
         if command == 'host-loop':
             return runtime.host_loop(load(args.command_json), owner, args.limit, args.timeout)
+        if command == 'watch':
+            require(args.owner, 'watch', 'watch 需要 --owner（run 命令返回的主控身份）。')
+            return runtime.watch(args.owner, args.steps, args.poll, args.idle_limit)
         require(False, 'access', '未实现命令。')
     finally:
         runtime.close()

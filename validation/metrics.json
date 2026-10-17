@@ -1,10 +1,10 @@
 {
   "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
   "novel_ledger": {
-    "modules": 37,
-    "runtime_lines_including_cli": 7434,
+    "modules": 40,
+    "runtime_lines_including_cli": 9016,
     "cycles_including_deferred_imports": [],
-    "dependency_edges": 131
+    "dependency_edges": 139
   },
   "context": [
     {
@@ -94,19 +94,19 @@
     {
       "causal_nodes": 20,
       "required_story_nodes": 2,
-      "required_record_bytes": 5153,
+      "required_record_bytes": 5059,
       "complete_design_nodes": 20
     },
     {
       "causal_nodes": 100,
       "required_story_nodes": 2,
-      "required_record_bytes": 5153,
+      "required_record_bytes": 5059,
       "complete_design_nodes": 100
     },
     {
       "causal_nodes": 500,
       "required_story_nodes": 2,
-      "required_record_bytes": 5164,
+      "required_record_bytes": 5070,
       "complete_design_nodes": 500
     }
   ],
@@ -114,19 +114,19 @@
     {
       "interpretations": 20,
       "selected_interpretations": 3,
-      "required_record_bytes": 4616,
+      "required_record_bytes": 4656,
       "complete_optional_source_preserved": true
     },
     {
       "interpretations": 100,
       "selected_interpretations": 3,
-      "required_record_bytes": 4616,
+      "required_record_bytes": 4656,
       "complete_optional_source_preserved": true
     },
     {
       "interpretations": 500,
       "selected_interpretations": 3,
-      "required_record_bytes": 4616,
+      "required_record_bytes": 4656,
       "complete_optional_source_preserved": true
     }
   ],
@@ -168,13 +168,13 @@
       "synthetic_prose_han_at_least": 60000,
       "history_source_bytes": 197,
       "previous_full_catalog_and_event_index_bytes": 5846,
-      "first_build_ms": 0.439,
-      "six_repeated_snapshot_ms": 4.984,
+      "first_build_ms": 0.513,
+      "six_repeated_snapshot_ms": 4.584,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
       "missing_match_event_pages_read": 20,
-      "missing_match_ms": 14.063,
+      "missing_match_ms": 12.465,
       "oldest_prose_complete": true,
       "observed_read_chars": 4237
     },
@@ -183,13 +183,13 @@
       "synthetic_prose_han_at_least": 300000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 29370,
-      "first_build_ms": 1.978,
-      "six_repeated_snapshot_ms": 5.039,
+      "first_build_ms": 2.345,
+      "six_repeated_snapshot_ms": 5.618,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
       "missing_match_event_pages_read": 100,
-      "missing_match_ms": 54.518,
+      "missing_match_ms": 50.198,
       "oldest_prose_complete": true,
       "observed_read_chars": 4240
     },
@@ -198,13 +198,13 @@
       "synthetic_prose_han_at_least": 1500000,
       "history_source_bytes": 198,
       "previous_full_catalog_and_event_index_bytes": 148570,
-      "first_build_ms": 9.601,
-      "six_repeated_snapshot_ms": 5.227,
+      "first_build_ms": 10.926,
+      "six_repeated_snapshot_ms": 4.788,
       "six_repeated_snapshot_document_reads": 6,
       "repeated_snapshot_new_documents": 0,
       "recent_five_match_event_pages_read": 6,
       "missing_match_event_pages_read": 500,
-      "missing_match_ms": 238.5,
+      "missing_match_ms": 213.34,
       "oldest_prose_complete": true,
       "observed_read_chars": 4253
     }

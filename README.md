@@ -5,7 +5,7 @@
 仅依赖 Python 3.9+ 标准库，无第三方依赖、无需联网（调用模型的宿主由你自己提供）。
 
 - **定位**：写作流程的**治理层**，不是提示词集合，也不是文本生成器。它不产生一个字，但决定谁能写、写完谁审、事实怎么入账、改稿怎么不毁原稿。
-- **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 38 个模块（核心规则与流程处理普通值，具体存储、文件交付和进程在外层装配）+ 一个 SQLite 项目库。
+- **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 40 个模块（核心规则与流程处理普通值，具体存储、文件交付和进程在外层装配）+ 一个 SQLite 项目库。
 - **当前版本**：`1.5.0`，数据库 schema `novel-ledger/3`（已有 v3 可继续使用，v2 及更早库显式拒绝，不做隐式升级）。
 
 1.5.0 在四分区、滚动规划和独立写审之上加入叙事工作台：作品理解独立于事实与未来方案保存，保留原文表达样本、反证与适用范围；场景身份不绑定章号，支持移动时保留身份；修订区分保留、重读、局部修改和重写。重读通过保留原文，发现实质问题才进入返修及完整独立章审。存储 schema 保持 novel-ledger/3；已有 v3 直接续写保持原能力，可在章节边界显式启用；重新激活的约定按新项目默认启用。新能力不追补旧冻结任务或重解释旧计划；执行层的自动回改范围保护仍适用于旧冻结根审。完整说明见 [叙事工作台](references/workbench.md)。
@@ -34,6 +34,7 @@ flowchart TD
     BOOT --> VIEW[交付适配器 presentation]
     BOOT --> SQL[存储适配器 sqlite_store]
     BOOT --> HOST[进程适配器 host]
+    BOOT --> WATCH[无人值守等待 unattended]
     BOOT --> DEL
     BOOT --> PAGE
     BOOT --> WF
@@ -63,6 +64,7 @@ flowchart TD
     SQL --> BS[四区归属 book_state]
     SQL --> C[基础契约 contracts]
     HOST --> PORT
+    WATCH --> PORT
     PORT --> C
     BS --> C
     DOMAIN --> C
@@ -87,7 +89,7 @@ flowchart TD
 | 本地交付 | `presentation`、`delivery`、`bookpage`、`workspace` | 只读账本，生成任务文件、修复方案、导出与页面；完本清单由应用核验留档；输出位置与保护路径单独注入 |
 | 模板 | `result_templates` | 按协议生成回执模板，独立于质量核验模块 |
 | 持久化适配器 | `sqlite_store` | SQLite 事务、不可变文档、任务、分支和历史目录；不回收交付文件 |
-| 进程适配器 | `host` | 只调用公开应用用例，执行进程、等待与核实提交；不读取 app.repo |
+| 进程适配器 | `host`、`unattended` | 只调用公开应用用例：host 执行外部进程并核实提交，unattended 在引擎进程内等待外部提交并续租（watch）；不读取 app.repo |
 
 独立解耦以**适配器可替换**为标准：替换账本、冻结编译、交付或时钟无需修改应用与纯领域。`tests/test_application_ports.py` 通过内存账本、替代编译器与交付对象完成真实生命周期；`tests/test_presentation_boundaries.py`、`tests/test_host_ports.py` 和 `tests/test_cli_boundary.py` 分别检验只读账本、公开宿主能力与命令运行工厂的替代实现。`tests/test_architecture.py` 扫描所有作用域及绝对包内导入，强制逐模块依赖白名单、核心 I/O 禁令与无环约束。
 
@@ -199,7 +201,7 @@ novel-ledger/
 ├── SKILL.md              技能入口（DSH 等宿主的加载说明与执行边界）
 ├── scripts/
 │   ├── novel.py          CLI：参数、访问分级、主控/Worker 边界
-│   └── novel_ledger/     38 个模块（contracts 为字段权威；ports 定义层级接口；bootstrap 集中装配）
+│   └── novel_ledger/     40 个模块（contracts 为字段权威；ports 定义层级接口；bootstrap 集中装配）
 │       └── templates/   页面 HTML/CSS/JS，导出时内嵌为单文件
 ├── references/           按任务取用，协议要求与写作建议分开说明
 │   ├── opening.md        逐门开书、字段归属与恢复

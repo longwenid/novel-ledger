@@ -46,12 +46,14 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 | 取当前状态 | advance --compact，已有 owner 时继续携带。 | 当前 action，不预猜阶段或自行拼任务。 |
 | task_ready | 按任务交接规则派新 Worker、恢复原会话或等待。 | 原执行者状态、claim、review_session；新任务用空历史会话，沿用当前模型设置。 |
 | Worker 结束 | 接收身份和状态摘要，正文与完整回执留在项目。 | task_id、真实 session、accepted/checked、worker_boundary 或错误码及原因。 |
-| 核实提交 | advance --compact --after 该任务ID。 | wait_for_submit 表示未提交，resync 表示重取状态；不能仅凭 accepted_chapters 判断规划或核验任务是否完成。 |
+| 核实提交 | 无人值守用 `watch --owner ID`（默认一步：等当前任务提交后直接取下一派工）；需要显式核实时 advance --compact --after 该任务ID。 | wait_for_submit 表示未提交，resync 表示重取状态；不能仅凭 accepted_chapters 判断规划或核验任务是否完成。watch 的等待发生在引擎进程里，主干会话不为等待付费。 |
 | 接续 | 按下面的动作表继续。 | 章节、窗口、Worker 和卷末均非授权目标停点，修订采纳、完本与交付也在循环内。 |
 
 ### 动作分支
 
 下表的命令均使用同一 PROJECT，已有 owner 时继续携带；作者已有明确授权直接执行，仅缺失的作者决定才询问。
+
+无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。
 
 | action | 主干下一步 |
 |---|---|
@@ -66,7 +68,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 | world_ready / outline_ready | 交付返回的世界及实际卷纲 coverage；已有正文授权但尚未保存时，用 run 保存同一授权后继续，否则到本次开书目标结束 |
 | await_choice | 展示当前方案板；已有该板的明确选择则 choose 后继续，否则等待作者选择 |
 | await_author | 已有对应 prose_hash 的明确认可则 approve 后继续，否则提供该版本首章并等待认可 |
-| paused / repair_exhausted | 保留候选和失败记录，报告具体阻碍；不自动 resume 或重派任务来重置预算。**因额度、范围或未决问题停下时**，`resume` 不重置额度，而是把处理方式交成作者决定：设计候选与章级候选给"再返修一轮／接受候选并把意见记为未解决项／重开本阶段或改约"；修订运行中若范围复核在运行范围之外记下缺陷，给"接受本次修订并记为未解决项／先撤销本次修订再开一次范围更大的修订"。用 `answer` 记录选择后才继续；被接受的条目写进 `accepted_findings`，在 `status` 与完本篇审计里可见，**接受不等于通过** |
+| paused / repair_exhausted | 保留候选和失败记录，报告具体阻碍；不自动 resume 或重派任务来重置预算。**因额度、范围或未决问题停下时**（章级候选的同一条意见连续两轮返修未解决时也会以 repair-stalled 停下，额度未尽同样交作者），`resume` 不重置额度，而是把处理方式交成作者决定：设计候选与章级候选给"再返修一轮／接受候选并把意见记为未解决项／重开本阶段或改约"；修订运行中若范围复核在运行范围之外记下缺陷，给"接受本次修订并记为未解决项／先撤销本次修订再开一次范围更大的修订"。用 `answer` 记录选择后才继续；被接受的条目写进 `accepted_findings`，在 `status` 与完本篇审计里可见，**接受不等于通过** |
 | preparing | 按初始化入口导入已有完整约定或完成开书准备；只对真实缺口等待作者，不空转调用 advance |
 
 未登记的动作和命令错误按返回的 code/details 核实修正入口，不猜测成功或无条件重试。字段拒绝交回当前子 agent 修正；完整性失败、作者裁决和修复耗尽保留现场并报告。可恢复的执行失败先核实任务是否已提交、原执行者是否仍在运行，再决定等待或恢复；换执行者不增加文学返修额度。
@@ -192,7 +194,7 @@ HASH 取 advance 的 proposal.plan_hash 或 status 的 revision_proposal.plan_ha
 
 仅在宿主通过外部模型进程执行任务时使用；默认的主干与子 agent 循环直接沿上文交接，不需要启动这层适配器。
 
-command.json 是已安装模型宿主的 argv 数组。`host-step --command-json 文件 --owner ID` 执行一步；`host-loop ... --limit N` 在当前进程持续监督，遇作者边界、失败、暂停或目标终点停止。
+command.json 是已安装模型宿主的 argv 数组。`host-step --command-json 文件 --owner ID` 执行一步；`host-loop ... --limit N` 在当前进程持续监督，遇作者边界、失败、暂停或目标终点停止。宿主用子 agent（而非子进程）执行 Worker 时，等价能力是 `watch`：等待与续租在引擎侧，派工由宿主完成。
 
 通过 NOVEL_TASK_PATH/NOVEL_PROJECT/NOVEL_TASK_ID/NOVEL_SESSION/NOVEL_EXECUTION_CLAIM 提供身份；CLI 只消费其中的 TASK_ID/SESSION/EXECUTION_CLAIM，PROJECT 与 TASK_PATH 是给 Worker 进程定位项目和回执的便利变量，命令行仍须显式给 --project。宿主负责实际模型新会话；新子进程不证明空模型历史。超时终止并等待自己的进程；返回 0 且任务实际 done 才继续。日志无法打开或进程无法启动时返回 host_launch_failed；认领后的各退出路径均释放任务占用，包括主控续租失败。
 

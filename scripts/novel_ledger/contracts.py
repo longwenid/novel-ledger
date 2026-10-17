@@ -216,6 +216,29 @@ OPENING_DIRECTION_GATES = {
     'title': '书名按男频搜索习惯给：关键词直接点出题材与金手指或身份优势，一眼能看懂看点，不用意象化短名。',
 }
 SCALE_WINDOW = 3          # how many consecutive tiers one board shows
+# How the pipeline itself scales with the chosen size class. Gates, world domains, design layers
+# and review layers used to be constants, so a three-chapter book paid the same pre-prose
+# dispatch count as a serial (measured on a real micro project: 59 of 81 dispatches happened
+# before the first word). The first shape decision: on the smallest tier a single volume's
+# design IS the book design — one cause chain, one review — so `volume_plan` and its review are
+# not dispatched; the accepted book design is installed as the volume design instead. Tiers that
+# keep the separate layer say so here; a guard test derives the coverage requirement from the
+# tier table itself, so a new tier cannot arrive without declaring its shape.
+PIPELINE_SHAPES = {
+    't0': {'merge_volume_design': True},
+    't1': {'merge_volume_design': False},
+    't2': {'merge_volume_design': False},
+    't3': {'merge_volume_design': False},
+    't4': {'merge_volume_design': False},
+    't5': {'merge_volume_design': False},
+}
+
+
+def tier_of(contract):
+    """The tier row a contract's chapter band was sized to, or None for a custom band."""
+    return next((row for row in SCALE_TIERS
+                 if row['chapter_min'] == contract.get('chapter_min')
+                 and row['chapter_max'] == contract.get('chapter_max')), None)
 # Male-channel serials live in the long tiers, so the first board opens on 标准/长篇/超长; 精简 and
 # 微型 stay one 换组 away for an author who wants something shorter.
 SCALE_DEFAULT_WINDOW = 3
