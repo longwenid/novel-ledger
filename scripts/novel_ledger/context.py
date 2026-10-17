@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, TASK, Job, checks_for, dump, digest, require)
+from .contracts import (CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, SCALE_TIERS, TASK, Job, checks_for, dump, digest, require)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
 from . import briefs, creation, narrative, scopes, world, editorial, story_memory, understanding
@@ -78,8 +78,24 @@ def _brief(book, job):
         return briefs.opening_options(payload.get('gate', {}), payload.get('lens_brief', ''), previous,
                                       creation.opening_version(book['creation']))
     if job.stage == 'world_model':
-        return briefs.world_model(previous=previous, repair=bool(payload.get('repair')))
+        return briefs.world_model(previous=previous, repair=bool(payload.get('repair')),
+                                  scale=_scale_line(book))
     return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book)})
+
+
+def _scale_line(book):
+    """The chosen size class, spelled out for the world brief."""
+    contract = book.get('contract') or {}
+    volumes = contract.get('volumes') or []
+    if not volumes:
+        return ''
+    tier = next((row for row in SCALE_TIERS
+                 if row['chapter_min'] == contract.get('chapter_min')
+                 and row['chapter_max'] == contract.get('chapter_max')), None)
+    last = volumes[-1]['end']
+    return '%s，%d 卷共 %d 章，每章 %s～%s 汉字' % (
+        (tier['name'] + '档') if tier else '已定体量', len(volumes), last,
+        contract.get('chapter_min'), contract.get('chapter_max'))
 
 
 def _selection_line(option, budget=120):

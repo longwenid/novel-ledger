@@ -61,13 +61,20 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
     return '\n'.join(lines)
 
 
-def world_model(lens_brief=None, previous=(), repair=False):
+def world_model(lens_brief=None, previous=(), repair=False, scale=None):
     """World plus contract in one dispatch: what the world owes, and what the contract must keep."""
     lines = ['# ' + BRIEFS['world_model'], '',
              '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。十个领域的字段按当前模板与世界指南填写，'
              '完整记录须有稳定 id 与 links=[领域:id]；同时给 premise、story_capacity 与准确的 selection_hash。',
              '除 mechanisms 外每个领域至少一条实写记录；已选无特殊机制时 mechanisms 必须为空数组，有限机制时至少一条。'
              '不要写"待补"，地域、日常、人物与隐秘都要能落到具体场景。', '']
+    if scale:
+        # A world is read by every later dispatch, so its size is a recurring cost, not a one-off.
+        # Ten domains at "at least one record" is a floor, not a target: a single-volume micro book
+        # only needs the institutions and people its one line actually walks through.
+        lines.extend(['## 规模要与已选体量相称', '本项目的体量与分卷是：' + scale + '。'
+                      '世界只需支撑这条主线走完：写进每条记录前先问它会在哪一章被用到，用不上的城市史、势力谱系与日常细节不要为凑数写进来；'
+                      '每多一条记录，之后每一次派工都要多读它。story_capacity 用一句话说清这个世界能撑住多少章、靠什么持续供料。', ''])
     if repair:
         # The draft and its repair used to share one brief, so a repair dispatch never said it was
         # a repair: the worker had to infer it from previous_proposal, and rewriting untouched
