@@ -691,11 +691,29 @@ class OpeningTests(unittest.TestCase):
         window = creation.selected(state)['scale']['chapter_window']
         model_data = model(self.app)
         draft = contract_data(self.app, model_data)
-        draft['volumes'][-1]['end'] = window[0] - 5
+        draft['volumes'][-1]['end'] = max(1, window[0] - 1)
         with self.assertRaises(Exception) as caught:
             creation.validate_contract(planning.validate_contract(draft), state, model_data)
         self.assertEqual(caught.exception.code, 'opening_alignment')
         self.assertIn('chapter_window', caught.exception.details)
+
+    def test_the_smallest_tier_can_express_a_short_work(self):
+        """The ladder used to start at 34,000 characters, so the shape an author may ask for
+        (a few chapters, ten thousand characters) had no size class: the contract could be amended
+        to it, but the closing audit would then refuse the book as incompatible with its tier.
+        """
+        self.select_gates(scale_tier='t0')
+        state = self.repo.load()['creation']
+        tier = creation.selected(state)['scale']
+        self.assertEqual(tier['tier'], 't0')
+        self.assertLessEqual(tier['chapter_window'][0], 3)
+        self.assertLessEqual(tier['word_range'][0], 10000)
+        model_data = model(self.app)
+        for total in (tier['chapter_window'][0], 3, tier['chapters']):
+            with self.subTest(chapters=total):
+                draft = contract_data(self.app, model_data)
+                draft['volumes'][-1]['end'] = total
+                creation.validate_contract(planning.validate_contract(draft), state, model_data)
 
     def test_explicit_run_after_world_delivery_enters_existing_writing_flow(self):
         self.world_ready()
