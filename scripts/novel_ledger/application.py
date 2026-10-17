@@ -732,8 +732,30 @@ class Application:
             self.repo.record('discard', {'branch': book['branch'], 'restored': parent})
         return self.status()
 
-    def recontract(self, contract, source, owner=None, opening=False):
+    @staticmethod
+    def _contract_base(book, opening=False):
+        """The contract a re-contract or its patch builds on."""
+        pending = (book.get('pending_contract') or {}).get('data')
+        if isinstance(pending, dict):
+            return pending
+        proposal = book.get('proposal') or {}
+        if proposal.get('scope') == 'contract' and isinstance(proposal.get('data'), dict):
+            return proposal['data']
+        return None if opening else book.get('contract')
+
+    def recontract(self, contract, source, owner=None, opening=False, patch=False):
         require(text(source), 'author_source', '改约须保存作者要求原话。')
+        if patch:
+            # A re-contract usually amends one clause of a candidate that has already been
+            # reviewed. Hand-copying 40 unchanged fields to change one sentence is how a stray
+            # duplicate gets in: the patch names only the fields the author is changing.
+            with self.repo.transaction():
+                book = self.repo.load()
+                base = self._contract_base(book, opening)
+                require(isinstance(base, dict), 'contract', '没有可打补丁的底稿；首次约定请交完整候选。')
+                unknown = sorted(set(contract) - set(base))
+                require(not unknown, 'contract', '补丁含底稿里没有的字段。', {'unknown_fields': unknown})
+                contract = {**base, **contract}
         candidate = planning.validate_contract(contract)
         facts.seed(candidate)
         with self.repo.transaction():
@@ -763,9 +785,7 @@ class Application:
             # A re-contract usually changes one or two fields of an already reviewed candidate.
             # Handing the reviewer the delta is what lets it check the amendment instead of
             # re-reading 40 unchanged fields (and it cannot quietly become a second amendment).
-            base = ((book.get('pending_contract') or {}).get('data')
-                    or (book['proposal'].get('data') if book.get('proposal') and book['proposal'].get('scope') == 'contract' else None)
-                    or (book.get('contract') if not opening else None))
+            base = self._contract_base(book, opening)
             amendment = {}
             if isinstance(base, dict):
                 for key in sorted(set(base) | set(candidate)):

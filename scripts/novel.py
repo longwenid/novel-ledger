@@ -72,6 +72,9 @@ def parser():
             sub.add_argument('--task')
         if command in ('approve', 'recontract', 'opening', 'choose', 'lexical', 'intake', 'workbench'):
             sub.add_argument('--source', required=True)
+        if command == 'recontract':
+            sub.add_argument('--patch', action='store_true',
+                             help='文件只列要改的字段，其余沿用当前候选或生效约定。')
         if command == 'choose':
             sub.add_argument('--option')
             sub.add_argument('--tier', help='结构门按档位直接指定；展示窗口会自动滑到该档。')
@@ -289,7 +292,8 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'discard':
             return app.discard(owner)
         if command in ('recontract', 'opening'):
-            return app.recontract(load(args.file), args.source, owner, opening=command == 'opening')
+            return app.recontract(load(args.file), args.source, owner, opening=command == 'opening',
+                                  patch=getattr(args, 'patch', False))
         if command == 'audit':
             return app.audit()
         if command == 'complete':
