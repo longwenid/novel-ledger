@@ -382,6 +382,12 @@ class OpeningTests(unittest.TestCase):
         self.assertIn('opening_choices', material['on_demand'])
         single = self.app.read(task['task_id'], 'opening_choices')
         self.assertEqual(single['records']['opening_choices']['value'], {})
+        # A single-record read is that record (plus the hash index), not a second copy of the whole
+        # dispatch view: the worker already holds brief/payload/policy in input.json.
+        self.assertNotIn('brief', single)
+        self.assertNotIn('payload', single)
+        self.assertIn('on_demand', single)
+        self.assertIn('payload', material)
 
     def test_single_decision_gates_carry_their_own_delivery_requirement(self):
         self.choose_board(self.board())                                  # 定位
