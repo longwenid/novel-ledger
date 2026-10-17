@@ -78,7 +78,7 @@ def _brief(book, job):
         return briefs.opening_options(payload.get('gate', {}), payload.get('lens_brief', ''), previous,
                                       creation.opening_version(book['creation']))
     if job.stage == 'world_model':
-        return briefs.world_model(previous=previous)
+        return briefs.world_model(previous=previous, repair=bool(payload.get('repair')))
     return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book)})
 
 

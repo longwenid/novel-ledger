@@ -61,13 +61,21 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
     return '\n'.join(lines)
 
 
-def world_model(lens_brief=None, previous=()):
+def world_model(lens_brief=None, previous=(), repair=False):
     """World plus contract in one dispatch: what the world owes, and what the contract must keep."""
     lines = ['# ' + BRIEFS['world_model'], '',
              '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。十个领域的字段按当前模板与世界指南填写，'
              '完整记录须有稳定 id 与 links=[领域:id]；同时给 premise、story_capacity 与准确的 selection_hash。',
              '除 mechanisms 外每个领域至少一条实写记录；已选无特殊机制时 mechanisms 必须为空数组，有限机制时至少一条。'
              '不要写"待补"，地域、日常、人物与隐秘都要能落到具体场景。', '']
+    if repair:
+        # The draft and its repair used to share one brief, so a repair dispatch never said it was
+        # a repair: the worker had to infer it from previous_proposal, and rewriting untouched
+        # records reopened questions the last review had already settled.
+        lines.extend(['## 这是返修，不是重写', '上一版世界与逐条 findings 都在 previous_proposal 里。只改 findings 点名的问题，'
+                      '其余记录保持与上一版逐字一致；不要借返修顺手改写没被点名的部分。'
+                      '逐条改完再自查一遍，避免改一处带出另一处不一致（规则互相否定、数字前后对不上、'
+                      '某条程序被另一条堵死）。', ''])
     if previous:
         lines.append('## 已选方向（不得改动）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
@@ -164,4 +172,14 @@ def stage(name, payload=None):
         memory = ' creative_memory 是可修订的理解及原文表达样本，结合反证和适用范围使用；不把解释直接当世界事实，也不必模仿样本句式。unavailable_refs 是当前缺失或已失效的旧理解，须核对原文或重规划，不照搬失效解释。'
         if name in ('chapter_review', 'scope_review', 'scope_synthesis', 'revision_review'):
             memory += ' 有值得延续的新理解时交 understanding 数组（无新增用空数组），按 workbench 指南给 id/kind/claim/subjects/topics/status/reason/evidence/counterevidence；保留多种解释，不为完成表格强行提炼结论。'
-    return rule + time_rule + extra + handoff + enhanced + authority + memory + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，来源不足时按冻结哈希补读，不读源码猜格式。'
+    repair_rule = ''
+    if payload.get('repair') and name in ('book_plan', 'volume_plan', 'volume_outline'):
+        # A design repair re-emits the whole candidate, so an unrequested rewrite of untouched
+        # records is pure cost: it reopens questions the last review already settled, and the next
+        # review spends a round on new material instead of the named defect. A real world repair went
+        # 14 -> 7 -> 4 findings while each round rewrote every record; narrowing the repair is what
+        # makes the rounds converge.
+        repair_rule = (' 这是返修不是重写：只改 findings 点名的问题，其余记录保持与上一版逐字一致，'
+                       '不要借返修顺手改写没被点名的部分；上一版候选与逐条 findings 都在 previous_proposal 里，'
+                       '逐条改完再自查一遍，避免改一处带出另一处不一致。')
+    return rule + time_rule + extra + handoff + enhanced + authority + memory + repair_rule + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，来源不足时按冻结哈希补读，不读源码猜格式。'
