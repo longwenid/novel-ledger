@@ -173,12 +173,13 @@ class Application:
             return {**boundary, **view}
         return {'action': 'task_ready', 'task': self.presentation.task(task, self._baseline(book, task), compact=compact), 'status': self.status(), **view}
 
-    def read(self, task_id, record=None):
+    def read(self, task_id, record=None, everything=False):
         task = self.repo.task(task_id)
         self._live(task)
         work = task['input']
         require(not work['blind'] or task['first_read'] is not None, 'first_read_sealed', '先阅读冻结正文并提交首读，再读取正式资料。')
-        names = [record] if record else work['required']
+        already = [] if (record or everything) else [n for n in self.repo.read_names(task_id) if n in work['records']]
+        names = [record] if record else [n for n in work['required'] if n not in already]
         virtual = record in ('historical_index', 'memory_index') and 'history_source' in work['records']
         require(virtual or all(n in work['records'] for n in names), 'record', '资料不在当前冻结任务目录中。')
         if virtual:
@@ -195,11 +196,16 @@ class Application:
                   'records': records,
                   'on_demand': {n: h for n, h in work['records'].items() if n not in names}}
         if not record:
-            # The whole dispatch view is only for "read everything this task may read", and even
-            # then the envelope itself is not repeated: brief, payload, policy, prose and
-            # obligations already live in input.json, which the worker read to get here. A real
-            # design run paid ~100 KB per full read largely for a second copy of those.
+            # A worker reads the envelope it already holds, so a second full read of the same task
+            # used to re-deliver every required record: a real design run spent more characters
+            # re-sending records than on every envelope and receipt together. The journal already
+            # knows what this task was handed, so a plain read returns what is still new, and the
+            # records that were skipped are named rather than silently dropped.
             result.update({'first_read': task['first_read']})
+            if already:
+                result['already_read'] = already
+                result['already_read_note'] = ('这些记录此前已交给本任务；需要原文时用 read --record 名称重取，'
+                                               '或用 read --all 取回全部必读记录。')
         return self._observe_read(task_id, names, result)
 
     def _observe_read(self, task_id, names, result):
@@ -484,6 +490,12 @@ class Application:
                                               workflow.stage_for_proposal(proposal))
                 self.repo.save(book)
                 return self.status()
+            draft = book.get('draft')
+            if draft and draft.get('stage') == 'exhausted':
+                # Same dead end one level down: a single chapter that used its repair rounds.
+                workflow.hold_for_draft_exhaustion(book)
+                self.repo.save(book)
+                return self.status()
             require(not self._revision_summary(book), 'revision_bounds', '先处理超出自动回改范围的修复方案，resume 不扩大授权。',
                     self._revision_summary(book))
             require(not book['draft'] or book['draft']['stage'] != 'exhausted', 'repair_budget', '修复额度已耗尽，恢复不增加额度；作者需明确处置当前方案。')
@@ -538,7 +550,9 @@ class Application:
                 # one more round, accepting the candidate with the findings kept open, or stopping
                 # here so the author can redo the stage themselves.
                 stage = str(block['id']).split(':', 1)[-1]
-                if option == workflow.REPAIR_AGAIN:
+                if stage == 'chapter_repair':
+                    workflow.resolve_draft_exhaustion(book, option)
+                elif option == workflow.REPAIR_AGAIN:
                     workflow.allow_another_repair(book)
                 elif option == workflow.ACCEPT_OPEN:
                     workflow.accept_with_findings(book, stage)

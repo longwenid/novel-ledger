@@ -231,6 +231,16 @@ class MemoryRepository:
     def record(self, action, value):
         self._journal.append({'action': action, 'value': deepcopy(value)})
 
+    def read_names(self, task_id):
+        seen = []
+        for row in self._journal:
+            if row['action'] != 'read' or row['value'].get('task') != task_id:
+                continue
+            for name in row['value'].get('records') or ():
+                if name not in seen:
+                    seen.append(name)
+        return seen
+
     def usage(self):
         return {'tasks': len(self._tasks),
                 'task_input_chars': sum(len(dump(t['input'])) for t in self._tasks.values()),

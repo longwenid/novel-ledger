@@ -156,6 +156,47 @@ def stage_for_proposal(proposal):
     return 'design_review'
 
 
+def hold_for_draft_exhaustion(book):
+    """Ask the author how to proceed when one chapter has spent its repair rounds.
+
+    A chapter that is close enough that the reviewer is still only asking for local fixes used to
+    dead-end here: `resume` refused with a budget code and the only exits were discarding the whole
+    candidate or changing the contract. The author decides instead, and the decision is recorded.
+    """
+    draft = book['draft']
+    findings = draft.get('findings') or []
+    book['author_block'] = {
+        'id': 'repair-exhausted:chapter_repair',
+        'question': '第 %d 章的返修额度已用尽，独立章审仍给出 %d 条意见，接下来怎么处理？'
+                    % (draft['chapter'], len(findings)),
+        'options': copy.deepcopy(list(EXHAUSTION_OPTIONS))}
+    book.update(status='paused', pause_reason=book['author_block']['question'])
+    return book['author_block']
+
+
+def resolve_draft_exhaustion(book, option):
+    """Apply the author's answer for a spent chapter repair budget."""
+    draft = book['draft']
+    require(draft is not None, 'draft', '没有可处理的候选稿。')
+    chapter = draft['chapter']
+    budget = book.setdefault('rework', {}).setdefault(str(chapter), {})
+    if option == REPAIR_AGAIN:
+        budget['repairs'] = max(0, budget.get('repairs', 0) - 1)
+        draft['stage'] = 'repair'
+        book['status'] = 'running'
+    elif option == ACCEPT_OPEN:
+        findings = copy.deepcopy(draft.get('findings') or [])
+        book.setdefault('accepted_findings', []).append(
+            {'stage': 'chapter_repair', 'scope': 'chapter:%d' % chapter, 'findings': findings})
+        book['carry_findings'] = list(book.get('carry_findings') or []) + findings
+        # The formal chapter stays as it is; only the candidate goes away.
+        book['draft'] = None
+        book['status'] = 'running'
+    else:
+        book.update(status='paused', pause_reason='作者选择重开本章或改约。')
+    return book
+
+
 def next_outline(book, volume, chapter=None):
     if not book['contract'].get('volume_outline'):
         return None

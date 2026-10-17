@@ -201,8 +201,13 @@ def build(repo: ContextStore, book, job):
             add('opening_rejections', [r for r in book['creation']['rejections'] if r['gate'] == job.payload['gate']['id']])
     if book.get('world'):
         model = book['world']
-        add('world_model', model, stage in ('book_plan', 'volume_plan', 'volume_outline', 'outline_review', 'design_review', 'opening_contract', 'contract_review'))
-        add('world_core', {'premise': model['premise'], 'rules': model['rules'], 'story_capacity': model['story_capacity']})
+        full_world = stage in ('book_plan', 'volume_plan', 'volume_outline', 'outline_review', 'design_review', 'opening_contract', 'contract_review')
+        add('world_model', model, full_world)
+        # The core view is a projection of the model (premise, rules, capacity). It is required only
+        # where the model itself is not, so a stage never pays for the same world twice: a scene
+        # dispatch still reads the rules, while a design dispatch reads the record they come from.
+        add('world_core', {'premise': model['premise'], 'rules': model['rules'], 'story_capacity': model['story_capacity']},
+            not full_world)
         if plan:
             records_by_id = world.index(model)
             selected_world = set(plan.get('world_refs', []))
@@ -383,6 +388,17 @@ def build(repo: ContextStore, book, job):
     # A frozen head addresses shared immutable chapter pages. Re-dispatching another role
     # neither copies every summary nor re-reads every historical event.
     add('history_source', repo.history_snapshot(book['branch']), False)
+    # Two required records can hold byte-identical material: a narrow projection and the record it
+    # projects from, or two projections that currently coincide. Requiring both charges the worker
+    # twice for one fact and hides which one is authoritative, so the duplicate stays reachable on
+    # demand but stops being required. (Measured on a real run: world_core ⊂ world_model at 11 KB,
+    # frontier:book ≡ design:book at 12 KB, on every design and review dispatch.)
+    first_by_content = {}
+    for name in list(required):
+        ident = records[name]
+        keeper = first_by_content.setdefault(ident, name)
+        if keeper != name:
+            required.remove(name)
     brief = _brief(book, Job(stage, chapter, job.scope, job.first, job.last, payload))
     task = {'schema': TASK, 'stage': stage, 'chapter': chapter, 'scope': job.scope,
             'first': job.first, 'last': job.last, 'payload': payload, 'branch': book['branch'],

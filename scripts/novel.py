@@ -98,6 +98,8 @@ def parser():
             sub.add_argument('--start', type=int)
         if command == 'read':
             sub.add_argument('--record')
+            sub.add_argument('--all', action='store_true', dest='everything',
+                             help='取回全部必读记录（默认只给本任务还没拿到过的那些）。')
         if command == 'recall':
             group = sub.add_mutually_exclusive_group(required=True)
             group.add_argument('--chapter', type=int)
@@ -237,7 +239,7 @@ def dispatch(args, open_runtime=open_local_runtime):
             payload = load(args.file) if args.file else stdin_json()
             return app.check(payload, getattr(args, 'task', None), session=os.environ.get('NOVEL_SESSION'))
         if command == 'read':
-            return app.read(args.task, args.record)
+            return app.read(args.task, args.record, everything=getattr(args, 'everything', False))
         if command == 'recall':
             kind = next((k for k in ('entity', 'node', 'topic', 'thread') if getattr(args, k)), None)
             return app.recall(args.task, args.chapter, args.state, kind, getattr(args, kind) if kind else None, args.limit, args.before)

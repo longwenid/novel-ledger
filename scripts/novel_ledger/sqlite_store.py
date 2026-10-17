@@ -345,6 +345,19 @@ class SQLiteRepository:
     def record(self, action, value):
         self.db.execute('INSERT INTO journal(at,action,value) VALUES (?,?,?)', (time.time(), action, dump(value)))
 
+    def read_names(self, task_id):
+        """Record names this task has already been handed, newest first, without duplicates."""
+        seen = []
+        rows = self.db.execute("SELECT value FROM journal WHERE action='read' ORDER BY id").fetchall()
+        for row in rows:
+            record = json.loads(row['value'])
+            if record.get('task') != task_id:
+                continue
+            for name in record.get('records') or ():
+                if name not in seen:
+                    seen.append(name)
+        return seen
+
     def usage(self):
         rows = self.db.execute('SELECT input,result FROM tasks').fetchall()
         reads = self.db.execute("SELECT value FROM journal WHERE action='read'").fetchall()

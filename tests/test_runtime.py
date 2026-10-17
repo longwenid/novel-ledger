@@ -179,7 +179,18 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(self.repo.load()['draft']['prose'], '他走了。')
         self.assertEqual(self.repo.load()['rework']['1'], {'repairs': 2, 'redesigns': 1, 'initial_used': True})
         self.assertEqual(self.app.status()['status'], 'paused')
-        self.assertCode('repair_budget', self.app.resume)
+        # The spent chapter budget is an author decision, not a wall: resume hands up the question.
+        status = self.app.resume()
+        self.assertEqual(status['status'], 'paused')
+        self.assertEqual(status['author_decision']['id'], 'repair-exhausted:chapter_repair')
+        self.assertIn('第 1 章', status['author_decision']['question'])
+        # Accepting keeps the formal chapter and records the reviewer's findings as open items.
+        accepted = self.app.answer('repair-exhausted:chapter_repair', workflow.ACCEPT_OPEN, '这一处我承担。')
+        self.assertEqual(accepted['status'], 'running')
+        book = self.repo.load()
+        self.assertIsNone(book['draft'])
+        self.assertTrue(book['carry_findings'])
+        self.assertEqual(book['accepted_findings'][0]['scope'], 'chapter:1')
 
     def test_a_spent_repair_budget_hands_the_decision_to_the_author(self):
         """A converging candidate used to dead-end: resume refused and there was no channel at all.
@@ -255,6 +266,23 @@ class RuntimeTests(unittest.TestCase):
                                  text=True, capture_output=True, encoding='utf-8', errors='replace')
         self.assertEqual(blocked.returncode, 2)
         self.assertEqual(json.loads(blocked.stdout)['error'], 'author_decision')
+
+    def test_a_second_full_read_only_hands_over_what_is_still_new(self):
+        """A real run spent more characters re-sending records than on every envelope together.
+
+        The journal already knows what a task was handed, so a plain read returns the remainder and
+        names the records it skipped; `--all` and `--record` stay available for a deliberate re-read.
+        """
+        task = self.app.advance()['task']
+        first = self.app.read(task['task_id'])
+        self.assertTrue(first['records'], 'first read hands over the required records')
+        second = self.app.read(task['task_id'])
+        self.assertEqual(second['records'], {})
+        self.assertEqual(sorted(second['already_read']), sorted(first['records']))
+        self.assertIn('--all', second['already_read_note'])
+        again = self.app.read(task['task_id'], everything=True)
+        self.assertEqual(sorted(again['records']), sorted(first['records']))
+        self.assertNotIn('already_read', again)
 
     def test_first_chapter_approval_binds_exact_version(self):
         final = drive(self.app, until='chapter_review')

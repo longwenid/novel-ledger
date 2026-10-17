@@ -327,6 +327,32 @@ class NarrativeTests(unittest.TestCase):
         self.assertNotIn('design:book', w['required'])
         self.assertIn('design:book', w['records'])
 
+    def test_the_world_is_never_required_twice_on_one_dispatch(self):
+        """The full model and its core projection were both required on every design dispatch.
+
+        A real run paid 47,636 bytes of world plus an 11,199-byte projection of the same world on each
+        design and review task. The projection is required only where the model is not.
+        """
+        handle = drive_tracked(self.app, until='write')
+        self.repo.cancel_pending('工程世界投影')
+        book = self.repo.load()
+        book['world'] = {'premise': '仓库', 'rules': [], 'story_capacity': '工程模型',
+                         'characters': [{'id': 'shen', 'links': []}], 'mysteries': []}
+        book['plans']['1']['world_refs'] = ['characters:shen']
+        self.repo.save(book)
+        self.app.advance()
+        work = self.repo.pending()['input']
+        self.assertEqual(work['stage'], 'write')
+        self.assertIn('world_core', work['required'])
+        self.assertNotIn('world_model', work['required'])
+        self.assertIn('world_model', work['records'])
+        self.repo.cancel_pending('工程世界投影')
+        # A design dispatch reads the record the projection comes from, not both.
+        built = context.build(self.repo, self.repo.load(), Job('book_plan', 1, 'book'))
+        self.assertIn('world_model', built['required'])
+        self.assertNotIn('world_core', built['required'])
+        self.assertIn('world_core', built['records'])
+
     def test_review_tree_bounds_parent_fanout_and_invalidates_changed_chain(self):
         headers=[{'n':i,'chain':str(i)} for i in range(1,501)]
         parts=scopes.tree(headers,1,500,3,3)

@@ -136,6 +136,21 @@ def response(app, task_id=None, session=None, claim=None):
     return result
 
 
+def required_material(work):
+    """The required records whose content is not already carried by an earlier required name.
+
+    Every dispatch must satisfy this: a worker should never be charged twice for one fact, and two
+    names holding byte-identical material also hide which one is authoritative.
+    """
+    seen, kept = set(), []
+    for name in work['required']:
+        ident = work['records'][name]
+        if ident not in seen:
+            seen.add(ident)
+            kept.append(name)
+    return kept
+
+
 def drive(app, owner=None, until=None):
     for _ in range(100):
         handoff = app.advance(owner=owner)
@@ -146,5 +161,8 @@ def drive(app, owner=None, until=None):
             return handoff
         if until and handoff['task']['stage'] == until:
             return handoff
+        work = app.repo.pending()['input']
+        if len(required_material(work)) != len(work['required']):
+            raise AssertionError('必读记录里有内容完全相同的两份：' + ','.join(work['required']))
         app.submit(response(app))
     raise AssertionError('工程流程没有在有限步骤内停止')
