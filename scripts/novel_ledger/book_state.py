@@ -16,7 +16,7 @@ PART_FIELDS = {
                   'pending_contract_reviewer', 'contract_draft', 'controller_owner',
                   'opening_world_only', 'run_authorized', 'alignment_hold',
                   'alignment_proposal', 'alignment_history', 'author_block',
-                  'author_decision_history', 'carry_findings', 'prior_candidate',
+                  'author_decision_history', 'carry_findings', 'accepted_findings', 'prior_candidate',
                   'repair_cases', 'remedy_exhausted', 'revision_directive',
                   'scope_findings', 'scope_closures', 'completed_at', 'completion_snapshot')}
 

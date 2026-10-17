@@ -66,6 +66,96 @@ def hold_for_author(book, review, holder=None):
     return True
 
 
+EXHAUSTION_OPTIONS = (
+    {'label': '再返修一轮（只按这几条改）',
+     'impact': '给本阶段加一轮返修额度：仍只改被点名的记录，改完再独立核验一次。'
+               '额度不是无限的，这一轮用尽后还会来问你。'},
+    {'label': '接受当前候选，把这几条记为未解决项继续',
+     'impact': '候选进入下一阶段，这些发现不会被删掉，会记成未解决项，完本篇审计与全书视图都能看到。'
+               '独立核验者给的是 fix，这一步等于你以作者身份承担这处风险。'},
+    {'label': '重开本阶段或改约',
+     'impact': '按现有路径重做本阶段或改约定：已有正文时改约会在新分支自第 1 章重写重审全书，'
+               '代价随已写章数增长；没有正文时只是重新核验。'},
+)
+
+# The author's answer to an exhausted design review, by option position.
+REPAIR_AGAIN = '再返修一轮（只按这几条改）'
+ACCEPT_OPEN = '接受当前候选，把这几条记为未解决项继续'
+
+
+def hold_for_exhaustion(book, proposal, review, stage):
+    """Ask the author how to proceed when a design candidate has spent its repair rounds.
+
+    Stopping with a bare pause left the author no channel at all: the two existing escapes
+    (recontract, opening back) discard a nearly verified candidate for a few local fixes. The
+    findings go up as a decision instead, and whichever way the author answers stays on record.
+    """
+    findings = review['findings']
+    proposal['findings'] = findings
+    blockers = sum(1 for finding in findings if finding['severity'] == 'blocker')
+    book['author_block'] = {
+        'id': 'repair-exhausted:' + stage,
+        'question': '本阶段返修额度已用尽，独立核验仍给出 %d 条意见（其中 blocker %d 条），接下来怎么处理？'
+                    % (len(findings), blockers),
+        'options': copy.deepcopy(list(EXHAUSTION_OPTIONS))}
+    book.update(status='paused', pause_reason=book['author_block']['question'])
+    return book['author_block']
+
+
+def allow_another_repair(book):
+    """One more repair round for the current candidate, granted by the author."""
+    proposal = book['proposal']
+    require(proposal is not None, 'proposal', '没有可返修的候选。')
+    proposal['attempts'] = REPAIRS
+    proposal['needs_repair'] = True
+
+
+def accept_with_findings(book, stage):
+    """Accept a candidate whose last review asked for changes, and keep those changes open.
+
+    The transition is the pass transition, so nothing downstream has to know; what differs is that
+    the findings are recorded as unresolved instead of disappearing with the receipt.
+    """
+    proposal = book['proposal']
+    require(proposal is not None, 'proposal', '没有可接受的候选。')
+    findings = copy.deepcopy(proposal.get('findings') or [])
+    book.setdefault('accepted_findings', []).append(
+        {'stage': stage, 'scope': proposal.get('scope'), 'findings': findings})
+    book['carry_findings'] = list(book.get('carry_findings') or []) + findings
+    if stage == 'world_review':
+        book['world'] = proposal['data']
+        book['world_review'] = {'receipt': {'verdict': 'accepted_with_findings', 'findings': findings},
+                                'producer': proposal['producer'], 'reviewer': None}
+        book['proposal'] = book.get('contract_draft') or None
+        book.pop('contract_draft', None)
+        if book.get('creation'):
+            book['creation']['phase'] = 'contract'
+    elif stage == 'design_review':
+        book['designs'][proposal['scope']] = proposal['data']
+        book['proposal'] = None
+    elif stage == 'outline_review':
+        design = book['designs'][proposal['scope']]
+        design.setdefault('chapters', []).extend(copy.deepcopy(proposal['data']['chapters']))
+        design.setdefault('outline_reviews', []).append(
+            {'first': proposal['first'], 'last': proposal['last'], 'producer': proposal['producer'],
+             'reviewer': None, 'data_hash': digest(proposal['data']), 'findings': findings,
+             'verdict': 'accepted_with_findings'})
+        book['proposal'] = None
+    else:
+        require(False, 'stage', '该阶段没有可接受的候选。')
+    book['status'] = 'running'
+
+
+def stage_for_proposal(proposal):
+    """Which review stage a stuck proposal came from, without a second field to keep in sync."""
+    require(isinstance(proposal, dict), 'proposal', '没有可处理的候选。')
+    if proposal.get('kind') == 'volume_outline':
+        return 'outline_review'
+    if proposal.get('scope') == 'world':
+        return 'world_review'
+    return 'design_review'
+
+
 def next_outline(book, volume, chapter=None):
     if not book['contract'].get('volume_outline'):
         return None
@@ -318,7 +408,7 @@ def apply(book, task, data, actor, sources):
             proposal['attempts'] += 1
             proposal['findings'] = review['findings']
             if proposal['attempts'] > REPAIRS:
-                book.update(status='paused', pause_reason='世界模型核验修复耗尽，候选保留。')
+                hold_for_exhaustion(book, proposal, review, stage)
             else:
                 proposal['needs_repair'] = True
     elif stage == 'opening_contract':
@@ -367,7 +457,7 @@ def apply(book, task, data, actor, sources):
             proposal['attempts'] += 1
             proposal['findings'] = review['findings']
             if proposal['attempts'] > REPAIRS:
-                book.update(status='paused', pause_reason='逐章卷纲核验返修耗尽，已通过前缀与候选保留。')
+                hold_for_exhaustion(book, proposal, review, stage)
             else:
                 proposal['needs_repair'] = True
     elif stage == 'design_review':
@@ -384,7 +474,7 @@ def apply(book, task, data, actor, sources):
             proposal['attempts'] += 1
             proposal['findings'] = review['findings']
             if proposal['attempts'] > REPAIRS:
-                book.update(status='paused', pause_reason='设计核验返修耗尽，候选保留。')
+                hold_for_exhaustion(book, proposal, review, stage)
             else:
                 proposal['needs_repair'] = True
     elif stage == 'contract_review':

@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (AUTHOR_CHANNEL_STAGES, CHECK_SETS, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, checks_for, digest, dump,
-                        han_count, require, text)
+from .contracts import (AUTHOR_CHANNEL_STAGES, CHECK_SETS, POLICY_FIELDS, REPAIRS, RESULT, SCALE_TIERS, VERSION, Error,
+                        checks_for, digest, dump, han_count, require, text)
 from . import creation, facts, narrative, planning, quality, workflow, world, craft, editorial, store_keys, story_memory, understanding
 from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
@@ -468,6 +468,15 @@ class Application:
             self.controller_guard(owner)
             book = self.repo.load()
             require(book['status'] == 'paused', 'resume', '只有暂停项目可以恢复。')
+            proposal = book.get('proposal')
+            if proposal and proposal.get('attempts', 0) > REPAIRS:
+                # The only stop left is a spent repair budget. Resume may not reset it, but a bare
+                # refusal leaves the author nowhere to go: the role of resume here is to hand the
+                # decision up, so the answer records what happens instead of silently continuing.
+                workflow.hold_for_exhaustion(book, proposal, {'findings': proposal.get('findings') or []},
+                                              workflow.stage_for_proposal(proposal))
+                self.repo.save(book)
+                return self.status()
             require(not self._revision_summary(book), 'revision_bounds', '先处理超出自动回改范围的修复方案，resume 不扩大授权。',
                     self._revision_summary(book))
             require(not book['draft'] or book['draft']['stage'] != 'exhausted', 'repair_budget', '修复额度已耗尽，恢复不增加额度；作者需明确处置当前方案。')
@@ -514,6 +523,17 @@ class Application:
             if book.get('pause_reason') == block.get('question'):
                 book.pop('pause_reason', None)
                 book['status'] = 'running'
+            if str(block.get('id', '')).startswith('repair-exhausted:'):
+                # The question was "the repair budget is spent", so the answer decides the budget:
+                # one more round, accepting the candidate with the findings kept open, or stopping
+                # here so the author can redo the stage themselves.
+                stage = str(block['id']).split(':', 1)[-1]
+                if option == workflow.REPAIR_AGAIN:
+                    workflow.allow_another_repair(book)
+                elif option == workflow.ACCEPT_OPEN:
+                    workflow.accept_with_findings(book, stage)
+                else:
+                    book.update(status='paused', pause_reason='作者选择重开本阶段或改约。')
             book['revision'] += 1
             self.repo.save(book)
             self.repo.record('author_decision', book['author_decision_history'][-1])

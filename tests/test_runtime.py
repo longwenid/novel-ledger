@@ -181,6 +181,49 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(self.app.status()['status'], 'paused')
         self.assertCode('repair_budget', self.app.resume)
 
+    def test_a_spent_repair_budget_hands_the_decision_to_the_author(self):
+        """A converging candidate used to dead-end: resume refused and there was no channel at all.
+
+        The world candidate of a real book went 14 -> 7 -> 4 -> 3 findings and then hit the budget.
+        Neither escape (recontract, opening back) is proportionate to three local fixes, so the stop
+        becomes an author decision instead of a wall.
+        """
+        findings = [{'criterion': 'economic_consequences', 'severity': 'quality', 'reason': '指标算不平。',
+                     'evidence': [{'chapter': 0, 'quote': '一年三到五个'}], 'target_chapter': 0,
+                     'repair_scope': 'local'}]
+        book = self.repo.load()
+        book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': {'premise': '工程候选。'},
+                            'producer': 'controller-1', 'attempts': 3, 'findings': findings,
+                            'needs_repair': True}
+        book.update(status='paused', pause_reason='世界模型核验修复耗尽，候选保留。')
+        self.repo.save(book)
+        status = self.app.resume()
+        self.assertEqual(status['status'], 'paused')
+        decision = status['author_decision']
+        self.assertEqual(decision['id'], 'repair-exhausted:world_review')
+        self.assertEqual([row['label'] for row in decision['options']],
+                         [workflow.REPAIR_AGAIN, workflow.ACCEPT_OPEN, decision['options'][2]['label']])
+        # One more round restores exactly one repair, and the candidate is re-dispatched.
+        granted = self.app.answer(decision['id'], workflow.REPAIR_AGAIN, '这几条都得改透。', 'controller-1')
+        self.assertEqual(granted['status'], 'running')
+        reloaded = self.repo.load()
+        self.assertEqual(reloaded['proposal']['attempts'], 2)
+        self.assertTrue(reloaded['proposal']['needs_repair'])
+        # Accepting instead keeps the findings on the record rather than turning them into a pass.
+        book = self.repo.load()
+        book['proposal']['attempts'] = 3
+        book.update(status='paused', pause_reason='世界模型核验修复耗尽，候选保留。')
+        self.repo.save(book)
+        status = self.app.resume()
+        accepted = self.app.answer(status['author_decision']['id'], workflow.ACCEPT_OPEN,
+                                   '这一处我承担，先往下走。', 'controller-1')
+        self.assertEqual(accepted['status'], 'running')
+        book = self.repo.load()
+        self.assertIsNone(book['proposal'])
+        self.assertEqual(book['world']['premise'], '工程候选。')
+        self.assertEqual(book['accepted_findings'][0]['stage'], 'world_review')
+        self.assertEqual(book['carry_findings'][-1]['criterion'], 'economic_consequences')
+
     def test_answering_a_pending_author_decision_releases_the_halt(self):
         block = {'id': 'death-detail', 'question': '录音能不能带出铁门内的内容？',
                  'options': [{'label': '不能', 'impact': '录音须改写。'}, {'label': '能', 'impact': '禁令改写为另一条。'}]}

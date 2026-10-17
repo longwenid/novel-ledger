@@ -66,7 +66,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 | world_ready / outline_ready | 交付返回的世界及实际卷纲 coverage；已有正文授权但尚未保存时，用 run 保存同一授权后继续，否则到本次开书目标结束 |
 | await_choice | 展示当前方案板；已有该板的明确选择则 choose 后继续，否则等待作者选择 |
 | await_author | 已有对应 prose_hash 的明确认可则 approve 后继续，否则提供该版本首章并等待认可 |
-| paused / repair_exhausted | 保留候选和失败记录，报告具体阻碍；不自动 resume 或重派任务来重置预算 |
+| paused / repair_exhausted | 保留候选和失败记录，报告具体阻碍；不自动 resume 或重派任务来重置预算。**设计阶段返修额度用尽且核验仍在给意见时**，`resume` 不重置额度，而是把决定交给作者：`status.author_decision` 给出三条路（再返修一轮／接受候选并把意见记为未解决项／重开本阶段或改约），用 `answer` 记录选择后才继续 |
 | preparing | 按初始化入口导入已有完整约定或完成开书准备；只对真实缺口等待作者，不空转调用 advance |
 
 未登记的动作和命令错误按返回的 code/details 核实修正入口，不猜测成功或无条件重试。字段拒绝交回当前子 agent 修正；完整性失败、作者裁决和修复耗尽保留现场并报告。可恢复的执行失败先核实任务是否已提交、原执行者是否仍在运行，再决定等待或恢复；换执行者不增加文学返修额度。
@@ -102,7 +102,7 @@ await_author 给准确 prose_hash；已获得该版本认可时由主干 `approv
 | 需要 | 命令入口 | 边界 |
 |---|---|---|
 | 暂停 | pause --reason 原因 | 保留任务与候选；--cancel 取消但留档。恢复原首读用原会话，另派审稿者须取消并重新首读，不能冒用 session。 |
-| 恢复 | resume | 不增加额度；耗尽时保留材料并报告，不重开任务清零。内容与篇幅共享两次返修、一次重设计，字段拒绝与预检回滚不计次。 |
+| 恢复 | resume | 不增加额度；耗尽时保留材料并报告，不重开任务清零。内容与篇幅共享两次返修、一次重设计，字段拒绝与预检回滚不计次。设计候选（世界、卷设计、逐章卷纲）返修额度用尽而核验仍有意见时，resume 会把处理方式交成一条作者决定：再返修一轮（只改被点名的记录）、接受候选并把这几条记为未解决项（写进 carry_findings，完本篇审计与全书视图可见，不是 pass）、或重开本阶段与改约；选项之外的新决定仍走改约，代价照写进 impact |
 | 候选稿反馈 | feedback --text 原话 | 对当前候选安排修复；已验收正文改用 revise。 |
 | 历史正文修改 | revise --from-chapter N --reason 原话 | 必须声明作用范围四选一：`--through M` / `--changes-file` / `--proposal-hash` / `--to-end`；不给范围时命令直接拒绝，并提示先跑 revision-impact 查看影响终点。影响分析、后缀处理和完整范围验收见 [修订影响分析](#修订影响分析)。 |
 | 未写窗口重规划 | replan --from-chapter N --reason 原因 | 已有草稿或正式稿的计划不能直接删除。 |
