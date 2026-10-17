@@ -284,6 +284,40 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(sorted(again['records']), sorted(first['records']))
         self.assertNotIn('already_read', again)
 
+    def test_a_revision_with_out_of_range_scope_findings_asks_the_author(self):
+        """The third shape of one dead end: the run cannot grow and cannot be finished.
+
+        A revision run's own closure review can flag a chapter outside its range. `revise` refuses
+        while a run is open and `promote` refuses while the finding stands, so the author decides.
+        """
+        book = self.repo.load()
+        book['revision_run'] = {'parent': 'main', 'first': 3, 'last': 3, 'carry': []}
+        book['scope_findings'] = [{'criterion': 'causality', 'severity': 'quality',
+                                   'reason': '第二章与第一章逐字重复。', 'evidence': [],
+                                   'target_chapter': 2, 'repair_scope': 'local'}]
+        book.update(status='paused', pause_reason='跨章核验发现缺陷，按明确 target_chapter 开修订分支。')
+        self.repo.save(book)
+        status = self.app.resume()
+        self.assertEqual(status['author_decision']['id'], 'scope-findings:open-revision')
+        self.assertIn('第 2 章', status['author_decision']['question'])
+        accepted = self.app.answer('scope-findings:open-revision', workflow.SCOPE_OPTIONS[0]['label'],
+                                   '这一处我承担，先把本次修订做完。', 'controller-1')
+        self.assertEqual(accepted['status'], 'running')
+        book = self.repo.load()
+        self.assertIsNone(book.get('scope_findings'))
+        self.assertEqual(book['accepted_findings'][0]['scope'], 'open-revision')
+        self.assertTrue(book['carry_findings'])
+        # The author's second exit names the command instead of silently discarding the run.
+        book['scope_findings'] = [{'criterion': 'causality', 'severity': 'quality', 'reason': '再记一条。',
+                                   'evidence': [], 'target_chapter': 2, 'repair_scope': 'local'}]
+        book.update(status='paused', pause_reason='跨章核验发现缺陷。')
+        self.repo.save(book)
+        status = self.app.resume()
+        held = self.app.answer('scope-findings:open-revision', workflow.SCOPE_OPTIONS[1]['label'],
+                               '我先把这次修订撤掉。', 'controller-1')
+        self.assertEqual(held['status'], 'paused')
+        self.assertIn('discard', held['pause_reason'])
+
     def test_first_chapter_approval_binds_exact_version(self):
         final = drive(self.app, until='chapter_review')
         self.app.submit(response(self.app))

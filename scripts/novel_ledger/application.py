@@ -501,6 +501,13 @@ class Application:
                 workflow.hold_for_draft_exhaustion(book)
                 self.repo.save(book)
                 return self.status()
+            # Third shape: a revision whose own closure review flagged a chapter outside its range.
+            # Starting a second run is impossible while the first is open and finishing the first is
+            # impossible with the finding outstanding, so the author decides how it closes.
+            if book.get('scope_findings') and book.get('revision_run'):
+                workflow.hold_for_scope_findings(book, quality.repairable(book['scope_findings']) or book['scope_findings'])
+                self.repo.save(book)
+                return self.status()
             require(not self._revision_summary(book), 'revision_bounds', '先处理超出自动回改范围的修复方案，resume 不扩大授权。',
                     self._revision_summary(book))
             require(not book['draft'] or book['draft']['stage'] != 'exhausted', 'repair_budget', '修复额度已耗尽，恢复不增加额度；作者需明确处置当前方案。')
@@ -554,11 +561,19 @@ class Application:
             if book.get('pause_reason') == block.get('question'):
                 book.pop('pause_reason', None)
                 book['status'] = 'running'
-            if str(block.get('id', '')).startswith('repair-exhausted:'):
+            decision = str(block.get('id', ''))
+            if decision.startswith('scope-findings:'):
+                # The run cannot grow and cannot be finished; the author closes it either way.
+                if option == workflow.SCOPE_OPTIONS[0]['label']:
+                    workflow.accept_scope_findings(book)
+                else:
+                    book.update(status='paused',
+                                pause_reason='作者选择先撤销本次修订；执行 discard 后重新 advance 开一次范围更大的修订。')
+            elif decision.startswith('repair-exhausted:'):
                 # The question was "the repair budget is spent", so the answer decides the budget:
                 # one more round, accepting the candidate with the findings kept open, or stopping
                 # here so the author can redo the stage themselves.
-                stage = str(block['id']).split(':', 1)[-1]
+                stage = decision.split(':', 1)[-1]
                 if stage == 'chapter_repair':
                     workflow.resolve_draft_exhaustion(book, option)
                 elif option == workflow.REPAIR_AGAIN:

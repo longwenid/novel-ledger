@@ -197,6 +197,44 @@ def resolve_draft_exhaustion(book, option):
     return book
 
 
+SCOPE_OPTIONS = (
+    {'label': '接受本次修订，把这几个缺陷记为未解决项并完成修订',
+     'impact': '本次修订照常收尾，这些缺陷不会消失：它们记成未解决项，完本篇审计与状态都能看到。'
+               '独立范围审给的是 fix，这一步等于你以作者身份承担这处风险。'},
+    {'label': '先撤销本次修订，再把缺陷并入下一次修订',
+     'impact': '撤销后回到原稿（本次已通过的章节改动一并放弃），再按当前状态重新 advance 开一次范围更大的修订。'
+               '代价照旧：范围内各章要重新写审。'},
+)
+
+
+def hold_for_scope_findings(book, findings):
+    """Ask the author how to close a revision whose own scope review flagged an out-of-range chapter.
+
+    The third shape of the same dead end: a revision run can be told by the closure review of its own
+    branch that a chapter just outside its range needs work. Starting a second run is impossible while
+    the first is open, and finishing the first is impossible with the finding outstanding, so the
+    author's only exit used to be discarding everything.
+    """
+    book['author_block'] = {
+        'id': 'scope-findings:open-revision',
+        'question': '本次修订的范围复核记下了 %d 条缺陷（涉及第 %s 章），但它们落在本次修订范围之外，接下来怎么处理？'
+                    % (len(findings), '、'.join(str(f.get('target_chapter')) for f in findings)),
+        'options': copy.deepcopy(list(SCOPE_OPTIONS))}
+    book.update(status='paused', pause_reason=book['author_block']['question'])
+    return book['author_block']
+
+
+def accept_scope_findings(book):
+    """Close the run with the scope review's findings recorded as unresolved rather than repaired."""
+    findings = copy.deepcopy(book.get('scope_findings') or [])
+    book.setdefault('accepted_findings', []).append(
+        {'stage': 'scope_review', 'scope': 'open-revision', 'findings': findings})
+    book['carry_findings'] = list(book.get('carry_findings') or []) + findings
+    book.pop('scope_findings', None)
+    book['status'] = 'running'
+    return book
+
+
 def next_outline(book, volume, chapter=None):
     if not book['contract'].get('volume_outline'):
         return None

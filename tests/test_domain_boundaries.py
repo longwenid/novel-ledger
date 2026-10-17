@@ -214,6 +214,29 @@ class DomainBoundaryTests(unittest.TestCase):
                         self.assertIn(source[0], creation.gate_ids(version),
                                       'a version may only source fields from gates it actually has')
 
+    def test_required_material_never_charges_twice_for_one_fact(self):
+        """The thinning pass is a declared relationship, not an accident of two similar payloads.
+
+        It covers both shapes a real run produced: a projection whose source is also required, and
+        two names whose content is byte-identical. A dropped name stays reachable in `records`.
+        """
+        from novel_ledger import context
+        self.assertEqual(context.projects_from('world_core'), 'world_model')
+        self.assertEqual(context.projects_from('frontier:volume:v1'), 'design:volume:v1')
+        self.assertEqual(context.projects_from('scope_profiles'), 'profiles')
+        self.assertIsNone(context.projects_from('design:book'))
+        records = {'contract': 'h0', 'world_model': 'h1', 'world_core': 'h2', 'design:book': 'h3',
+                   'frontier:book': 'h3', 'profiles': 'h4', 'scope_profiles': 'h4'}
+        both = ['contract', 'world_model', 'world_core', 'design:book', 'frontier:book',
+                'profiles', 'scope_profiles']
+        self.assertEqual(context.thin_required(records, both),
+                         ['contract', 'world_model', 'design:book', 'profiles'])
+        # Where no source is required the projection is exactly what the worker should read.
+        self.assertEqual(context.thin_required(records, ['world_core', 'frontier:book', 'scope_profiles']),
+                         ['world_core', 'frontier:book', 'scope_profiles'])
+        self.assertEqual(context.thin_required({'world_model': 'h1', 'world_core': 'h2'},
+                                               ['world_model', 'world_core']), ['world_model'])
+
     def test_frozen_capability_values_are_checked_instead_of_degrading(self):
         """A task frozen with an unknown protocol version must fail, not read as an older project."""
         from novel_ledger import contracts
