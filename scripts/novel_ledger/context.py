@@ -175,7 +175,7 @@ def scoped_state(state, participants, plan=None, chapter=0, horizon=3):
     return view
 
 
-def _brief(book, job):
+def _brief(book, job, version=CHECKS_VERSION):
     """The one page this dispatch needs, generated here instead of shipping whole guides."""
     previous = []
     version_of_book = creation.opening_version(book.get('creation') or {})
@@ -193,7 +193,7 @@ def _brief(book, job):
         return briefs.world_model(previous=previous, repair=bool(payload.get('repair')),
                                   scale=_scale_line(book),
                                   sections=world.required_sections(tier['id'] if tier else None))
-    return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book)})
+    return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book), 'checks_version': version})
 
 
 def scale_tier(book):
@@ -509,7 +509,7 @@ def build(repo: ContextStore, book, job):
     # neither copies every summary nor re-reads every historical event.
     add('history_source', repo.history_snapshot(book['branch']), False)
     required = thin_required(records, required)
-    brief = _brief(book, Job(stage, chapter, job.scope, job.first, job.last, payload))
+    brief = _brief(book, Job(stage, chapter, job.scope, job.first, job.last, payload), version)
     task = {'schema': TASK, 'stage': stage, 'chapter': chapter, 'scope': job.scope,
             'first': job.first, 'last': job.last, 'payload': payload, 'branch': book['branch'],
             'revision': book['revision'], 'records': records, 'required': required,

@@ -155,6 +155,67 @@ class DomainBoundaryTests(unittest.TestCase):
         with self.assertRaises(Error):
             world.validate(model, choices, 'h', sections='t3')
 
+    def test_a_local_repair_may_only_change_what_its_findings_name(self):
+        """Repairs that re-draft everything are how a run pays twice for the same ground.
+
+        A real world candidate was repaired four times; the early repairs rewrote records nobody had
+        questioned, findings already settled came back, and the next review paid for them again. The
+        engine can tell a narrow repair from a rewrite mechanically, so it refuses the rewrite in the
+        writer's own session instead of spending an independent review on it.
+        """
+        from novel_ledger import workflow
+        previous = {'rules': [{'id': 'r1', 'principle': '第一条'},
+                              {'id': 'r2', 'principle': '第二条'}],
+                    'characters': [{'id': 'c1', 'name': '沈桐'}]}
+        findings = [{'criterion': 'rule_consistency', 'severity': 'quality', 'repair_scope': 'local',
+                     'reason': 'r1 的违反后果没写清。', 'evidence': [{'chapter': 0, 'quote': '第一条'}]}]
+        # Only the named record changed: accepted.
+        workflow.require_narrow_repair(previous, {'rules': [{'id': 'r1', 'principle': '第一条，违反者扣当班'},
+                                                           {'id': 'r2', 'principle': '第二条'}],
+                                                 'characters': previous['characters']}, findings)
+        # An unnamed record changed or disappeared: refused, and the message names what drifted.
+        changed = {'rules': [{'id': 'r1', 'principle': '第一条，违反者扣当班'},
+                             {'id': 'r2', 'principle': '第二条改过了'}],
+                   'characters': previous['characters']}
+        with self.assertRaises(Error) as caught:
+            workflow.require_narrow_repair(previous, changed, findings)
+        self.assertEqual(caught.exception.code, 'repair_scope')
+        self.assertEqual(caught.exception.details['changed_but_not_named'], ['rules:r2'])
+        dropped = {'rules': [{'id': 'r1', 'principle': '第一条，违反者扣当班'}],
+                   'characters': previous['characters']}
+        with self.assertRaises(Error):
+            workflow.require_narrow_repair(previous, dropped, findings)
+        # A wider declared scope is exactly how a writer asks for permission to move more.
+        workflow.require_narrow_repair(previous, changed, [dict(findings[0], repair_scope='chapter')])
+        # Nothing identifiable in the findings: the guard does not guess a scope.
+        workflow.require_narrow_repair(previous, changed, [dict(findings[0], reason='整体不够好。',
+                                                               evidence=[])])
+
+    def test_the_producer_brief_carries_the_rubric_the_reviewer_uses(self):
+        """Same criteria, one table: the producer can answer before submitting what the review asks.
+
+        The most expensive rework is an independent session plus the full material plus a repair round,
+        spent discovering something the brief could have asked for. This checks the two sides cannot
+        drift: every criterion the producer is judged by has a self-check line, and the brief renders
+        the criteria the review will actually use for that stage.
+        """
+        from novel_ledger import briefs, contracts
+        for producer, kinds in briefs.PRODUCER_CHECKS.items():
+            for kind in kinds:
+                for criterion in contracts.checks_for(contracts.CHECKS_VERSION, kind):
+                    with self.subTest(stage=producer, criterion=criterion):
+                        self.assertIn(criterion, briefs.SELF_CHECK_HINTS,
+                                      '核验清单里的判据要有生产者自检一行，否则简报会与判据漂移')
+        text = briefs.stage('write', {'checks_version': contracts.CHECKS_VERSION})
+        self.assertIn('## 提交前自检（独立审查者会逐项看这些）', text)
+        for criterion in contracts.checks_for(contracts.CHECKS_VERSION, 'reader'):
+            self.assertIn('- %s：' % criterion, text)
+        world_text = briefs.world_model(scale='微型档，1 卷共 17 章', sections=('rules', 'society'))
+        for criterion in contracts.checks_for(contracts.CHECKS_VERSION, 'world'):
+            self.assertIn('- %s：' % criterion, world_text)
+        # A stage the review judges without a producer counterpart renders nothing extra.
+        self.assertNotIn('提交前自检', briefs.stage('chapter_review', {'checks_version': contracts.CHECKS_VERSION}))
+
     def test_every_stage_declares_the_material_it_must_read(self):
         """The same completeness rule as deliverable blocks, for the other half of a dispatch.
 

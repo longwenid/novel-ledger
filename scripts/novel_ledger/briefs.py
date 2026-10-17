@@ -7,8 +7,8 @@ pays for the current gate's rules and lens, not for the entire toolbox on every 
 from __future__ import annotations
 
 from .creation import gate_note, gate_title, value_rules
-from .contracts import (AUTHOR_CHANNEL_STAGES, OPENING_DIRECTION, OPENING_DIRECTION_GATES, OPENING_VERSION,
-                        OPTION_CONTRACT)
+from .contracts import (AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, OPENING_DIRECTION, OPENING_DIRECTION_GATES,
+                        OPENING_VERSION, OPTION_CONTRACT, checks_for)
 from . import stages, world
 BRIEFS = {
     'opening_options': '开书方案简报',
@@ -91,7 +91,8 @@ def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections
         lines.extend(['## 这是返修，不是重写', '上一版世界与逐条 findings 都在 previous_proposal 里。只改 findings 点名的问题，'
                       '其余记录保持与上一版逐字一致；不要借返修顺手改写没被点名的部分。'
                       '逐条改完再自查一遍，避免改一处带出另一处不一致（规则互相否定、数字前后对不上、'
-                      '某条程序被另一条堵死）。', ''])
+                      '某条程序被另一条堵死）。程序会逐条比对：没被点名的记录一旦被改动或删除，回执当场被拒'
+                      '（repair_scope）；确实需要扩大范围时请核验者把 finding 写成 chapter 范围。', ''])
     if previous:
         lines.append('## 已选方向（不得改动）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
@@ -99,7 +100,76 @@ def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections
     lines.extend(direction_block(('world', 'protagonist', 'engine', 'ending')))
     lines.extend(['## 同一份提交里还要给约定', OPTION_CONTRACT,
                   '约定必须逐字保留已选字段；模板里 contract 一节的字段骨架照填。', ''])
+    lines.extend(self_check_block('world_model', CHECKS_VERSION))
     return '\n'.join(lines)
+
+
+# What an independent reviewer will judge, turned into what the producer can check before submitting.
+# Read from the same table the review uses (`CHECK_SETS`), so a brief cannot drift from the rubric it
+# is judged by. The most expensive rework there is: an independent session plus the full material plus
+# a repair round, spent discovering something the brief could have asked for — a real run's world went
+# 14 -> 7 -> 4 -> 3 findings over four repair rounds, most of them criteria now listed here.
+SELF_CHECK_HINTS = {
+    'coverage': '该兑现的节点都真在正文里发生了，不是被提到。',
+    'continuity': '与前文的器物、编号、称呼、立场接得上；同一个事实两处说法一致。',
+    'resources': '用掉与得到的资源有来源、有去处，数量对得上。',
+    'knowledge': '每个人只知道他该知道的；越界知情的来源要写出来。',
+    'time': '顺序、历时与时限算得通，不出现同一段时间被用两次。',
+    'world_rules': '世界规则用到时没被绕过，代价照付。',
+    'space': '人物在场与移动对得上，没有瞬移与同场冲突。',
+    'narrative': '这一章的推动清楚：谁因何行动、阻力、选择与代价、信息或关系变化。',
+    'character_consistency': '人物这一章的言行与他的欲望、底线、声线一致，除非有据地变化。',
+    'stable_facts': '已确立的事实没有被这一章无意改掉。',
+    'read_on': '读到章末读者会想知道下一章发生什么。',
+    'character': '人物是可记住的具体的人，不是功能。',
+    'change': '这一章确实改变了什么：处境、关系、认知或代价。',
+    'emotion_cost': '情绪有来处，代价落在人身上且可查。',
+    'language': '句子干净、不啰嗦、不用形容词报幕；同一动作不重复描写。',
+    'repetition': '句式、动作组与解释不与自己或前文重复；换写法而不是换词。',
+    'substance': '每一场都在推进或改变，没有为凑字数存在的段落。',
+    'disclosure': '披露顺序正确：读者现在该知道的知道，不该知道的没提前漏。',
+    'pacing': '张弛有分配，静章也承担余波、关系或暗线。',
+    'dialogue_identity': '遮住名字也能听出是谁在说。',
+    'voice_match': '声线与人物档案一致，压力下会变但不变人。',
+    'pov_consistency': '约定的叙述人称与视角是硬约束：不越界、不无标记地切换。',
+    'voice_evolution': '跨章的语言与视角是演进而非漂移。',
+    'author_constraints': '每一处仍在作者约定内：承诺、体量、分卷、禁区、视角没有被顺手改掉。',
+    'causality': '节点之间是先因后果，链上没有断口与悬空。',
+    'characters': '用到的人物都已登记，行动与欲望、底线一致。',
+    'scale': '规模与体量相称：不为凑数加设定，也不留下撑不起终局的空间。',
+    'threads': '线路职责、窗口与终局可兑现；必要线路标了 required。',
+    'choice_alignment': '世界仍遵守已选方向与前提，没有替换作者的取舍。',
+    'rule_consistency': '规则自洽：范围、限制与违反后果彼此不冲突。',
+    'spatial_connections': '地域之间的通行与阻隔说得通，压力来自地理本身。',
+    'historical_causes': '历史事件与当下利益有因果，不是背景装饰。',
+    'faction_interests': '各方诉求、力量来源与依赖能推出冲突。',
+    'economic_consequences': '资源的生产、分配与稀缺能推出争夺。',
+    'social_pressure': '制度、习惯与执行方式能推出普通人的处境。',
+    'character_boundaries': '人物的知情边界与底线明确且未被越过。',
+    'story_capacity': '一句话说清这个世界靠什么持续供料。',
+}
+# Which rubric a producer can self-check before submitting (reviewers keep their own list).
+PRODUCER_CHECKS = {
+    'world_model': ('world',),
+    'book_plan': ('design',), 'volume_plan': ('design',), 'volume_outline': ('design',),
+    'alignment_plan': ('design',),
+    'write': ('fact', 'reader'), 'repair': ('fact', 'reader'), 'redesign': ('fact', 'reader'),
+    'plan': ('fact',),
+}
+
+
+def self_check_block(stage_name, version):
+    """The reviewer's criteria rendered as questions the producer can answer before submitting."""
+    names = []
+    for kind in PRODUCER_CHECKS.get(stage_name) or ():
+        names.extend(checks_for(version, kind))
+    rows = [(name, SELF_CHECK_HINTS[name]) for name in dict.fromkeys(names) if name in SELF_CHECK_HINTS]
+    if not rows:
+        return []
+    return ['## 提交前自检（独立审查者会逐项看这些）',
+            '这是核验者用的同一份清单；机械项（字数、必须节点、引用存在、禁区字面）提交时会直接判，'
+            '判断项请你自己先按下面的问题过一遍，别把可以自查的问题留给独立核验：',
+            *['- %s：%s' % (name, hint) for name, hint in rows], '']
 
 
 def stage(name, payload=None):
@@ -198,4 +268,11 @@ def stage(name, payload=None):
         repair_rule = (' 这是返修不是重写：只改 findings 点名的问题，其余记录保持与上一版逐字一致，'
                        '不要借返修顺手改写没被点名的部分；上一版候选与逐条 findings 都在 previous_proposal 里，'
                        '逐条改完再自查一遍，避免改一处带出另一处不一致。')
-    return rule + time_rule + extra + handoff + enhanced + authority + memory + repair_rule + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，来源不足时按冻结哈希补读，不读源码猜格式。'
+    # The rubric the review uses, handed to the producer as questions it can answer itself. The same
+    # criteria, read from the same table: a first draft that fails a criterion the brief could have
+    # asked about costs an independent session, the full material and a repair round to discover.
+    self_check = self_check_block(name, payload.get('checks_version', CHECKS_VERSION))
+    return ('\n'.join([rule + time_rule + extra + handoff + enhanced + authority + memory + repair_rule]
+                      + self_check)
+            + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，'
+              '来源不足时按冻结哈希补读，不读源码猜格式。')

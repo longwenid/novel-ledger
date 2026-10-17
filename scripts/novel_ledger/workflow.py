@@ -462,6 +462,66 @@ def route_repair(book, draft, findings):
     book['draft'] = draft
 
 
+def identified_items(data):
+    """The addressable parts of a world, design or outline candidate, keyed the way findings name them."""
+    items = {}
+    for section, rows in (data or {}).items():
+        if section == 'chapters' and isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict) and 'chapter' in row:
+                    items['chapter:%s' % row['chapter']] = row
+        elif isinstance(rows, list) and rows and all(isinstance(r, dict) and 'id' in r for r in rows):
+            for row in rows:
+                items['%s:%s' % (section, row['id'])] = row
+        elif not isinstance(rows, (list, dict)):
+            items[section] = rows
+    return items
+
+
+def require_narrow_repair(previous, candidate, findings):
+    """A local repair may only change the parts its findings name.
+
+    Measured: a real run's world candidate was repaired four times, and the early repairs re-drafted
+    everything — findings already settled came back, so the next review paid for the same ground
+    again. The engine can tell a narrow repair from a rewrite mechanically: when every finding is
+    local and its target is named, everything nobody named has to come back unchanged. Additions are
+    allowed (a review sees them); changing or dropping an unnamed part is not.
+    """
+    if not previous or not findings:
+        return
+    if any(finding.get('repair_scope') != 'local' for finding in findings):
+        return                       # a chapter/volume-scope repair may legitimately move more
+    before, after = identified_items(previous), identified_items(candidate)
+    if not before:
+        return
+    named = named_items(previous, findings)
+    if not named:
+        return                       # nothing identifiable in the findings: do not guess a scope
+    drifted = sorted(key for key, value in before.items()
+                     if key not in named and after.get(key, object()) != value)
+    require(not drifted, 'repair_scope', '局部返修只能改被点名的部分，其余与上一版逐字一致。',
+            {'changed_but_not_named': drifted[:8], 'named_by_findings': sorted(named)[:8],
+             'recover': '把没被点名的记录/节点恢复为上一版内容；确实需要扩大改动范围时，'
+                        '请核验者在 findings 里写成 chapter 范围。'})
+
+
+def named_items(previous, findings):
+    """The candidate's items a finding actually names, found in its criterion, reason and evidence."""
+    text_of = ' '.join(' '.join(str(finding.get(field) or '') for field in ('criterion', 'reason'))
+                       + ' ' + ' '.join(str(row.get('quote') or '') for row in finding.get('evidence') or []
+                                        if isinstance(row, dict))
+                       for finding in findings)
+    named = set()
+    for key, value in identified_items(previous).items():
+        ident = key.split(':', 1)[-1]
+        if key in text_of or ident in text_of:
+            named.add(key)
+        elif isinstance(value, dict) and any(str(part) in text_of for part in value.values()
+                                             if isinstance(part, str) and part):
+            named.add(key)
+    return named
+
+
 def apply(book, task, data, actor, sources):
     require(isinstance(data, dict), 'result', 'data 须为对象。')
     data = copy.deepcopy(data)
@@ -493,6 +553,8 @@ def apply(book, task, data, actor, sources):
         model = world.validate(draft, creation.selected(opening), opening['selection_hash'],
                                sections=world.required_sections(tier_id(opening)))
         old = book['proposal'] or {}
+        if (task.get('payload') or {}).get('repair'):
+            require_narrow_repair(old.get('data') or {}, model, old.get('findings') or [])
         book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': model, 'producer': actor, 'attempts': old.get('attempts', 0)}
         if 'opening_contract' in (task.get('payload') or {}).get('also', ()):  # combined dispatch
             planning.enforce(planning.active_policy(book.get('lexical_policy')), 'opening_contract', data.get('contract'))
@@ -539,12 +601,16 @@ def apply(book, task, data, actor, sources):
             require(any(t['kind'] == 'main' and t['required'] for t in design['threads']), 'story_threads', '全书设计至少要有一条必须完成的主线。')
             require(any(n['required'] for n in design['nodes']), 'story_node', '全书设计须有必要终局节点。')
         old = book['proposal'] or {}
+        if task.get('payload', {}).get('repair'):
+            require_narrow_repair(old.get('data') or {}, design, old.get('findings') or [])
         book['proposal'] = {'scope': task['scope'], 'chapter': chapter, 'data': design, 'producer': actor, 'attempts': old.get('attempts', 0)}
     elif stage == 'volume_outline':
         policy = task['payload']['volume_outline']
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         planning.validate_chapter_outlines(data, policy, book.get('world'), node_map(book))
         old = book['proposal'] or {}
+        if task.get('payload', {}).get('repair'):
+            require_narrow_repair(old.get('data') or {}, data, old.get('findings') or [])
         book['proposal'] = {'kind': 'volume_outline', 'scope': task['scope'], 'chapter': chapter,
                             'first': task['first'], 'last': task['last'], 'data': data, 'producer': actor,
                             'attempts': old.get('attempts', 0)}
