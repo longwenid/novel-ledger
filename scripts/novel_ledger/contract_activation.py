@@ -19,11 +19,19 @@ class ContractActivation:
         book['lexical_policy'] = copy.deepcopy(old['lexical_policy'])
         book['contract_review'] = {'producer': proposal['producer'],
                                    'reviewer': old.get('pending_contract_reviewer', proposal['producer'])}
-        if old.get('creation') and old['creation']['phase'] == 'contract':
+        if old.get('creation'):
+            # An answered opening stays answered: the closed choices are what the new contract is
+            # an amendment of, so they travel with it whatever phase they were in.
             book['creation'] = copy.deepcopy(old['creation'])
             book['creation']['phase'] = 'ready'
+            book['opening_world_only'] = True
+        # A re-contract keeps the world that was independently verified. Keying this on the opening
+        # phase dropped it on every re-contract after the first activation (which moves that phase to
+        # `ready`): a real second amendment silently continued without the world, and the design
+        # stages after it bound `world_hash: null` with empty `world_refs`.
+        if old.get('world'):
             book['world'] = copy.deepcopy(old['world'])
-            book['world_review'] = copy.deepcopy(old['world_review'])
+            book['world_review'] = copy.deepcopy(old.get('world_review') or {})
             book['opening_world_only'] = True
         book['feedback'] = old['feedback'] + [proposal['source']]
         if old.get('repair_cases'):

@@ -562,6 +562,40 @@ class RuntimeTests(unittest.TestCase):
         self.assertIsNone(self.repo.load().get('pending_contract'))
         self.assertEqual(self.app.advance(owner=owner)['action'], 'ready_to_complete')
 
+    def test_a_second_activation_keeps_the_verified_world(self):
+        """A re-contract after the first activation used to lose the verified world.
+
+        The world was copied only while the opening phase was still 'contract'; the first
+        activation moves that phase to 'ready', so every later amendment continued with
+        `world=None` — and the design stages after it bound a null world hash with empty refs.
+        """
+        from novel_ledger.contract_activation import ContractActivation
+
+        class Repo:
+            def __init__(self):
+                self.book = None
+            def put(self, key, value):
+                return None
+            def get(self, key, default=None):
+                return default
+            def headers(self, branch):
+                return []
+            def save(self, book):
+                self.book = book
+            def record(self, action, value):
+                return None
+
+        proposal = {'data': contract(2), 'producer': 'controller', 'source': '作者改约原话。'}
+        old = {'pending_contract': proposal, 'lexical_policy': [], 'creation': {'phase': 'ready'},
+               'world': {'premise': '已核验的世界。'}, 'world_review': {'receipt': {}},
+               'feedback': [], 'rework': {}, 'revision': 0, 'branch': 'main', 'target': 2,
+               'finish': False, 'draft': None}
+        book = ContractActivation(Repo()).activate(old)
+        self.assertEqual(book['world'], {'premise': '已核验的世界。'})
+        self.assertEqual(book['world_review'], {'receipt': {}})
+        self.assertTrue(book['opening_world_only'])
+        self.assertEqual(book['creation']['phase'], 'ready')
+
     def test_contract_activation_preserves_project_lexical_versions(self):
         self.app.set_lexical({'forbidden_terms': ['临时禁词'], 'forbidden_name_chars': ['禁']}, '工程作者指定项目字面规则。')
         versions = self.repo.load()['lexical_policy']
