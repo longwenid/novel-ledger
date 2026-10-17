@@ -181,17 +181,32 @@ class Application:
                         book.update(status='paused', pause_reason='原修复额度已经耗尽，改约不重新发初稿额度。')
                         self.repo.save(book)
                     if choice['action'] not in ('world_ready', 'outline_ready'):
-                        return {**choice, 'status': self.status()}
-                    boundary = {**choice, 'status': self.status()}
+                        boundary = {**choice, 'status': self.status()}
+                        if choice['action'] != 'await_choice':
+                            return boundary
+                        # A board on display falls through: the author-facing card is
+                        # materialized below, outside the transaction.
+                    else:
+                        boundary = {**choice, 'status': self.status()}
                 else:
                     task = self.repo.add_task(self.compile_task(book, choice))
                     self.repo.record('dispatch', {'task': task['id'], 'stage': choice.stage})
         view = {}
-        if boundary or refresh_world:
+        # The world view belongs to boundaries that hand a world over (or a refresh after
+        # contract activation); a choice board must not drag an unverified world into the return.
+        if refresh_world or boundary and boundary.get('action') in ('world_ready', 'outline_ready'):
             try:
                 view['world_view'] = self.presentation.world()
             except OSError as exc:
                 view['world_view_error'] = str(exc)
+        if boundary and boundary.get('action') == 'await_choice' and boundary.get('board') is not None:
+            # The controller hands work/board.md to the author instead of re-rendering the JSON
+            # return; GBK consoles garble long UTF-8 stdout, and a live run hand-wrote this card
+            # for every gate before the engine owned it.
+            try:
+                boundary['board_card'] = self.presentation.board(boundary['board'])
+            except OSError as exc:
+                boundary['board_card_error'] = str(exc)
         if boundary:
             return {**boundary, **view}
         return {'action': 'task_ready', 'task': self.presentation.task(task, self._baseline(book, task), compact=compact), 'status': self.status(), **view}

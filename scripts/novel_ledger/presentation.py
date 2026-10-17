@@ -29,5 +29,8 @@ class LocalPresentation:
     def world(self):
         return delivery.export_world(self.repo, bookpage.render, workspace=self.workspace)
 
+    def board(self, board):
+        return delivery.write_board_card(self.workspace, board)
+
     def retire(self, task_id):
         delivery.retire(self.workspace.project / 'work' / task_id, workspace=self.workspace)

@@ -53,6 +53,8 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 下表的命令均使用同一 PROJECT，已有 owner 时继续携带；作者已有明确授权直接执行，仅缺失的作者决定才询问。
 
+Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端显示会乱；需要人读的长内容一律走引擎物化的文件（board.md、task.json、html），机器可读的短 JSON 才看控制台，或先 `$env:PYTHONUTF8=1`。
+
 无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。
 
 | action | 主干下一步 |
@@ -66,7 +68,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 | completed | 从完本快照执行 deliver 或恢复失败的交付；交付成功后结束 |
 | target_reached | 刷新 html，按约定导出并交付实际完成的章节范围；不冒充全书完本 |
 | world_ready / outline_ready | 交付返回的世界及实际卷纲 coverage；已有正文授权但尚未保存时，用 run 保存同一授权后继续，否则到本次开书目标结束 |
-| await_choice | 展示当前方案板；已有该板的明确选择则 choose 后继续，否则等待作者选择 |
+| await_choice | 返回携带 `board_card`（work/board.md，引擎渲染的作者卡片：门名/进度/各案 pitch·这一版·推进·代价风险·承接·画面/命名提示/固定操作）。把卡片内容原样交给作者，不在控制台直接读长 JSON（GBK 控制台会乱码）也不手工重排版；已有该板的明确选择则按卡内 id 与 hash 执行 choose 后继续，否则等待作者选择 |
 | await_author | 已有对应 prose_hash 的明确认可则 approve 后继续，否则提供该版本首章并等待认可 |
 | paused / repair_exhausted | 保留候选和失败记录，报告具体阻碍；不自动 resume 或重派任务来重置预算。**因额度、范围或未决问题停下时**（章级候选的同一条意见连续两轮返修未解决时也会以 repair-stalled 停下，额度未尽同样交作者），`resume` 不重置额度，而是把处理方式交成作者决定：设计候选与章级候选给"再返修一轮／接受候选并把意见记为未解决项／重开本阶段或改约"；修订运行中若范围复核在运行范围之外记下缺陷，给"接受本次修订并记为未解决项／先撤销本次修订再开一次范围更大的修订"。用 `answer` 记录选择后才继续；被接受的条目写进 `accepted_findings`，在 `status` 与完本篇审计里可见，**接受不等于通过** |
 | preparing | 按初始化入口导入已有完整约定或完成开书准备；只对真实缺口等待作者，不空转调用 advance |

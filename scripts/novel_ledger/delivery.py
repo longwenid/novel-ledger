@@ -6,7 +6,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from .contracts import FIRST_READ, FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, digest, require
+from .contracts import FIRST_READ, FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, digest, require, text
 from .result_templates import template
 from .ports import PublicationReader
 from .publication import publication
@@ -17,6 +17,49 @@ from . import store_keys
 
 def json_write(path, value):
     atomic_write(path, json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+
+
+# The author-facing card for one choice board. The controller hands this file's content over
+# verbatim instead of re-deriving a presentation from the JSON return: a live run had to redirect
+# advance's stdout to a file (GBK consoles garble UTF-8) and then hand-write a markdown card for
+# every gate, paying main-session tokens to re-render what the engine already knows.
+def render_board_card(board):
+    gate = board.get('gate') or {}
+    letters = 'ABCDEF'
+    lines = ['# 开书选择：第 %s/%s 门 · %s' % (gate.get('number', '?'), gate.get('total', '?'), gate.get('title', '')),
+             '',
+             'board `%s`（choose/regroup 时原样使用）' % board.get('hash', ''),
+             '']
+    for index, option in enumerate(board.get('options') or []):
+        tag = letters[index] if index < len(letters) else str(index + 1)
+        lines.append('## %s. %s' % (tag, option.get('title', '')))
+        lines.append('- id：`%s`（choose --option 用它）' % option.get('id', ''))
+        for field, label in (('pitch', '一句话'), ('premise', '这一版'), ('driver', '推进'),
+                             ('tradeoff', '代价与风险'), ('fit_reason', '承接')):
+            value = option.get(field)
+            if text(value):
+                lines.append('- **%s**：%s' % (label, value))
+        scenes = option.get('scene') or []
+        if scenes:
+            lines.append('- **画面**：')
+            lines.extend('  - %s' % row for row in scenes)
+        lines.append('')
+    warnings = board.get('name_warnings') or []
+    if warnings:
+        lines.append('## 命名提示')
+        lines.extend('- %s' % row.get('message', '') for row in warnings)
+        lines.append('')
+    lines.append('---')
+    lines.append('回复 **A / B / C** 选择；**换一组**（附原因更好）；**D** 自定义一句方向；**返回某门**改已选项。')
+    return chr(10).join(lines) + chr(10)
+
+
+def write_board_card(workspace: LocalWorkspace, board):
+    """Materialize the current board as work/board.md; a derived view, rebuilt on every ask."""
+    path = workspace.artifact_path(workspace.project / 'work' / 'board.md')
+    atomic_write(path, render_board_card(board))
+    return str(path)
+
 
 
 def output_path(workspace: LocalWorkspace, output, default):
