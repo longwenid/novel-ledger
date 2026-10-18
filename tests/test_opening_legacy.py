@@ -229,7 +229,8 @@ class LegacyOpeningTests(unittest.TestCase):
         try:
             book = repo.load()
             self.assertEqual(creation.opening_version(book['creation']), OPENING_VERSION)
-            self.assertEqual(len(creation.gates(book['creation'])), 10)
+            self.assertEqual(creation.gates(book['creation']), creation.GATE_SETS[OPENING_VERSION])
+            self.assertEqual(len(creation.gates(book['creation'])), len(creation.gate_ids(OPENING_VERSION)))
         finally:
             repo.close()
 

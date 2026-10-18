@@ -1,10 +1,11 @@
-"""The current opening protocol: ten male-channel gates, one question each.
+"""The current opening protocol: eleven male-channel gates, one question each.
 
-These exercise opening/3 — the gate set a new book opens with: genre, voice, scale, edge,
-protagonist, relationships, world, opposition, payoff, title. The structural length gate is answered
-by the engine from a proved ladder, every other gate by a cold worker, and the final contract must
-keep each decision verbatim. Older gate sets keep their own regression cover: `test_opening_v2.py`
-(opening/2) and `test_opening_legacy.py` (opening/1).
+These exercise opening/4 — the gate set a new book opens with: genre, origin, voice, scale, edge,
+protagonist, relationships, world, opposition, payoff, title. The protagonist's origin is asked right
+after the genre (the setting decides what "came from elsewhere" can even mean), the structural length
+gate is answered by the engine from a proved ladder, every other gate by a cold worker, and the final
+contract must keep each decision verbatim. Older gate sets keep their own regression cover:
+`test_opening_v2.py` (opening/2) and `test_opening_legacy.py` (opening/1).
 """
 import copy
 import sys
@@ -23,6 +24,8 @@ from support import contract
 
 VALUES = {
     'genre': {'genre': '都市异能', 'reader_promise': '看他从仓库夜班一路把签字责任查到底。', 'tone': '冷硬利落，偶尔留一点暖。'},
+    'origin': {'family': '魂穿', 'arrival': '车祸后醒在这座仓库的夜班宿舍，带着上一世的核对习惯。',
+               'cost': '原身的旧账跟着他，同事只当他忽然变了一个人。'},
     'voice': {'pov': '第三人称限知，只跟沈桐的所见所知。', 'voice': '短句推进，对白带信息。', 'style_traits': ['少解释多动作。', '章末留钩。']},
     'edge': {'advantage': '他能读出签字上被压过的第二层笔迹。', 'origin': '仓库夜班十年练出来的手感。',
              'growth': '三层：认笔迹、认印章、认改过的日期。', 'cost': '每次细看都要熬掉一夜的精力。',
@@ -41,9 +44,9 @@ VALUES = {
     'title': {'title': '夜班退件：我能读出第二层笔迹'},
 }
 # Which field each gate varies so its options are genuinely different, not relabelled.
-VARY = {'genre': 'reader_promise', 'voice': 'voice', 'edge': 'advantage', 'protagonist': 'identity',
-        'relationships': 'relationships', 'world': 'world_premise', 'opposition': 'opposition',
-        'payoff': 'ending', 'title': 'title'}
+VARY = {'genre': 'reader_promise', 'origin': 'arrival', 'voice': 'voice', 'edge': 'advantage',
+        'protagonist': 'identity', 'relationships': 'relationships', 'world': 'world_premise',
+        'opposition': 'opposition', 'payoff': 'ending', 'title': 'title'}
 
 
 def rows_for(gate):
@@ -91,6 +94,7 @@ def contract_from(state, world_rules=('夜班退件必须登记负责人。',)):
     value = contract()
     value.update({key: copy.deepcopy(scale[key]) for key in ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim')})
     value.update(genre=choices['genre']['genre'], reader_promise=choices['genre']['reader_promise'], tone=choices['genre']['tone'])
+    value.update(protagonist_origin=copy.deepcopy(choices['origin']))
     value.update(pov=choices['voice']['pov'], voice=choices['voice']['voice'], style_traits=list(choices['voice']['style_traits']))
     value.update(core_edge=copy.deepcopy(choices['edge']))
     value.update(protagonist_setup=copy.deepcopy(choices['protagonist']))
@@ -124,7 +128,8 @@ class OpeningThreeTests(unittest.TestCase):
     def test_a_new_project_opens_on_the_redesigned_gates_with_the_male_channel_direction(self):
         book = self.repo.load()
         self.assertEqual(creation.opening_version(book['creation']), OPENING_VERSION)
-        self.assertEqual(self.app.status()['opening']['total_gates'], 10)
+        self.assertEqual(self.app.status()['opening']['total_gates'],
+                         len(creation.gate_ids(OPENING_VERSION)))
         task = self.app.advance()['task']
         self.assertEqual(task['stage'], 'opening_options')
         pending = self.repo.pending()['input']
@@ -132,6 +137,38 @@ class OpeningThreeTests(unittest.TestCase):
         # The direction reaches the option writer, together with what this gate means for it.
         self.assertIn('起点/番茄男频长篇网文', pending['brief'])
         self.assertIn('男频题材要连承诺一起给', pending['brief'])
+
+    def test_the_origin_gate_follows_the_genre_and_owns_its_contract_field(self):
+        """opening/4 asks where the protagonist came from, right after the genre decided the world.
+
+        The origin is a contract field of its own (`protagonist_origin`), projected from the gate's
+        whole value, so the alignment check compares it like every other decision.
+        """
+        from novel_ledger.contracts import CONTRACT_FIELDS, alignment_for, opening_source
+        gates = [ident for ident, _title in creation.GATE_SETS[4]]
+        self.assertEqual(len(gates), 11)
+        self.assertEqual(gates[0], 'genre')
+        self.assertEqual(gates[1], 'origin')
+        self.assertEqual(creation.SYSTEM_GATES[4], ('scale',))
+        self.assertEqual(creation.value_fields('origin', 4), ('family', 'arrival', 'cost'))
+        row = next(entry for entry in CONTRACT_FIELDS if entry['key'] == 'protagonist_origin')
+        self.assertEqual(tuple(row['shape']), ('family', 'arrival', 'cost'))
+        self.assertEqual(opening_source(row, 4), ('origin', None))
+        self.assertIn('protagonist_origin', alignment_for(4))
+
+    def test_a_project_opened_under_the_older_protocol_keeps_its_ten_gates(self):
+        """A gate set is a property of the project's own protocol, so v3 does not gain an origin."""
+        state = creation.begin('工程夹具：旧协议项目。', version=3)
+        self.assertEqual(len(creation.gate_ids(3)), 10)
+        self.assertNotIn('origin', creation.gate_ids(3))
+        self.assertEqual(creation.opening_version(state), 3)
+        self.assertEqual(creation.gates(state), creation.GATES_V3)
+
+    def test_the_anti_cliche_naming_discipline_survives_the_new_gate_order(self):
+        """The origin gate precedes the protagonist gate, so the naming rules still apply there."""
+        note = creation.gate_note(4, 'protagonist')
+        self.assertTrue(note.strip())
+        self.assertIn('命名', note)
 
     def test_every_later_gate_receives_the_direction_already_chosen(self):
         """A promise without its channel and setting is how a later gate drifts into another era.
@@ -156,13 +193,14 @@ class OpeningThreeTests(unittest.TestCase):
         self.assertEqual(context._selection_line({'title': '空门', 'value': {}}), '空门')
 
     def test_every_gate_owns_its_fields_and_states_its_structured_keys(self):
-        for gate in creation.gate_ids(3):
-            if gate in creation.SYSTEM_GATES[3]:
-                continue
-            with self.subTest(gate=gate):
-                self.assertEqual(set(creation.value_fields(gate, 3)), set(VALUES[gate]))
-                self.assertCode('opening_option', creation.validate_value, gate,
-                                {**copy.deepcopy(VALUES[gate]), 'unrelated': '越权字段。'}, 3, {})
+        for version in (3, OPENING_VERSION):
+            for gate in creation.gate_ids(version):
+                if gate in creation.SYSTEM_GATES[version]:
+                    continue
+                with self.subTest(gate=gate, version=version):
+                    self.assertEqual(set(creation.value_fields(gate, version)), set(VALUES[gate]))
+                    self.assertCode('opening_option', creation.validate_value, gate,
+                                    {**copy.deepcopy(VALUES[gate]), 'unrelated': '越权字段。'}, version, {})
         # A premise the engine cannot check is refused: every declared key must be stated.
         edge = copy.deepcopy(VALUES['edge'])
         del edge['ceiling']
@@ -171,24 +209,46 @@ class OpeningThreeTests(unittest.TestCase):
         payoff['plan']['ways'] = []
         self.assertCode('opening_option', creation.validate_value, 'payoff', payoff, 3, {})
 
-    def test_walking_the_ten_gates_forms_a_contract_that_keeps_each_decision(self):
+    def test_an_origin_family_outside_the_four_directions_is_refused(self):
+        for family in ('转世', '', None):
+            broken = copy.deepcopy(VALUES['origin'])
+            broken['family'] = family
+            with self.subTest(family=family):
+                self.assertCode('opening_option', creation.validate_value, 'origin', broken, 4, {})
+        for field in ('arrival', 'cost'):
+            incomplete = copy.deepcopy(VALUES['origin'])
+            del incomplete[field]
+            with self.subTest(missing=field):
+                self.assertCode('opening_option', creation.validate_value, 'origin', incomplete, 4, {})
+        # All four accepted directions pass with the two required sentences present.
+        for family in ('魂穿', '身穿', '本土', '其他'):
+            value = copy.deepcopy(VALUES['origin'])
+            value['family'] = family
+            self.assertIsNone(creation.validate_value('origin', value, 4, {}))
+
+    def test_walking_every_gate_forms_a_contract_that_keeps_each_decision(self):
         state = walk(creation.begin('工程夹具：走完全程。'))
         self.assertEqual(state['phase'], 'world')
         choices = creation.selected(state)
-        self.assertEqual(set(choices), set(creation.gate_ids(3)))
+        self.assertEqual(set(choices), set(creation.gate_ids(OPENING_VERSION)))
         value = contract_from(state)
         planning.validate_contract(value)
         world = {'rules': [{'principle': '夜班退件必须登记负责人。'}]}
         creation.validate_contract(value, state, world)
-        # The two decisions male-channel serials live on are first-class contract terms.
+        # The two decisions male-channel serials live on are first-class contract terms, and the
+        # origin is one of them now that the gate exists.
         self.assertEqual(value['core_edge'], choices['edge'])
         self.assertEqual(value['payoff_plan'], choices['payoff']['plan'])
         self.assertEqual(value['ending'], choices['payoff']['ending'])
         self.assertEqual(value['pov'], choices['voice']['pov'])
+        self.assertEqual(value['protagonist_origin'], choices['origin'])
         # A contract that quietly changes a decision the author made is refused.
         tampered = copy.deepcopy(value)
         tampered['core_edge']['growth'] = '改成一层就封顶。'
         self.assertCode('opening_alignment', creation.validate_contract, tampered, state, world)
+        retold = copy.deepcopy(value)
+        retold['protagonist_origin'] = {**retold['protagonist_origin'], 'family': '身穿'}
+        self.assertCode('opening_alignment', creation.validate_contract, retold, state, world)
 
     def test_intake_needs_only_a_tier_for_the_structural_gate(self):
         values = {gate: copy.deepcopy(value) for gate, value in VALUES.items()}

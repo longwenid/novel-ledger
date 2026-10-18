@@ -37,7 +37,8 @@ class BoardCardTests(unittest.TestCase):
         state = self.app.repo.load()['creation']
         offered = shown(state)
         card = delivery.render_board_card(offered['board'])
-        self.assertIn('第 1/10 门', card)
+        self.assertIn('第 %d/%d 门' % (creation.current(state)['number'],
+                                      len(creation.gates(state))), card)
         self.assertIn(offered['board']['hash'], card)
         for option in offered['board']['options']:
             self.assertIn(option['title'], card)
@@ -65,7 +66,7 @@ class BoardCardTests(unittest.TestCase):
 
     def test_name_warnings_surface_on_the_card(self):
         state = self.app.repo.load()['creation']
-        for _gate in ('genre', 'voice', 'scale', 'edge'):
+        for _gate in ('genre', 'origin', 'voice', 'scale', 'edge'):
             offered = shown(state)
             state = creation.pick(offered, offered['board']['options'][0]['id'],
                                   offered['board']['hash'], '作者选它。')

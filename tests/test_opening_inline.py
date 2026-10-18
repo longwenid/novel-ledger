@@ -94,7 +94,7 @@ class InlineOpeningTests(unittest.TestCase):
 
     def test_cliche_protagonist_names_come_back_as_board_warnings_not_blocks(self):
         state = self.app.repo.load()['creation']
-        for _gate in ('genre', 'voice', 'scale', 'edge'):
+        for _gate in ('genre', 'origin', 'voice', 'scale', 'edge'):
             offered = shown(state)
             state = creation.pick(offered, offered['board']['options'][0]['id'],
                                   offered['board']['hash'], '作者选它。')

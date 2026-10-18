@@ -29,10 +29,11 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import PIPELINE_SHAPES, SCALE_TIERS, Job, digest, dump
+from novel_ledger.contracts import (OPENING_VERSION, PIPELINE_SHAPES, SCALE_TIERS, Job,
+                                    digest, dump)
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book
-from novel_ledger import context, facts
+from novel_ledger import context, creation, facts
 from support import (chapter_outline_fixture, contract, drive, response, seeded_book,
                      volume_outline_fixture)
 
@@ -112,7 +113,14 @@ def dispatch_ledger():
     chapter — plus the one per-tier shape switch, `merge_chapter_outline`.
     """
     rows = []
-    gates = {'opening_options': 0, 'note': '十门由主干自执，不计子 agent 派工（spec §1/§7）。'}
+    # The gate count is derived, not hard-coded: opening/4 inserted `origin` (11 gates, `scale` is a
+    # system gate and spends no dispatch), so a literal "ten" here would silently misreport the cost.
+    gate_ids = creation.gate_ids(OPENING_VERSION)
+    system = tuple(creation.SYSTEM_GATES.get(OPENING_VERSION, ()))
+    gates = {'opening_version': OPENING_VERSION, 'gates': list(gate_ids), 'system_gates': list(system),
+             'dispatched_opening_options': len(gate_ids) - len(system),
+             'note': '开书门由主干自执，不计子 agent 派工（spec §1/§7）；门数与系统门由 '
+                     'creation.gate_ids / SYSTEM_GATES 派生。'}
     for tier in SCALE_TIERS:
         shape = PIPELINE_SHAPES.get(tier['id'], {})
         merged = bool(shape.get('merge_chapter_outline'))

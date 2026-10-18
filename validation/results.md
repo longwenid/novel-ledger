@@ -479,3 +479,13 @@ V 的行为核验（不引用实现者自述）：① 三个缺口用例都跑�
 ### 边界声明
 
 文风代理指标只保证**文风一致与可核对**（句长/段长/对白比/章内重复度/人称五项按声明窗口机械判定），**不证明「好看、人物可信」**；伏笔账验证的是「声明 → 执行 → 卷末闭合 → 入账 → `complete()` 拦截」的机械一致性，不评价伏笔本身的文学质量。全部验收在临时项目与合成回执上完成，未调用模型。改动保留在工作区，未提交或推送。
+
+## 2026-10-19 opening/4 追补验收（11 门：门 2 新增「主角来历」）
+
+开书协议由 creation/3 升为 **opening/4**，在 `genre` 之后插入 `origin` 门（`family` 四方向 `魂穿/身穿/本土/其他` + `arrival`/`cost`），门数 10→11。完整记录见 `validation/opening4-verification.md`。
+
+- **门序与门数（派生自引擎表）**：`creation.gate_ids(4)` = `genre → origin → voice → scale → edge → protagonist → relationships → world → opposition → payoff → title`（`origin` 在索引 1）；`SYSTEM_GATES[4]=('scale',)` → 11 门中 10 门派工。全链实测 `opening_version=4`、`gate_count=11`、`opening_options` 派工 **10** 次（断言与派生期望相等）。
+- **四方向校验**：`魂穿/身穿/本土/其他` 四个方向全部通过 `creation.validate_value('origin', …, 4)`；四方向之外的「穿越」被拒（`opening_option`，details 给 `valid_families`）；同一 value 用 `version=3` 校验被拒（旧门集不含该门）。
+- **旧项目不受影响**：`workflow.preparing_book(guided=True, opening_version=3)` 跑同一条全链 → 10 门、不含 `origin`、`opening_options` 派工 9 次、`target_reached`。
+- **追补复跑**：`pytest` **487 passed / 12 skipped / 1074 subtests / 0 failed**（176 s）；`pyflakes`（scripts+tests+validation，107 文件）**0 发现**；`e2e_guided.py` **5/5**、`adversarial.py` 10/10、`repro_hook_matrix` 10/10、`repro_hook_chain` 3/3、`repro_style_window` 单元 9/9 + 流程 1/1、`repro_v21_gaps` 5/5、`measure.py` 6/6、BUG-0…BUG-3 四个 repro 全 exit 0。
+- **夹具侧改动（非引擎缺陷）**：`validation/e2e_guided.py` 的方案生成器为 `origin` 门特判（`family` 按四方向轮换），并把门数断言改为从 `creation.gate_ids/opening_version` 派生；`validation/measure.py` 的 `dispatch` 节同样改为派生输出门表（原来写死「十门」）。

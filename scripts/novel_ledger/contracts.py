@@ -17,7 +17,7 @@ SCHEMA = 'novel-ledger/3'
 # database schema: a new gate set only changes a JSON document inside the book record, so raising the
 # storage version would lock every existing project out for no benefit. A project whose creation state
 # is version 1 keeps the gate set it was opened with.
-OPENING_VERSION = 3
+OPENING_VERSION = 4
 TASK = 'novel-ledger.task/1'
 RESULT = 'novel-ledger.result/1'
 # The dispatch's own copy of who it is: data for cross-checking, never a permission.
@@ -273,6 +273,12 @@ OPENING_DIRECTION = (
 # that requirement from the gate table itself).
 OPENING_DIRECTION_GATES = {
     'genre': '男频题材要连承诺一起给：爽点是什么、读者看谁赢谁、他在这个故事里想要什么。',
+    # opening/4: 魂穿/身穿/本土 is the first thing a male-channel reader infers from the premise, and
+    # it decides what the protagonist brings before anything else is chosen — so it is its own gate,
+    # right after the genre gate, and every later gate (edge, protagonist, world) reads it.
+    'origin': '来历决定主角开局手里有什么：魂穿带记忆与知识、身穿带随身之物与体质、本土没有穿越红利但扎根世界；'
+              '其他脑洞写法（重生/觉醒/召唤/借体/登陆/飞升）必须先说清机制与代价。三个方向都要能立刻兑现成'
+              '开篇三章的压力或机会，并写清这个世界谁会起疑、谁知道。',
     'voice': '叙述先定人称与视角范围：贴住主角的限知视角便于持续给爽点与信息差；语感短句推进、对白带信息。',
     'scale': '长篇连载体量：这一门只选档位，别在这里讨论剧情；相邻档的差别要落到节奏与线索数量上。',
     'edge': '金手指或稀缺优势要能被反复使用并升级：说清它怎么来、分几层、每层的条件与代价、上限在哪；'
@@ -368,6 +374,11 @@ CONTRACT_FIELDS = (
     {'key': 'world_rules', 'kind': 'rows', 'default': [], 'alignment': True},
     {'key': 'protagonist_setup', 'kind': 'map', 'default': '', 'alignment': True,
      'shape': ('id', 'name', 'identity', 'desire', 'limit'), 'opening': ('protagonist', None)},
+    # opening/4's origin gate: what the protagonist brings into the story (魂穿/身穿/本土/其他) and what
+    # it costs him. A field of its own rather than a key inside `protagonist_setup`, because adding a
+    # key to that shape would reject every contract written before this version.
+    {'key': 'protagonist_origin', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
+     'since': 4, 'shape': ('family', 'arrival', 'cost'), 'opening': ('origin', None)},
     {'key': 'entities', 'kind': 'rows', 'default': [], 'alignment': True},
     {'key': 'initial_resources', 'kind': 'rows', 'default': [], 'alignment': False},
     {'key': 'volumes', 'kind': 'rows', 'default': [], 'alignment': True,
@@ -429,13 +440,20 @@ CONTRACT_ALIGNMENT = tuple(row['key'] for row in CONTRACT_FIELDS if row['alignme
 def opening_source(row, version):
     """Which gate and value key decide a contract field for one opening version.
 
-    A tuple means every version; a dict keys by version with `'*'` as the fallback, so a gate can be
-    redesigned in a later protocol without re-reading an old project's choices through the new gates.
-    Returns None when this version does not decide the field at all.
+    A tuple means every version. A dict keys by version, and **falls forward**: the newest numeric
+    entry at or below this version wins, and `'*'` covers anything older than the first redesign.
+
+    The falling-forward rule is what keeps a new gate set from becoming five hand-edited copies.
+    opening/4 only inserted a gate in the middle of the order — every field it did not re-source must
+    keep reading the gate that opening/3 gave it (pov ← voice, ending/theme ← payoff, story_engine and
+    opposition ← opposition). Resolving `4` straight to `'*'` silently re-pointed those five fields at
+    v1's gate ids, which no longer exist, and the mismatch only surfaced later as a KeyError while
+    building a contract. Returns None when this version does not decide the field at all.
     """
     source = row.get('opening')
     if isinstance(source, dict):
-        source = source.get(version, source.get('*'))
+        declared = [(key, value) for key, value in source.items() if type(key) is int and key <= version]
+        source = max(declared, key=lambda pair: pair[0])[1] if declared else source.get('*')
     return source
 
 

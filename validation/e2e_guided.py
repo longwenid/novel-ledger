@@ -2,16 +2,18 @@
 
     python validation/e2e_guided.py
 
-这是一条**脚本驱动**的全链，不是人工点选：十个门里除系统门（scale）外，其余各门的方案由本脚本按
-引擎自己声明的字段表（`creation.value_fields`）机械生成，世界模型按 `world.SECTIONS` 生成，
+这是一条**脚本驱动**的全链，不是人工点选：各门的方案由本脚本按引擎自己声明的字段表
+（`creation.value_fields`）机械生成，门的数量与顺序由 `creation.gate_ids(opening_version)` 派生
+（opening/4 的 11 门同样适用，系统门 `scale` 不派工），世界模型按 `world.SECTIONS` 生成，
 约定按 `contracts.CONTRACT_FIELDS.opening` 从作者已选项中投影出来。生成器只用引擎的公开表，
 不抄任何实现者夹具的文本，因此它同时是对「门表/世界分区表/约定字段表」是否自洽的一次独立检查。
 
-断言（§8.3 的四条）：
-1. 全链无任何被删除的审查阶段派工；
-2. 章纲状态链拒绝一个人为漂移样例；
-3. write 的 drift_check 漏项被拒；
-4. 通过后状态正确入账，并一路写到 target_reached。
+断言（§8.3 的四条 + opening/4 的门集）：
+1. 全链无任何被删除的审查阶段派工，派工的门数 = 门集 − 系统门；
+2. `origin` 门（opening/4）四方向都通过校验、第五种说法被拒、opening/3 不接受该门；
+3. 章纲状态链拒绝一个人为漂移样例；
+4. write 的 drift_check 漏项被拒；
+5. 通过后状态正确入账，并一路写到 target_reached。
 """
 import copy
 import json
@@ -77,10 +79,17 @@ def filler(field, index):
                 'hooks': '卷中转折放旧凭据暴露矛盾；卷尾高潮放来源公开并承担后果。'}
     if field == 'limits':
         return []
+    if field == 'family':
+        # opening/4's origin gate: `family` is a four-way enum, not free text. Rotation covers three
+        # of them inside one gate; `origin_families_are_validated()` checks all four plus a refusal.
+        return ORIGIN_FAMILIES[index % len(ORIGIN_FAMILIES)]
     return '工程第%d案：%s 的具体选择。' % (index + 1, field)
 
 
 HEADS = ('以凭据开', '以人情开', '以规章开')
+# opening/4 inserted `origin` right after `genre`; the gate set (and therefore the dispatch count) is
+# derived from the engine's own tables, never hard-coded, so a later protocol version keeps working.
+ORIGIN_FAMILIES = ('魂穿', '身穿', '本土', '其他')
 
 
 def gate_receipt(app, task):
@@ -239,10 +248,11 @@ def drive(app, tamper=None, on=None, tier='t1', through=None, limit=400):
     return stages, 'limit-reached', None
 
 
-def fresh(guided=True):
+def fresh(guided=True, version=None):
     temporary = tempfile.TemporaryDirectory()
     _TEMPORARIES.append(temporary)
-    book = workflow.preparing_book(source='端到端脚本：从逐门开书跑到完稿。', guided=guided)
+    book = workflow.preparing_book(source='端到端脚本：从逐门开书跑到完稿。', guided=guided,
+                                   **({'opening_version': version} if version else {}))
     repo = SQLiteRepository.initialize(Path(temporary.name) / 'book', book)
     _REPOS.append(repo)
     return repo, Application(repo)
@@ -282,8 +292,19 @@ def case_full_chain_clean():
     chapters = (book['contract']['volumes'][-1]['end'])
     settled = book['state']['clock']
     declared = sum((book['plans'][str(row['n'])].get('clock') or {}).get('advance_days') or 0 for row in repo.headers('main'))
+    # Gate expectations come from the engine's own tables: a protocol version that inserts a gate
+    # (opening/4 added `origin`) changes the count, and this script must not need editing for it.
+    creation_state = book.get('creation') or {}
+    version = creation.opening_version(creation_state)
+    gate_ids = creation.gate_ids(version)
+    system = tuple(creation.SYSTEM_GATES.get(version, ()))
     return {'action': action,
             'error': None if error is None else '%s: %s' % (error.code, error.message),
+            'opening_version': version,
+            'gate_count': len(gate_ids),
+            'gates': list(gate_ids),
+            'system_gates': list(system),
+            'expected_opening_options_dispatches': len(gate_ids) - len(system),
             'opening_options_dispatches': stages.count('opening_options'),
             'first_stages': stages[:6],
             'review_stages_dispatched': sorted(set(stages) & DELETED_STAGES),
@@ -317,9 +338,83 @@ def case_drift_check_coverage():
             'repair_stage': (book.get('draft') or {}).get('stage')}
 
 
+def case_origin_gate_forms():
+    """opening/4: the `origin` gate's four directions are all valid, a fifth is refused, and the gate
+    sits right after `genre` in the version's own gate list."""
+    problems = []
+    version = 4
+    ids = creation.gate_ids(version)
+    if 'origin' not in ids:
+        problems.append('opening/4 的门集里没有 origin：%s' % list(ids))
+    elif ids.index('origin') != 1 or ids[0] != 'genre':
+        problems.append('origin 不在 genre 之后：%s' % list(ids))
+    accepted = {}
+    for family in ORIGIN_FAMILIES:
+        value = {'family': family, 'arrival': '工程第 1 案：arrival 的具体选择。',
+                 'cost': '工程第 1 案：cost 的具体选择。'}
+        try:
+            creation.validate_value('origin', value, version)
+            accepted[family] = 'ok'
+        except Error as exc:
+            accepted[family] = '%s: %s' % (exc.code, exc.message)
+    refused = None
+    try:
+        creation.validate_value('origin', {'family': '穿越', 'arrival': 'x', 'cost': 'y'}, version)
+        refused = 'ACCEPTED'
+    except Error as exc:
+        refused = exc.code
+    if any(row != 'ok' for row in accepted.values()):
+        problems.append('有方向未被接受：%s' % accepted)
+    if refused == 'ACCEPTED':
+        problems.append('第五种说法（穿越）没有被拒')
+    # A gate set that has no origin must not accept one either (v3 keeps its own shape).
+    v3_refused = None
+    try:
+        creation.validate_value('origin', {'family': '魂穿', 'arrival': 'x', 'cost': 'y'}, 3)
+        v3_refused = 'ACCEPTED'
+    except Error as exc:
+        v3_refused = exc.code
+    if v3_refused == 'ACCEPTED':
+        problems.append('opening/3 的门集不该接受 origin')
+    return {'kind': 'accepted' if not problems else 'contradicted',
+            'gate_ids_v4': list(ids), 'accepted': accepted, 'fifth_form': refused,
+            'v3_origin': v3_refused, 'problems': problems,
+            'fragment': 'creation.validate_value("origin", …, 4) 的四方向 + 第五种说法'}
+
+
+def case_v3_project_unaffected():
+    """An in-flight opening/3 project keeps its own ten-gate set: no `origin`, nine dispatches."""
+    repo, app = fresh(version=3)
+    stages, action, error = drive(app)
+    book = repo.load()
+    version = creation.opening_version(book.get('creation') or {})
+    ids = creation.gate_ids(version)
+    system = tuple(creation.SYSTEM_GATES.get(version, ()))
+    problems = []
+    if version != 3:
+        problems.append('旧项目没有被当作 opening/3：version=%s' % version)
+    if len(ids) != 10 or 'origin' in ids:
+        problems.append('opening/3 的门集被改动：%s' % list(ids))
+    if stages.count('opening_options') != len(ids) - len(system):
+        problems.append('门派工数不符：%d（应 %d）' % (stages.count('opening_options'),
+                                                      len(ids) - len(system)))
+    if action != 'target_reached' or error is not None:
+        problems.append('opening/3 项目没有跑完：%s %s' % (action, error))
+    return {'kind': 'accepted' if not problems else 'contradicted',
+            'opening_version': version, 'gate_count': len(ids), 'gates': list(ids),
+            'opening_options_dispatches': stages.count('opening_options'),
+            'action': action,
+            'error': None if error is None else '%s: %s' % (error.code, error.message),
+            'committed': [row['n'] for row in repo.headers('main')],
+            'problems': problems,
+            'fragment': 'workflow.preparing_book(guided=True, opening_version=3)'}
+
+
 def main():
     report, failures = {}, 0
     for name, fn in (('全链自洽（逐门开书→完稿）', case_full_chain_clean),
+                     ('opening/4 origin 门四方向', case_origin_gate_forms),
+                     ('opening/3 旧项目不受影响', case_v3_project_unaffected),
                      ('章纲状态链拒绝人为漂移', case_chain_rejects_drift),
                      ('drift_check 漏项被拒', case_drift_check_coverage)):
         try:
@@ -332,13 +427,18 @@ def main():
         print(json.dumps(value, ensure_ascii=False, indent=1)[:1400])
     close_projects()
     clean = report['全链自洽（逐门开书→完稿）']
+    origin = report['opening/4 origin 门四方向']
+    legacy = report['opening/3 旧项目不受影响']
     chain = report['章纲状态链拒绝人为漂移']
     coverage = report['drift_check 漏项被拒']
     failures += 0 if (clean.get('action') == 'target_reached'
                       and clean.get('committed') == list(range(1, clean.get('target_chapters', 0) + 1))
                       and not clean.get('review_stages_dispatched')
                       and not clean.get('unknown_stages')
-                      and clean.get('clock_settled') == clean.get('clock_declared')) else 1
+                      and clean.get('clock_settled') == clean.get('clock_declared')
+                      and clean.get('opening_options_dispatches') == clean.get('expected_opening_options_dispatches')) else 1
+    failures += 0 if origin.get('kind') == 'accepted' else 1
+    failures += 0 if legacy.get('kind') == 'accepted' else 1
     failures += 0 if chain.get('action') == 'rejected' else 1
     failures += 0 if coverage.get('criteria') else 1
     print('\n%s' % ('全部符合预期' if not failures else '%d 项不符合预期' % failures))

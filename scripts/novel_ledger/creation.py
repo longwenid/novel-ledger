@@ -47,12 +47,30 @@ GATES_V3 = (
     ('payoff', '爽点兑现与终局'),
     ('title', '书名'),
 )
-GATE_SETS = {1: GATES_V1, 2: GATES_V2, 3: GATES_V3}
+# opening/4 inserts the origin gate right after the genre gate: 魂穿/身穿/本土 decides what the
+# protagonist *brings* into the story, and in a male-channel serial that single decision shapes the
+# edge gate, the protagonist's opening pressure, and what the first three chapters can spend. It
+# belongs before the voice/scale gates because everything after it reads it. A project opened under
+# an earlier version keeps its own gate set (creation state carries the schema).
+GATES_V4 = (
+    ('genre', '题材、频道与读者承诺'),
+    ('origin', '主角来历：魂穿、身穿、本土或其他'),
+    ('voice', '叙述人称与语感'),
+    ('scale', '体量与分卷'),
+    ('edge', '核心优势与成长线'),
+    ('protagonist', '主角身份、处境与底线'),
+    ('relationships', '核心关系与情感线'),
+    ('world', '世界前提、机制与禁区'),
+    ('opposition', '主要对抗与冲突梯度'),
+    ('payoff', '爽点兑现与终局'),
+    ('title', '书名'),
+)
+GATE_SETS = {1: GATES_V1, 2: GATES_V2, 3: GATES_V3, 4: GATES_V4}
 # No bare `GATES` alias on purpose: which gate set applies is a property of the project's creation
 # document, so every lookup goes through gates(state) instead of a module-level constant.
 # Gates the engine answers itself from a table it has already proved satisfiable. A worker must not
 # invent them, and no dispatch is spent on them.
-SYSTEM_GATES = {1: (), 2: ('scale',), 3: ('scale',)}
+SYSTEM_GATES = {1: (), 2: ('scale',), 3: ('scale',), 4: ('scale',)}
 # Inputs used by the world/scale derivation rules rather than copied into a contract.
 # Direct choices and the protagonist value shape come from CONTRACT_FIELDS.opening.
 DERIVATION_INPUTS = {'world': ('world_premise', 'mechanism', 'red_lines'),
@@ -208,6 +226,21 @@ VALUE_RULES = {
         'payoff': 'plan={ways 兑现方式数组, cadence 短线兑现密度与章末钩, hooks 卷内高潮位置}（约定字段 payoff_plan 存这份 plan）、ending 终局兑现的那场胜利、theme 母题',
         'title': 'title 书名：男频搜索式可用名（点出题材与优势），不是占位符',
     },
+    4: {
+        'genre': 'genre 题材与频道落点、reader_promise 读者承诺（爽点是什么、看谁赢谁）、tone 基调',
+        'origin': 'family 来历方向（只能是"魂穿"/"身穿"/"本土"/"其他"之一）、arrival 怎么来与带来了什么'
+                  '（魂穿写清是谁的记忆与知识；身穿写清随身带了什么、身体状态如何；本土写清出身与起点资源；'
+                  '其他写清机制一句话）、cost 这份来历的代价或麻烦（本土也要写：没有穿越红利，代价是什么）',
+        'voice': 'pov 叙述人称与视角范围、voice 语感、style_traits 表达要点数组；scene 必须用该方案的人称写出来',
+        'scale': 'tier 档位 ID（引擎按档位表补齐已证明的数字）、chapter_min/chapter_max/chapter_aim、volume_count、chapters、chapter_window（照抄不要改数；总字数区间是派生结果，不用填）',
+        'edge': 'advantage 优势是什么、origin 怎么来、growth 分几层与升级条件、cost 每次使用的代价、ceiling 上限（约定字段 core_edge 直接存这五项）',
+        'protagonist': 'id、name、identity 身份与处境、desire 欲望、limit 底线',
+        'relationships': 'relationships 具体关系数组，至少一条：写清助力与背叛风险，以及感情线的分量与处理',
+        'world': 'world_premise 世界前提、mechanism={mode:none或bounded, principle, cost, limits:数组}、red_lines 禁区数组、allow_special_mechanism 布尔（必须等于 mode=="bounded"）',
+        'opposition': 'opposition 主要对抗与逐卷抬高方式（第一卷对手挡着什么利益、每次胜利换来多强的对手、终局面对谁）、story_engine 持续推进的动力',
+        'payoff': 'plan={ways 兑现方式数组, cadence 短线兑现密度与章末钩, hooks 卷内高潮位置}（约定字段 payoff_plan 存这份 plan）、ending 终局兑现的那场胜利、theme 母题',
+        'title': 'title 书名：男频搜索式可用名（点出题材与优势），不是占位符',
+    },
 }
 # A gate whose delivery contract needs one more sentence than the value shape can carry.
 GATE_NOTES = {
@@ -217,6 +250,27 @@ GATE_NOTES = {
     },
     3: {
         'genre': '作者没有给方向时，第一轮先把 GENRE_CATALOG 全类目铺开（十二个男频类目各配一句网文化读者承诺），让作者先挑类目或自定义；作者点了大方向后，再在类目内给 2～3 个具体方案。作者已给方向时直接在方向内出案。',
+        'voice': '本门只决定"怎么讲"：人称与视角范围是硬决定，语感是同一门的阅读质地。每个方案的 scene 与 pitch 都用该方案的人称写出来，让作者读到的不是解释，而是这个人称讲出来的样子；不要在本门讨论情节走向。',
+        'edge': '本门只决定核心优势与成长线：advantage 优势是什么、origin 怎么得到、growth 分几层与每层升级条件、cost 每次使用的代价、ceiling 上限在哪。写清楚它在开篇三章内第一次怎么用上；不要写成世界观说明或力量体系百科，也不要替作者决定题材。本门排在主角门之前，主角的姓名与身份还没决定：用「主角」指代，不要在本门给他起名、定职业或写编制——本门文本会被约定逐字保留，写进去的名字会与主角门后来选定的人冲突。',
+        'opposition': '本门只决定对抗与梯度：第一卷谁挡着他、挡着什么具体利益、每次胜利换来多强的对手、终局面对谁。梯度必须是可执行的加码方式，不靠误会或临时改设定维持；不要在本门重述世界规则。',
+        'world': '本门决定世界前提、机制与禁区，按网文设定生成的口径来写：① 至少一条读者看得见的等级或台阶，'
+                 '带升级条件（境界/段位/星级/职位都行）；② 一种可记账的稀缺资源，写清来源、稀缺点与谁在分配；'
+                 '③ 一个有权分配它的组织（宗门/家族/公司/官方），它的压迫要能落成具体考核、任务或贡献点；'
+                 '④ 主角优势的供料链：升级材料从哪来、谁在抢、世界怎么持续产出它；⑤ 留加层位置——敌人、地图、'
+                 '资源与等级都要能往上涨，不靠临时改设定续命。写"能用"的设定：开篇三章的第一场冲突里就要用上'
+                 '其中至少两件，不做纯氛围世界观。',
+        'protagonist': '本门决定主角身份、处境与底线，并执行反套路命名纪律：姓氏贴世界与阶层（市井用常见姓与俗字，世家才配行辈雅字，别扎堆潇洒姓）、俗字与双字名优先（单字玄乎名是重灾区）、称呼链一次想好（全名→日常称呼→诨名/职衔）、口语测试三遍（放进街坊对白念着像网文签名档就换）。套路组合（潇洒姓×玄乎单字）会以 name_warnings 出现在板面上。',
+        'payoff': '本门只决定读者一路拿到什么以及最后兑现成什么：plan 里的兑现方式、短线密度与章末钩、卷内高潮位置，以及终局兑现开篇承诺的那场胜利与母题。不要写成章节大纲，也不要在这里改对抗梯度。',
+        'title': '本门只决定书名。按男频搜索习惯给真正可用的候选名：关键词直接点出题材与核心优势或身份优势，一眼能看懂看点；不要给"待定""暂名一"这类占位符，不要意象化短名，也不要重新讨论故事内容。',
+    },
+    4: {
+        'genre': '作者没有给方向时，第一轮先把 GENRE_CATALOG 全类目铺开（十二个男频类目各配一句网文化读者承诺），让作者先挑类目或自定义；作者点了大方向后，再在类目内给 2～3 个具体方案。作者已给方向时直接在方向内出案。',
+        'origin': '本门只决定一件事：主角从哪来。四个方向各给一个方案——**魂穿**（带着另一个人的记忆与知识来：优势在脑子里，'
+                  '麻烦在于原主的身份、旧账与知情者）、**身穿**（带着自己的身体与随身之物来：优势在实物与体质，麻烦在于'
+                  '没有身份、来历看得见）、**本土**（生在世上：没有穿越红利，靠出身、资源与选择上位，代价写清他缺什么）、'
+                  '**其他**（重生、觉醒、召唤、借体重生、游戏登陆、机械飞升…必须先说清机制与代价，不能换个说法当新方向）。'
+                  '每个方案写清三件事：① 他带来了什么；② 这个世界谁会起疑、谁知道；③ 这份来历在开篇三章怎么变成压力或机会。'
+                  '不要在本门重述题材（上一门已定），也不要写具体情节。',
         'voice': '本门只决定"怎么讲"：人称与视角范围是硬决定，语感是同一门的阅读质地。每个方案的 scene 与 pitch 都用该方案的人称写出来，让作者读到的不是解释，而是这个人称讲出来的样子；不要在本门讨论情节走向。',
         'edge': '本门只决定核心优势与成长线：advantage 优势是什么、origin 怎么得到、growth 分几层与每层升级条件、cost 每次使用的代价、ceiling 上限在哪。写清楚它在开篇三章内第一次怎么用上；不要写成世界观说明或力量体系百科，也不要替作者决定题材。本门排在主角门之前，主角的姓名与身份还没决定：用「主角」指代，不要在本门给他起名、定职业或写编制——本门文本会被约定逐字保留，写进去的名字会与主角门后来选定的人冲突。',
         'opposition': '本门只决定对抗与梯度：第一卷谁挡着他、挡着什么具体利益、每次胜利换来多强的对手、终局面对谁。梯度必须是可执行的加码方式，不靠误会或临时改设定维持；不要在本门重述世界规则。',
@@ -335,8 +389,8 @@ def system_board(state):
 
 def validate_value(gate, value, version=OPENING_VERSION, choices=None):
     require(isinstance(value, dict), 'opening_option', '每个方案须有结构化 value。')
-    if version == 3:
-        return _validate_value_v3(gate, value)
+    if version in (3, 4):
+        return _validate_value_modern(gate, value, version)
     if version == 2:
         return _validate_value_v2(gate, value)
     return _validate_value_v1(gate, value, choices or {})
@@ -429,14 +483,25 @@ def _validate_value_v2(gate, value):
         require(text(value.get('title')), 'opening_option', '书名方案需要可用的书名。')
 
 
-def _validate_value_v3(gate, value):
-    """opening/3: the same ownership rule, with the male-channel decisions as first-class gates."""
-    allowed = value_fields(gate, 3)
+def _validate_value_modern(gate, value, version=3):
+    """opening/3 and /4: the same ownership rule, with the male-channel decisions as first-class gates.
+
+    /4 only inserts the origin gate; every other gate keeps the checks it had in /3, so the two
+    versions share one body parameterised by `version` rather than a copy that can drift.
+    """
+    allowed = value_fields(gate, version)
     unknown = sorted(set(value) - set(allowed))
-    require(gate in gate_ids(3) and not unknown, 'opening_option', 'value 只能包含本门负责的字段。',
+    require(gate in gate_ids(version) and not unknown, 'opening_option', 'value 只能包含本门负责的字段。',
             {'gate': gate, 'unknown_fields': unknown, 'allowed_fields': list(allowed),
              'recover': '删除额外字段；修改此前决定须 back 返回对应门。'})
-    if gate == 'genre':
+    if gate == 'origin':
+        forms = ('魂穿', '身穿', '本土', '其他')
+        require(value.get('family') in forms, 'opening_option', '来历方向须是这四个之一。',
+                {'valid_families': list(forms), 'got': value.get('family'),
+                 'recover': 'family 填方向，具体写法写进 arrival；四个方向之外的说法归"其他"，并在 arrival 里说清机制。'})
+        require(all(text(value.get(k)) for k in ('arrival', 'cost')), 'opening_option',
+                '来历方案需要"怎么来、带来了什么"与"代价或麻烦"两句。')
+    elif gate == 'genre':
         require(all(text(value.get(k)) for k in ('genre', 'reader_promise', 'tone')),
                 'opening_option', '题材方案需要题材、读者承诺和基调。')
     elif gate == 'voice':
@@ -638,7 +703,7 @@ def _v2_groups(choices, version=OPENING_VERSION):
         if row.get('since', 1) > version or row['key'] in contracts.DERIVED_FIELDS:
             continue
         source = contracts.opening_source(row, version)
-        if source:
+        if source and source[0] in choices:
             gate, key = source
             expected[row['key']] = copy.deepcopy(choices[gate] if key is None else choices[gate][key])
     derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}

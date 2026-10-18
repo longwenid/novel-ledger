@@ -136,7 +136,7 @@ class ArtifactTests(unittest.TestCase):
         self.assertIn('Other', options[-1]['description'])
         # The structural gate has no pitch; the ask falls back to the tier premise the engine wrote.
         state = self.app.repo.load()['creation']
-        for _gate in ('genre', 'voice'):
+        for _gate in ('genre', 'origin', 'voice'):
             state = shown(state)
             state = creation.pick(state, state['board']['options'][0]['id'],
                                   state['board']['hash'], '作者选它。')
