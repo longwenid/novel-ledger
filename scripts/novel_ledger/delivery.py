@@ -6,7 +6,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from .contracts import FIRST_READ, FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, digest, require, text
+from .contracts import FIRST_READ, FORM_ARTIFACTS, GENRE_CATALOG, IDENTITY, RESULT, VERSION, digest, require, text
 from .result_templates import template
 from .ports import PublicationReader
 from .publication import publication
@@ -67,6 +67,11 @@ def render_question(board):
     The controller forwards it verbatim instead of re-authoring one-line summaries: a live run
     condensed every gate into hand-written option descriptions while the engine's card (pitch,
     premise, tradeoff) never reached the author.
+
+    Capped at four options because common ask components cap the list there: a live controller
+    facing that cap silently dropped the fixed actions (and once offered only 4 of the 12
+    categories as the whole first gate). Custom input is the host's Other/free-text field, so the
+    folding loses nothing; the full board stays in board.md for the chat text.
     """
     gate = board.get('gate') or {}
     letters = 'ABCDEF'
@@ -75,13 +80,30 @@ def render_question(board):
         tag = letters[index] if index < len(letters) else str(index + 1)
         summary = option.get('pitch') if text(option.get('pitch')) else option.get('premise')
         options.append({'label': '%s %s' % (tag, option.get('title', '')), 'description': summary or ''})
-    options.append({'label': '换一组（可附原因）',
-                    'description': '这一组都不合适；说明理由（如“格局太小”“不够爽”），我按理由重出一组实质不同的方案。'})
-    options.append({'label': 'D 自定义', 'description': '这一门我自己说：直接给方向或内容。'})
+    options.append({'label': '换一组 / 自定义',
+                    'description': '这一组都不合适：说明理由（如“格局太小”“不够爽”）我按理由重出一组；'
+                                   '想自己定就直接在自定义/Other 里写方向或内容。'})
+    options = options[:4]
     number, total, title = gate.get('number', '?'), gate.get('total', '?'), gate.get('title', '')
     return {'questions': [{'header': '第 %s/%s 门%s' % (number, total, '（新一组）' if board.get('round') else ''),
                            'question': '第 %s 门（%s）：选哪个？' % (number, title),
                            'multiSelect': False, 'options': options}]}
+
+
+def render_catalog_card(catalog):
+    """The first gate's category spread, as chat text rather than ask options.
+
+    The protocol always meant the twelve categories to reach the author as text before the ask;
+    a live controller facing a four-option ask component instead offered four categories as if
+    they were the whole catalog. The card makes the spread a mechanical paste.
+    """
+    lines = ['# 开书第一门：先收一个题材方向',
+             '',
+             '下面是全部类目；回复一个类目名（或混搭、自定义方向）即可，之后的方案在这一门内深化：',
+             '']
+    lines.extend('- %s：%s' % (name, hook) for name, hook in catalog)
+    lines.append('')
+    return '\n'.join(lines) + '\n'
 
 
 def write_question_card(workspace: LocalWorkspace, board):
@@ -165,6 +187,13 @@ def render_dispatch_card(envelope, identity):
     for name in command_names:
         if commands.get(name):
             lines.append('- %s：%s' % (name, _quoted_argv(commands[name])))
+    if envelope.get('stale_result_session'):
+        lines += ['',
+                  '## 遗留草稿已隔离',
+                  '',
+                  '- 目录里发现上一次派工未提交的回执草稿（session=%s），已改名为 `result.stale.json`。'
+                  '它不代表本任务任何进度，也不是你的判断依据（核验任务尤其别读它——独立性从空白起算）；'
+                  '从 `result.template.json` 起稿，直接覆盖提交。' % envelope['stale_result_session']]
     lines += ['',
               '## 4. 常见坑',
               '',
@@ -308,6 +337,35 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         brief_file = artifact('brief.md')
         atomic_write(brief_file, brief_text)
         envelope['brief_path'] = str(brief_file)
+    if work['stage'] == 'opening_options' and (work.get('payload') or {}).get('gate', {}).get('id') == 'genre' \
+            and not (work.get('payload') or {}).get('round'):
+        # The first gate's category spread, materialized so the controller pastes it instead of
+        # improvising under the ask component's option cap.
+        catalog_file = artifact('catalog.md')
+        atomic_write(catalog_file, render_catalog_card(GENRE_CATALOG))
+        envelope['catalog_path'] = str(catalog_file)
+    # A re-render of an unsubmitted task may find the previous attempt's half-written receipt in
+    # the directory — a live reviewer found one sitting beside the blank form, one dropped
+    # session away from being read as their own judgment (or submitted under someone else's
+    # session). Quarantine it out of the worker's way before the dispatch card mentions it; the
+    # ledger, not the work directory, is the receipt of record. Safe because re-rendering while
+    # a worker is actively writing is already outside the dispatch protocol (wait for the
+    # worker, then `advance --after`).
+    prior_view = artifact('task.json')
+    if prior_view.exists():
+        try:
+            prior = json.loads(prior_view.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            prior = None
+        stale = artifact('result.json')
+        if isinstance(prior, dict) and prior.get('input_hash') == envelope['input_hash'] and stale.exists():
+            try:
+                stale_receipt = json.loads(stale.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                stale_receipt = None
+            if isinstance(stale_receipt, dict) and stale_receipt.get('session'):
+                stale.replace(artifact('result.stale.json'))
+                envelope['stale_result_session'] = stale_receipt['session']
     dispatch_file = artifact('dispatch.md')
     atomic_write(dispatch_file, render_dispatch_card(envelope, identity))
     envelope['dispatch_path'] = str(dispatch_file)
@@ -361,7 +419,8 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     if compact:
         # Keep the controller's context small; workers always receive the complete on-disk envelope.
         # The shared dispatch fields are listed from the same mapping the envelope was built from.
-        keys = ('schema', 'version', *shared, 'task_path', 'identity_path', 'brief_path', 'dispatch_path', 'claim')
+        keys = ('schema', 'version', *shared, 'task_path', 'identity_path', 'brief_path', 'dispatch_path',
+                'claim', 'redispatch_count', 'stale_result_session', 'catalog_path')
         return {key: envelope[key] for key in keys if key in envelope}
     return envelope
 

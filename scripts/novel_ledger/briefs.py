@@ -197,7 +197,8 @@ def self_check_block(stage_name, version):
 FINDING_STAGES = frozenset({'alignment_review', 'chapter_review', 'contract_review', 'design_review',
                             'outline_review', 'revision_review', 'scope_review', 'scope_synthesis',
                             'world_review'})
-FINDING_SHAPE = ('findings[].evidence 是单个 {chapter,quote,start?} 对象——同一个键在 checks[] 里才是数组；'
+FINDING_SHAPE = ('verdict 与 checks[].result 只取 pass|fix——没有 fail，有问题就记 fix 并逐条给 findings；'
+                 'findings[].evidence 是单个 {chapter,quote,start?} 对象——同一个键在 checks[] 里才是数组；'
                  '实质 finding 还须给 target_chapter（只取本任务冻结材料里的章号，设计/卷纲/约定核验为 0）'
                  '与 repair_scope=local|chapter，note 可省修复范围。')
 

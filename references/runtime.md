@@ -45,7 +45,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 |---|---|---|
 | 取当前状态 | advance --compact，已有 owner 时继续携带。 | 当前 action，不预猜阶段或自行拼任务。 |
 | task_ready | **开书门任务（opening_options）由主干自执**：读 task_path 的 task.json 与同目录 brief.md，`read --task` 取必读（同会话连门且 records_hash 未变可豁免），从 result.template.json 起稿一次成稿后 check/submit（session 填主干身份，门任务不绑定会话）。其余阶段按任务交接规则派新 Worker、恢复原会话或等待。 | 原执行者状态、claim、review_session；新任务用空历史会话，沿用当前模型设置。门任务对主控放行 read/recall（contracts.CONTROLLER_STAGES），正文与审读阶段不在此列。 |
-| Worker 结束 | 接收身份和状态摘要，正文与完整回执留在项目。 | task_id、真实 session、accepted/checked、worker_boundary 或错误码及原因。 |
+| Worker 结束 | 接收身份和状态摘要，正文与完整回执留在项目。**子 agent 空转结束**（无提交、无报告，或宿主显示其模型调用连续空响应重试）不是流程事件：用 `advance --compact` 重派同一 pending 任务（引擎重渲染视图，`redispatch_count` 递增，上次未提交的回执草稿被隔离为 `result.stale.json`；未提交不计任何返修额度），换一个新子 agent；连续两次仍空转则保留现场报告作者，不要靠反复重派碰运气。 | task_id、真实 session、accepted/checked、worker_boundary 或错误码及原因。 |
 | 核实提交 | 无人值守用 `watch --owner ID`（默认一步：等当前任务提交后直接取下一派工）；需要显式核实时 advance --compact --after 该任务ID。 | wait_for_submit 表示未提交，resync 表示重取状态；不能仅凭 accepted_chapters 判断规划或核验任务是否完成。watch 的等待发生在引擎进程里，主干会话不为等待付费。 |
 | 接续 | 按下面的动作表继续。 | 章节、窗口、Worker 和卷末均非授权目标停点，修订采纳、完本与交付也在循环内。 |
 
@@ -68,7 +68,7 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 | completed | 从完本快照执行 deliver 或恢复失败的交付；交付成功后结束 |
 | target_reached | 刷新 html，按约定导出并交付实际完成的章节范围；不冒充全书完本 |
 | world_ready / outline_ready | 交付返回的世界及实际卷纲 coverage；已有正文授权但尚未保存时，用 run 保存同一授权后继续，否则到本次开书目标结束 |
-| await_choice | 返回携带 `board_card`（work/board.md，引擎渲染的作者卡片）与 `question_card`（work/question.json，可直接投给宿主提问组件的选项结构）。先在回复正文贴出 board.md 内容（或链接），再用 question.json 的选项原样发起提问，不自拟摘要替换引擎文案；不在控制台直接读长 JSON（GBK 控制台会乱码）也不手工重排版。--compact 时返回只带门名/哈希/option_ids，完整板面在 board.md 与 work/last-advance.json。已有该板的明确选择则按卡内 id 与 hash 执行 choose 后继续，否则等待作者选择 |
+| await_choice | 返回携带 `board_card`（work/board.md，引擎渲染的作者卡片）与 `question_card`（work/question.json，可直接投给宿主提问组件的选项结构，封顶 4 项）。先在回复正文贴出 board.md 内容（或链接），再用 question.json 的选项原样发起提问，不自拟摘要替换引擎文案；宿主选项数更低时截到“换一组”为止，不删板面方案腾位，自定义走宿主 Other/自由填答。不在控制台直接读长 JSON（GBK 控制台会乱码）也不手工重排版。--compact 时返回只带门名/哈希/option_ids，完整板面在 board.md 与 work/last-advance.json。已有该板的明确选择则按卡内 id 与 hash 执行 choose 后继续，否则等待作者选择。第一门未定向时另有任务目录的 `catalog.md`（compact 的 catalog_path）：目录铺陈用正文贴出，不用提问选项装十二个类目 |
 | await_author | 已有对应 prose_hash 的明确认可则 approve 后继续，否则提供该版本首章并等待认可 |
 | paused / repair_exhausted | 保留候选和失败记录，报告具体阻碍；不自动 resume 或重派任务来重置预算。**设计候选（世界/骨架/卷纲）的返修额度用尽时先看剩余问题**：只剩 quality/note 级且 repair_scope=local 的意见直接走 accepted_with_findings——记入未解决项继续跑，不打断作者（实测一本微型书为一条措辞级意见停摆等作者 52 分钟，仲裁成本远大于修复成本）；blocker 或章范围级问题才交作者。**章级候选与修订运行**停摆时，`resume` 不重置额度，而是把处理方式交成作者决定：章级候选给"再返修一轮／接受候选并把意见记为未解决项／重开本阶段或改约"（同一条意见连续两轮返修未解决时也会以 repair-stalled 停下，额度未尽同样交作者）；修订运行中若范围复核在运行范围之外记下缺陷，给"接受本次修订并记为未解决项／先撤销本次修订再开一次范围更大的修订"。用 `answer` 记录选择后才继续；被接受的条目写进 `accepted_findings`，在 `status` 与完本篇审计里可见，**接受不等于通过** |
 | preparing | 按初始化入口导入已有完整约定或完成开书准备；只对真实缺口等待作者，不空转调用 advance |

@@ -31,7 +31,10 @@ def first_read(data, sources):
 
 
 def checks(receipt, required, sources, obligations=(), challenge_ids=(), expected_version=None, author_channel=False):
-    require(isinstance(receipt, dict) and receipt.get('verdict') in ('pass', 'fix'), 'review', '审稿需要 pass/fix 结论。')
+    require(isinstance(receipt, dict) and receipt.get('verdict') in ('pass', 'fix'), 'review', '审稿需要 pass/fix 结论。',
+            {'expect': {'verdict': 'pass|fix'},
+             'rule': '没有 fail：任何一项有问题就整体记 fix 并逐条给 findings；全部成立才记 pass。',
+             'got': receipt.get('verdict') if isinstance(receipt, dict) else None})
     version = receipt.get('checks_version', 1)
     require(expected_version is None or version == expected_version, 'checks_version', '回执版本与冻结任务不一致。',
             {'expected': expected_version, 'got': version, 'recover': '按当前任务模板填写 checks_version，不要降级检查清单。'})
@@ -44,7 +47,10 @@ def checks(receipt, required, sources, obligations=(), challenge_ids=(), expecte
     normalized = copy.deepcopy(receipt)
     normalized['checks_version'] = version
     for row in normalized['checks']:
-        require(row.get('result') in ('pass', 'fix') and text(row.get('reason')), 'review', '每项检查须独立判断并给出理由。')
+        require(row.get('result') in ('pass', 'fix') and text(row.get('reason')), 'review', '每项检查须独立判断并给出理由。',
+                {'expect': {'result': 'pass|fix', 'reason': 'str'},
+                 'rule': '没有 fail：该项有问题记 fix 并在 findings 里逐条说明；两项都不可空。',
+                 'got': {'result': row.get('result')}})
         refs = row.get('evidence')
         require(isinstance(refs, list) and refs, 'evidence', '每项检查须引用完整来源。')
         row['evidence'] = [evidence(ref, sources) for ref in refs]

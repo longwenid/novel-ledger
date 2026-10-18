@@ -23,9 +23,9 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 import novel
-from novel_ledger import creation, delivery, workflow, world
+from novel_ledger import creation, delivery, quality, workflow, world
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import RESULT, Error
+from novel_ledger.contracts import CHECKS_VERSION, RESULT, Error
 from novel_ledger.sqlite_store import SQLiteRepository
 from test_opening import shown
 from test_opening_inline import gate_result
@@ -76,6 +76,46 @@ class ArtifactTests(unittest.TestCase):
         self.assertIn('read', card) and self.assertIn('submit', card)
         self.assertIn('utf-8-sig', card)
 
+    def test_a_redispatched_task_quarantines_the_previous_attempt_draft(self):
+        """A live reviewer found a dropped session's half-written receipt beside the blank form.
+
+        The next reviewer must not read it as their own judgment (or submit it under someone
+        else's session): a re-render of the unsubmitted task moves it to result.stale.json and
+        the dispatch card says so.
+        """
+        first = self.app.advance()
+        base = Path(first['task']['task_path']).parent
+        (base / 'result.json').write_text(json.dumps(
+            {'schema': RESULT, 'task_id': first['task']['task_id'], 'input_hash': 'x',
+             'session': 'worker-dropped-session', 'data': {'gate': 'genre', 'options': []}}, ensure_ascii=False),
+            encoding='utf-8')
+        again = self.app.advance(compact=True)
+        self.assertFalse((base / 'result.json').exists())
+        quarantined = json.loads((base / 'result.stale.json').read_text(encoding='utf-8'))
+        self.assertEqual(quarantined['session'], 'worker-dropped-session')
+        self.assertEqual(again['task']['redispatch_count'], 2)
+        self.assertEqual(again['task']['stale_result_session'], 'worker-dropped-session')
+        card = Path(again['task']['dispatch_path']).read_text(encoding='utf-8')
+        self.assertIn('遗留草稿已隔离', card)
+        self.assertIn('worker-dropped-session', card)
+        # The blank form is untouched by the quarantine; a fresh render of a fresh task keeps
+        # whatever the active worker has written (no prior view, no quarantine).
+        self.assertTrue((base / 'result.template.json').exists())
+
+    def test_the_review_enums_are_told_not_probed(self):
+        """The same live reviewer spent two preflight rounds on 'fail' and finding shapes."""
+        from novel_ledger import briefs
+        receipt = {'verdict': 'fail', 'checks_version': CHECKS_VERSION,
+                   'checks': [{'id': 'causality', 'result': 'fail', 'reason': '工程反例。',
+                               'evidence': [{'chapter': 0, 'quote': '原文。'}]}],
+                   'findings': []}
+        with self.assertRaises(Error) as caught:
+            quality.checks(receipt, ('causality',), {0: '原文。'})
+        self.assertEqual(caught.exception.code, 'review')
+        self.assertIn('没有 fail', caught.exception.details['rule'])
+        self.assertEqual(caught.exception.details['expect'], {'verdict': 'pass|fix'})
+        self.assertIn('没有 fail', briefs.FINDING_SHAPE)
+
     def test_compact_advance_trims_the_board_echo_and_snapshots_the_full_view(self):
         self.app.advance()
         self.app.submit(gate_result(self.app, 'lead-main'))
@@ -101,11 +141,14 @@ class ArtifactTests(unittest.TestCase):
         state = shown(self.app.repo.load()['creation'])
         question = delivery.render_question(state['board'])
         options = question['questions'][0]['options']
-        self.assertEqual([row['label'] for row in options[-2:]],
-                         ['换一组（可附原因）', 'D 自定义'])
+        # Capped at four: common ask components stop there, and a live controller facing the cap
+        # silently dropped the fixed actions (and once offered 4 of 12 categories as the gate).
+        self.assertLessEqual(len(options), 4)
         for row, option in zip(options, state['board']['options']):
             self.assertIn(option['title'], row['label'])
             self.assertEqual(row['description'], option['pitch'])
+        self.assertIn('自定义', options[-1]['label'])
+        self.assertIn('Other', options[-1]['description'])
         # The structural gate has no pitch; the ask falls back to the tier premise the engine wrote.
         state = self.app.repo.load()['creation']
         for _gate in ('genre', 'voice'):
@@ -118,6 +161,29 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(tier_ask['description'], scale_board['options'][0]['premise'])
         regrouped = dict(scale_board, round=1)
         self.assertIn('新一组', delivery.render_question(regrouped)['questions'][0]['header'])
+
+    def test_the_first_gate_materializes_the_whole_catalog_as_chat_text(self):
+        """A live controller offered 4 of the 12 categories as the whole first gate.
+
+        The spread is now an engine artifact the controller pastes; ask options never carry the
+        catalog. Only the genre gate's first round carries it.
+        """
+        handoff = self.app.advance(compact=True)
+        task = handoff['task']
+        self.assertIn('catalog_path', task)
+        catalog = Path(task['catalog_path']).read_text(encoding='utf-8')
+        for name, hook in __import__('novel_ledger.contracts', fromlist=['GENRE_CATALOG']).GENRE_CATALOG:
+            self.assertIn(name, catalog)
+            self.assertIn(hook[:12], catalog)
+        self.assertIn('题材方向', catalog)
+        # Not a question payload: the catalog travels as text, the ask only collects the answer.
+        self.assertNotIn('questions', catalog)
+        self.app.submit(gate_result(self.app, 'lead-main'))
+        self.app.opening_choice(self.repo.load()['creation']['board']['options'][0]['id'],
+                                self.repo.load()['creation']['board']['hash'], '作者选它。')
+        second = self.app.advance(compact=True)['task']
+        self.assertNotIn('catalog_path', second)
+        self.assertFalse((Path(second['task_path']).parent / 'catalog.md').exists())
 
     def test_read_returns_a_records_hash_that_is_stable_across_gates(self):
         self.app.advance()

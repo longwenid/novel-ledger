@@ -46,7 +46,8 @@ TASK_FIELDS = ('schema', 'task_id', 'input_hash', 'stage', 'chapter', 'scope', '
 # A locked dispatch hides the formal material: it carries the first-read brief and
 # path instead, and only an unlocked dispatch adds the input/template/records set.
 TASK_OPTIONAL = ('brief', 'first_read_path', 'guides', 'input_path', 'template_path',
-                 'records', 'required', 'brief_path', 'dispatch_path')
+                 'records', 'required', 'brief_path', 'dispatch_path', 'stale_result_session',
+                 'catalog_path')
 
 # Dispatch identity (`identity.json` in the work directory): the task's own copy of who it is,
 # written so a worker and the controller can cross-check the dispatched identity without guessing.
