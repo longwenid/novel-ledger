@@ -23,7 +23,7 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 | 延续作品理解、原文样本、移动场景 | [叙事工作台](references/workbench.md) | 按任务冻结的理解、场景身份和阅读依赖能力执行。 |
 | 人物重核、场景展开、卷末关闭、完本 | [编辑能力](references/editorial.md) | 任务含 `editorial/1` 时读对应阶段；交付与失败恢复按运行指南。 |
 | 填回执、补事件、处理字段拒绝 | [任务与结果协议](references/protocol.md) | 先用当前模板和 `check` 试算；创作 Worker 不查源码或旧 pass 猜格式。 |
-| 修改引擎或核对能力边界 | [架构](references/architecture.md) | 工程检查、材料测量和真实文学评估读 [验证](references/validation.md)；**要减少返工或投递成本时先读 [返工与成本](references/rework.md)**（判据前移、返修范围守卫、结构化账目三条机制与设计原则）。 |
+| 修改引擎或核对能力边界 | [架构](references/architecture.md) | 工程检查、材料测量和真实文学评估读 [验证](references/validation.md)；**要减少返工或投递成本时先读 [返工与成本](references/rework.md)**（判据前移、窄返修、结构化账目、机械正文判据、收敛守卫等机制与设计原则）。 |
 
 ## 共同边界
 

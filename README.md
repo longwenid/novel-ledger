@@ -251,7 +251,7 @@ python scripts/novel.py --project "$P" run --through 3 --source '作者授权先
 
 `run` 返回 `owner` 租约令牌，之后每个主控命令都要带 `--owner <令牌>`，否则返回 `controller_lease`。
 
-默认由主干循环调度子 agent：`advance --compact` → 按 `task_path` 派空历史子 agent → 等待结束 → `advance --compact --after 任务ID` 核实提交并接续。主干只处理目标、任务身份、简短状态和治理命令，子 agent 读取完整任务并直接提交；主干生命周期由宿主提供。
+默认主干循环：开书门任务（opening_options）由主干在同一会话自执（无独立性要求，免每门一个冷子 agent）；世界模型及之后按 `advance --compact` → 派空历史子 agent → `watch --owner ID`（引擎进程内等待提交并续租）→ 取下一派工执行；板面在 `await_choice` 时由引擎物化为 `work/board.md`。主干只处理目标、任务身份、简短状态和治理命令，子 agent 读取完整任务并直接提交；主干生命周期由宿主提供。
 
 章节、规划窗口和卷末都继续循环；修订就绪按授权 `promote` 后接续，完本依次 `complete`、`deliver`。首章认可和开书选择仍按准确版本保存作者决定。`--compact` 只精简返回主干的派工信息，磁盘 `task.json` 与冻结材料保持完整；`review_session` 指明原审稿会话，执行中的子 agent 不重复派工。完整动作分支见 [运行与恢复](references/runtime.md)；`host-step/host-loop` 保留为可选子进程适配器。
 

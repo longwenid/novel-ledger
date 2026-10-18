@@ -32,7 +32,7 @@ protagonist_setup={id,name,identity,desire,limit} 保存主角身份、欲望和
 
 task.json 给身份、路径和 commands。首读封印阶段不生成正式 input/template；解锁后 records 提供冻结哈希，required 给必读名称，prose 和 obligations 给正文及义务。brief 说明当前任务规则，guides 作为相关章节的参考，不重复通读全部文档。
 
-主干使用 advance --compact 获取精简 task，再把 task_path 交给子 agent；磁盘 task.json 始终完整。review_session 非空表示当前任务已冻结首读，requires_new_worker=false，仍须沿该真实会话完成核验；新任务使用新会话。claim 只表示执行认领，须结合宿主中的子 agent 状态判断是否仍在执行，主干循环及动作分支见 [运行](runtime.md)。
+主干使用 advance --compact 获取精简 task；开书门任务（opening_options）由主干自执，其余阶段把 task_path 交给子 agent；磁盘 task.json 始终完整。review_session 非空表示当前任务已冻结首读，requires_new_worker=false，仍须沿该真实会话完成核验；新任务使用新会话。claim 只表示执行认领，须结合宿主中的子 agent 状态判断是否仍在执行，主干循环及动作分支见 [运行](runtime.md)。
 
 工作台能力 `understanding/1`、稳定场景身份 `scene-identity/2`、阅读关联 `reading-dependencies/1`、作品理解字段和修订阅读任务见 [叙事工作台](workbench.md)。能力及规范化计划的 reading_schema 按版本解释，不追补旧回执或重解释旧计划的同名字段。新开书方案的篇幅上界另由 opening-bounds/1 冻结，见 [逐门开书](opening.md)。
 
@@ -42,7 +42,7 @@ task.json 给身份、路径和 commands。首读封印阶段不生成正式 inp
 
 每个任务材料的 `policy` 块是当前生效的项目字面约定：`version`/`source` 说明版本与来源（作者原话或内置默认），`forbidden_terms`/`forbidden_name_chars` 给出规则，`scope` 说明**本阶段实际检查哪些字段**。该块与执行检查共用 `contracts.ENFORCEMENT` 一张表，所以声明与校验不会脱节；越出 scope 的字段不检查，违反 scope 内字段以 `literal_policy` 拒绝并在 details 里列出命中字段与命中词。改规则用 `lexical` 命令。
 
-`read --task ID` 返回全部必读完整记录；`--record 名称` 读单个完整记录。`recall --task ID --chapter N` 读冻结目录中的完整历史章，`--state` 读完整前态。新任务的可选 history_source 以哈希冻结逐章目录，旧任务仍使用自身索引；分页检索与承诺关联见 [叙事推进](narrative.md)。必读 state 按参与人和相关开放承诺选择，派工 baseline 也取该冻结视图，complete_state 永远可补读。结构选择不证明其他事实语义无关；跟踪项目 story 包含目标及直接前提，已兑现结果见 story_nodes，全部祖先和完整设计仍有补读入口。当前 state 是视图，不冒充全部资料。
+`read --task ID` 只返回本任务**尚未拿到过**的必读记录（跳过的名字列在 already_read，需要原文用 `--record 名称` 或 `--all` 取回）；`--record 名称` 读单个完整记录。`recall --task ID --chapter N` 读冻结目录中的完整历史章，`--state` 读完整前态。新任务的可选 history_source 以哈希冻结逐章目录，旧任务仍使用自身索引；分页检索与承诺关联见 [叙事推进](narrative.md)。必读 state 按参与人和相关开放承诺选择，派工 baseline 也取该冻结视图，complete_state 永远可补读。结构选择不证明其他事实语义无关；跟踪项目 story 包含目标及直接前提，已兑现结果见 story_nodes，全部祖先和完整设计仍有补读入口。当前 state 是视图，不冒充全部资料。
 
 hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、紧凑分隔符、allow_nan=False。正文哈希也基于 JSON 字符串值，不是裸文件字节。来源完整性不证明阅读理解。
 
@@ -71,13 +71,13 @@ submit 的 accepted=true 表示回执已接受，不等于正文通过：verdict
 | opening_options | 当前门 gate 与 2～3 个 options，详见 [逐门开书](opening.md) |
 | world_model / world_review | 完整世界记录与独立核验；默认 world_model 同时起草 data.contract，按 payload.also 和模板交付，详见 [世界模型](world.md) |
 | opening_contract | 默认随世界起草，世界通过后再 contract_review；单独派发时读冻结的核验世界。约定不得更改用户选择，模板由 CONTRACT_FIELDS 派生 |
-| book_plan / volume_plan | intent/ending_conditions/nodes。节点 id/line/cause/choice/cost/outcome/disclosure/depends_on；ID 唯一，引用存在，无因果环 |
+| book_plan / volume_plan | intent/ending_conditions/nodes。节点 id/line/cause/choice/cost/outcome/disclosure/depends_on；ID 唯一，引用存在，无因果环。可选 ledger 账目行：一旦给出，四则关系提交时验算，后续工件同键同值 |
 | volume_outline / outline_review | 逐章卷纲有界批次与独立设计核验；world_hash/chapters、脑暴选案及篇幅规则见 [叙事推进](narrative.md) |
 | design_review / contract_review | verdict/checks/findings/obligations；独立核验 proposal 来源，证据 chapter=0 |
-| plan | plans 恰好覆盖冻结窗口；chapter/goal/obstacle/choice/cost/change/ending/node_ids/participants，可带 new_entities/obligations/schedule |
+| plan | plans 恰好覆盖冻结窗口；chapter/goal/obstacle/choice/cost/change/ending/node_ids/participants，可带 new_entities/obligations/schedule 与可选 ledger 行（同键与已核验设计一致） |
 | profiles | 恰好覆盖 payload.entities；entity/desire/fear/limit/voice/knowledge_boundary |
 | alignment_plan / alignment_review | 独立改案提案 reason/plan/designs 与设计核验；通过仍重新章审，见编辑能力 |
-| write / repair / redesign | title/完整 prose/summary/具体 self_check；不交 events 或 candidate_events |
+| write / repair / redesign | title/完整 prose/summary/具体 self_check；不交 events 或 candidate_events。提交时机械判据直接判定：章幅区间、跨章逐字重复（≥25 字）、对白引号体例、西文残留，命中按名返修不消耗独立审 |
 | revision_review | reader 阅读回执；先冻结首读，pass 保留待携带正文，fix 按 local/chapter 返修；不重抽事实 |
 | chapter_review | facts 和 reader 两套完整回执；事实通过需 events/summary/elapsed_days，首读已持久冻结 |
 | scope_review / scope_synthesis | 叶块 coverage 按 chapter；树形综合按 children 的 part_id，另交 handoff，见 [叙事推进](narrative.md) |

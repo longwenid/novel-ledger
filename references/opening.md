@@ -42,7 +42,7 @@
 
 ### 第一门的全类目
 
-作者没给题材方向时，第一轮不抽三个冷样本：任务简报已内置 `contracts.GENRE_CATALOG` 十二个男频类目（玄幻、仙侠修真、都市异能、都市职场、历史权谋、科幻末世、悬疑探案、游戏电竞、武侠、军事战争、体育竞技、二次元轻小说），逐项铺开让作者先挑类目或自定义；点了大方向后下一轮回到该类目内的 2～3 个深化方案。作者已给方向时直接在方向内出案。
+作者没给题材方向时，第一轮不抽三个冷样本：任务简报已内置 `contracts.GENRE_CATALOG` 十二个男频类目（玄幻、仙侠修真、都市异能、都市职场、历史权谋、科幻末世、悬疑探案、游戏电竞、武侠、军事战争、体育竞技、二次元轻小说），**主控在对话里把目录铺给作者**（内联执行时直接展示，派工时随派工说明转述），收一句方向或自定义；**回执仍按 offer 协议交 2～3 个方案**——在该类目内深化，不把全目录当成回执选项。作者已给方向时跳过铺目录直接出案。
 
 ### 主角门的命名纪律
 
@@ -71,13 +71,13 @@ AI 起名高度趋同（潇洒姓×玄乎单字是重灾区，同一个玄乎字
 
 人称与视角在人物、世界与对抗之前定下来，所以 `voice` 排在最前：后续各门的 scene 都用该方案的人称写。题材门的画面发生在人称选择前，只作体验预览，不替作者锁定人称。世界规则约束后续对抗的加码方式，关系门同时提供助力和背叛风险，书名承接已选题材与核心优势。
 
-无预填、换组或回退时，十门包含 9 次创意方案派工与 10 次作者选择；结构门当次给板、不派 Worker。已有要求跳过相应门，实际次数随作者操作变化，不作为固定用量承诺。
+无预填、换组或回退时，十门为 9 次创意方案生成（默认主干自执，不派工）与 10 次作者选择；结构门当次给板。已有要求跳过相应门，实际次数随作者操作变化，不作为固定用量承诺。
 
 方案字段以当前 brief 和模板为准，构思方法见 [创意工具箱](hatch.md)。`voice` 与 `title` 这类单一决定门另有专门交付要求：叙述门的每个 scene 用该方案的人称展示实际效果，书名门给真正可用的候选名，不交占位符。
 
 ## 默认方向（起点/番茄男频长篇网文）
 
-十门的默认方向是**起点/番茄男频长篇网文**，声明在 `contracts.OPENING_DIRECTION`（共用做法）与 `contracts.OPENING_DIRECTION_GATES`（每门要点），由 `briefs.opening_options` 与 `briefs.world_model` 逐门渲染进简报，所以冷启动的方案 Worker 不必猜市场口味：
+十门的默认方向是**起点/番茄男频长篇网文**，声明在 `contracts.OPENING_DIRECTION`（共用做法）与 `contracts.OPENING_DIRECTION_GATES`（每门要点），由 `briefs.opening_options` 与 `briefs.world_model` 逐门渲染进简报，所以冷启动的方案生成者不必猜市场口味：
 
 - 开篇三章内给压力与第一个可见收益；主角有可升级的稀缺优势或金手指，升级有条件与代价；每卷对手与舞台抬高一级；短线小兑现与长线悬念交替，章末留钩；冲突落到资源、名额、地位、复仇、守护、真相这类具体利益；题材走男频主流落点；语感短句推进、对白带信息；体量按长篇连载预期起步。
 - 每门还有一条要点：题材连承诺一起给（爽点是什么、看谁赢谁），视角便于持续给爽点与信息差，世界机制持续供料，主角身份自带上升通道，关系同时给出助力与背叛风险，推进动力能反复加码，终局兑现开篇承诺的那场胜利，书名按男频搜索习惯点出看点。
@@ -106,7 +106,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 
 新派 opening_options 冻结 capabilities.opening_bounds=opening-bounds/1，程序按去除首尾空白后的字符数执行 pitch≤40、scene 最多3条。没有该能力的旧冻结任务保留原校验规则，已接受的旧方案板继续按原展示版本选择，不因升级重新拒绝；creation/1 和 creation/2 的门序及 value 规则仍由各自协议决定。
 
-创意门 Worker 先读 task.json、当前简报和 required 中的完整记录。本门规则、当轮方法及已选方向已写入 brief；方案阶段当前必读记录为 opening_rejections，opening_choices 按需补读，不把可选资料升级为重复必读。单一决定门按简报的专门交付要求执行；结构门由主干展示引擎档位板，不派 Worker 或提交方案回执。
+创意门执行者（默认主干，派工时为 Worker）先读 task.json、当前简报和 required 中的完整记录。本门规则、当轮方法及已选方向已写入 brief；方案阶段当前必读记录为 opening_rejections，opening_choices 按需补读，不把可选资料升级为重复必读。单一决定门按简报的专门交付要求执行；结构门由主干展示引擎档位板，不派 Worker 或提交方案回执。
 
 `value` 只接受本门负责的字段，任务简报会列出允许字段。携带其他门的字段或未知字段按 `opening_option` 拒绝，详情给出 `allowed_fields`、`unknown_fields` 和修正出口；例如书名门不能附带 `pov` 改写已选视角。intake 使用相同边界，形成约定时还会再次校验闭合选择；改此前决定须 back 返回对应门。
 
@@ -117,7 +117,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 | 阶段 | 执行者与动作 | 交接依据 |
 |---|---|---|
 | 初始化 | 主干 init，随后 advance --compact。 | 自动生成 book.html，返回 book_view 的绝对路径；无设定时不要求 source 或 contract。 |
-| 创意门 | 新空历史 Worker 读取 task.json、brief、payload 和 required，生成方案并 submit。 | 主干等待结束，再 --after 核实提交；委派只给任务路径和当前角色。 |
+| 创意门 | **默认主干自执**（同一会话读 task.json、brief 与 required，生成方案并 submit，不派子 agent）；宿主无法内联时才派新空历史 Worker。 | 主干自执无交接等待；派工路径由主干等待结束再 --after 核实提交，委派只给任务路径和当前角色。 |
 | 结构门 | 引擎即时返回档位板，主干展示。 | await_choice，无任务或 Worker；方案回执按 opening_system 拒绝。 |
 | 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 系统不代选；换组和返回保留记录。 |
 | 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务同时包含 world_model 与 opening_contract，回执为世界字段加 contract；以任务 stages、payload.also 和模板为准。 |

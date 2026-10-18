@@ -42,11 +42,14 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
     if note:
         lines.extend(['## 本门的交付要求', note, ''])
     if gate.get('id') == 'genre' and not previous:
-        lines.extend(['## 全类目目录（作者未给方向时第一轮先铺开）',
-                      '把下面十二个类目逐项列为方案基础（可按相近合并，但不许只挑三四个）：',
+        # The catalog is a chat step, not the receipt: offer() takes 2~3 options, so the
+        # controller shows this table to the author first and the receipt deepens the named
+        # direction. Inlining both sides of that instruction here keeps one authority.
+        lines.extend(['## 全类目目录（作者未给方向时先用它收方向）',
+                      '主控先在对话里把下面十二个类目铺给作者（原文照抄即可），收一句方向或自定义；',
+                      '本任务回执不列全目录——按作者点名的类目给 2～3 个深化方案，每案写该类目下的具体落点：主角生态位、第一卷压力与开篇三章的第一个爽点：',
                       *['- %s：%s' % (name, hook) for name, hook in GENRE_CATALOG],
-                      '每案给该类目下的一个具体落点（不是类目说明）：主角生态位、第一卷压力与开篇三章的第一个爽点。'
-                      '作者点了大方向后，下一轮回到 2～3 个深化方案。', ''])
+                      '作者已给方向时跳过铺目录，直接在方向内出案。', ''])
     if previous:
         lines.append('## 已选方向（不要推翻，只在此之上给方案）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
