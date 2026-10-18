@@ -89,7 +89,7 @@ class PipelineShapeTests(unittest.TestCase):
     def test_every_tier_declares_its_pipeline_shape(self):
         self.assertEqual(set(PIPELINE_SHAPES), {row['id'] for row in SCALE_TIERS})
         for shape in PIPELINE_SHAPES.values():
-            self.assertEqual(set(shape), {'merge_volume_design'})
+            self.assertEqual(set(shape), {'merge_volume_design', 'outline_batch'})
 
     def test_a_single_volume_micro_tier_reuses_the_book_design(self):
         handoff, stages, book = self.drive_micro(chapters=3, volumes=1)

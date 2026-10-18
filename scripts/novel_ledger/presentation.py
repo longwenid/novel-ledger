@@ -32,5 +32,11 @@ class LocalPresentation:
     def board(self, board):
         return delivery.write_board_card(self.workspace, board)
 
+    def question(self, board):
+        return delivery.write_question_card(self.workspace, board)
+
+    def snapshot(self, boundary):
+        return delivery.write_advance_snapshot(self.workspace, boundary)
+
     def retire(self, task_id):
         delivery.retire(self.workspace.project / 'work' / task_id, workspace=self.workspace)

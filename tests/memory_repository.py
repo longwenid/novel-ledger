@@ -122,6 +122,12 @@ class MemoryRepository:
     def pending(self):
         return next((self.task(t['id']) for t in self._tasks.values() if t['status'] == 'pending'), None)
 
+    def task_rows(self):
+        return [{'id': t['id'], 'status': t['status'], 'stage': t['input'].get('stage'),
+                 'chapter': t['input'].get('chapter'), 'scope': t['input'].get('scope'),
+                 'session': t.get('reviewer')}
+                for t in self._tasks.values()]
+
     def task(self, task_id):
         require(task_id in self._tasks, 'task', 'Task does not exist.')
         task = deepcopy(self._tasks[task_id])

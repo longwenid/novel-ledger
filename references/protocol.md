@@ -30,7 +30,7 @@ protagonist_setup={id,name,identity,desire,limit} 保存主角身份、欲望和
 
 ## 冻结任务与资料读取
 
-task.json 给身份、路径和 commands。首读封印阶段不生成正式 input/template；解锁后 records 提供冻结哈希，required 给必读名称，prose 和 obligations 给正文及义务。brief 说明当前任务规则，guides 作为相关章节的参考，不重复通读全部文档。
+task.json 给身份、路径和 commands。首读封印阶段不生成正式 input/template；解锁后 records 提供冻结哈希，required 给必读名称，prose 和 obligations 给正文及义务。brief 说明当前任务规则，任务目录同时物化 `brief.md`（同一简报的 markdown 全文，直接读它，不解析 input.json）与 `dispatch.md`（Worker 自举卡：环境自举、步骤、认领状态、命令与常见坑）；guides 作为相关章节的参考，不重复通读全部文档。
 
 主干使用 advance --compact 获取精简 task；开书门任务（opening_options）由主干自执，其余阶段把 task_path 交给子 agent；磁盘 task.json 始终完整。review_session 非空表示当前任务已冻结首读，requires_new_worker=false，仍须沿该真实会话完成核验；新任务使用新会话。claim 只表示执行认领，须结合宿主中的子 agent 状态判断是否仍在执行，主干循环及动作分支见 [运行](runtime.md)。
 
@@ -42,7 +42,7 @@ task.json 给身份、路径和 commands。首读封印阶段不生成正式 inp
 
 每个任务材料的 `policy` 块是当前生效的项目字面约定：`version`/`source` 说明版本与来源（作者原话或内置默认），`forbidden_terms`/`forbidden_name_chars` 给出规则，`scope` 说明**本阶段实际检查哪些字段**。该块与执行检查共用 `contracts.ENFORCEMENT` 一张表，所以声明与校验不会脱节；越出 scope 的字段不检查，违反 scope 内字段以 `literal_policy` 拒绝并在 details 里列出命中字段与命中词。改规则用 `lexical` 命令。
 
-`read --task ID` 只返回本任务**尚未拿到过**的必读记录（跳过的名字列在 already_read，需要原文用 `--record 名称` 或 `--all` 取回）；`--record 名称` 读单个完整记录。`recall --task ID --chapter N` 读冻结目录中的完整历史章，`--state` 读完整前态。新任务的可选 history_source 以哈希冻结逐章目录，旧任务仍使用自身索引；分页检索与承诺关联见 [叙事推进](narrative.md)。必读 state 按参与人和相关开放承诺选择，派工 baseline 也取该冻结视图，complete_state 永远可补读。结构选择不证明其他事实语义无关；跟踪项目 story 包含目标及直接前提，已兑现结果见 story_nodes，全部祖先和完整设计仍有补读入口。当前 state 是视图，不冒充全部资料。
+`read --task ID` 只返回本任务**尚未拿到过**的必读记录（跳过的名字列在 already_read，需要原文用 `--record 名称` 或 `--all` 取回）；返回里的 `records_hash` 是本任务全部可见记录哈希的一并摘要——主干同一会话连跑多个任务时，与前一次相同且必读名单未变即可跳过本次 read；`--record 名称` 读单个完整记录。`recall --task ID --chapter N` 读冻结目录中的完整历史章，`--state` 读完整前态。新任务的可选 history_source 以哈希冻结逐章目录，旧任务仍使用自身索引；分页检索与承诺关联见 [叙事推进](narrative.md)。必读 state 按参与人和相关开放承诺选择，派工 baseline 也取该冻结视图，complete_state 永远可补读。结构选择不证明其他事实语义无关；跟踪项目 story 包含目标及直接前提，已兑现结果见 story_nodes，全部祖先和完整设计仍有补读入口。当前 state 是视图，不冒充全部资料。
 
 hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、紧凑分隔符、allow_nan=False。正文哈希也基于 JSON 字符串值，不是裸文件字节。来源完整性不证明阅读理解。
 
@@ -62,14 +62,14 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 submit 的 accepted=true 表示回执已接受，不等于正文通过：verdict=fix 也可正常入库并转入返修或暂停。根审可先成功保存修复回执，再由 advance 返回 revision_blocked。主干等待子 agent 结束后用 advance --compact --after 核实实际动作，不凭 accepted 单独判断章审通过或授权目标完成。
 
-`check` 是给 Worker 的格式自检：把候选回执从标准输入管道进去（无需 `--file`，已通过身份环境定位当前任务时可省略命令行 `--task`）。回执本身仍须提供 task_id 和 input_hash，不允许猜测或改投身份；会话取自身份进程或任务自身。它按与 submit 相同的校验运行但**不提交、不消耗额度**，直接报告缺哪个字段或哪个枚举不对，让执行者不必读引擎源码确认格式。常见拒绝对应的期望形状：前值不匹配时 details 带 `current`（照抄为 before，新键为 null）；`evidence_scope`/首读覆盖带 `frozen_chapters`；`review_coverage`/`finding` 带 `expect`/`valid_criteria`；`event_op` 带 `valid_ops`；`opening_option`（choose）带 `valid_options`。报错里没有的形状不要去源码里找，用 check 试算。
+`check` 是给 Worker 的格式自检：把候选回执从标准输入管道进去（无需 `--file`，已通过身份环境定位当前任务时可省略命令行 `--task`）。回执本身仍须提供 task_id 和 input_hash（信封字段从 result.template.json 复制起稿，不手写；`input_version` 报错带 expected），不允许猜测或改投身份；会话取自身份进程或任务自身。它按与 submit 相同的校验运行但**不提交、不消耗额度**，直接报告缺哪个字段或哪个枚举不对，让执行者不必读引擎源码确认格式。常见拒绝对应的期望形状：前值不匹配时 details 带 `current`（照抄为 before，新键为 null）；`evidence_scope`/首读覆盖带 `frozen_chapters`；`review_coverage`/`finding` 带 `expect`/`valid_criteria`；`event_op` 带 `valid_ops`；`opening_option`（choose）带 `valid_options`；对齐类拒绝（`world_alignment`/`opening_alignment`/`world_reference`）带 `expect`（须逐字相等的原文、缺失的引用或禁区）与 `source`（取自哪份选择记录）。报错里没有的形状不要去源码里找，用 check 试算。
 
 历史修订的 revision_range 表示请求未覆盖已登记目标或回退到无关前文；revision_bounds 表示不能用 resume 跳过超界方案；revision_proposal 表示方案哈希、范围、变更或来源不匹配；author_source 表示缺少配套的方案哈希和作者原话。revision_blocked 是已保存方案的业务动作，不是回执格式拒绝；恢复步骤统一见 [运行](runtime.md)。
 
 | 阶段 | data |
 |---|---|
 | opening_options | 当前门 gate 与 2～3 个 options，详见 [逐门开书](opening.md) |
-| world_model / world_review | 完整世界记录与独立核验；默认 world_model 同时起草 data.contract，按 payload.also 和模板交付，详见 [世界模型](world.md) |
+| world_model / world_review | 完整世界记录与独立核验；默认 world_model 同时起草 data.contract，按 payload.also 和模板交付，详见 [世界模型](world.md)。返修后的重核可按需 `read --record repair_diff`（上一轮改了什么、findings 点名了什么、哪些记录未动），不手工 diff 两版文件 |
 | opening_contract | 默认随世界起草，世界通过后再 contract_review；单独派发时读冻结的核验世界。约定不得更改用户选择，模板由 CONTRACT_FIELDS 派生 |
 | book_plan / volume_plan | intent/ending_conditions/nodes。节点 id/line/cause/choice/cost/outcome/disclosure/depends_on；ID 唯一，引用存在，无因果环。可选 ledger 账目行：一旦给出，四则关系提交时验算，后续工件同键同值 |
 | volume_outline / outline_review | 逐章卷纲有界批次与独立设计核验；world_hash/chapters、脑暴选案及篇幅规则见 [叙事推进](narrative.md) |
@@ -90,7 +90,7 @@ submit 的 accepted=true 表示回执已接受，不等于正文通过：verdict
 
 checks 恰好覆盖模板，各项 {id,result:pass或fix,reason,evidence:[...]}。证据 {chapter,quote,start?}；缺 start 时引文必须唯一。time/language 附 challenge={risk,disposition:satisfied或violated,reason,evidence}，对应 pass/fix。
 
-findings=[{criterion,severity:blocker或quality或note,reason,evidence,target_chapter,repair_scope:local或chapter}]。实质 finding 与 fix 检查一致，须给 target_chapter 与 repair_scope；note 可省修复范围。修复起点不从举证位置猜。reason 说明具体问题、影响和修订建议，evidence 保留精确原文，不另加字段。义务逐项回 {id,result,reason,evidence}，未履行者须关联带 obligation_id 的实质 finding。
+findings=[{criterion,severity:blocker或quality或note,reason,evidence,target_chapter,repair_scope:local或chapter}]。实质 finding 与 fix 检查一致，须给 target_chapter 与 repair_scope；note 可省修复范围。修复起点不从举证位置猜。`repair_scope` 拒绝会带 `valid_chapters`：target_chapter 只能取本任务冻结材料包含的章号——全书设计/卷纲/约定核验的冻结材料是 chapter 0，缺陷无论落在第几章都记 0，具体章写进 reason 的修订范围。reason 说明具体问题、影响和修订建议，evidence 保留精确原文，不另加字段。义务逐项回 {id,result,reason,evidence}，未履行者须关联带 obligation_id 的实质 finding。
 
 severity=author 表示问题出在作者约定本身，任何改写都无法解决：它不写 target_chapter/repair_scope，改带 decision={id,question,options:[{label,impact}]}，question 须是作者能直接回答的问题，options 至少两个并说明取舍后果。程序把该发现挂到既有作者通道（暂停项目、pause_reason 取 question、resume 拒绝绕过），不安排写作端返修，也不消耗返修额度；作者选定选项后记录进 author_decision_history 并并入作者原话，候选按新前提重新起草，改约定本身的问题仍走改约核验。只有世界模型、设计、卷纲、改约、改案与跨章核验这些正文未定型的阶段有该通道，章内审稿仍只报能由改写解决的缺陷。一份回执最多上交一条 author 发现（一次只有一个待决问题），且只有 author 级发现可以携带 decision。
 

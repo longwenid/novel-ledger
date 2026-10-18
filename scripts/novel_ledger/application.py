@@ -30,6 +30,15 @@ class Application:
         self._revisions = RevisionService(repo, cancel_pending=self._cancel_pending)
         self._contracts = ContractActivation(repo)
 
+    def task_list(self):
+        """`status --tasks`: every dispatched task with its lifecycle state, read-only."""
+        book = self.repo.load()
+        rows = self.repo.task_rows()
+        counts = {}
+        for row in rows:
+            counts[row['status']] = counts.get(row['status'], 0) + 1
+        return {'version': VERSION, 'book_status': book['status'], 'tasks': rows, 'counts': counts}
+
     def status(self):
         book = self.repo.load()
         # A contradictory state is reported by the command that produced it, not discovered later.
@@ -207,6 +216,22 @@ class Application:
                 boundary['board_card'] = self.presentation.board(boundary['board'])
             except OSError as exc:
                 boundary['board_card_error'] = str(exc)
+            try:
+                boundary['question_card'] = self.presentation.question(boundary['board'])
+            except OSError as exc:
+                boundary['question_card_error'] = str(exc)
+            try:
+                boundary['advance_snapshot'] = self.presentation.snapshot(boundary)
+            except OSError as exc:
+                boundary['advance_snapshot_error'] = str(exc)
+            if compact and boundary.get('board_card'):
+                # The full board lives on disk (board card + last-advance.json), so the compact
+                # return names the options instead of echoing them a second time: a live run paid
+                # a file-redirect dance per gate to keep the echo out of its context.
+                board = boundary['board']
+                boundary['board'] = {'gate': board.get('gate'), 'round': board.get('round'),
+                                     'hash': board.get('hash'), 'system': board.get('system'),
+                                     'option_ids': [row.get('id') for row in board.get('options') or []]}
         if boundary:
             return {**boundary, **view}
         return {'action': 'task_ready', 'task': self.presentation.task(task, self._baseline(book, task), compact=compact), 'status': self.status(), **view}
@@ -232,6 +257,11 @@ class Application:
         result = {'task_id': task_id, 'input_hash': task['input_hash'], 'complete_records': True,
                   'stage': work['stage'], 'chapter': work['chapter'],
                   'records': records,
+                  # One digest over the records this task must read. A controller running
+                  # consecutive gates in one session compares it with the previous gate's and
+                  # skips the read entirely when the required material did not change, instead
+                  # of re-pulling an identical record set per gate.
+                  'records_hash': digest({name: work['records'].get(name) for name in work['required']}),
                   'on_demand': {n: h for n, h in work['records'].items() if n not in names}}
         if not record:
             # A worker reads the envelope it already holds, so a second full read of the same task
@@ -312,7 +342,9 @@ class Application:
             book = self._live(task)
             require(book['status'] == 'running' or (book['status'] == 'preparing' and task['input']['stage'] == 'opening_options'),
                     'paused', '项目暂停，保留回执并由主控恢复。')
-            require(result.get('input_hash') == task['input_hash'], 'input_version', '输入版本不匹配。')
+            require(result.get('input_hash') == task['input_hash'], 'input_version', '输入版本不匹配。',
+                    {'expected': task['input_hash'], 'got': result.get('input_hash'),
+                     'recover': '信封字段不手写：从本任务目录的 result.template.json 复制起稿，只改 data。'})
             self._session(task, result.get('session'), result.get('execution_claim'))
             work = copy.deepcopy(task['input'])
             if work['blind']:

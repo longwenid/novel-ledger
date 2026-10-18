@@ -26,7 +26,7 @@
 
 ### 批次、核验与实际覆盖
 
-方案通过后派 `volume_outline`，每批最多 min(6,planning_window) 章，交 `world_hash/chapters=[{chapter,synopsis,world_refs,node_ids}]`，恰好覆盖本批次连续章号。每章 synopsis 写清行动、阻力、选择、代价、变化及对下一章的推动，默认 450～550 汉字；引用真实世界记录与已批准节点，不把未来设计登记成事实。`outline_review` 独立完整阅读当前批次、已定卷方案、世界及 `outline_bridge`（前一批最后一章），沿现有设计检查项举证；通过后原子追加，返修预算共享且有界，失败保留已通过前缀。完整旧卷纲始终保留可选来源，不在每批必读中重复全部前缀。
+方案通过后派 `volume_outline`，交 `world_hash/chapters=[{chapter,synopsis,world_refs,node_ids}]`，恰好覆盖本批次连续章号。**批次大小按档位声明（PIPELINE_SHAPES.outline_batch）**：单卷微型档（t0）整卷一批；其余档位沿用每批最多 min(6,planning_window) 章——planning_window 是写作期滚动重排的参数，不是开书期的切批刀（实测一本 17 章验证书按它切了 6 批，而骨架已整体核验过）。t0 还可整档省略该派工：`book_plan` 的合并派工（payload.also=volume_outline）让骨架与整卷逐章卷纲同一个回执交付、同一次 `design_review` 核验（causality/disclosure/threads 同时覆盖逐章 synopsis），返修也保持合并形状。每章 synopsis 写清行动、阻力、选择、代价、变化及对下一章的推动，默认 450～550 汉字；引用真实世界记录与已批准节点，不把未来设计登记成事实。`outline_review` 独立完整阅读当前批次、已定卷方案、世界及 `outline_bridge`（前一批最后一章），沿现有设计检查项举证；通过后原子追加，返修预算共享且有界，失败保留已通过前缀。返修预算用尽时按剩余问题分流：只剩 quality/note 级局部意见直接记为未解决项继续，blocker 或章范围级问题才交作者决定。完整旧卷纲始终保留可选来源，不在每批必读中重复全部前缀。
 
 rolling 先完成首卷近期一个批次，进入未覆盖章节时才补下一批；章计划不得越过已核验卷纲边界。远期卷保留职责与关键节点，进入该卷时再细化。current 先完成首卷，后续每卷进入前完成；all 在正文前按卷顺序完成全部卷纲。后两种模式的完整覆盖不受试章授权影响。没有正文授权时以 `outline_ready` 交付并停止，返回 planning_mode/coverage 表示实际完成范围。逐章说明及脑暴选案在 book.html 的设计区展示；章计划必读 `volume_outline_window`，执笔只必读本章 `chapter_outline`，跟踪项目 frontier 不重复全部逐章说明。改案应保留已成立事实，再独立核验设计及正文。
 

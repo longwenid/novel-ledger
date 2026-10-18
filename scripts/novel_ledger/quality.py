@@ -88,8 +88,14 @@ def checks(receipt, required, sources, obligations=(), challenge_ids=(), expecte
                 {'recover': '能由改写解决的缺陷删掉 decision 并给出 target_chapter/repair_scope。'})
         if finding['severity'] != 'note':
             blocking.add(finding['criterion'])
-            require(type(finding.get('target_chapter')) is int and finding['target_chapter'] in sources
-                    and finding.get('repair_scope') in ('local', 'chapter'), 'repair_scope', '缺陷须明确修复章和 local/chapter 范围。')
+            require(type(finding.get('target_chapter')) is int and finding['target_chapter'] in sources,
+                    'repair_scope', '缺陷须挂在冻结材料的章号上。',
+                    {'valid_chapters': sorted(sources), 'got': finding.get('target_chapter'),
+                     'rule': 'target_chapter 只能取本任务冻结材料包含的章号；全书设计/卷纲/约定核验的冻结材料是 '
+                             'chapter 0——缺陷无论落在第几章都记 0，具体章写进 reason 的修订范围。'})
+            require(finding.get('repair_scope') in ('local', 'chapter'), 'repair_scope',
+                    '缺陷须明确 local/chapter 修复范围。',
+                    {'valid_scopes': ['local', 'chapter'], 'got': finding.get('repair_scope')})
     require(len(decisions) <= AUTHOR_DECISIONS_PER_RECEIPT, 'author_decision', '一份回执一次只能上交一个作者裁决。',
             {'got': [f['decision']['id'] for f in decisions], 'limit': AUTHOR_DECISIONS_PER_RECEIPT,
              'recover': '把其余问题合并成同一问题的选项，或在下一轮核验中另交。'})

@@ -78,6 +78,9 @@ def parser():
         if command == 'choose':
             sub.add_argument('--option')
             sub.add_argument('--tier', help='结构门按档位直接指定；展示窗口会自动滑到该档。')
+        if command == 'status':
+            sub.add_argument('--tasks', action='store_true',
+                             help='列出全部派工任务的生命周期视图（id/状态/阶段/会话）。')
         if command in ('choose', 'regroup'):
             sub.add_argument('--board')
         if command == 'regroup':
@@ -201,6 +204,13 @@ def worker_guard(app, args):
     ident = os.environ.get('NOVEL_TASK_ID')
     if not ident:
         return
+    if args.command == 'claim':
+        # The docs used to tell whoever holds the receipt to "claim when needed" — a dispatched
+        # worker followed that and was rejected here. Say the role and the way out instead.
+        require(False, 'worker_boundary', '认领由主干进程执行；Worker 进程不执行 claim。',
+                {'task_id': ident,
+                 'recover': '派工视图里 claim=null 表示本任务无需认领，直接读取与提交；'
+                            '确需租约时回报主控，由主控执行 claim --task ' + ident + ' --session <会话>。'})
     require(args.command in WORKER, 'worker_boundary', 'Worker 不能执行主控或作者命令。')
     if args.command not in ('submit', 'preflight'):
         app.authorize_worker(ident, os.environ.get('NOVEL_SESSION'), os.environ.get('NOVEL_EXECUTION_CLAIM'))
@@ -231,7 +241,7 @@ def dispatch(args, open_runtime=open_local_runtime):
                 result['book_view_error'] = str(exc)
             return result
         if command == 'status':
-            return app.status()
+            return app.task_list() if args.tasks else app.status()
         if command == 'advance':
             return app.advance(args.after, owner, compact=args.compact)
         if command == 'intake':

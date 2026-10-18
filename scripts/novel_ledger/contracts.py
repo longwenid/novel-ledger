@@ -159,7 +159,7 @@ DEFAULT_TERMS = ['账本', '入账', '回执']
 DEFAULT_NAME_CHARS = []
 # Work-directory artifacts the controller may regenerate; everything else in a task directory
 # is authored by a Worker and is never rewritten behind its back.
-FORM_ARTIFACTS = ('input.json', 'result.template.json')
+FORM_ARTIFACTS = ('input.json', 'result.template.json', 'brief.md', 'dispatch.md')
 # Brainstorm methods. A lens is a way to make the next option genuinely different, not a label:
 # the axis spends one slot of the choice, the method says how to vary it. Kept beside the
 # contract fields because option quality is part of the author-facing contract.
@@ -262,12 +262,12 @@ SCALE_WINDOW = 3          # how many consecutive tiers one board shows
 # keep the separate layer say so here; a guard test derives the coverage requirement from the
 # tier table itself, so a new tier cannot arrive without declaring its shape.
 PIPELINE_SHAPES = {
-    't0': {'merge_volume_design': True},
-    't1': {'merge_volume_design': False},
-    't2': {'merge_volume_design': False},
-    't3': {'merge_volume_design': False},
-    't4': {'merge_volume_design': False},
-    't5': {'merge_volume_design': False},
+    't0': {'merge_volume_design': True, 'outline_batch': 'volume'},
+    't1': {'merge_volume_design': False, 'outline_batch': 'window'},
+    't2': {'merge_volume_design': False, 'outline_batch': 'window'},
+    't3': {'merge_volume_design': False, 'outline_batch': 'window'},
+    't4': {'merge_volume_design': False, 'outline_batch': 'window'},
+    't5': {'merge_volume_design': False, 'outline_batch': 'window'},
 }
 
 

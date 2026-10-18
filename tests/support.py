@@ -42,6 +42,20 @@ def node(ident, dependencies=()):
             'cost': '承担违规责任。', 'outcome': '找到退件来源。', 'disclosure': '先展示箱子，再披露来源。', 'depends_on': list(dependencies)}
 
 
+def outline_fixture(app, policy, anchor):
+    """A valid per-chapter outline for one batch: refs off the real world, length off the policy."""
+    model = app.repo.load().get('world')
+    refs = [next(section + ':' + r['id'] for section, rows in model.items() if isinstance(rows, list) for r in rows)] if model else []
+    sentence = '沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。'
+    synopsis = (sentence * (policy['words'] // len(sentence) + 3))
+    from novel_ledger.contracts import han_count
+    while han_count(synopsis) > policy['words']:
+        synopsis = synopsis[:-1]
+    return {'world_hash': policy['world_hash'],
+            'chapters': [dict(chapter=k, synopsis=synopsis, world_refs=refs, node_ids=[anchor])
+                         for k in range(policy['first'], policy['last'] + 1)]}
+
+
 def response(app, task_id=None, session=None, claim=None):
     task = app.repo.task(task_id) if task_id else app.repo.pending()
     work = task['input']
@@ -57,10 +71,15 @@ def response(app, task_id=None, session=None, claim=None):
     data = template(stage, n, sources, work['obligations'], version=work.get('checks_version', 1),
                     payload=work['payload'], tracking=work.get('narrative_tracking', False))
     if stage in ('book_plan', 'volume_plan'):
+        anchor = 'book' if stage == 'book_plan' else work['scope']
         data = {'intent': '查明来源。', 'ending_conditions': '证据公开且后果落实。',
-                'nodes': [node('book' if stage == 'book_plan' else work['scope'], () if stage == 'book_plan' else ('book',))]}
+                'nodes': [node(anchor, () if stage == 'book_plan' else ('book',))]}
         policy = work['payload'].get('volume_outline')
-        if policy:
+        if policy and 'volume_outline' in (work['payload'].get('also') or ()):
+            # The merged single-volume dispatch: the skeleton receipt also carries the volume's
+            # chapter outlines, the way the world receipt carries its contract.
+            data.update(outline_fixture(app, policy, anchor))
+        elif policy:
             model = app.repo.load().get('world')
             refs = [next(section + ':' + r['id'] for section, rows in model.items() if isinstance(rows, list) for r in rows)] if model else []
             data.update(world_hash=policy['world_hash'],
@@ -68,17 +87,7 @@ def response(app, task_id=None, session=None, claim=None):
                                     dict(id='B', premise='先追查货物流向，再回查签字矛盾。', tradeoff='延迟确认经手人。', world_refs=refs)],
                         selected='A', selection_reason='工程样本：卷末责任与现有规则相接。')
     elif stage == 'volume_outline':
-        policy = work['payload']['volume_outline']
-        model = app.repo.load().get('world')
-        refs = [next(section + ':' + r['id'] for section, rows in model.items() if isinstance(rows, list) for r in rows)] if model else []
-        sentence = '沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。'
-        synopsis = (sentence * (policy['words'] // len(sentence) + 3))
-        from novel_ledger.contracts import han_count
-        while han_count(synopsis) > policy['words']:
-            synopsis = synopsis[:-1]
-        data = {'world_hash': policy['world_hash'],
-                'chapters': [dict(chapter=k, synopsis=synopsis, world_refs=refs, node_ids=[work['scope']])
-                             for k in range(policy['first'], policy['last'] + 1)]}
+        data = outline_fixture(app, work['payload']['volume_outline'], work['scope'])
     elif stage == 'plan':
         book = app.repo.load()
         volume_id = next(v['id'] for v in book['contract']['volumes'] if v['first'] <= n <= v['end'])

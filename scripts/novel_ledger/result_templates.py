@@ -85,4 +85,12 @@ def template(stage, chapter, sources, obligations=(), extra=(), version=CHECKS_V
         return {'world_hash': policy['world_hash'],
                 'chapters': [{'chapter': n, 'synopsis': '', 'world_refs': [], 'node_ids': []}
                              for n in range(policy['first'], policy['last'] + 1)]}
+    if stage == 'book_plan' and 'volume_outline' in (extra or ()):
+        # The merged single-volume dispatch: the skeleton plus the volume's chapter outlines
+        # ride in one receipt, the way the world dispatch carries its contract.
+        policy = payload['volume_outline']
+        return {'intent': '', 'ending_conditions': '', 'nodes': [], **({'threads': []} if tracking else {}),
+                'world_hash': policy['world_hash'],
+                'chapters': [{'chapter': n, 'synopsis': '', 'world_refs': [], 'node_ids': []}
+                             for n in range(policy['first'], policy['last'] + 1)]}
     return {'intent': '', 'ending_conditions': '', 'nodes': [], **({'threads': []} if tracking else {})}

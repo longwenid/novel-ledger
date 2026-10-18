@@ -48,7 +48,9 @@ def validate(data, choices, selection_hash, sections=None):
     required = required_sections(sections) if isinstance(sections, str) else tuple(sections or required_sections())
     require(isinstance(data, dict) and data.get('selection_hash') == selection_hash
             and text(data.get('premise')) and text(data.get('story_capacity')), 'world', '世界需要准确选择版本、核心前提和长篇承载说明。')
-    require(data['premise'] == choices['world']['world_premise'], 'world_alignment', '世界前提须遵守所选方案。')
+    require(data['premise'] == choices['world']['world_premise'], 'world_alignment', '世界前提须与所选方案逐字一致。',
+            {'rule': '逐字相等；不是包含、缩写或改写', 'expect': choices['world']['world_premise'],
+             'got': data.get('premise'), 'source': 'opening_choices.world.world_premise'})
     all_ids = set()
     for section, fields in SECTIONS.items():
         rows = data.get(section)
@@ -64,13 +66,22 @@ def validate(data, choices, selection_hash, sections=None):
             require(isinstance(row.get('links'), list) and all(text(ref) for ref in row['links']), 'world_links', '世界记录须声明关联引用，独立记录可用空数组。')
     for section in SECTIONS:
         for row in data[section]:
-            require(all(ref in all_ids for ref in row['links']), 'world_reference', '世界关联引用不存在。')
+            missing = [ref for ref in row['links'] if ref not in all_ids]
+            require(not missing, 'world_reference', '世界关联引用不存在。',
+                    {'record': section + ':' + row['id'], 'missing': missing,
+                     'expect': 'links 只能引用本世界里已存在的 领域:id 记录；独立记录用空数组'})
     names = [c['name'] for c in data['characters']]
     require(len(names) == len(set(names)), 'world_identity', '世界人物称呼不能歧义。')
     protagonist = choices['protagonist']
     require(any(c['id'] == protagonist['id'] and c['name'] == protagonist['name'] and c['desire'] == protagonist['desire']
-                and c['limit'] == protagonist['limit'] for c in data['characters']), 'world_alignment', '世界模型须保留所选主角的身份、欲望和底线。')
+                and c['limit'] == protagonist['limit'] for c in data['characters']), 'world_alignment', '世界模型须保留所选主角的身份、欲望和底线。',
+            {'rule': 'characters 里须有一条记录的 id/name/desire/limit 与所选主角逐字相同',
+             'expect': {k: protagonist[k] for k in ('id', 'name', 'desire', 'limit')},
+             'source': 'opening_choices.protagonist'})
     mode = choices['world']['mechanism']['mode']
-    require((mode == 'none' and not data['mechanisms']) or (mode == 'bounded' and bool(data['mechanisms'])), 'world_alignment', '世界机制必须遵守已选的无机制或有限机制方向。')
+    require((mode == 'none' and not data['mechanisms']) or (mode == 'bounded' and bool(data['mechanisms'])), 'world_alignment', '世界机制必须遵守已选的无机制或有限机制方向。',
+            {'selected_mode': mode,
+             'rule': '所选 mode=none 时 mechanisms 必须为空数组；mode=bounded 时至少一条',
+             'source': 'opening_choices.world.mechanism.mode'})
     require(set(data) <= {'selection_hash', 'premise', 'story_capacity', *SECTIONS}, 'world_fields', '世界模型不得夹带正文事件或事实结算。')
     return copy.deepcopy(data)

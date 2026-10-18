@@ -100,7 +100,7 @@ flowchart TD
 | editorial | 正文实现裁决、根修复案例、卷末职责、关闭验收范围、自动回改策略与终审覆盖；只依赖 contracts |
 | facts | 原文定位、事件前值、资源、时钟、站位与历史断言的纯结算 |
 | quality | 首读与独立审稿回执的完整性、一致性、证据核验；作者级发现的形状与“写作端可修”的区分 |
-| workflow | 下一任务和状态转换，内容与篇幅共享修复额度；窄返修守卫、返修复发计数与 repair-stalled 停止点；按 PIPELINE_SHAPES 在微型档单卷项目安装合并卷设计 |
+| workflow | 下一任务和状态转换，内容与篇幅共享修复额度；窄返修守卫、返修复发计数与 repair-stalled 停止点；设计候选额度用尽按剩余问题严重度分流（局部 quality/note 记为未解决项继续，blocker/章范围级交作者）；返修落位时产出 repair_diff 摘要（改了什么/被点名什么/哪些未动）供重核按需读取；按 PIPELINE_SHAPES 安装档位流程形状：微型档合并卷设计（merge_volume_design）与整卷卷纲批次（outline_batch）、骨架+逐章卷纲合并派工（payload.also，同 world+contract 先例） |
 | briefs / result_templates | 按阶段生成任务说明与交付模板；不承担回执核验 |
 | context | 面向 ContextStore 编译冻结来源、必读选择和按需资料，不依赖 workflow |
 | publication | 面向 PublicationReader 的只读交付快照查询 |
@@ -109,7 +109,7 @@ flowchart TD
 | sqlite_store | 持久化、唯一 pending、幂等回执、不可变材料及分支；逐章历史来源与增量目录缓存；未达文档回收 |
 | presentation | 实现交付端口，组合任务目录、修复方案、世界及全书视图 |
 | workspace | 输出位置与受保护资源别名判定；保护路径由存储适配器经组合根注入 |
-| delivery | 任务目录物化、表单保留与回收、正文和世界导出、选择板卡片（work/board.md）渲染 |
+| delivery | 任务目录物化、表单保留与回收、正文和世界导出、选择板卡片（work/board.md）、提问载荷（work/question.json）、Worker 自举卡（dispatch.md）、简报全文（brief.md）与 advance 完整视图快照（work/last-advance.json）渲染 |
 | bookpage | 统一 book.html 的只读数据准备、转义与渲染；templates/ 保存 HTML 外壳及 CSS/JS，导出时全部内嵌 |
 | host | 面向 HostApplication 的外部进程执行、超时终止和实际提交核实，不访问应用内部 Repository |
 | unattended | 面向 WatchApplication 的无人值守等待循环：派工后由引擎进程等待外部提交并续租，仅在下一派工、作者决定、暂停、终点或 idle 时返回；本地组合根附写 work/watch.jsonl 派工日志 |
@@ -134,7 +134,7 @@ flowchart TD
 
 ### 派工文件与角色
 
-- `work/<task>/` 里两类文件分属不同作者：task.json、input.json、identity.json、chapter-*.txt 由主控生成且可重建；result.template.json（表单）与 result.json（回执）由 Worker 写。主控只在表单缺失或属于其他任务时才生成它，重跑 advance 绝不覆盖 Worker 已填内容；取消任务是唯一回收表单的事件。
+- `work/<task>/` 里两类文件分属不同作者：task.json、input.json、identity.json、dispatch.md（Worker 自举卡）、brief.md（简报全文）、chapter-*.txt 由主控生成且可重建；result.template.json（表单）与 result.json（回执）由 Worker 写。主控只在表单缺失或属于其他任务时才生成它，重跑 advance 绝不覆盖 Worker 已填内容；取消任务是唯一回收表单的事件。
 - 角色由身份而非称呼区分：read/recall 只在携带 NOVEL_TASK_ID 的派工身份下开放，主控调用按 role_boundary 拒绝；audit/export/html 是验收与交付命令，主控可用。身份本身随派工一起留档（identity.json：task_id、input_hash、阶段、worker_env 与 review_session），供核对与解释失败，但权限只看宿主注入的凭据——可核对的数据不是许可证，也不由 Worker 写回。
 
 ### 字面策略与材料选择

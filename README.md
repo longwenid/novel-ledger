@@ -251,9 +251,9 @@ python scripts/novel.py --project "$P" run --through 3 --source '作者授权先
 
 `run` 返回 `owner` 租约令牌，之后每个主控命令都要带 `--owner <令牌>`，否则返回 `controller_lease`。
 
-默认主干循环：开书门任务（opening_options）由主干在同一会话自执（无独立性要求，免每门一个冷子 agent）；世界模型及之后按 `advance --compact` → 派空历史子 agent → `watch --owner ID`（引擎进程内等待提交并续租）→ 取下一派工执行；板面在 `await_choice` 时由引擎物化为 `work/board.md`。主干只处理目标、任务身份、简短状态和治理命令，子 agent 读取完整任务并直接提交；主干生命周期由宿主提供。
+默认主干循环：开书门任务（opening_options）由主干在同一会话自执（无独立性要求，免每门一个冷子 agent）；世界模型及之后按 `advance --compact` → 转发任务目录的 `dispatch.md`（Worker 自举卡）派空历史子 agent → `watch --owner ID`（引擎进程内等待提交并续租）→ 取下一派工执行。中文长内容一律走引擎物化的文件工件：任务目录的 `brief.md`（简报全文）与 `dispatch.md`，`await_choice` 时的 `work/board.md`（作者卡片）、`work/question.json`（提问载荷）与 `work/last-advance.json`（完整视图快照，`--compact` 的板面回显压缩为哈希与 option_ids）。主干只处理目标、任务身份、简短状态和治理命令，子 agent 读取完整任务并直接提交；主干生命周期由宿主提供。
 
-章节、规划窗口和卷末都继续循环；修订就绪按授权 `promote` 后接续，完本依次 `complete`、`deliver`。首章认可和开书选择仍按准确版本保存作者决定。`--compact` 只精简返回主干的派工信息，磁盘 `task.json` 与冻结材料保持完整；`review_session` 指明原审稿会话，执行中的子 agent 不重复派工。完整动作分支见 [运行与恢复](references/runtime.md)；`host-step/host-loop` 保留为可选子进程适配器。
+章节、规划窗口和卷末都继续循环；修订就绪按授权 `promote` 后接续，完本依次 `complete`、`deliver`。首章认可和开书选择仍按准确版本保存作者决定。`--compact` 只精简返回主干的派工信息，磁盘 `task.json` 与冻结材料保持完整；`review_session` 指明原审稿会话，执行中的子 agent 不重复派工；`status --tasks` 列出全部派工任务的生命周期视图。完整动作分支见 [运行与恢复](references/runtime.md)；`host-step/host-loop` 保留为可选子进程适配器。
 
 审稿触发的历史修订先分析实际影响：局部修改后保留无影响原文，阅读变化先独立重读，语义变化沿依赖传播。自动回改限于最近 `planning_window` 个已写章（默认 3 章），并保护已关闭卷的验收范围；超界返回 `revision_blocked`，保存完整修复方案而不启动重写。扩大执行需作者明确认可准确 `plan_hash`，详见运行指南。
 

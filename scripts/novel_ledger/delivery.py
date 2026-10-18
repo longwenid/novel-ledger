@@ -61,6 +61,121 @@ def write_board_card(workspace: LocalWorkspace, board):
     return str(path)
 
 
+def render_question(board):
+    """The author-facing ask payload rendered once by the engine, mirroring the board card.
+
+    The controller forwards it verbatim instead of re-authoring one-line summaries: a live run
+    condensed every gate into hand-written option descriptions while the engine's card (pitch,
+    premise, tradeoff) never reached the author.
+    """
+    gate = board.get('gate') or {}
+    letters = 'ABCDEF'
+    options = []
+    for index, option in enumerate(board.get('options') or []):
+        tag = letters[index] if index < len(letters) else str(index + 1)
+        summary = option.get('pitch') if text(option.get('pitch')) else option.get('premise')
+        options.append({'label': '%s %s' % (tag, option.get('title', '')), 'description': summary or ''})
+    options.append({'label': '换一组（可附原因）',
+                    'description': '这一组都不合适；说明理由（如“格局太小”“不够爽”），我按理由重出一组实质不同的方案。'})
+    options.append({'label': 'D 自定义', 'description': '这一门我自己说：直接给方向或内容。'})
+    number, total, title = gate.get('number', '?'), gate.get('total', '?'), gate.get('title', '')
+    return {'questions': [{'header': '第 %s/%s 门%s' % (number, total, '（新一组）' if board.get('round') else ''),
+                           'question': '第 %s 门（%s）：选哪个？' % (number, title),
+                           'multiSelect': False, 'options': options}]}
+
+
+def write_question_card(workspace: LocalWorkspace, board):
+    """Materialize the ask payload as work/question.json beside the board card."""
+    path = workspace.artifact_path(workspace.project / 'work' / 'question.json')
+    json_write(path, render_question(board))
+    return str(path)
+
+
+def write_advance_snapshot(workspace: LocalWorkspace, boundary):
+    """Persist the full boundary view as work/last-advance.json before any compact trimming.
+
+    The board echo is the one advance output that exists nowhere on disk; with the snapshot the
+    compact return may shrink to pointers without losing the full view.
+    """
+    path = workspace.artifact_path(workspace.project / 'work' / 'last-advance.json')
+    json_write(path, boundary)
+    return str(path)
+
+
+def _quoted_argv(argv):
+    return ' '.join("'%s'" % part for part in argv)
+
+
+def render_dispatch_card(envelope, identity):
+    """The worker bootstrap card, rendered by the engine from the frozen dispatch itself.
+
+    Hand-written dispatch prompts drift from what the engine enforces (a live run taught a worker
+    to run `claim` and the boundary guard rejected it), and every cold worker paid a role_boundary
+    round to learn the env bootstrap. The card carries the exact preamble and steps once, from the
+    same source the guards check against; the controller forwards the path instead of re-authoring
+    the protocol.
+    """
+    stage = envelope['stage']
+    claim = envelope.get('claim')
+    if claim is None:
+        claim_lines = ['- 本任务 claim=null：无需认领，直接读取与提交。认领（claim 命令）由主干进程执行；'
+                       'Worker 进程（已设 NOVEL_TASK_ID）执行会被 worker_boundary 拒绝。']
+    else:
+        state = '已过期' if claim.get('expired') else '生效中（session=%s）' % claim.get('session')
+        claim_lines = ['- 本任务已有租约（%s）：未过期沿用原会话；过期由主干重新认领，Worker 不执行 claim。' % state]
+    suggested = identity['worker_env'].get('NOVEL_SESSION') or ('worker-%s-XXXX（自命名，XXXX 任选四位）' % stage)
+    commands = envelope.get('commands') or {}
+    locked = envelope.get('delivery_phase') == 'first_read'
+    if locked:
+        steps = ['1. 读 `task.json` 与 `brief.md`（首读指示）；完整读 prose_files 里的每一章正文。',
+                 '2. 按 `first_read_path` 指向的 first-read.json 逐章填首读记录，执行 commands.first_read。',
+                 '3. 首读冻结后按返回的新 task_path 继续：仍用本会话完成解锁后的核验，不换人不重读首读。',
+                 '4. worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令。']
+        command_names = ('read', 'first_read')
+    else:
+        steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。',
+                 '2. 执行一次无参数 read（命令见下）把必读记录拿齐；确需某份再 read --record 名称。',
+                 '3. 复制 `result.template.json` 为 `result.json` 起稿，只改 data；'
+                 'schema/task_id/input_hash 不手写（input_version 报错会带 expected）。',
+                 '4. `preflight` 试算，按报错 details.expect 修正；不为确认格式读引擎源码。',
+                 '5. `submit` 提交；worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令，不改写 commands/guides。']
+        command_names = ('read', 'preflight', 'submit')
+    lines = ['# Worker 自举卡：%s' % stage,
+             '',
+             identity.get('task_line') or ('本任务：stage=%s。' % stage),
+             '任务文件（唯一权威）：`%s`；简报全文：同目录 `brief.md`（不必解析 input.json）。' % envelope['task_path'],
+             '',
+             '## 1. 环境自举（PowerShell，照抄；会话名一次定下不再改）',
+             '',
+             '    $env:PYTHONIOENCODING=\'utf-8\'',
+             '    [Console]::OutputEncoding=[System.Text.Encoding]::UTF8',
+             "    $env:NOVEL_TASK_ID='%s'" % envelope['task_id'],
+             "    $env:NOVEL_SESSION='%s'" % suggested,
+             '',
+             '首条 read 报 role_boundary 说明环境变量未生效：回本块重设后再试。',
+             '',
+             '## 2. 步骤',
+             '',
+             *steps,
+             '',
+             '## 3. 认领',
+             '',
+             *claim_lines,
+             '']
+    for name in command_names:
+        if commands.get(name):
+            lines.append('- %s：%s' % (name, _quoted_argv(commands[name])))
+    lines += ['',
+              '## 4. 常见坑',
+              '',
+              '- commands 是 argv 数组：逐项传参，不拼 shell 字符串，不改路径。',
+              '- 控制台 GBK 会乱码：中文内容走文件工件（brief.md、work/board.md、work/question.json），'
+              '不在控制台打印长 JSON；自行重定向时 PowerShell 5 的 `Out-File -Encoding utf8` 带 BOM，读回用 utf-8-sig。',
+              '- 完成后向主控只报状态：task_id、valid/accepted/committed、worker_boundary、'
+              '错误或拒绝摘要（含 code）；不贴正文或完整回执。']
+    return '\n'.join(lines) + '\n'
+
+
 
 def output_path(workspace: LocalWorkspace, output, default):
     """Delegate output validation to the workspace that owns local paths."""
@@ -185,6 +300,17 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     identity_file = artifact('identity.json')
     json_write(identity_file, identity)
     envelope['identity_path'] = str(identity_file)
+    # The brief rides inside input.json as one long JSON string, which console tools truncate or
+    # garble; the markdown twin is what readers actually open. Both branches above settled the
+    # text (the locked branch writes its own one-line brief into the envelope).
+    brief_text = envelope.get('brief') or work.get('brief')
+    if text(brief_text):
+        brief_file = artifact('brief.md')
+        atomic_write(brief_file, brief_text)
+        envelope['brief_path'] = str(brief_file)
+    dispatch_file = artifact('dispatch.md')
+    atomic_write(dispatch_file, render_dispatch_card(envelope, identity))
+    envelope['dispatch_path'] = str(dispatch_file)
     # The commands below are rendered from this process, so they work as long as this installation
     # does. Say so, and say what to do when it has moved: a stale path is refreshed by another
     # `advance`, never by rewriting the command by hand.
@@ -235,8 +361,8 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     if compact:
         # Keep the controller's context small; workers always receive the complete on-disk envelope.
         # The shared dispatch fields are listed from the same mapping the envelope was built from.
-        keys = ('schema', 'version', *shared, 'task_path', 'identity_path', 'claim')
-        return {key: envelope[key] for key in keys}
+        keys = ('schema', 'version', *shared, 'task_path', 'identity_path', 'brief_path', 'dispatch_path', 'claim')
+        return {key: envelope[key] for key in keys if key in envelope}
     return envelope
 
 

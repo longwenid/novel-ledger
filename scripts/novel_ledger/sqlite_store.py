@@ -207,6 +207,21 @@ class SQLiteRepository:
         row = self.db.execute("SELECT id FROM tasks WHERE status='pending'").fetchone()
         return self.task(row['id']) if row else None
 
+    def task_rows(self):
+        """One light row per task ever dispatched, in dispatch order.
+
+        The sanctioned read-only view of task lifecycle: a live reviewer needing "which tasks
+        exist and what happened to them" opened the SQLite file with a scratch script, because
+        no command answered that question.
+        """
+        rows = []
+        for row in self.db.execute('SELECT id, status, reviewer, input FROM tasks ORDER BY rowid'):
+            work = json.loads(row['input'])
+            rows.append({'id': row['id'], 'status': row['status'], 'stage': work.get('stage'),
+                         'chapter': work.get('chapter'), 'scope': work.get('scope'),
+                         'session': row['reviewer']})
+        return rows
+
     def task(self, task_id):
         row = self.db.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
         require(row is not None, 'task', '任务不存在。')

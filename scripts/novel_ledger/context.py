@@ -203,6 +203,29 @@ def _brief(book, job, version=CHECKS_VERSION):
         return briefs.world_model(previous=previous, repair=bool(payload.get('repair')),
                                   scale=_scale_line(book),
                                   sections=world.required_sections(tier['id'] if tier else None))
+    if job.stage == 'book_plan' and 'volume_outline' in (payload.get('also') or ()):
+        return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book), 'checks_version': version}) + (
+            '\n\n## 本任务同时交付逐章卷纲（单卷合并档）\n'
+            '全书骨架与本卷逐章卷纲写在同一个回执里（模板已含 world_hash 与 chapters）。'
+            'chapters 逐章给 chapter/synopsis/world_refs/node_ids，覆盖 payload.volume_outline 的 first~last 全部章；'
+            'synopsis 是可直接落笔的情节推进说明（谁、做什么、结果与代价），不是节点复述，'
+            '章与节点的窗口和披露顺序保持一致。')
+    if job.stage in ('world_review', 'design_review', 'outline_review'):
+        notes = ''
+        proposal = book.get('proposal') or {}
+        if job.stage == 'design_review' and proposal.get('scope') == 'book' \
+                and (proposal.get('data') or {}).get('chapters'):
+            notes += ('\n\n## 本提案含逐章卷纲（合并档）\n'
+                      '本候选的冻结材料（chapter 0）同时包含全书骨架与本卷逐章 synopsis：'
+                      'causality/disclosure/threads 的检查须同时覆盖骨架节点与逐章 synopsis 的一致性'
+                      '（章落在节点窗口内、披露顺序不重复不超前、钩子按约定兑现），证据可引 chapter 0 的 synopsis 原文。')
+        if proposal.get('repair_diff'):
+            notes += ('\n\n## 返修后重核\n'
+                      '上一轮返修实际改动范围见 read --record repair_diff（named_by_findings/changed/added/removed/unchanged）。'
+                      '先核对该记录与上一轮 findings 一一对应、未被点名的部分未动，再做整体验证；'
+                      '不手工 diff 两版文件，也不读引擎源码推返修规则。')
+        if notes:
+            return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book), 'checks_version': version}) + notes
     return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book), 'checks_version': version})
 
 
@@ -479,6 +502,11 @@ def build(repo: ContextStore, book, job):
         add('previous_proposal', book['proposal'])
     if stage in ('design_review', 'outline_review', 'contract_review', 'world_review'):
         add('proposal', book['proposal'])
+        if stage != 'contract_review' and book['proposal'].get('repair_diff'):
+            # On demand, not required: only a re-review after a repair has anything to compare,
+            # and the summary is small. This is the scope check the reviewer used to hand-roll
+            # with scratch diff scripts — rendered once by the same comparison the guard runs.
+            add('repair_diff', book['proposal']['repair_diff'], False)
         prose = [{'chapter': 0, 'hash': repo.document(dump(book['proposal']['data']))}]
         if stage == 'contract_review' and book['proposal'].get('amendment'):
             # A re-contract changes a field or two of a candidate that was already reviewed. The

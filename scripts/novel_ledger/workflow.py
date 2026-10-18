@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (AUTHOR_CHANNEL_STAGES, FAST_REVIEW_BLOCK, HOOK_LINKS_CAPABILITY,
+from .contracts import (AUTHOR_CHANNEL_STAGES, AUTHOR_SEVERITY, FAST_REVIEW_BLOCK, HOOK_LINKS_CAPABILITY,
                         OPENING_BOUNDS_CAPABILITY, OPENING_VERSION, READING_DEPENDENCIES_CAPABILITY, REPAIRS, REDESIGNS,
                         SCENE_IDENTITY_CAPABILITY, UNDERSTANDING_CAPABILITY, PIPELINE_SHAPES, tier_of,
                         Job, Outcome, capabilities_for, checks_for, digest, han_count, require, text)
@@ -68,6 +68,20 @@ def install_merged_volume_design(book, scope, data):
     key = 'volume:' + volumes[0]['id']
     book['designs'][key] = copy.deepcopy(data)
     return key
+
+
+def merges_volume_outline(book):
+    """Whether this project's one volume is outlined in a single batch (or none, when merged).
+
+    `planning_window` is the writing-time rolling-replan bound; using it as the opening-time
+    batch knife made a 17-chapter micro book pay six dispatch cycles for outlines of a skeleton
+    that was already reviewed as a whole. Single-volume tiers outline the whole volume at once.
+    """
+    contract = editorial.effective_contract(book)
+    tier = tier_of(contract)
+    volumes = contract.get('volumes') or []
+    return (tier is not None and len(volumes) == 1
+            and PIPELINE_SHAPES.get(tier['id'], {}).get('outline_batch') == 'volume')
 
 
 def new_book(contract, source=''):
@@ -168,6 +182,19 @@ def allow_another_repair(book):
     require(proposal is not None, 'proposal', '没有可返修的候选。')
     proposal['attempts'] = REPAIRS
     proposal['needs_repair'] = True
+
+
+def minor_remaining(review):
+    """Whether an exhausted budget's remaining findings are all local, non-blocker items.
+
+    A live micro-book halted for an author decision over one quality finding whose fix was a
+    single wording change; the arbitration (and the author's wait) cost far more than the fix.
+    Blockers and chapter-scope repairs still go to the author — those change what the book is,
+    not how a sentence reads.
+    """
+    substantive = [f for f in review['findings'] if f.get('severity') not in ('note', AUTHOR_SEVERITY)]
+    return bool(substantive) and all(f.get('severity') != 'blocker' and f.get('repair_scope') == 'local'
+                                     for f in substantive)
 
 
 def accept_with_findings(book, stage):
@@ -333,7 +360,12 @@ def next_outline(book, volume, chapter=None):
     if rolling and first > (chapter or volume['first']):
         return None
     if first <= volume['end']:
-        last = min(volume['end'], first + min(6, book['contract']['planning_window']) - 1)
+        # The writing-time rolling window stays the knife for long books; a single-volume tier
+        # that declares it outlines the whole volume in one batch.
+        if merges_volume_outline(book):
+            last = volume['end']
+        else:
+            last = min(volume['end'], first + min(6, book['contract']['planning_window']) - 1)
         return Job('volume_outline', first, scope, first, last)
     return None
 
@@ -369,7 +401,14 @@ def choose(book, headers):
             return Job(stage, proposal['chapter'], proposal['scope'], proposal['first'], proposal['last'], {'repair': bool(proposal.get('needs_repair'))})
         if proposal.get('needs_repair'):
             stage = 'world_model' if proposal['scope'] == 'world' else 'book_plan' if proposal['scope'] == 'book' else 'volume_plan'
-            return Job(stage, proposal['chapter'], scope=proposal['scope'], payload={'repair': True})
+            payload = {'repair': True}
+            if proposal['scope'] == 'book' and (proposal.get('data') or {}).get('chapters'):
+                # A merged skeleton+outline candidate is repaired as one artifact: the repair
+                # dispatch carries the same combined shape the original draft was asked for.
+                contract_now = editorial.effective_contract(book)
+                payload.update(also=('volume_outline',),
+                               volume_outline=planning.outline_policy(contract_now, contract_now['volumes'][0], book['world']))
+            return Job(stage, proposal['chapter'], scope=proposal['scope'], payload=payload)
         # A contract drafted together with the world waits for that world to be verified first:
         # the alignment check reads the verified world, so reviewing it earlier would be empty.
         if proposal['scope'] == 'contract' and proposal.get('after') == 'world' and not book.get('world'):
@@ -391,7 +430,15 @@ def choose(book, headers):
     if opening_only and not outline:
         return {'action': 'world_ready', 'selection_hash': opening['selection_hash']}
     if 'book' not in book['designs']:
-        return Job('book_plan', 1, scope='book')
+        payload = {}
+        if merges_volume_design(book) and outline and book.get('world'):
+            # The tier that merges volume design also merges the volume's chapter outlines into
+            # the skeleton dispatch: one cold worker drafts both, one review covers both. The
+            # measured opening run paid six outline batches plus reviews for a 17-chapter book
+            # whose skeleton was already reviewed as a whole.
+            payload = {'also': ('volume_outline',),
+                       'volume_outline': planning.outline_policy(contract, contract['volumes'][0], book['world'])}
+        return Job('book_plan', 1, scope='book', payload=payload)
     head = headers[-1]['n'] if headers else 0
     if outline and (opening_only or outline['scope'] == 'all' and head == 0):
         volumes = contract['volumes'] if outline['scope'] == 'all' else contract['volumes'][:1]
@@ -576,6 +623,25 @@ def require_narrow_repair(previous, candidate, findings):
                         '请核验者在 findings 里写成 chapter 范围。'})
 
 
+def repair_summary(previous, candidate, findings):
+    """What a narrow repair actually touched, as the summary the next reviewer reads.
+
+    A re-review used to verify scope by hand: diffing two result files with scratch scripts and
+    reading engine source to guess the rule. The comparison the guard already makes is rendered
+    once here and handed over as the `repair_diff` record instead.
+    """
+    before, after = identified_items(previous or {}), identified_items(candidate)
+    named = named_items(previous or {}, findings or [])
+    changed = sorted(key for key, value in before.items() if after.get(key, object()) != value)
+    removed = sorted(key for key in before if key not in after)
+    return {'named_by_findings': sorted(named),
+            'changed': changed,
+            'added': sorted(key for key in after if key not in before),
+            'removed': removed,
+            'unchanged': sorted(set(before) - set(changed) - set(removed)),
+            'changed_but_not_named': sorted(key for key in changed if key not in named)}
+
+
 def named_items(previous, findings):
     """The candidate's items a finding actually names, found in its criterion, reason and evidence."""
     text_of = ' '.join(' '.join(str(finding.get(field) or '') for field in ('criterion', 'reason'))
@@ -626,7 +692,11 @@ def apply(book, task, data, actor, sources):
         old = book['proposal'] or {}
         if (task.get('payload') or {}).get('repair'):
             require_narrow_repair(old.get('data') or {}, model, old.get('findings') or [])
-        book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': model, 'producer': actor, 'attempts': old.get('attempts', 0)}
+            book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': model, 'producer': actor,
+                                'attempts': old.get('attempts', 0),
+                                'repair_diff': repair_summary(old.get('data') or {}, model, old.get('findings') or [])}
+        else:
+            book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': model, 'producer': actor, 'attempts': old.get('attempts', 0)}
         if 'opening_contract' in (task.get('payload') or {}).get('also', ()):  # combined dispatch
             planning.enforce(planning.active_policy(book.get('lexical_policy')), 'opening_contract', data.get('contract'))
             contract = planning.validate_contract(data.get('contract'))
@@ -652,7 +722,10 @@ def apply(book, task, data, actor, sources):
             proposal['attempts'] += 1
             proposal['findings'] = review['findings']
             if proposal['attempts'] > REPAIRS:
-                hold_for_exhaustion(book, proposal, review, stage)
+                if minor_remaining(review):
+                    accept_with_findings(book, stage)
+                else:
+                    hold_for_exhaustion(book, proposal, review, stage)
             else:
                 proposal['needs_repair'] = True
     elif stage == 'opening_contract':
@@ -666,8 +739,21 @@ def apply(book, task, data, actor, sources):
     elif stage in ('book_plan', 'volume_plan'):
         known = node_map(book)
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
-        design = planning.validate_design(data, known, tracking, narrative.registry(book)[1],
-                                          task.get('payload', {}).get('volume_outline'), book.get('world'))
+        merged_outline = stage == 'book_plan' and 'volume_outline' in (task.get('payload') or {}).get('also', ())
+        draft = {key: value for key, value in data.items() if key not in ('chapters', 'world_hash')} \
+            if merged_outline else data
+        design = planning.validate_design(draft, known, tracking, narrative.registry(book)[1],
+                                          None if merged_outline else task.get('payload', {}).get('volume_outline'),
+                                          book.get('world'))
+        if merged_outline:
+            # The single-volume tier drafts skeleton and per-chapter outlines in one cold
+            # session — the same combined-dispatch shape as world+contract — and each half is
+            # validated by its own contract check before both ride in one proposal. The chapter
+            # node references may point at the nodes this same receipt defines.
+            planning.enforce(planning.active_policy(book.get('lexical_policy')), 'volume_outline', data)
+            planning.validate_chapter_outlines(data, task['payload']['volume_outline'], book.get('world'),
+                                               set(node_map(book)) | {row['id'] for row in design['nodes']})
+            design = {**design, 'world_hash': data['world_hash'], 'chapters': data['chapters']}
         ledger.check(data.get('ledger'))
         if tracking and task['scope'] == 'book':
             require(any(t['kind'] == 'main' and t['required'] for t in design['threads']), 'story_threads', '全书设计至少要有一条必须完成的主线。')
@@ -675,7 +761,11 @@ def apply(book, task, data, actor, sources):
         old = book['proposal'] or {}
         if task.get('payload', {}).get('repair'):
             require_narrow_repair(old.get('data') or {}, design, old.get('findings') or [])
-        book['proposal'] = {'scope': task['scope'], 'chapter': chapter, 'data': design, 'producer': actor, 'attempts': old.get('attempts', 0)}
+            book['proposal'] = {'scope': task['scope'], 'chapter': chapter, 'data': design, 'producer': actor,
+                                'attempts': old.get('attempts', 0),
+                                'repair_diff': repair_summary(old.get('data') or {}, design, old.get('findings') or [])}
+        else:
+            book['proposal'] = {'scope': task['scope'], 'chapter': chapter, 'data': design, 'producer': actor, 'attempts': old.get('attempts', 0)}
     elif stage == 'volume_outline':
         policy = task['payload']['volume_outline']
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
@@ -684,9 +774,14 @@ def apply(book, task, data, actor, sources):
         old = book['proposal'] or {}
         if task.get('payload', {}).get('repair'):
             require_narrow_repair(old.get('data') or {}, data, old.get('findings') or [])
-        book['proposal'] = {'kind': 'volume_outline', 'scope': task['scope'], 'chapter': chapter,
-                            'first': task['first'], 'last': task['last'], 'data': data, 'producer': actor,
-                            'attempts': old.get('attempts', 0)}
+            book['proposal'] = {'kind': 'volume_outline', 'scope': task['scope'], 'chapter': chapter,
+                                'first': task['first'], 'last': task['last'], 'data': data, 'producer': actor,
+                                'attempts': old.get('attempts', 0),
+                                'repair_diff': repair_summary(old.get('data') or {}, data, old.get('findings') or [])}
+        else:
+            book['proposal'] = {'kind': 'volume_outline', 'scope': task['scope'], 'chapter': chapter,
+                                'first': task['first'], 'last': task['last'], 'data': data, 'producer': actor,
+                                'attempts': old.get('attempts', 0)}
     elif stage == 'outline_review':
         proposal = book['proposal']
         require(actor != proposal['producer'], 'review_independence', '逐章卷纲批次须由独立核验者检查。')
@@ -707,7 +802,10 @@ def apply(book, task, data, actor, sources):
             proposal['attempts'] += 1
             proposal['findings'] = review['findings']
             if proposal['attempts'] > REPAIRS:
-                hold_for_exhaustion(book, proposal, review, stage)
+                if minor_remaining(review):
+                    accept_with_findings(book, stage)
+                else:
+                    hold_for_exhaustion(book, proposal, review, stage)
             else:
                 proposal['needs_repair'] = True
     elif stage == 'design_review':
@@ -718,14 +816,26 @@ def apply(book, task, data, actor, sources):
             # The answer changes the premise, so re-draft it rather than re-review the same candidate.
             proposal['needs_repair'] = True
         elif review['verdict'] == 'pass':
-            book['designs'][proposal['scope']] = proposal['data']
-            install_merged_volume_design(book, proposal['scope'], proposal['data'])
+            design = proposal['data']
+            book['designs'][proposal['scope']] = design
+            alias = install_merged_volume_design(book, proposal['scope'], design)
+            if alias and design.get('chapters'):
+                # A merged dispatch delivered the single volume's chapter outlines with the
+                # skeleton, and this review covered both: record it as the volume's outline
+                # review so the coverage trail stays auditable.
+                book['designs'][alias].setdefault('outline_reviews', []).append(
+                    {'first': design['chapters'][0]['chapter'], 'last': design['chapters'][-1]['chapter'],
+                     'producer': proposal['producer'], 'reviewer': actor, 'receipt': review,
+                     'data_hash': digest(design)})
             book['proposal'] = None
         else:
             proposal['attempts'] += 1
             proposal['findings'] = review['findings']
             if proposal['attempts'] > REPAIRS:
-                hold_for_exhaustion(book, proposal, review, stage)
+                if minor_remaining(review):
+                    accept_with_findings(book, stage)
+                else:
+                    hold_for_exhaustion(book, proposal, review, stage)
             else:
                 proposal['needs_repair'] = True
     elif stage == 'contract_review':

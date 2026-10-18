@@ -655,8 +655,11 @@ def validate_contract(contract, state, world):
     for key, value in expected.items():
         require(key in contract, 'opening_alignment', '约定缺少本门已选字段：' + key,
                 {'key': key, 'recover': '按模板补齐该字段，并逐字保留作者选择。'})
-        require(contract.get(key) == value, 'opening_alignment', '最终约定改变了用户选择：' + key)
-    require(len(contract['volumes']) == choices['scale']['volume_count'], 'opening_alignment', '分卷数量与用户选择不一致。')
+        require(contract.get(key) == value, 'opening_alignment', '最终约定改变了用户选择：' + key,
+                {'key': key, 'rule': '逐字相等；不是包含、缩写或改写', 'expect': value, 'got': contract.get(key)})
+    require(len(contract['volumes']) == choices['scale']['volume_count'], 'opening_alignment', '分卷数量与用户选择不一致。',
+            {'rule': '卷数须等于所选体量档位的 volume_count', 'expect': choices['scale']['volume_count'],
+             'got': len(contract['volumes']), 'source': 'opening_choices.scale'})
     if version >= 2:
         tier = next((row for row in SCALE_TIERS if row['id'] == choices['scale']['tier']), None)
         require(tier is not None, 'opening_alignment', '体量档位不在档位表中。', {'tier': choices['scale'].get('tier')})
@@ -666,9 +669,16 @@ def validate_contract(contract, state, world):
                 {'tier': tier['id'], 'chapters': chapters, 'chapter_window': tier['chapter_window'],
                  'recover': '把卷末章号落在该档区间内，或 back 重选体量档位。'})
     forbidden = choices['genre'] if version == 1 else choices['world']
-    require(all(line in contract['red_lines'] for line in forbidden['red_lines']), 'opening_alignment', '不能丢掉已选禁区。')
+    require(all(line in contract['red_lines'] for line in forbidden['red_lines']), 'opening_alignment', '不能丢掉已选禁区。',
+            {'missing': [line for line in forbidden['red_lines'] if line not in contract['red_lines']],
+             'rule': '已选禁区逐条逐字保留在 red_lines 里，可增不可减'})
     protagonist = choices['protagonist']
-    require(any(e['id'] == protagonist['id'] and e['name'] == protagonist['name'] and e['kind'] == 'person' for e in contract.get('entities', [])), 'opening_alignment', '最终约定必须保留所选主角身份。')
-    require(contract['world_rules'] == [r['principle'] for r in world['rules']], 'opening_alignment', '约定世界规则须来自已独立核验的世界。')
+    require(any(e['id'] == protagonist['id'] and e['name'] == protagonist['name'] and e['kind'] == 'person' for e in contract.get('entities', [])), 'opening_alignment', '最终约定必须保留所选主角身份。',
+            {'rule': 'entities 里须有一条记录的 id/name/kind=person 与所选主角逐字相同',
+             'expect': {'id': protagonist['id'], 'name': protagonist['name'], 'kind': 'person'},
+             'source': 'opening_choices.protagonist'})
+    require(contract['world_rules'] == [r['principle'] for r in world['rules']], 'opening_alignment', '约定世界规则须来自已独立核验的世界。',
+            {'rule': 'world_rules 逐条逐字等于已核验世界 rules 各条的 principle，顺序一致',
+             'expect': [r['principle'] for r in world['rules']], 'got': contract.get('world_rules')})
     require(not contract.get('initial_knowledge'), 'opening_alignment', '世界隐秘设计不能直接登记为初始人物知情。')
     return contract
