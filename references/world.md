@@ -49,7 +49,7 @@
 | 世界模型里的东西 | 至少产出 | 与门的对应 |
 |---|---|---|
 | `powers` | 读者看得见的**位阶阶梯**：级别名、升级条件、拿到什么、卡在哪、上限 | `world` 门的 `tiers` 每条在这里有同名记录（逐字） |
-| `economy` | 一种**硬通货**：名称、来源、谁在分配（灵石/贡献点/积分/信用/丹药一类可记账资源） | `world` 门的 `resource` 在这里有同名记录，且文本里出现声明的 `allocator` |
+| `economy` | 一种**硬通货**：名称、来源、谁在分配（灵石/贡献点/积分/信用/丹药一类可记账资源） | `world` 门的 `resource` 在这里有同名记录，且 `distribution` 里出现声明的 `allocator` |
 | `factions` | 一个**有资源分配权的组织**，且它的压迫能落成具体考核、任务或贡献点 | 可承接 `ladder` 的 `stage`（跨卷仍在场用 `survives_scale_up` 说明） |
 | `mechanisms` | 有特殊机制时：代价、上限与**供料链**（升级材料从哪来、谁在抢、世界怎么持续产出） | 与 `edge` 门声明的优势供料链一致 |
 | `geography` / `cosmology` | 留出**下一张地图的位置**：下一级舞台在哪、通行条件、以及到 `一界`/`星海`/`诸天` 尺度时的位面（层名、谁在、什么法则、怎么进） | `ladder` 的每级 `stage` 在这里有同名记录（逐字） |
@@ -63,7 +63,7 @@
 | 门里声明 | 世界模型里必须有 |
 |---|---|
 | `world_tiers` 的每条位阶 | `powers` 里有一条 `name`/`condition`/`gain`/`cost`/`limit` 与它**逐字相同**的记录；额外的高阶记录允许（世界可以比门里声明的更长） |
-| `world_resource`（`name`/`source`/`allocator`） | `economy` 里有一条记录，其 `resource` 与声明的 `name` 逐字相同，且该条记录文本里出现声明的 `allocator` |
+| `world_resource`（`name`/`source`/`allocator`） | `economy` 里有一条记录，其 `resource` 与声明的 `name` 逐字相同，且该条记录的 `distribution` 字段文本里出现声明的 `allocator`（分配者必须写在分配方式里；在别的字段出现不算） |
 | `world_ladder` 的每级 `stage` | `geography`/`cosmology`/`factions`/`powers` 里有一条 `name` 与它**逐字相同**的记录 |
 
 另外，`data` 里缺的领域会先规范化为 `[]`（在返回的深拷贝里补上），只有**本档位或本次声明要求**的领域才要求至少一条实写记录（`mechanisms` 的既有例外保留）——所以在跑项目（10 域、没有新键）仍能通过一致性复检。

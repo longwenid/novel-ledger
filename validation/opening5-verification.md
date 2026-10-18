@@ -124,3 +124,20 @@ tests 侧用例覆盖（随全量 526 passed 一起绿）。
 - `e2e_guided.py` 的 v5 值由脚本按引擎公开表机械生成（不是抄实现者夹具），因此它是「§4 门校验能否被
   独立构造的合法值满足」的一次独立检查；生成器只覆盖**应通过**的方向，拒绝路径以 tests 为准。
 - 全文未调用模型；12 个跳过项均为宿主符号链接能力。
+
+---
+
+## 七、Lead 追记：hardening 复跑（2026-10-19 02:40，非 V 的原始结论）
+
+`validation/opening5-adversarial.md`（task-25 独立对抗复核）发现 F1/F2/F7 三条并已修复（处置见该报告第八节）。
+hardening 之后由 Lead 复跑同一组命令：
+
+| 命令 | 结果 |
+|---|---|
+| `python -m pytest -q` | **528 passed, 12 skipped, 1291 subtests passed, 0 failed** |
+| `python -m pyflakes scripts tests validation` | 无输出，rc=0 |
+| `python validation/e2e_guided.py` | rc=0：13 门、`expected_opening_options_dispatches=12` 实测 12、`target_reached`、`problems: []` |
+
+F1/F2 的新增回归用例：`test_opening`（一字位阶名 / 一字分配者 / 一字层级名被拒）、
+`test_world_grand`（分配者只写在 `conflict` 字段仍被拒）、`test_creation_bounds`（`exact` 行的空文本记录被拒；
+可选 rows 字段的空数组=未声明）。F3–F6 按第八节接受现状。

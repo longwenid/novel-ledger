@@ -97,15 +97,16 @@ SETTING_CLICHES = ('序列', '途径', '克苏鲁', '克系', '系统', '幕后�
 ### 4.2 `world`（world_premise / mechanism / red_lines / allow_special_mechanism / **tiers** / **resource**）
 
 - 既有 world 校验全部保留（premise、mechanism 三件套、red_lines 数组、allow_special_mechanism 一致）。
-- `tiers`：数组，每条恰好 `('name','condition','gain','cost','limit')` 五键且皆非空文本，`name` 不重复；
+- `tiers`：数组，每条恰好 `('name','condition','gain','cost','limit')` 五键且皆非空文本，`name` 不重复且 ≥2 字符；
   条数 ≥ `DEFAULTS['world_ladder']['tier_min'][tier]`（tier 取 `choices['scale']['tier']`）。
-- `resource`：恰好 `('name','source','allocator')` 三键且皆非空文本。
+- `resource`：恰好 `('name','source','allocator')` 三键，皆非空文本且各 ≥2 字符（一字名会被记录文本偶然命中，
+  绑定就不再是证据）。
 
 ### 4.3 `ladder`（value = `{'scale': {...}, 'ladder': [...]}`）
 
 - `scale.opening` ≥ 8 字符（第一章读者能看见的边界）；`scale.unchanged` ≥ 8 字符（跨卷不变的上层结构）；
   `scale.terminal ∈ WORLD_TERMINALS`。
-- `ladder` 每条恰好 `('stage','scope','growth','new_rule','cost')` 五键且皆非空文本，`stage` 不重复；
+- `ladder` 每条恰好 `('stage','scope','growth','new_rule','cost')` 五键，皆非空文本；`stage` 不重复且 ≥2 字符；
   `stage` 写成**世界里能落成一条记录的名字**（地点/位面/势力/位阶名），不要写「第一卷」这类编号。
 - 条数 ≥ `DEFAULTS['world_ladder']['stage_min'][tier]`。
 - `scope ∈ WORLD_SCOPES`，且按 `WORLD_SCOPES` 序号**单调不减**。
@@ -174,7 +175,8 @@ def declared_sections(choices):        # 门里声明了什么，世界模型就
 2. 新增三条**逐字绑定**（`choices` 声明了才检查，错误码沿用 `world_alignment`，details 里写清 rule/expect/got）：
    - `world_tiers`：每条声明的位阶，`powers` 里必须有一条记录 `name/condition/gain/cost/limit` 与它**逐字相同**；
      额外的高阶记录允许（世界可比门里声明的更长）。
-   - `world_resource`：`economy` 里必须有一条 `resource` 与声明 `name` 逐字相同，且该条记录文本里出现声明的 `allocator`。
+   - `world_resource`：`economy` 里必须有一条 `resource` 与声明 `name` 逐字相同，且该条记录的 `distribution`
+     字段文本里出现声明的 `allocator`（分配者必须写在分配方式里；在别的字段出现不算，避免偶然命中）。
    - `world_ladder`：每条 `stage` 必须在 `geography`/`cosmology`/`factions`/`powers` 里有一条 `name` **逐字相同**的记录。
 3. 既有校验（premise 逐字、主角逐字、机制 mode、id/links 唯一性、`set(data) <= ...`）全部保留。
 

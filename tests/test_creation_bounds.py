@@ -102,7 +102,14 @@ class CreationBoundsTests(unittest.TestCase):
         self.assertCode('contract', planning.validate_contract, missing)
         empty = contract(v5_rows=True)
         empty['world_tiers'] = []
-        self.assertCode('contract', planning.validate_contract, empty)
+        # An empty array in an optional rows field means "not declared here", exactly like absence:
+        # shape accepts it, and a guided opening's alignment check (not shape) is what requires it.
+        self.assertEqual(planning.validate_contract(empty)['world_tiers'], [])
+        # A present row with blank fields is not a decision either: an imported contract
+        # (opening --file) never runs the gate checks, so the shape check is its only guard.
+        blank = contract(v5_rows=True)
+        blank['world_tiers'] = [{'name': '', 'condition': '', 'gain': '', 'cost': '', 'limit': ''}]
+        self.assertCode('contract', planning.validate_contract, blank)
 
 
 if __name__ == '__main__':

@@ -687,6 +687,11 @@ def _validate_world_structures(value, tier_id, floors):
         require(isinstance(row, dict) and set(row) == {'name', 'condition', 'gain', 'cost', 'limit'},
                 'opening_option', '位阶条目只能有 name/condition/gain/cost/limit 五个字段。',
                 {'got': sorted(row) if isinstance(row, dict) else row})
+        # A one-character rank name binds a one-character record: the binding would be satisfied by
+        # coincidence, not by the author having named a rung (found by the adversarial review).
+        require(len(row['name'].strip()) >= 2, 'opening_option',
+                '位阶名称至少 2 个字：一个字的名字会让世界模型里的同名记录变成巧合。',
+                {'got': row['name']})
         names.append(row['name'])
     require(len(names) == len(set(names)), 'opening_option', '位阶名称不能重复。', {'names': names})
     resource = value.get('resource')
@@ -694,6 +699,10 @@ def _validate_world_structures(value, tier_id, floors):
             and all(text(resource.get(key)) for key in ('name', 'source', 'allocator')),
             'opening_option', '硬通货需要 name 名称、source 来源、allocator 分配者三项，不能留空。',
             {'got': resource})
+    short = [key for key in ('name', 'source', 'allocator') if len(resource[key].strip()) < 2]
+    require(not short, 'opening_option',
+            '硬通货的名称、来源与分配者各至少 2 个字：单字会被记录文本偶然命中，绑定就不再是证据。',
+            {'short': short, 'got': resource})
 
 
 def _validate_ladder(value, tier_id, floors):
@@ -729,6 +738,9 @@ def _validate_ladder(value, tier_id, floors):
         require(row['growth'] in contracts.WORLD_GROWTHS, 'opening_option',
                 'growth 只能取「这一级变大的是什么」表里的值。',
                 {'valid': list(contracts.WORLD_GROWTHS), 'got': row['growth'], 'row': row})
+        require(len(row['stage'].strip()) >= 2, 'opening_option',
+                '层级名至少 2 个字：它在世界模型里要落成一条同名记录，一个字的名字只是巧合。',
+                {'got': row['stage']})
         require(row['stage'] not in seen, 'opening_option', '格局层级名不能重复。', {'stage': row['stage']})
         seen.add(row['stage'])
         ranks.append(contracts.WORLD_SCOPES.index(row['scope']))

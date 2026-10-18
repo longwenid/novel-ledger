@@ -101,19 +101,6 @@ def index(model):
     return {section + ':' + row['id']: row for section in SECTIONS for row in model.get(section, [])}
 
 
-def _record_text(row):
-    """Everything a world record says, as one string: where a declared allocator has to show up."""
-    parts = []
-    for value in row.values():
-        if isinstance(value, str):
-            parts.append(value)
-        elif isinstance(value, list):
-            parts.extend(item for item in value if isinstance(item, str))
-        elif isinstance(value, dict):
-            parts.extend(item for item in value.values() if isinstance(item, str))
-    return ' '.join(parts)
-
-
 def _bindings(model, choices):
     """The three verbatim bindings: a gate's decision must exist in the world, word for word.
 
@@ -137,8 +124,12 @@ def _bindings(model, choices):
     if resource:
         name, allocator = resource.get('name'), resource.get('allocator')
         match = next((item for item in model.get('economy') or [] if item.get('resource') == name), None)
-        if match is None or not text(allocator) or allocator not in _record_text(match):
-            complaints.append({'rule': 'world_resource→economy 同名 resource 且记录文本里出现 allocator',
+        # The allocator has to be named where allocation is described. Searching the whole record let
+        # a short allocator be satisfied by coincidence in another field (adversarial review F1);
+        # `distribution` is the field the brief tells the world dispatch to write it into.
+        distribution = (match or {}).get('distribution') or ''
+        if match is None or not text(allocator) or allocator not in distribution:
+            complaints.append({'rule': 'world_resource→economy 同名 resource，且 allocator 出现在该记录的 distribution 里',
                                'expect': {'resource': name, 'allocator': allocator},
                                'got': ({'resource': match.get('resource'),
                                         'distribution': match.get('distribution')} if match else None)})
@@ -153,7 +144,7 @@ def _bindings(model, choices):
                                'expect': stage, 'got': []})
     require(not complaints, 'world_alignment', '世界模型与门里声明的设定没有逐字对上。',
             {'rule': '门里选的位阶表/硬通货/格局阶梯必须在世界模型里有同名记录',
-             'expect': 'powers 全字段等值；economy 同名 resource 且记录文本含 allocator；'
+             'expect': 'powers 全字段等值；economy 同名 resource，且 allocator 出现在 distribution；'
                        '阶梯每级在 geography/cosmology/factions/powers 有同名 name',
              'got': complaints[:8], 'mismatches': len(complaints),
              'recover': '把门里选定的那一行逐字写进对应领域的记录；世界可以比阶梯更长，但不能对不上。'})

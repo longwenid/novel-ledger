@@ -1162,7 +1162,6 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
                                          'id/name/kind 唯一', _safe(entity),
                                          '内联新实体不合法：' + str(error),
                                          'chapter_entity', 'blocker', 'outline'))
-        findings.extend(_deltas(row, [])[1] if isinstance(_deltas(row, []), tuple) else [])
         shape = []
         _deltas(row, shape)
         findings.extend(shape)

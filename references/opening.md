@@ -85,9 +85,9 @@ AI 起名高度趋同（潇洒姓×玄乎单字是重灾区，同一个玄乎字
 
 **世界门与格局门（`world` / `ladder`）**：世界门从"一句话前提 + 机制"升级为结构化交付，格局门再把它抬到全书尺度。
 
-- `world.tiers`：每条恰好 `name`/`condition`/`gain`/`cost`/`limit` 五键且皆非空文本，`name` 不重复；条数 ≥ `DEFAULTS['world_ladder']['tier_min'][tier]`（t0 为 2，t1/t2 为 3，t3–t5 为 4）。`world.resource`：恰好 `name`/`source`/`allocator` 三键且皆非空文本。
+- `world.tiers`：每条恰好 `name`/`condition`/`gain`/`cost`/`limit` 五键且皆非空文本，`name` 不重复且 ≥2 字符；条数 ≥ `DEFAULTS['world_ladder']['tier_min'][tier]`（t0 为 2，t1/t2 为 3，t3–t5 为 4）。`world.resource`：恰好 `name`/`source`/`allocator` 三键，皆非空文本且各 ≥2 字符（一字名会被记录文本偶然命中，绑定就不再是证据）。
 - `ladder.scale.opening` ≥8 字符（第一章读者能看见的边界）、`scale.unchanged` ≥8 字符（**跨卷不变的上层结构**）、`scale.terminal` ∈ **局部 / 势力 / 体系 / 文明**。
-- `ladder.ladder[]`：每条恰好 `stage`/`scope`/`growth`/`new_rule`/`cost` 五键且皆非空文本，`stage` 不重复；条数 ≥ `DEFAULTS['world_ladder']['stage_min'][tier]`（t0/t1 为 2，t2 为 3，t3–t5 为 4）。
+- `ladder.ladder[]`：每条恰好 `stage`/`scope`/`growth`/`new_rule`/`cost` 五键且皆非空文本，`stage` 不重复且 ≥2 字符；条数 ≥ `DEFAULTS['world_ladder']['stage_min'][tier]`（t0/t1 为 2，t2 为 3，t3–t5 为 4）。
 - `scope` ∈ **局部 / 一城 / 一域 / 一界 / 星海 / 诸天**，并按这个顺序**单调不减**；`growth` ∈ **地盘 / 势力 / 规则 / 认知 / 文明**，条数 ≥3 时至少一条是 `规则`/`认知`/`文明`（防"只换地图"）。
 - `terminal` 要与层级表一致：`文明` → 存在 `growth=='文明'`；`体系` → 存在 `'规则'`；`势力` → 存在 `'势力'`；`局部` → 仅允许 `t0`/`t1`。
 - `stage` 要写成**世界里能落成一条记录的名字**（地点/位面/势力/位阶名），不要写"第一卷"这类编号——世界模型会按名字逐字核对（见 [三条逐字绑定](world.md#三条逐字绑定)）。

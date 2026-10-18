@@ -603,6 +603,11 @@ OPTION_CONTRACT = ('每个方案给 id、title 短标题（真正可用的名字
 
 def _placeholder(row):
     if row['kind'] in ('rows', 'band'):
+        if row.get('optional'):
+            # An optional rows field blanks to its own default (an empty array), never to a row of
+            # blanks: a template that invented a blank decision would then be refused by the very
+            # shape check that reads it (and a pre-opening/5 project's template must stay loadable).
+            return copy.deepcopy(row['default'])
         if row.get('shape'):
             entries = [{field: (0 if field == 'end' else '') for field in row['shape']}]
             return entries * row.get('count', 1)
@@ -647,15 +652,25 @@ def contract_errors(raw):
         if kind == 'rows':
             if not isinstance(value, list):
                 complaints.append(key + ' 须为数组。')
+            elif not value and row.get('optional'):
+                # An empty array in an optional rows field means "not declared here" — the same thing
+                # its absence means. A template that carries the field blank (a pre-open... a project
+                # opened under an older protocol, or an imported contract) must not be refused for it;
+                # a guided opening still requires it through the alignment check, not through shape.
+                pass
             elif row.get('blank') is False and len(value) < row.get('count', 1):
                 complaints.append(key + ' 须提供至少 ' + str(row.get('count', 1)) + ' 条完整记录。')
             elif row.get('exact') and row.get('shape'):
-                # A row that declares `exact` states its whole key set: an undeclared key inside a
-                # structured row is the same defect as an undeclared contract field, only one level
-                # down. `volumes` stays non-exact because the engine derives `first` onto its rows.
+                # A row that declares `exact` states its whole key set and gives every key a value:
+                # an undeclared or blank key inside a structured row is the same defect as an
+                # undeclared contract field, only one level down. A hand-written or imported contract
+                # bypasses the opening gate's per-value checks, so the shape check is its only guard
+                # (adversarial review F2). `volumes` stays non-exact because the engine derives
+                # `first` onto its rows.
                 allowed = set(row['shape'])
-                if any(not isinstance(entry, dict) or set(entry) != allowed for entry in value):
-                    complaints.append(key + ' 的每条记录只能有这些字段：' + '/'.join(row['shape']))
+                if any(not isinstance(entry, dict) or set(entry) != allowed
+                       or not all(text(entry[field]) for field in allowed) for entry in value):
+                    complaints.append(key + ' 的每条记录只能有这些字段，且每项都要写实：' + '/'.join(row['shape']))
             continue
         if kind == 'map':
             if not isinstance(value, dict) or any(field not in value for field in row.get('shape', ())):

@@ -236,6 +236,15 @@ class BindingTests(unittest.TestCase):
             check(anonymous, choices)
         self.assertEqual(caught.exception.code, 'world_alignment')
         self.assertIn(declared['allocator'], dump(caught.exception.details))
+        # Naming the allocator in another field of the same record does not bind it either: the
+        # allocator has to appear where allocation is described (adversarial review F1).
+        elsewhere = base_model(choices)
+        elsewhere['economy'][0]['distribution'] = '按班次发放。'
+        elsewhere['economy'][0]['conflict'] = '由%s决定份额。' % declared['allocator']
+        with self.assertRaises(Error) as caught:
+            check(elsewhere, choices)
+        self.assertEqual(caught.exception.code, 'world_alignment')
+        self.assertIn('distribution', dump(caught.exception.details))
 
     def test_every_ladder_stage_needs_a_same_named_record(self):
         choices = choices_v5(tiers=False, resource=False)

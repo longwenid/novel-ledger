@@ -305,6 +305,15 @@ class CurrentOpeningTests(unittest.TestCase):
         del no_allocator['resource']['allocator']
         self.assertCode('opening_option', creation.validate_value, 'world', no_allocator,
                         OPENING_VERSION, {})
+        # A one-character name would make the world-model binding a coincidence, not evidence.
+        one_word = copy.deepcopy(VALUES['world'])
+        one_word['tiers'][0]['name'] = '一'
+        self.assertCode('opening_option', creation.validate_value, 'world', one_word,
+                        OPENING_VERSION, {})
+        short_allocator = copy.deepcopy(VALUES['world'])
+        short_allocator['resource']['allocator'] = '人'
+        self.assertCode('opening_option', creation.validate_value, 'world', short_allocator,
+                        OPENING_VERSION, {})
 
     def test_the_ladder_gate_projects_the_scale_and_a_monotonic_ladder(self):
         """The scale ladder starts local, rises outward, and projects as `world_scale`/`world_ladder`."""
@@ -328,6 +337,11 @@ class CurrentOpeningTests(unittest.TestCase):
         bad_terminal = copy.deepcopy(VALUES['ladder'])
         bad_terminal['scale']['terminal'] = '看心情'
         self.assertCode('opening_option', creation.validate_value, 'ladder', bad_terminal,
+                        OPENING_VERSION, {})
+        # A one-character stage would bind a one-character world record by coincidence.
+        one_word = copy.deepcopy(VALUES['ladder'])
+        one_word['ladder'][0]['stage'] = '甲'
+        self.assertCode('opening_option', creation.validate_value, 'ladder', one_word,
                         OPENING_VERSION, {})
 
     def test_the_payoff_gate_binds_a_theme_anchor_to_a_deadline_chapter(self):
