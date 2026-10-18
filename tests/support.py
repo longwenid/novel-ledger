@@ -20,7 +20,7 @@ import uuid
 
 from novel_ledger import context, drift, facts, store_keys, workflow
 from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS, RESULT, digest, han_count,
-                                    opening_source)
+                                    opening_source, policy_default)
 from novel_ledger.result_templates import drift_items, template
 
 
@@ -43,18 +43,29 @@ def link_or_skip(case, link, target, target_is_directory=False):
 # The contract every engineering fixture writes
 # --------------------------------------------------------------------------------------------------
 
-def contract(chapters=2, volumes=1, volume_words=1000, chapter_words=150,
-             volume_tolerance=100, chapter_tolerance=60):
+def contract(chapters=2, volumes=1, volume_words=None, chapter_words=None,
+             volume_tolerance=None, chapter_tolerance=None):
     """A small, complete author contract with the two v2 outline policies declared.
 
     `chapter_min`/`chapter_max` are deliberately tiny: these tests drive whole books, and the prose
-    stub only has to land inside the band. The outline policies are explicit instead of defaulted so
-    a test can shrink the ~1000-character volume outline or the per-chapter synopsis when it wants
-    to exercise the length check without writing a page of filler.
+    stub only has to land inside the band. The outline policies default to the engine's own
+    declarations (`contracts.policy_default`) so a fixture can never disagree with the band the
+    validator applies; a test may still shrink them explicitly to exercise the length check without
+    writing a page of filler.
     """
+    volume_policy = policy_default('volume_outline')
+    chapter_policy = policy_default('chapter_outline')
+    if volume_words is not None:
+        volume_policy['words'] = volume_words
+    if volume_tolerance is not None:
+        volume_policy['tolerance'] = volume_tolerance
+    if chapter_words is not None:
+        chapter_policy['words'] = chapter_words
+    if chapter_tolerance is not None:
+        chapter_policy['tolerance'] = chapter_tolerance
     return {'narrative_tracking': False, 'editorial_features': False,
-            'volume_outline': {'scope': 'all', 'words': volume_words, 'tolerance': volume_tolerance},
-            'chapter_outline': {'scope': 'volume', 'words': chapter_words, 'tolerance': chapter_tolerance},
+            'volume_outline': volume_policy,
+            'chapter_outline': chapter_policy,
             'title': '夜班退件', 'genre': '都市生活',
             'reader_promise': '一个夜班工人查清退件来源并承担自己的选择。',
             'ending': '退件来源公开，工人承担违规开箱的后果。', 'world_premise': '一座仓库的夜班退件纠纷。',
@@ -282,7 +293,7 @@ def volume_outline_fixture(app, work, hooks=None):
     contract = book['contract']
     payload = work.get('payload') or {}
     policy = payload.get('volume_outline') or contract.get('volume_outline') or {}
-    words = policy.get('words') or 1000
+    words = policy.get('words') or 2500
     tracking = bool(contract.get('narrative_tracking'))
     wanted = payload.get('volume_ids') or [row['id'] for row in contract['volumes']]
     enabled = _hooks_on(hooks)
@@ -315,7 +326,7 @@ def volume_rows(book, volume_ids=None, words=None, hooks=None):
     """
     contract = book['contract']
     policy = contract.get('volume_outline') or {}
-    target = words if words is not None else policy.get('words') or 1000
+    target = words if words is not None else policy.get('words') or 2500
     tracking = bool(contract.get('narrative_tracking'))
     enabled = _hooks_on(hooks)
     wanted = list(volume_ids or [row['id'] for row in contract['volumes']])

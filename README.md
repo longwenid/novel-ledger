@@ -8,7 +8,7 @@
 - **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 模块（核心规则与流程处理普通值，具体存储、文件交付和进程在外层装配）+ 一个 SQLite 项目库。
 - **当前版本**：`2.0.0`，数据库 schema 仍是 `novel-ledger/3`（已有 v3 可继续使用，v2 及更早库显式拒绝，不做隐式升级）。v2 与 v1 是**流水线换代**：v1 的冻结任务（回执带 `checks_version`/`obligations`、要求首读，或阶段名为 `plan`/`book_plan` 等已删阶段的）在本版本不能执行，需按新协议重新派工；存储结构没有迁移。
 
-**流水线是五步**：十门开书（主干自执）→ 世界模型与约定 → 每卷约 1000 汉字的极简卷纲（含伏笔账与文风走向）→ 含资源/位置/情节漂移字段、伏笔执行与文风声明的极简章纲 → 按章纲执笔并自比，引擎机械核账。**设计层审查与章级独立审已全部删除**（作者决定），判据从"写完之后靠独立审稿者"前移到"章纲声明 + 卷内状态链 + 引擎核算 + 文风代理指标"。
+**流水线是五步**：十门开书（主干自执）→ 世界模型与约定 → 每卷 2000–3000 汉字（目标 2500）的极简卷纲（含伏笔账与文风走向）→ 含资源/位置/情节漂移字段、伏笔执行与文风声明的极简章纲 → 按章纲执笔并自比，引擎机械核账。**设计层审查与章级独立审已全部删除**（作者决定），判据从"写完之后靠独立审稿者"前移到"章纲声明 + 卷内状态链 + 引擎核算 + 文风代理指标"。
 
 **代价必须说清楚，不粉饰**：不再有独立 agent 复核文学质量与阅读体验。引擎能证明的是"正文与章纲声明一致、文风与锚点一致"——**文风代理指标只保证文风一致、可核对，不证明"这一章好看、人物可信"**。需要真正的文学判断时，只能人工抽读全文，或用离线盲测工具，或另行发起一次修订。详见 [返工与成本](references/rework.md) 第五节。
 
@@ -106,7 +106,7 @@ settings、canon、intent、execution 共同构成**一个作品事务聚合**�
 |---|---|---|---|
 | 1 | `opening_options` ×10 门 | 主干自执（不派子 agent） | `opening_choices` / `opening_basis` |
 | 2 | `world_model`（payload.also=opening_contract） | 1 次 | 世界 + 约定；提交时机械校验，无审查阶段 |
-| 3 | `volume_outline` | 1 次（`scope=all` 时含全部卷；`rolling` 时进卷前 1 次） | 每卷约 1000 汉字的极简卷纲：卷职责/弧线/转折 + **伏笔账 `hooks`**（窗口、required、跨卷）+ **文风走向 `style.trend`** |
+| 3 | `volume_outline` | 1 次（`scope=all` 时含全部卷；`rolling` 时进卷前 1 次） | 每卷 2000–3000 汉字（目标 2500）的极简卷纲：卷职责/弧线/转折 + **伏笔账 `hooks`**（窗口、required、跨卷）+ **文风走向 `style.trend`** |
 | 4 | `chapter_outline` | 每卷 1 次（进入该卷前） | 该卷每章极简章纲：资源/位置/情节/知情/人物/时钟增量 + `enter`/`exit` + **伏笔执行 `hooks`（plant/payoff）** + **文风 `style`** |
 | 5 | `write` | 每章 1 次 | 正文 + `drift_check` 自比 + 引擎核算入账（含 hook 事件）+ 文风代理指标；不符 → `repair`/`redesign` 有界返修 |
 
@@ -143,7 +143,7 @@ SQLite 是唯一持久真源；`work/` 目录、`book.html`、世界视图全部
 CONTRACT_FIELDS = (
     {'key': 'title', 'kind': 'text', 'default': '', 'alignment': True},
     ...
-    {'key': 'volume_outline', 'kind': 'map', 'default': {'scope': 'all', 'words': 1000, 'tolerance': 100}},
+    {'key': 'volume_outline', 'kind': 'map', 'default': {'scope': 'all', 'words': 2500, 'tolerance': 500}},
     {'key': 'chapter_outline', 'kind': 'map', 'default': {'scope': 'volume', 'words': 150, 'tolerance': 60}},
 )
 ```
@@ -218,7 +218,7 @@ init ──► 逐门选择（10 门，一门一件事，主干自执）──�
    └─ 或 --contract 直接导入完整约定
         │
         ▼
-   卷纲（每卷约 1000 汉字，默认一次交全部卷）──► 章纲（每卷进入前交，含漂移字段与 enter/exit）
+   卷纲（每卷 2000–3000 汉字，默认一次交全部卷）──► 章纲（每卷进入前交，含漂移字段与 enter/exit）
         │                                              │
         │                                     引擎逐章模拟卷内状态链，漂移即拒
         ▼
@@ -363,7 +363,7 @@ Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与
 
 新约定默认启用叙事跟踪：卷纲按卷登记主线、支线与暗线及其终局条件，章纲给出每章的节点与线路状态变化，资源/位置/知情/时钟/人物增量由卷内状态链逐章模拟。`narrative_tracking=false` 时节点与线路可空，但四类增量仍必需。完整协议见 [叙事推进](references/narrative.md)。
 
-卷纲默认 `scope=all`：约定生效后一次交全部卷，每卷约 1000 汉字（`tolerance=100`）。`scope=rolling` 改为进入该卷前交该卷；空对象 `{}` 表示关闭卷纲。章纲 `scope=volume`，每章 synopsis 约 150 汉字（`tolerance=60`）。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。没有正文授权时以 `outline_ready` 交付并停止，范围如实说明（rolling 只交了进入中的那一卷，不能说成全书卷纲）。
+卷纲默认 `scope=all`：约定生效后一次交全部卷，每卷 2000–3000 汉字（目标 2500，`words=2500`、`tolerance=500`）。`scope=rolling` 改为进入该卷前交该卷；空对象 `{}` 表示关闭卷纲。章纲 `scope=volume`，每章 synopsis 约 150 汉字（`tolerance=60`）。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。没有正文授权时以 `outline_ready` 交付并停止，范围如实说明（rolling 只交了进入中的那一卷，不能说成全书卷纲）。
 
 卷内状态链取代了原来的分层范围核验：`enter` 与模拟状态必须逐章相等，`exit = enter ⊕ 本章增量`，卷末按 `exit_state` 闭合，本卷 `required` 的伏笔必须全部 `paid`。它挡住的是资源、位置、知情、时钟、人物变化与伏笔埋收的自相矛盾；**因果是否可信、节奏是否成立，v2 没有独立复核者**。
 

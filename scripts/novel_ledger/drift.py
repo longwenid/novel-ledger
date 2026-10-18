@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import copy
 
-from .contracts import han_count, require, text
+from .contracts import DEFAULTS, han_count, require, text
 from .entities import register as register_entity
 from . import ledger, narrative, spatial, world
 
@@ -871,7 +871,9 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
             findings.append(_finding(chapter_no, 'volume', ident, 'purpose/arc/climax/exit_state', _safe(
                 {k: volume.get(k) for k in ('purpose', 'arc', 'climax', 'exit_state')}),
                 '卷纲需要职责、卷内弧线、卷末高潮与卷末状态各一句。', 'volume_shape', 'blocker', 'volume'))
-        policy = _length_policy((contract.get('volume_outline') or {}), 1000, 100)
+        fallback = DEFAULTS['volume_outline']
+        policy = _length_policy((contract.get('volume_outline') or {}),
+                                fallback['words'], fallback['tolerance'])
         if policy:
             words, tolerance = policy
             length = _deep_han({key: volume.get(key) for key in VOLUME_FIELDS})

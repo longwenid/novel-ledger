@@ -118,6 +118,35 @@ class ArchitectureTests(unittest.TestCase):
                 self.assertFalse(internal - ALLOWED[name],
                                  f'{name} crosses its layer: {sorted(internal - ALLOWED[name])}')
 
+    def test_shared_numeric_defaults_are_declared_once(self):
+        """A policy default belongs to `contracts.DEFAULTS` and to nothing else.
+
+        Layer boundaries are one half of decoupling; the other half is that a *value* shared across
+        layers has one source. Raising the volume outline's floor from 1000 to 2000 once meant editing
+        five literals in four modules — a missed copy would have left two layers disagreeing about
+        "the default". This guard reads the sources, so the next such change is one edit.
+        """
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        from novel_ledger import contracts, style
+        self.assertEqual(style.DEFAULT_WINDOW, contracts.policy_default('style_window'))
+        self.assertEqual(style.MIN_HAN, contracts.DEFAULTS['style_floor_han'])
+        skeleton = contracts.contract_skeleton()
+        for key in ('volume_outline', 'chapter_outline', 'style_window'):
+            with self.subTest(policy=key):
+                self.assertEqual(skeleton[key], contracts.policy_default(key))
+        # The same numbers must not reappear as literals outside the declaration. Only the shared
+        # ones are listed: a module-local threshold (a lint window, a time marker set) is that
+        # module's business and stays where it is.
+        literals = ("'words': 2500", '"words": 2500', "'tolerance': 500", "'repetition': 0.12",
+                    '{"scope": "all"', "'scope': 'all', 'words'")
+        for name, path in self.sources.items():
+            if name == 'contracts':
+                continue
+            text = path.read_text(encoding='utf-8')
+            for needle in literals:
+                with self.subTest(module=name, literal=needle):
+                    self.assertNotIn(needle, text, '%s 重新硬编码了共享默认值：%s' % (name, needle))
+
     def test_every_stop_point_declares_where_the_author_decides(self):
         """A stop with no declared channel is how a converging project dead-ends.
 

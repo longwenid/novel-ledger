@@ -9,10 +9,10 @@ dispatch anywhere in this file, and no branch waits for one.
 from __future__ import annotations
 
 import copy
-from .contracts import (HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY,
+from .contracts import (DEFAULTS, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY,
                         OPENING_VERSION, PIPELINE_SHAPES, REDESIGNS,
                         REPAIRS, UNDERSTANDING_CAPABILITY, Job, Outcome,
-                        capabilities_for, digest, han_count, require, text, tier_of)
+                        capabilities_for, digest, han_count, policy_default, require, text, tier_of)
 from . import creation, drift, facts, narrative, planning, world, craft, editorial, understanding, ledger, lint, style
 from .evidence import evidence
 
@@ -54,13 +54,13 @@ def merges_chapter_outline(book):
 
 
 def volume_policy(book):
-    """The volume-outline policy of the live contract, defaults already resolved by validation."""
-    return editorial.effective_contract(book).get('volume_outline') or {'scope': 'all', 'words': 1000, 'tolerance': 100}
+    """The volume-outline policy of the live contract, defaults resolved by validation."""
+    return editorial.effective_contract(book).get('volume_outline') or policy_default('volume_outline')
 
 
 def chapter_policy(book):
     """The chapter-outline policy of the live contract."""
-    return editorial.effective_contract(book).get('chapter_outline') or {'scope': 'volume', 'words': 150, 'tolerance': 60}
+    return editorial.effective_contract(book).get('chapter_outline') or policy_default('chapter_outline')
 
 
 def new_book(contract, source=''):
@@ -433,7 +433,7 @@ ACCEPT_OPEN = '接受当前候选，把这几条记为未解决项继续'
 # A finding that survives this many repair rounds is a stall, not slow convergence: the next
 # identical round only spends budget. A real chapter went four rounds on the same two findings
 # before anyone could see the loop was not converging at all.
-STALL_AFTER_ROUNDS = 2
+STALL_AFTER_ROUNDS = DEFAULTS['stall_after_rounds']
 
 
 def hold_for_draft_exhaustion(book):

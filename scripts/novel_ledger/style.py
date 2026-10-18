@@ -15,27 +15,21 @@ from __future__ import annotations
 
 import re
 
-from .contracts import han_count, text
+from .contracts import DEFAULTS, han_count, policy_default, text
 
 # Sentence terminators, and the quote families a Chinese manuscript actually uses. A quote family
 # is a pair, so an unclosed quote simply yields no dialogue rather than half a chapter of it.
 SENTENCE_END = '。！？…!?；;'
 QUOTE_PAIRS = (('“', '”'), ('「', '」'), ('『', '』'), ('‘', '’'))
-# Default tolerances: relative deviation from the anchor for the shape metrics, an absolute share
-# for in-chapter repetition, and 1 meaning "the narration person must match what was declared".
-# The repetition share is calibrated, not guessed: ordinary Chinese prose in this repository measures
-# 0.043~0.086 (README 0.057, references/narrative.md 0.083, results.md 0.086), while a template that
-# repeats one clause measures 0.87. 0.12 sits above real writing and far below the pathological case.
-DEFAULT_WINDOW = {'sentence': 0.35, 'paragraph': 0.35, 'dialogue': 0.40, 'repetition': 0.12, 'person': 1}
-# Below these floors a sample is too short for a metric to mean anything, and comparing it would
-# only produce noise findings on chapters that the word budget already governs. MIN_HAN is the one
-# that binds in practice (a sample that passes it always has more than MIN_NGRAMS four-grams); the
-# n-gram floor stays as the guard for the case where the prose floor is loosened.
-MIN_HAN = 40
-MIN_SENTENCES = 3
-MIN_NGRAMS = 20
-NGRAM = 4
-SHORT_SENTENCE = 10
+# Tolerances, metric floors and n-gram size all come from the one declaration in contracts.DEFAULTS:
+# a duplicated default is how the same band ends up meaning two different things in two layers.
+DEFAULT_WINDOW = policy_default('style_window')
+MIN_HAN = DEFAULTS['style_floor_han']
+MIN_SENTENCES = DEFAULTS['style_min_sentences']
+MIN_NGRAMS = DEFAULTS['style_min_ngrams']
+NGRAM = DEFAULTS['style_ngram']
+SHORT_SENTENCE = DEFAULTS['style_short_sentence']
+SAME_ORDER = DEFAULTS['style_same_order']
 FIRST_PERSON = ('我', '咱', '俺')
 THIRD_PERSON = ('他', '她', '它')
 HAN = re.compile(r'[\u3400-\u4dbf\u4e00-\u9fff\U00020000-\U0003134f]+')
@@ -182,12 +176,12 @@ def _relative(got, base):
 
 
 def _same_order(left, right):
-    """Whether two samples are big enough to compare shape with each other (within 3x either way)."""
+    """Whether two samples are big enough to compare shape with each other (within Nx either way)."""
     left, right = left or 0, right or 0
     if not left or not right:
         return False
     ratio = left / right
-    return 1 / 3 <= ratio <= 3
+    return 1 / SAME_ORDER <= ratio <= SAME_ORDER
 
 
 def compare(prose, declared, anchor, window, chapter=0, contract=None):

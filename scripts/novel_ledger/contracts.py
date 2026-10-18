@@ -29,6 +29,51 @@ IDENTITY = 'novel-ledger.identity/1'
 # as findings between a producer and a reviewer; a broken receipt is refused where it is filed.
 
 
+# --------------------------------------------------------------------------------------------------
+# Standard numeric settings, declared exactly once.
+#
+# Every layer that needs one of these reads it from here: the contract's own defaults below, the
+# checks in drift/style/lint, the fallbacks in workflow/context, and the test fixtures. The rule is
+# narrow but absolute — a *policy default* has one source. Scattering the same band across modules is
+# not decoupling, it is four copies of one decision: changing the volume outline's floor from 1000 to
+# 2000 once meant editing five literals, and any missed one would have left two layers disagreeing
+# about what "the default" is. Layer boundaries (who may import whom) are the decoupling this repo
+# enforces in tests/architecture_table.py; numbers shared across layers belong to this table.
+#
+# Each entry is data, not behaviour: changing a value here changes the engine's default for new
+# projects, while an existing project keeps the policy stored in its own contract.
+DEFAULTS = {
+    # Step three: one volume outline per volume, complete in a single receipt. [floor, ceiling] =
+    # [2000, 3000] 汉字 — 2000 is the author's floor, 2500 the target.
+    'volume_outline': {'scope': 'all', 'words': 2500, 'tolerance': 500},
+    # Step four: one synopsis per chapter, with that chapter's drift declarations.
+    'chapter_outline': {'scope': 'volume', 'words': 150, 'tolerance': 60},
+    # Style proxies: relative tolerances against the approved first chapter, an absolute in-chapter
+    # repetition ceiling, and 1 meaning "the narration person must match what was declared". The
+    # repetition ceiling is calibrated: ordinary Chinese prose measures 0.043~0.086 here, a chapter
+    # that repeats one clause measures 0.79~0.99.
+    'style_window': {'sentence': 0.35, 'paragraph': 0.35, 'dialogue': 0.40, 'repetition': 0.12, 'person': 1},
+    # Where a style metric is worth measuring at all: below these floors the sample says nothing and
+    # comparing it would only produce noise findings on chapters the word budget already governs.
+    'style_floor_han': 40,
+    'style_min_sentences': 3,
+    'style_min_ngrams': 20,
+    'style_ngram': 4,
+    'style_short_sentence': 10,
+    'style_same_order': 3,
+    # Bounded repair: how many rounds one chapter may spend before the author is asked.
+    'repairs': 2,
+    'redesigns': 1,
+    'stall_after_rounds': 2,
+}
+
+
+def policy_default(key):
+    """A policy's default, copied: callers must not be able to mutate the one declaration."""
+    value = DEFAULTS[key]
+    return copy.deepcopy(value) if isinstance(value, (dict, list)) else value
+
+
 # Frozen task capabilities: which version of a protocol a dispatch was planned under. A consumer reads
 # them to keep interpreting a field the way that task was written. Each capability declares every
 # version this build understands, so an undeclared value is an error instead of a silent downgrade to
@@ -40,10 +85,10 @@ SCENE_IDENTITY_V1 = 'scene-identity/1'
 SCENE_IDENTITY_CAPABILITY = 'scene-identity/2'
 READING_DEPENDENCIES_CAPABILITY = 'reading-dependencies/1'
 OPENING_BOUNDS_CAPABILITY = 'opening-bounds/1'
-# The volume outline protocol changed shape in v2: a volume is now one ~1000-character outline
-# carrying its own nodes/threads and state boundaries, and the per-chapter rows live in the
-# chapter outline that follows it. A task frozen under volume-outline/1 describes a batch of
-# chapters instead, so this build refuses it rather than reinterpreting its fields.
+# The volume outline protocol changed shape in v2: a volume is now one outline per volume, complete
+# in a single receipt, carrying its own nodes/threads and state boundaries, and the per-chapter rows
+# live in the chapter outline that follows it. A task frozen under volume-outline/1 describes a batch
+# of chapters instead, so this build refuses it rather than reinterpreting its fields.
 VOLUME_OUTLINE_CAPABILITY = 'volume-outline/2'
 SCENE_MEMORY_CAPABILITY = 'scene-memory/1'
 HOOK_LINKS_CAPABILITY = 'hook-links/1'
@@ -108,8 +153,10 @@ GENRE_CATALOG = (
 # board; a hard ban stays the author's lexical rule.
 CLICHE_SURNAMES = '叶林萧楚顾沈陆苏秦'
 CLICHE_GIVEN = '辰尘轩言夜寒渊冥烬煜珩枫炎离砚'
-REPAIRS = 2
-REDESIGNS = 1
+# Bounded repair budgets: one chapter may spend this many rounds before the author is asked. Declared
+# in DEFAULTS with every other shared number, and aliased here because the workflow reads them by name.
+REPAIRS = DEFAULTS['repairs']
+REDESIGNS = DEFAULTS['redesigns']
 # Fast verification merges block reviews by design: a basic project's fast mode sets the review block
 # to exactly this size instead of reading the author's review_chunk, so one review task never covers
 # more than this many chapters and a whole volume never lands in a single worker.
@@ -314,27 +361,26 @@ CONTRACT_FIELDS = (
     {'key': 'review_fanout', 'kind': 'int', 'default': 3, 'alignment': False, 'legacy': True},
     {'key': 'editorial_features', 'kind': 'bool', 'default': True, 'alignment': False},
     {'key': 'scope_append_limit', 'kind': 'int', 'default': 3, 'alignment': False},
-    # Step three of the five-step pipeline: one ~1000-character outline per volume, written from
-    # the world model and the opening choices. `scope=all` drafts every volume before the first
-    # word; `rolling` drafts each volume just before it is entered. `words` counts one volume.
-    {'key': 'volume_outline', 'kind': 'map', 'default': {'scope': 'all', 'words': 1000, 'tolerance': 100},
+    # Step three of the five-step pipeline: one outline per volume, written from the world model and
+    # the opening choices, and delivered complete in a single receipt. The band is [2000, 3000]
+    # 汉字: the author's floor is 2000, 2500 is the target, and the ceiling keeps a volume's outline
+    # from growing into a cost that every later dispatch pays for. `scope=all` drafts every volume
+    # before the first word; `rolling` drafts each volume just before it is entered.
+    {'key': 'volume_outline', 'kind': 'map', 'default': policy_default('volume_outline'),
      'alignment': False, 'optional': True},
     # Step four: the per-chapter outline that carries the drift declarations. `words` bounds each
     # chapter's synopsis, not the delta rows — those are as long as the state they describe.
     # `scope=volume` builds a volume's chapter outlines just before writing it; `all` builds every
     # volume's up front, which is what an author who wants the whole resource chain resolved before
     # the first word should choose.
-    {'key': 'chapter_outline', 'kind': 'map', 'default': {'scope': 'volume', 'words': 150, 'tolerance': 60},
+    {'key': 'chapter_outline', 'kind': 'map', 'default': policy_default('chapter_outline'),
      'alignment': False, 'optional': True},
     # v2.1: literary quality is carried by style, not by a reviewer. The author's spec is
     # qualitative (contract voice/tone, a volume's trend, a chapter's execution points); these are
     # the tolerances the engine applies to the proxies it can compute for free — see style.py.
     # `repetition` is an absolute in-chapter share, the others are relative deviations from the
-    # approved first chapter, and `person` is 1 meaning "the narration person must match". The
-    # repetition default is calibrated against ordinary prose (measured 0.04~0.09) rather than
-    # guessed, so it fires on a chapter that repeats itself, not on a chapter that reads normally.
-    {'key': 'style_window', 'kind': 'map',
-     'default': {'sentence': 0.35, 'paragraph': 0.35, 'dialogue': 0.40, 'repetition': 0.12, 'person': 1},
+    # approved first chapter, and `person` is 1 meaning "the narration person must match".
+    {'key': 'style_window', 'kind': 'map', 'default': policy_default('style_window'),
      'alignment': False, 'optional': True},
     {'key': 'anchors', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'links', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},

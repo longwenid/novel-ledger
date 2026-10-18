@@ -122,7 +122,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 | 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 系统不代选；换组和返回保留记录。 |
 | 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务同时包含 world_model 与 opening_contract（payload.also），回执为世界字段加 contract；以任务 stages、payload.also 和模板为准。 |
 | 机械校验与激活 | 世界与约定**不再有独立核验阶段**：提交时由引擎校验字段、links 引用、选择一致性与约定对齐（含与所选世界的 world_rules 逐字一致），通过即在同一事务激活约定；失败按 `repair` 预算有界返修。 | 校验只证明字段、引用和声明一致，不证明世界承载或因果成立；判断留给卷纲与章纲的状态链，以及作者抽读。 |
-| 卷纲 | 约定生效后按 `advance` 派 `volume_outline`：默认 `scope=all`，一次交全部卷、每卷约 1000 汉字；`scope=rolling` 时进入该卷前交该卷。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。 | 形状、校验与覆盖见 [叙事推进](narrative.md#卷纲)。 |
+| 卷纲 | 约定生效后按 `advance` 派 `volume_outline`：默认 `scope=all`，一次交全部卷、每卷 2000–3000 汉字（目标 2500）；`scope=rolling` 时进入该卷前交该卷。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。 | 形状、校验与覆盖见 [叙事推进](narrative.md#卷纲)。 |
 | 章纲 | 每卷进入前派一次 `chapter_outline`：该卷每章极简章纲（资源/位置/知情/时钟/人物/情节增量与 enter/exit），提交时按卷内状态链逐章模拟。 | 漂移字段与核算见 [叙事推进](narrative.md#章纲)。 |
 | 交付 | outline_ready 按实际卷纲覆盖交付；关闭卷纲时为 world_ready。 | world_view.html_path 指向统一 book.html，另交 world.json 的绝对路径；视图失败可 advance 重建。 |
 

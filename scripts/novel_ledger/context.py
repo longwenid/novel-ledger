@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (SCALE_TIERS, TASK, Job, require, tier_of)
+from .contracts import (SCALE_TIERS, TASK, Job, policy_default, require, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
 from . import briefs, creation, narrative, style, world, editorial, story_memory, understanding
@@ -536,7 +536,7 @@ def build(repo: ContextStore, book, job):
         # word target. `volume_outline` is the policy map here; on a draft dispatch the same key
         # carries this volume's approved row instead. The defaults mirror the contract's own, so a
         # project loaded from before v2 still gets a stated target rather than an empty one.
-        policy = contract.get('volume_outline') or {'scope': 'all', 'words': 1000, 'tolerance': 100}
+        policy = contract.get('volume_outline') or policy_default('volume_outline')
         ids = payload.get('volume_ids') or [v['id'] for v in contract.get('volumes') or []]
         chosen = [v for v in contract.get('volumes') or [] if v['id'] in set(ids)]
         payload['volume_outline'] = {**policy,
@@ -546,12 +546,12 @@ def build(repo: ContextStore, book, job):
         if merged_outline:
             # The merged half reads the same chapter-outline policy, per volume: the outer key names
             # the volumes this receipt must also outline chapter by chapter.
-            chapter_policy_ = contract.get('chapter_outline') or {'scope': 'volume', 'words': 150, 'tolerance': 60}
+            chapter_policy_ = contract.get('chapter_outline') or policy_default('chapter_outline')
             payload['chapter_outline'] = {
                 **chapter_policy_,
                 'volumes': [{'id': v['id'], 'first': v['first'], 'last': v['end']} for v in chosen]}
     if stage == 'chapter_outline':
-        policy = contract.get('chapter_outline') or {'scope': 'volume', 'words': 150, 'tolerance': 60}
+        policy = contract.get('chapter_outline') or policy_default('chapter_outline')
         first, last = _batch_range(job, volume, payload)
         payload['volume'] = volume['id'] if volume else payload.get('volume')
         payload['from_chapter'] = first
