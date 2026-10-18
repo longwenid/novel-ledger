@@ -16,6 +16,7 @@
 |---|---|
 | volume_outline | `{scope:'all', words:1000, tolerance:100}`；`words` 是**每卷**汉字数，scope 为 all（一次交全部卷）或 rolling（进卷前交该卷）；空对象 `{}` 关闭卷纲 |
 | chapter_outline | `{scope:'volume', words:150, tolerance:60}`；`words` 是**每章 synopsis** 汉字数，scope 为 volume 或 all |
+| style_window | `{sentence:0.35, paragraph:0.35, dialogue:0.40, repetition:0.12, person:1}`（optional、不参与对齐）：文风代理指标的容差；前四项是相对偏差上限（`repetition` 为本章内部高重复的绝对占比上限，实测校准：正常散文 0.04~0.09、复读文本 0.79~0.99），`person=1` 表示视角标记必须与声明一致；卷纲 `style.window` 与契约**逐项合并**（先用契约补默认，再按合法键与合法数值逐个覆盖），作者可改约调整。见 [文风](narrative.md#文风) |
 | narrative_tracking | true；关闭时章纲的 `plot.nodes`/`plot.threads` 可空，但资源/位置/知情/时钟/人物增量仍必需 |
 | editorial_features | true；编辑能力要求叙事跟踪，关闭跟踪时也须关闭编辑能力；人物、场景与补丁字段见 [编辑能力](editorial.md) |
 | planning_window / review_interval / review_chunk / review_fanout / verification | **保留字段，v2 基本不再读取**（legacy）：只用于加载旧项目与旧冻结任务的原字段解释，当前流程不按它们调度或分块。**例外**：`planning_window` 仍被修订边界读取（`editorial.revision_policy` 的 limit，缺省 `REVISION_LIMIT_DEFAULT`），决定自动回改的“最近 limit 章”窗口；其余四个字段没有读取点 |
@@ -69,9 +70,9 @@ submit 的 accepted=true 表示回执已接受，不等于正文通过：字数�
 | opening_options | 当前门 gate 与 2～3 个 options，详见 [逐门开书](opening.md) |
 | opening_contract | 默认随世界起草；单独派发时读冻结的已采纳世界，模板由 CONTRACT_FIELDS 派生 |
 | world_model | 完整世界记录；默认同时起草 data.contract（payload.also），提交时由引擎机械校验引用、领域与选择一致性 |
-| volume_outline | `volumes[]`：id/purpose/arc/turns/climax/nodes/threads/resources/places/characters/knowledge/clock/exit_state；每卷约 1000 汉字，校验见 [叙事推进](narrative.md#卷纲) |
-| chapter_outline | `volume` + `chapters[]`：synopsis、plot.beat、四个增量数组、enter/exit、disclosures、world_refs、new_entities；每章约 150 汉字，状态链见 [叙事推进](narrative.md#章纲) |
-| write / repair / redesign | title/完整 prose/summary/drift_check/具体 self_check；工作台模式下可带顶层 `understanding` 增量（引擎在入库时更新作品理解）；提交时机械判定字数区间、跨章逐字重复（≥25 字）、对白引号体例、西文残留，并核算漂移 |
+| volume_outline | `volumes[]`：id/purpose/arc/turns/climax/nodes/threads/**hooks**/style/resources/places/characters/knowledge/clock/exit_state；`hooks` 必填可为空（`{id,text,plant,payoff,required,continues}`），`style.trend` 必填；每卷约 1000 汉字，校验见 [叙事推进](narrative.md#卷纲) 与 [伏笔账](narrative.md#伏笔账卷纲声明章纲执行) |
+| chapter_outline | `volume` + `chapters[]`：synopsis、plot.beat、四个增量数组、enter/exit、disclosures、world_refs、new_entities、**hooks**、**style**；`hooks` 必填可为空（`{hook,action:plant/payoff,note}`，只有这两个动作），`style` 的 `pov`/`rhythm` 必填；每章约 150 汉字，状态链见 [叙事推进](narrative.md#章纲) |
+| write / repair / redesign | title/完整 prose/summary/drift_check/具体 self_check；工作台模式下可带顶层 `understanding` 增量（引擎在入库时更新作品理解）；提交时机械判定字数区间、跨章逐字重复（≥25 字）、对白引号体例、西文残留，核算漂移，并跑文风代理指标（见 [文风](narrative.md#文风)） |
 
 有世界模型时，章纲须声明 world_refs=[领域:id]，引用须存在，所选关联记录完整保留。返修必须逐项回应引擎拒绝的具体项（漏项、前态不符、体例或字数命中），不重交原样候选。
 
@@ -83,11 +84,14 @@ submit 的 accepted=true 表示回执已接受，不等于正文通过：字数�
 - `actual.from` 必须等于引擎投影的当前真实值，不由写手自报前态；不等 → `drift_before`。
 - `status=kept` 时 `actual.to` 等于 `planned.to`；`deviated`/`skipped` 必须给 `reason` 并登记进 `book['design_drift']`。
 - `unplanned` 每项按同一规则核算；未登记的计划外变化会在下一次章纲校验时暴露。
+- `kind='hook'` 的行用动作而不是前后值：`planned={'action':'plant'|'payoff'}`、`actual={'action':…}`，`evidence` 仍是正文引文。伏笔事件由 `drift.reconcile` 从章纲行与 `drift_check` **产出，写手不手写事件**。
 - `evidence.quote` 是正文原文片段，走精确引文校验。
 
 ## 结算与时钟
 
-事件来源是 `drift_check.items`（含 `unplanned`），由引擎按既有机械判据结算：资源不透支、时钟不倒退、位置存在于世界、知情不倒退（`retracted` 除外）、人物变化必须有 `choice`/`cost`、node 不重复推进、thread 关闭后不重用。**不再有独立审稿者提交事件回执**，读者侧的节奏核验也随章审一起删除。
+事件来源是 `drift_check.items`（含 `unplanned`），由引擎按既有机械判据结算：资源不透支、时钟不倒退、位置存在于世界、知情不倒退（`retracted` 除外）、人物变化必须有 `choice`/`cost`、node 不重复推进、thread 关闭后不重用、伏笔按 `plant`/`payoff` 转 `open`/`paid`（`{'op':'hook', id, status, due, text, reason, evidence}`，延期最多两次，到期未兑现报 `hook_due`）。**不再有独立审稿者提交事件回执**，读者侧的节奏核验也随章审一起删除。
+
+伏笔事件由 `drift.reconcile` 产出，所以 `state.hooks` 对新书不再是空集，bookpage 的承诺区照常渲染，`complete()` 的“未交代承诺”检查对新书是真实检查；卷末 `required` 未兑现由章纲的卷内状态链收尾拒绝。见 [伏笔账](narrative.md#伏笔账卷纲声明章纲执行)。
 
 elapsed_days 等于主线时钟增量。引文真实、时间词存在及数值一致只证明机械条件；知情、代价与路径是否成立，v2 没有独立判断，只能由作者抽读正文确认。
 

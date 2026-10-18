@@ -454,3 +454,28 @@
 `measure.py` 的 `review_trees`（`scopes.tree`）一节删除，改为 `dispatch` 节：按 `PIPELINE_SHAPES` × `volume_outline.scope` 机械计数五步派工（t2 档 25 章一卷示例：all 档 6 次派工前置、rolling 档 9 次；全书 total = 1 world + 卷纲 + 章纲 + 章数）。`reflux_probe.py` 的 `REVIEW_STAGES` 删除，改为「引擎核算意见 + 执笔自比偏离」两源聚合，v1 回执单列并标注仅历史项目。`duplication_probe.py` 的 v1 投影对删除，v2 只剩 `world_core ⊂ world_model`。
 
 本轮为工程行为验收：使用临时项目与明确标记的合成回执，未调用模型，不作为文学质量、真实长篇或计费用量结论。改动保留在工作区，未提交或推送。
+
+## 2026-10-18 v2.1 验收：伏笔账（卷纲声明 + 章纲执行）与文风机械代理指标
+
+作者第二轮增量（冻结接口 `validation/v2.1-hooks-and-style-spec.md`）：伏笔在卷纲上表现、在章纲上执行（补上 v2 里 hook 事件无生产者的缺口）；文学质量用文风规格 + 引擎机械代理指标承担可核对的那一半。本轮仍由独立验证位（V）执行，完整证据、最小复现与归属清单见 `validation/v2.1-verification.md`。
+
+### §三 五条逐条（四条已验证，另发现两个 spec 合法却跑不通的缺口）
+
+- **全量回归**：`python -m pytest tests -q` → **473 passed, 12 skipped, 829 subtests, 0 failed**（175.57 s；12 个 skip 全为宿主符号链接能力）；`python -m pyflakes`（scripts+tests+validation，107 文件）→ **0 发现**。
+- **伏笔反例矩阵 10/10**（`validation/repro_hook_matrix.py`）：plant 未在卷纲声明、payoff 早于 plant、plant 两次、payoff 两次、plant 越窗、payoff 越窗、卷末 required 未兑现、`hook_refs` 承接未埋、卷纲 required+越卷、卷纲窗口非法——逐条被拒且错误可读（9 条为 `design_drift`，卷末闭合那条走 `drift_closure`）。矩阵最初 2/10 的根因是夹具默认未开 hooks（回执里 `hooks` 全空，篡改成了空操作），harness 现显式 `set_hooks_default(True)`。
+- **自洽链 3/3**（`validation/repro_hook_chain.py`）：2 卷 4 章，每卷 1 条 required + v1 一条 `continues`；第一卷收卷 `{required: paid, carry: open}`，全书终点三条全 `paid`，`carry.due == 卷纲 payoff[1] == 下一卷首章 == 3`；存在 open 承诺时 `complete()` 被拒（`payoffs 仍有未交代承诺。`），全兑现后返回 `completed: true`。
+- **文风 单元 9/9 + 流程 1/1**（`validation/repro_style_window.py`）：句长/段长/对白比越界 → `style_*` finding（`severity=quality`、`repair_scope=local`）；容差内不报；无锚点只跑重复度与人称且 `unknown` 不算不符；章纲 `dialogue_ratio` 目标被核；**极短锚点（han=52）vs 长章（han=1755）不报形状**（同数量级护栏）；卷纲 `style.window` 逐项覆盖契约（`merged_window`）；`metrics` 全值有限、下限行为明确；人称只看引号外叙述。流程层：章纲声明第三人称、正文第一人称 → `style_person` + `next_stage='repair'` + 未入库。
+- **新增回归入口**：`validation/v21_harness.py`、`repro_hook_matrix.py`、`repro_hook_chain.py`、`repro_style_window.py`、`repro_v21_gaps.py`；v2 的 `adversarial.py`（10/10）与 `e2e_guided.py`（3/3，全链逐门开书到完稿）在修复后一并复跑通过。
+
+### 独立验证报出的引擎缺口（已证伪 → 已修复，V 复跑确认）
+
+| 编号 | 现象与机制（23:03 快照） | 修复后复跑（23:25） |
+|---|---|---|
+| GAP-1 / GAP-1b（高） | 合并档位（t0/t1）× ≥2 卷：第一次卷纲派工（`also=('chapter_outline',)`）被拒 `design_drift/chapter_hook`——合并分支对每卷**独立**校验章纲（`workflow.py:530-547`，`state0=book['state']`），第 2 卷首章要兑现第 1 卷在同一回执里声明的 `continues` 伏笔，登记表里却没有它。**默认形状**（卷纲 `scope=all` + 章节 `scope=volume`）即可触发，而 t1 的默认体量正是 2 卷 | `volume_outline → write×4 → target_reached`，章号 [1,2,3,4]、两卷卷纲齐备 |
+| GAP-2（高） | `chapter_outline.scope='all'` 一律崩：该模式会先把后续卷章纲排在纸上，而 `context.build` 装配 `previous_chapters` 时直接 `repo.chapter(branch, n)`（`context.py:519-524`），那些章还没落盘 → `Error('正式章节不存在')`。即 spec §2 声明的 `scope ∈ volume\|all` 中 `all` 实际不可用 | `volume_outline → chapter_outline×2 → write×4 → target_reached` |
+
+V 的行为核验（不引用实现者自述）：① 三个缺口用例都跑到 `target_reached` 且章号连续、两卷卷纲齐备；② 两个对照组未回归（rolling 仍一卷一卷、`scope=volume` 仍进卷前派章纲）；③ 全量 pytest `473 passed / 12 skipped / 828 subtests / 0 failed`、pyflakes 0；④ v2 对抗性矩阵仍 10/10（链式化没有放松既有判据）；⑤ 伏笔链自洽样例仍 3/3（卷末闭合、跨卷 open→paid、`complete()` 拦截）。`repro_v21_gaps.py` 的三个缺口用例已翻成 `accepted`，自此是回归门槛。完整记录见 `validation/v2.1-verification.md` §五/§六。
+
+### 边界声明
+
+文风代理指标只保证**文风一致与可核对**（句长/段长/对白比/章内重复度/人称五项按声明窗口机械判定），**不证明「好看、人物可信」**；伏笔账验证的是「声明 → 执行 → 卷末闭合 → 入账 → `complete()` 拦截」的机械一致性，不评价伏笔本身的文学质量。全部验收在临时项目与合成回执上完成，未调用模型。改动保留在工作区，未提交或推送。

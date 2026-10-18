@@ -433,9 +433,12 @@ class Application:
             row = self.repo.chapter(book['branch'], 1)
             require(row['prose'] == prose_hash, 'pilot_version', '认可版本与当前首章不一致。')
             book['pilot'] = {'prose': prose_hash, 'contract': digest(book['contract']), 'source': source}
-            if editorial.enabled(book):
-                book['style_anchor'] = {'prose_hash': prose_hash, 'sample': self.repo.read_document(row['prose']),
-                                        'voice': book['contract']['voice'], 'traits': book['contract']['style_traits'], 'source': source}
+            # The approved first chapter is the voice anchor, for every project: v2.1 carries
+            # literary consistency with style, so the sample the writer is measured against must not
+            # depend on the editorial flag (that flag gates patch/scene capabilities, not the voice).
+            book['style_anchor'] = {'prose_hash': prose_hash, 'sample': self.repo.read_document(row['prose']),
+                                    'voice': book['contract']['voice'], 'traits': book['contract']['style_traits'],
+                                    'source': source}
             self.repo.save(book)
             self.repo.record('approve', book['pilot'])
         return {'approved': True, 'prose_hash': prose_hash}

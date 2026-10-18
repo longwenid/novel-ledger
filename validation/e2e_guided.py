@@ -226,7 +226,8 @@ def drive(app, tamper=None, on=None, tier='t1', through=None, limit=400):
                 # whatever string it was handed.
                 prose_for(app, task['chapter'], result['data'])
                 result['data']['drift_check'] = drift_check_fixture(app, task, result['data']['prose'])
-        if tamper is not None and not tampered and task['stage'] == on:
+        wanted = (on,) if isinstance(on, str) else tuple(on or ())
+        if tamper is not None and not tampered and task['stage'] in wanted:
             tamper(result['data'], task)
             tampered = True
         try:
@@ -247,9 +248,25 @@ def fresh(guided=True):
     return repo, Application(repo)
 
 
+def _chapter_rows(data):
+    """The chapter rows of whichever receipt shape carries them.
+
+    A merged tier (t0/t1) returns the volumes and their chapters from the *volume* dispatch, with the
+    rows grouped by volume id; a separate dispatch returns them as one flat list. A tamper that only
+    knew the flat shape silently did nothing on a merged tier (the run then completed and the case
+    read as "not rejected"), so both shapes are handled here.
+    """
+    chapters = data.get('chapters')
+    if isinstance(chapters, dict):
+        return next((rows for rows in chapters.values() if rows), [])
+    return chapters or []
+
+
 def tamper_enter(data, task):
-    data['chapters'][1]['enter'][0]['expected'] = 777
-    return 'chapters[1].enter[0].expected -> 777'
+    rows = _chapter_rows(data)
+    rows[1]['enter'][0]['expected'] = 777
+    return 'chapters[1].enter[0].expected -> 777（%s）' % (
+        '合并回执按卷分组' if isinstance(data.get('chapters'), dict) else '独立章纲派工')
 
 
 def tamper_missing_item(data, task):
@@ -279,7 +296,8 @@ def case_full_chain_clean():
 
 def case_chain_rejects_drift():
     repo, app = fresh()
-    stages, action, error = drive(app, tamper=tamper_enter, on='chapter_outline')
+    stages, action, error = drive(app, tamper=tamper_enter,
+                                  on=('chapter_outline', 'volume_outline'))
     rows = ((error.details or {}).get('findings') if error is not None else None) or []
     return {'action': action,
             'error': None if error is None else '%s: %s' % (error.code, error.message),

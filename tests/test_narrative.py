@@ -18,7 +18,9 @@ from novel_ledger import drift, narrative
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import chapter_rows, contract, drive, response, seeded_book, volume_rows
+from support import (chapter_rows, contract, drive, response, seeded_book,
+                     volume_rows)
+
 
 
 def tracked_contract(chapters=6):
@@ -312,6 +314,126 @@ class CompletionTests(unittest.TestCase):
         self.assertTrue(book['draft'] is not None)
         handoff = self.app.advance(owner=owner)
         self.assertEqual(handoff['action'], 'paused')
+
+
+class HookSettlementTests(unittest.TestCase):
+    """Promises move through the real ledger: plant opens them, payoff pays them, completion audits.
+
+    The engine side is the existing `facts.settle` hook event — v2.1 only supplies the producer
+    (volume declaration + chapter execution + the writer's `hook` self-comparison rows), so what is
+    asserted here is that the entry lands in `state.hooks` with the declared due date and that the
+    unfinished-promise gate sees it.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.repo = SQLiteRepository.initialize(Path(self.temp.name) / 'book',
+                                                seeded_book(contract(chapters=2, volumes=1)))
+        self.addCleanup(self.repo.close)
+        self.app = Application(self.repo)
+
+    def owner(self):
+        return self.app.run(finish=True, source='工程夹具授权按伏笔账写完。')['owner']
+
+    def submit_chapter(self, owner, until='write'):
+        handoff = drive(self.app, owner, until=until)
+        self.assertEqual(handoff['task']['stage'], 'write')
+        return self.app.submit(response(self.app))
+
+    def test_plant_opens_the_promise_with_the_declared_due_and_payoff_pays_it(self):
+        owner = self.owner()
+        self.submit_chapter(owner)
+        promise = self.repo.load()['state']['hooks']['hook-v1-required']
+        self.assertEqual(promise['status'], 'open')
+        self.assertEqual(promise['due'], 2)
+        self.assertIn('凭据', promise['text'])
+
+
+class HookCompletionTests(unittest.TestCase):
+    """The closing audit sees promises now: an open one refuses completion until it is paid."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+
+    def build(self, chapters=2, volumes=1):
+        self.repo = SQLiteRepository.initialize(Path(self.temp.name) / 'book',
+                                                seeded_book(contract(chapters=chapters,
+                                                                     volumes=volumes)))
+        self.addCleanup(self.repo.close)
+        self.app = Application(self.repo)
+        return self.app, self.repo
+
+    def test_a_book_completes_once_its_promises_are_paid(self):
+        app, repo = self.build()
+        owner = app.run(finish=True, source='工程夹具授权按伏笔账完本。')['owner']
+        self.assertEqual(drive(app, owner)['action'], 'ready_to_complete')
+        book = repo.load()
+        self.assertEqual(book['state']['hooks']['hook-v1-required']['status'], 'paid')
+        self.assertTrue(app.complete(owner)['completed'])
+
+    def test_completion_is_refused_while_a_promise_is_still_open(self):
+        # A promise may legitimately outlive the written chapters: a continuing one whose payoff
+        # window lies past the book's last chapter stays open through `ready_to_complete`, and the
+        # closing audit must refuse to call the book done while it is unpaid.
+        repo = SQLiteRepository.initialize(Path(self.temp.name) / 'open-book',
+                                           seeded_book(contract(chapters=4, volumes=2)))
+        self.addCleanup(repo.close)
+        app = Application(repo)
+        owner = app.run(finish=True, source='工程夹具授权跨卷伏笔完本。')['owner']
+        handoff = app.advance(owner=owner)
+        self.assertEqual(handoff['task']['stage'], 'volume_outline')
+        rows = volume_rows(repo.load(), ['v1', 'v2'], hooks=True)
+        rows[0]['hooks'].append({'id': 'hook-open-later', 'text': '读者记住的那张凭据还没有下文。',
+                                 'plant': [1, 1], 'payoff': [5, 5], 'required': False,
+                                 'continues': True})
+        app.submit({**response(app),
+                    'data': {'volumes': rows}})
+        handoff = app.advance(owner=owner)
+        self.assertEqual(handoff['task']['stage'], 'chapter_outline')
+        book = repo.load()
+        chapters = chapter_rows(book, book['contract']['volumes'][0], book['state'], hooks=True)
+        chapters[0]['hooks'].append({'hook': 'hook-open-later', 'action': 'plant',
+                                     'note': '埋一条后文才兑现的承诺。'})
+        app.submit({**response(app), 'data': {'volume': 'v1', 'chapters': chapters}})
+        self.assertEqual(drive(app, owner)['action'], 'ready_to_complete')
+        hooks = repo.load()['state']['hooks']
+        self.assertEqual(hooks['hook-open-later']['status'], 'open')
+        self.assertEqual({hooks[key]['status'] for key in ('hook-v1-required', 'hook-v1-carry',
+                                                           'hook-v2-required')}, {'paid'})
+        with self.assertRaises(Error) as caught:
+            app.complete(owner)
+        self.assertEqual(caught.exception.code, 'payoffs')
+        self.assertFalse(repo.load()['status'] == 'completed')
+
+    def test_a_two_volume_book_pays_the_continuing_promise_in_the_next_volume(self):
+        app, repo = self.build(chapters=4, volumes=2)
+        owner = app.run(finish=True, source='工程夹具授权跨卷伏笔完本。')['owner']
+        self.assertEqual(drive(app, owner)['action'], 'ready_to_complete')
+        hooks = repo.load()['state']['hooks']
+        self.assertEqual(hooks['hook-v1-required']['status'], 'paid')
+        self.assertEqual(hooks['hook-v1-carry']['status'], 'paid')
+        self.assertEqual(hooks['hook-v2-required']['status'], 'paid')
+        self.assertTrue(app.complete(owner)['completed'])
+
+    def test_the_hook_chain_does_not_add_a_dispatch(self):
+        app, repo = self.build()
+        owner = app.run(finish=True, source='工程夹具授权按伏笔账完本。')['owner']
+        stages = []
+        for _ in range(20):
+            handoff = app.advance(owner=owner)
+            if handoff['action'] == 'await_author':
+                app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', owner)
+                continue
+            if handoff['action'] != 'task_ready':
+                break
+            stages.append(handoff['task']['stage'])
+            app.submit(response(app))
+        self.assertEqual(stages, ['volume_outline', 'chapter_outline', 'write', 'write'])
+        self.assertTrue(repo.load()['volumes_outline']['v1']['hooks'])
+        self.assertEqual([entry['action'] for entry in repo.load()['plans']['1']['hooks']],
+                         ['plant'])
 
 
 if __name__ == '__main__':

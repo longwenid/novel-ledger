@@ -166,6 +166,9 @@ DELTA_HINTS = {
             '同一节点不得重复推进或已 resolved 后再推，改做或漏做都要落成 deviated/skipped 并写 reason。',
     'thread': 'plot.threads 的线路状态（active/dormant/resolved）与正文一致；'
               '已 resolved 的线路不得重新启用，dormant 的线路要交代它为何搁置。',
+    'hook': '本章声明的伏笔动作逐条对上：plant 的那一次要在正文里有读者能看见的具体载体'
+            '（一件物、一句话、一个动作），payoff 的那一次是真兑现而不是再提一次；'
+            '卷末 required 的必须在本卷内收（引擎在卷内状态链收尾校验），continuity 上的跨卷条目允许仍 open。',
 }
 
 
@@ -177,7 +180,7 @@ def self_check_block():
     review stages removed, the thing a producer is judged by is exactly this list.
     """
     from .drift import DELTA_KINDS, ITEM_KINDS
-    kinds = list(DELTA_KINDS) + [kind for kind in ('node', 'thread') if kind in ITEM_KINDS]
+    kinds = list(DELTA_KINDS) + [kind for kind in ('node', 'thread', 'hook') if kind in ITEM_KINDS]
     rows = [(kind, DELTA_HINTS[kind]) for kind in kinds if kind in DELTA_HINTS]
     if not rows:
         return []
@@ -189,17 +192,20 @@ def self_check_block():
 
 VOLUME_CHECK_HINTS = (
     'volumes 的 id 与顺序和 payload.volume_ids / contract.volumes 一一对应，不多不少。',
-    '每卷汉字数落在 words±tolerance；purpose、arc、climax、exit_state 都不能空。',
-    'node/thread 的 id 全书唯一，不覆盖已批准的 id；window 落在本卷章号区间内。',
+    '每卷汉字数落在 words±tolerance；purpose、arc、climax、exit_state、style.trend 都不能空。',
+    'node/thread/hook 的 id 全书唯一，不覆盖已批准的 id；node/thread window 落在本卷章号区间内。',
+    'hooks 每条 plant 必须落在本卷章号区间；payoff[0] >= plant[1]；越过卷末的必须 continues=true 且 required=false。',
     'resources/places/knowledge/characters 引用的 key/entity 必须已存在于世界模型或既有状态。',
     '不写逐章 synopsis（那是 chapter_outline 的产物），也不写 brainstorm/selection_reason。',
 )
 CHAPTER_CHECK_HINTS = (
     'chapters 章号连续，恰好覆盖本卷冻结范围 [first,last]，不多一章不少一章。',
-    '每章 synopsis 汉字数落在 words±tolerance；plot.beat 与 world_refs 不得为空。',
-    'resources/places/knowledge/characters 四个数组不得省略：没有变化就给空数组。',
+    '每章 synopsis 汉字数落在 words±tolerance；plot.beat、world_refs、style.pov、style.rhythm 不得为空。',
+    'resources/places/knowledge/characters/hooks 数组不得省略：没有变化就给空数组。',
     'enter 是本章开始时的状态，exit 必须等于 enter 施加本章全部增量后的结果，引擎会自己算一遍比对。',
     'node/thread 只能引用本卷卷纲已登记的集合；knowledge 的 to 取 hinted|suspected|misled|confirmed|retracted。',
+    'hooks 只有 plant/payoff 两个动作：同一 id 各一次、payoff 不早于 plant、各自落在卷纲窗口内；'
+    'hook_refs 承接的 id 必须已经 plant 过。',
 )
 
 
@@ -219,8 +225,19 @@ def stage(name, payload=None):
                           'threads 给 {id,kind,purpose,ending_condition,required}，跨卷延续的线路加 continues=true；'
                           'resources 给本卷资源大势 {key,from,to,reason}（key 必须已存在于世界模型或既有状态）；'
                           'places/characters 给 {entity,from,to,reason} 的本卷起止；knowledge 给 {who,topic,from,to,reason}；'
+                          'hooks 是必填数组（本卷没有伏笔就给空数组，缺字段会被拒）：每条 '
+                          '{id,text,plant:[最早章,最迟章],payoff:[最早章,最迟章],required:true|false,continues:true|false}——'
+                          'id 全书唯一（与 node/thread 同一命名空间，跨卷续用必须 continues=true 且 required=false）；'
+                          'text 是对读者的具体承诺（哪件物、哪句话、哪桩没交代的事），不写「待补」；'
+                          'plant 窗口必须落在本卷章号区间内，两章之间必须有一次 plant；payoff[0] >= plant[1]，'
+                          '允许越过卷末，但越过时必须 continues=true 且 required=false；'
+                          'required=true 的必须在卷末兑现，引擎在卷内状态链收尾处校验。'
+                          '续写前卷留下的伏笔时沿用同一 id 并标 continues=true，id 清单见材料 hooks.open。'
+                          'style.trend 必填：用具体文字说清本卷文风怎么走（相对首章定调的松紧、对白占比、句长、节奏），'
+                          '不写「同上」「保持」；可选 style.window 逐项覆盖契约 style_window'
+                          '（sentence/paragraph/dialogue/repetition/person），只在对本卷有明确意图时才改。'
                           'clock.advance_days 是本卷总推进天数；exit_state 必须非空，把卷末资源/位置/人物/知情/线路各一句写死——'
-                          '它是卷内状态链的闭合条件。node/thread id 全书唯一，不覆盖已批准 id。'
+                          '它是卷内状态链的闭合条件。node/thread/hook id 全书唯一，不覆盖已批准 id。'
                           '不写逐章 synopsis，不写脑暴与选案理由，不写正文。',
         'chapter_outline': '交付 {volume, chapters}：章号连续、恰好覆盖本卷冻结范围 [first,last]。每章给：'
                            'synopsis（words±tolerance 汉字：行动、阻力、选择、代价、结果、对下一章的推动，只写因果不写氛围）；'
@@ -238,7 +255,18 @@ def stage(name, payload=None):
                            '所以宁可少列一个坐标，也不要写一个自己对不上的值；'
                            'disclosures 写读者认知的推进，world_refs 引用真实世界记录；'
                            'new_entities 内联新人物/地点/物品档案 {id,kind,name,role,desire,limit,knowledge_boundary}，'
-                           '第一次出现就给全，不用另派档案阶段；hook_refs/reader_refs/history_refs 声明要承接的旧资料；'
+                           '第一次出现就给全，不用另派档案阶段；'
+                           'hooks 是必填数组（本章不埋也不兑就给空数组）：每条 {hook,action:plant|payoff,note}。'
+                           '只有 plant 和 payoff 两个动作——plant 创建承诺（引擎按卷纲声明的 payoff[1] 设到期章），'
+                           'payoff 兑现承诺；「中途再提一次」不算动作，用 hook_refs 承接已经埋下的承诺。'
+                           'hook 必须是本卷卷纲 hooks 声明的 id，或前卷 continues=true 且仍未兑现的 id；'
+                           '同一 id 恰好 plant 一次、payoff 一次，payoff 不早于 plant（同章允许 plant 后立刻 payoff，用于短线钩子）；'
+                           'plant/payoff 各自必须落在卷纲声明的窗口内；卷末 required=true 的必须已 paid，'
+                           'continues=true 的允许仍 open 带入下一卷；hook_refs 里的 id 必须已经 plant 过，未埋就承接会被拒。'
+                           'style 必填：pov 与契约 pov 一致（或落在卷纲 style.trend 声明的演进内）、'
+                           'rhythm 用具体文字写本章句法与节奏、dialogue_ratio 给 0~1 的目标（可选）、'
+                           'notes 写本章例外（如对峙段允许长句）。'
+                           'hook_refs/reader_refs/history_refs 声明要承接的旧资料；'
                            'scenes/pacing 可选，保留工作台兼容。不写正文。',
         'write': '交 title/完整 prose/summary/具体 self_check 与逐条 drift_check。'
                  '本章纲（chapter_outline）与本章卷纲（volume_outline）都是必读：按章纲的场景与增量落笔，'
@@ -249,6 +277,12 @@ def stage(name, payload=None):
                  '计划外发生的变化写进 unplanned（同样给 reason）。'
                  '以动作、对白、选择、后果写场景，删除重复解释。遵守 word_budget 的本章范围；'
                  '静章承担余波、恢复、关系或暗线作用。作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
+                 '文风上照 style_anchor 的首章定调、本卷 style.trend 与本章 style 写：'
+                 'pov/rhythm/dialogue_ratio 是本章声明的执行点，self_check 必须逐条点名它们各自在本章哪几段落了地'
+                 '（例如「对白占比按 0.30 走，集中在第 3、5 段」），不能只写「已遵循」。'
+                 '材料 style.anchor 是首章的实测指标、style.window 是本卷生效的容差：'
+                 '机械指标只保证文风一致与可核对，不证明好看或人物可信，别为了凑指标牺牲场景。'
+                 '伏笔上 plant 的承诺与 payoff 的兑现都要在正文里落地，drift_check 的 hook 行照实填。'
                  '约定的叙述视角与人称是硬约束：不越出约定的视角范围，也不无标记地切换人称；'
                  '母题靠事件与选择体现，不写成口号；基调不靠形容词报幕。',
         'repair': '读完整基稿、返修问题与前态，交完整合成稿；local 保留成立部分，chapter 重排因果场景。'

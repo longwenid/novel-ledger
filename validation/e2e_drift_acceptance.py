@@ -165,8 +165,13 @@ def case_drift_check(tmp):
         ensure_task(app, owner)
 
         wrong = support.response(app)
-        if wrong['data']['drift_check']['items']:
-            wrong['data']['drift_check']['items'][0]['actual']['from'] = '自报的错前态'
+        # Since v2.1 the first item may be a promise row, whose `planned`/`actual` is an action
+        # rather than a value: pick the first row that actually carries a comparable value.
+        comparable = next((item for item in wrong['data']['drift_check']['items']
+                           if isinstance(item.get('planned'), dict)
+                           and ({'from', 'to', 'advance_days', 'after'} & set(item['planned']))), None)
+        if comparable is not None:
+            comparable['actual']['from'] = '自报的错前态'
         else:
             wrong['data']['drift_check']['unplanned'] = [{'kind': 'resources', 'key': '车费',
                                                           'change': '未登记的变化', 'reason': ''}]

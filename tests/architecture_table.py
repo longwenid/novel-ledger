@@ -31,6 +31,10 @@ ALLOWED = {
     'facts': {'contracts', 'entities', 'evidence', 'narrative', 'spatial'},
     'narrative': {'contracts'},
     'planning': {'contracts', 'entities', 'narrative', 'craft', 'story_memory', 'drift'},
+    # style judges mechanical prose shape (sentence/paragraph rhythm, dialogue share, in-chapter
+    # repetition, narration person) against the approved first chapter: same layer as lint, pure
+    # arithmetic on strings, and the only half of literary quality a program can actually check.
+    'style': {'contracts'},
     # drift owns the design-time state chain and the submission-time reconciliation: the chapter
     # outline's declared deltas, the simulation that walks them, and the comparison the writer
     # files against them. It reads the same tables the checks do (world sections, nodes, spatial
@@ -50,7 +54,7 @@ ALLOWED = {
     'briefs': {'contracts', 'creation', 'stages', 'world', 'drift'},
     'workflow': {'contracts', 'creation', 'drift', 'facts', 'narrative', 'planning',
                  'world', 'craft', 'editorial', 'understanding',
-                 'design_queries', 'evidence', 'lint', 'ledger'},
+                 'design_queries', 'evidence', 'lint', 'ledger', 'style'},
     # book_state declares the four-partition field ownership and the invariants between those fields,
     # so the application reads it to check the state it owns (the same way it reads store_keys for the
     # key space). book_state stays a pure declaration module: it imports nothing but contracts.
@@ -61,7 +65,7 @@ ALLOWED = {
                          'story_memory', 'understanding', 'workflow'},
     'contract_activation': {'contracts', 'ports', 'store_keys', 'workflow'},
     'context': {'contracts', 'ports', 'envelope', 'briefs', 'creation', 'narrative', 'drift',
-                'world', 'editorial', 'story_memory', 'understanding', 'planning',
+                'world', 'editorial', 'story_memory', 'understanding', 'planning', 'style',
                 'design_queries'},
     'publication': {'ports'},
     'workspace': {'contracts'},
@@ -101,6 +105,7 @@ CORE_EXTERNAL = {
     'narrative': {'__future__', 'copy'},
     'planning': {'__future__', 'copy', 'math'},
     'drift': {'__future__', 'copy'},
+    'style': {'__future__', 're'},
     'result_templates': {'__future__'},
     'revision_impact': {'__future__'},
     'spatial': {'__future__', 'copy'},

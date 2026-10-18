@@ -52,7 +52,7 @@
 | 线索回收 | 前期的闲笔或次要人物在卷尾成为决定胜负的关键手 |
 | 双线演进 | 核心对手在幕后推进自己的目标，与主角线交错施压 |
 
-设计节点用 `id/kind/purpose/ending_condition/required/window` 表达职责与收束条件，跨卷线路用 `continues: true`；节点与章号窗口规则见 [叙事推进](narrative.md#卷纲)。回收线索前核对原文和已成立证据，不临时补造过去。普通线索不必全部登记为 hook；`hook_refs` 指到的东西要在正文里真承接。
+设计节点用 `id/kind/purpose/ending_condition/required/window` 表达职责与收束条件，跨卷线路用 `continues: true`；节点与章号窗口规则见 [叙事推进](narrative.md#卷纲)。回收线索前核对原文和已成立证据，不临时补造过去。**伏笔是承诺，要进账**：在卷纲 `hooks` 里登记窗口与 `required`/`continues`，章纲用 `plant`/`payoff` 两个动作执行；`hook_refs` 只用于中途承接已经埋下的承诺，不新增动作。规则见 [伏笔账](narrative.md#伏笔账卷纲声明章纲执行)。
 
 ## 创意推演原则（自检）
 

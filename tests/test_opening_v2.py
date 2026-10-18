@@ -137,6 +137,28 @@ def combined(app, world=None):
     return {**model_data, 'contract': contract_data(app, model_data)}
 
 
+# Padding has to look like prose to the style proxies or it measures the fixture instead of the
+# handoff: a pool of words repeats its 4-grams no matter how it is rotated, so the filler is built
+# from a deterministic hash over a wide character space. It reads as word salad, which is what a
+# length stub is; the tests that care about content use their own sentences.
+_MASK = (1 << 64) - 1
+
+
+def _mix(value):
+    value = (value * 0x9E3779B97F4A7C15) & _MASK
+    value ^= value >> 29
+    value = (value * 0xBF58476D1CE4E5B9) & _MASK
+    value ^= value >> 32
+    value = (value * 0x94D049BB133111EB) & _MASK
+    return value ^ (value >> 31)
+
+
+def _filler(index, chapter):
+    """One deterministic sentence with no repeated skeleton to measure."""
+    seed = index * 101 + chapter * 10007
+    return ''.join(chr(0x4E00 + _mix(seed + position * 1009) % 1800) for position in range(11)) + '。'
+
+
 def writable_response(app, task_id=None, session=None, claim=None):
     """The engineering draft is a stub. A tier's chapter_min is a real length, so pad it to fit the
     contract it is judged against — the point under test is the handoff, not the stub's length."""
@@ -144,9 +166,11 @@ def writable_response(app, task_id=None, session=None, claim=None):
     data = result.get('data')
     if isinstance(data, dict) and isinstance(data.get('prose'), str):
         need = (app.repo.load().get('contract') or {}).get('chapter_min', 0)
-        filler = '登记台前的灯一直亮着，他把经手的凭据按顺序排开，逐个核对名字与责任栏。'
+        chapter = app.repo.pending()['input']['chapter']
+        index = 1
         while han_count(data['prose']) < need:
-            data['prose'] += filler
+            data['prose'] += _filler(index, chapter)
+            index += 1
     return result
 
 

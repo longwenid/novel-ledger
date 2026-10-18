@@ -28,8 +28,14 @@ WORK_PAYLOAD_FIELDS = (
     'understanding', 'editorial',                               # capability flags the brief reads
     'volume_ids',                                               # which volumes a volume_outline batch answers
     'volume', 'from_chapter', 'drift', 'reason',                # chapter_outline batch and its re-plan input
+    'anchor',                                                   # design-ahead chain vs the live state
     'volume_outline', 'chapter_outline',                        # the volume row / the chapter row handed to a writer
     'design_drift',                                             # drift rows a re-plan must absorb
+    # The promise ledger and the style specification normally travel as the `hooks` / `style`
+    # records, declared where they are assembled (context.STAGE_MATERIAL). They are registered here
+    # too so a dispatch that forwards either block inline — a re-plan naming the hooks to absorb, a
+    # template that needs the effective window — is a declared shape instead of a rejected field.
+    'hooks', 'style',
 )
 
 # Fields the local delivery adapter renders for one dispatch. Guides are attached

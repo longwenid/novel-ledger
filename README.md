@@ -8,9 +8,9 @@
 - **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 模块（核心规则与流程处理普通值，具体存储、文件交付和进程在外层装配）+ 一个 SQLite 项目库。
 - **当前版本**：`2.0.0`，数据库 schema 仍是 `novel-ledger/3`（已有 v3 可继续使用，v2 及更早库显式拒绝，不做隐式升级）。v2 与 v1 是**流水线换代**：v1 的冻结任务（回执带 `checks_version`/`obligations`、要求首读，或阶段名为 `plan`/`book_plan` 等已删阶段的）在本版本不能执行，需按新协议重新派工；存储结构没有迁移。
 
-**流水线是五步**：十门开书（主干自执）→ 世界模型与约定 → 每卷约 1000 汉字的极简卷纲 → 含资源/位置/情节漂移字段的极简章纲 → 按章纲执笔并自比，引擎机械核账。**设计层审查与章级独立审已全部删除**（作者决定），判据从"写完之后靠独立审稿者"前移到"章纲声明 + 卷内状态链 + 引擎核算"。
+**流水线是五步**：十门开书（主干自执）→ 世界模型与约定 → 每卷约 1000 汉字的极简卷纲（含伏笔账与文风走向）→ 含资源/位置/情节漂移字段、伏笔执行与文风声明的极简章纲 → 按章纲执笔并自比，引擎机械核账。**设计层审查与章级独立审已全部删除**（作者决定），判据从"写完之后靠独立审稿者"前移到"章纲声明 + 卷内状态链 + 引擎核算 + 文风代理指标"。
 
-**代价必须说清楚，不粉饰**：不再有独立 agent 复核文学质量与阅读体验。机械核算证明的是"正文与章纲声明一致"，不是"这一章好看、人物可信"。需要独立判断时，只能人工抽读全文，或用离线盲测工具，或另行发起一次修订。详见 [返工与成本](references/rework.md) 第五节。
+**代价必须说清楚，不粉饰**：不再有独立 agent 复核文学质量与阅读体验。引擎能证明的是"正文与章纲声明一致、文风与锚点一致"——**文风代理指标只保证文风一致、可核对，不证明"这一章好看、人物可信"**。需要真正的文学判断时，只能人工抽读全文，或用离线盲测工具，或另行发起一次修订。详见 [返工与成本](references/rework.md) 第五节。
 
 阅读入口：[SKILL.md](SKILL.md) 面向 agent，提供任务路由、共同边界和最短交接；`references/` 按任务维护专项规则；本 README 面向使用与维护者，说明安装、架构和命令示例。运行状态的完整动作表统一见 [运行与恢复](references/runtime.md#动作分支)。**判据前移的设计与实测见 [返工与成本](references/rework.md)**。
 
@@ -86,7 +86,7 @@ flowchart TD
 | 应用端口 | `ports` | Repository、ContextStore、PublicationReader、TaskCompiler、Presentation、HostApplication；只依赖基础契约 |
 | 应用编排 | `application`、`revision_service`、`contract_activation` | Application 保留授权与事务入口；专项服务负责历史修订及约定激活，使用端口与注入能力 |
 | 纯流程 | `workflow` | 下一任务、状态迁移与修复额度，按值调用领域规则 |
-| 纯领域 | `creation`、`world`、`planning`、`drift`、`facts` 等 | 逐门选择、世界、卷纲/章纲校验、状态链模拟、漂移核算与事实结算；实体、证据和节点查询由独立纯模块共享 |
+| 纯领域 | `creation`、`world`、`planning`、`drift`、`style`、`facts` 等 | 逐门选择、世界、卷纲/章纲校验、状态链模拟（含伏笔状态机）、漂移核算、文风代理指标与事实结算；实体、证据和节点查询由独立纯模块共享 |
 | 记忆与修订 | `understanding`、`story_memory`、`revision_impact` | 版本解释、场景身份、事实与阅读影响传播；只处理普通值 |
 | 数据归属 | `book_state` | 四区字段归属与同一事务快照的拆分、组装 |
 | 冻结查询 | `context`、`briefs` | 通过 ContextStore 编译来源与任务说明；不依赖 workflow |
@@ -106,9 +106,11 @@ settings、canon、intent、execution 共同构成**一个作品事务聚合**�
 |---|---|---|---|
 | 1 | `opening_options` ×10 门 | 主干自执（不派子 agent） | `opening_choices` / `opening_basis` |
 | 2 | `world_model`（payload.also=opening_contract） | 1 次 | 世界 + 约定；提交时机械校验，无审查阶段 |
-| 3 | `volume_outline` | 1 次（`scope=all` 时含全部卷；`rolling` 时进卷前 1 次） | 每卷约 1000 汉字的极简卷纲 |
-| 4 | `chapter_outline` | 每卷 1 次（进入该卷前） | 该卷每章极简章纲：资源/位置/情节/知情/人物/时钟增量 + `enter`/`exit` |
-| 5 | `write` | 每章 1 次 | 正文 + `drift_check` 自比 + 引擎核算入账；不符 → `repair`/`redesign` 有界返修 |
+| 3 | `volume_outline` | 1 次（`scope=all` 时含全部卷；`rolling` 时进卷前 1 次） | 每卷约 1000 汉字的极简卷纲：卷职责/弧线/转折 + **伏笔账 `hooks`**（窗口、required、跨卷）+ **文风走向 `style.trend`** |
+| 4 | `chapter_outline` | 每卷 1 次（进入该卷前） | 该卷每章极简章纲：资源/位置/情节/知情/人物/时钟增量 + `enter`/`exit` + **伏笔执行 `hooks`（plant/payoff）** + **文风 `style`** |
+| 5 | `write` | 每章 1 次 | 正文 + `drift_check` 自比 + 引擎核算入账（含 hook 事件）+ 文风代理指标；不符 → `repair`/`redesign` 有界返修 |
+
+**钩子与文风的落点**：伏笔在**卷纲声明、章纲执行**——卷纲给出 `plant`/`payoff` 窗口与 `required`/`continues`，章纲只做 `plant` 与 `payoff` 两个动作（中途再提用 `hook_refs`），事件由 `drift.reconcile` 产出，写手不手写事件；文风由**卷纲 `style.trend`（定性走向）+ 章纲 `style`（本章执行）**声明，提交时由 `style.py` 的五条代理指标按契约 `style_window` 容差与首章锚点比对。
 
 t0/t1 由 `PIPELINE_SHAPES.merge_chapter_outline` 把本卷卷纲与章纲合成一次派工，两个契约各自校验同一份回执。完整的阶段集合只有 8 个：`opening_options`、`opening_contract`、`world_model`、`volume_outline`、`chapter_outline`、`write`、`repair`、`redesign`。
 
@@ -150,15 +152,17 @@ CONTRACT_FIELDS = (
 
 ### 3. 章纲就是结算契约
 
-`chapter_outline` 在动笔前声明每一章的资源、位置、知情、时钟、人物与情节增量，外加 `enter`/`exit` 两侧状态。四个增量数组**可以空、不能省**——空数组等于声明"本章没有这类变化"，它本身就是承诺。
+`chapter_outline` 在动笔前声明每一章的资源、位置、知情、时钟、人物与情节增量，外加 `enter`/`exit` 两侧状态；伏笔用 `hooks` 执行（`plant`/`payoff`），文风用 `style` 声明本章执行要求。四个增量数组**可以空、不能省**——空数组等于声明"本章没有这类变化"，它本身就是承诺。
 
-引擎在章纲提交时逐项模拟：资源不能为负、时钟不能倒退、位置必须在世界里、知情不能倒退、人物变化必须给 `choice`/`cost`、node 不能重复推进、thread 关闭后不能重用；`exit` 必须等于 `enter ⊕ 本章增量`；卷末必须满足 `exit_state`（容差 0）。失败即 `design_drift`，走既有返修预算。
+引擎在章纲提交时逐项模拟：资源不能为负、时钟不能倒退、位置必须在世界里、知情不能倒退、人物变化必须给 `choice`/`cost`、node 不能重复推进、thread 关闭后不能重用、伏笔不能重复埋设/重复兑现/越窗/未埋先承接；`exit` 必须等于 `enter ⊕ 本章增量`；卷末必须满足 `exit_state`（容差 0）且本卷 `required` 伏笔全部 `paid`。失败即 `design_drift`，走既有返修预算。
 
 这一步取代了旧的"先写骨架、再脑暴卷方案、再独立设计审、再写章计划、再写人物档案"整条链。
 
 ### 4. 执笔自比 + 引擎核算
 
-执笔只交正文、标题、摘要与 `drift_check`：逐项列出本章纲的每个计划增量，`actual.from` 由引擎给出投影值（**不允许写手自报前态**），`kept` 必须与计划一致，`deviated`/`skipped` 必须给理由与正文引文。引擎核算覆盖是否完整、前态是否相符、偏差是否登记，通过后按既有的事实/叙事/空间判据原子入账。
+执笔只交正文、标题、摘要与 `drift_check`：逐项列出本章纲的每个计划增量（含 `kind='hook'` 的埋设/兑现行），`actual.from` 由引擎给出投影值（**不允许写手自报前态**），`kept` 必须与计划一致，`deviated`/`skipped` 必须给理由与正文引文。引擎核算覆盖是否完整、前态是否相符、偏差是否登记，通过后按既有的事实/叙事/空间判据原子入账，并由 `drift.reconcile` 产出伏笔事件。
+
+同一批提交里还会跑**文风代理指标**（`style.py`）：句长、段长、对白占比、本章重复度、视角标记与首章锚点/本章 `style` 的偏差超过契约 `style_window` 就出 style finding，走同一个有界返修。它保证"文风一致、可核对"，**不判断写得好不好看**。
 
 出现偏差时本章照常入库（理由已写明），引擎把偏差记进 `book['design_drift']`，并在下一章前对该卷剩余章纲派一次 `chapter_outline`（带偏差清单）重排——这是删除独立改案阶段后的替代路径。**它保证后续自洽，不会把已写坏的一章变好。**
 
@@ -271,7 +275,7 @@ novel-ledger/
 ├── SKILL.md              技能入口（DSH 等宿主的加载说明与执行边界）
 ├── scripts/
 │   ├── novel.py          CLI：参数、访问分级、主控/Worker 边界
-│   └── novel_ledger/     模块（contracts 为字段权威；drift 为状态链与漂移核算；ports 定义层级接口；bootstrap 集中装配）
+│   └── novel_ledger/     模块（contracts 为字段权威；drift 为状态链与漂移核算；style 为文风代理指标；ports 定义层级接口；bootstrap 集中装配）
 │       └── templates/   页面 HTML/CSS/JS，导出时内嵌为单文件
 ├── references/           按任务取用，协议要求与写作建议分开说明
 │   ├── opening.md        逐门开书、字段归属与恢复
@@ -349,7 +353,7 @@ Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与
 - **默认字面规则**：正文与标题不出现系统词汇「账本、入账、回执」；**人名禁字默认为空**——起名是作者的决定，需要限制时用 `lexical` 命令按书设定。规则随任务材料的 `policy` 块交付，覆盖范围与版本可查，覆盖内容逐版留档、开书阶段即生效。
 - **数据库版本**：`novel-ledger/3`，已有 v3 可继续使用，v2 及更早库显式拒绝。
 - **不做的事**：不自动打开或转换未知来源数据库；不代作者做选择。主干生命周期由宿主提供。
-- **未验证的部分**（不要把工程夹具当文学成果）：真实子 agent 的历史隔离、计费用量控制，以及真实文学质量评估——v2 删除了独立审阅者，后者的口径见 [验证](references/validation.md)。
+- **未验证的部分**（不要把工程夹具当文学成果）：真实子 agent 的历史隔离、计费用量控制，以及真实文学质量评估——v2 删除了独立审阅者，v2.1 的文风代理指标只覆盖"一致、可核对"这一半，**不构成文学质量证据**；口径见 [验证](references/validation.md)。
 
 ## 许可
 
@@ -361,7 +365,11 @@ Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与
 
 卷纲默认 `scope=all`：约定生效后一次交全部卷，每卷约 1000 汉字（`tolerance=100`）。`scope=rolling` 改为进入该卷前交该卷；空对象 `{}` 表示关闭卷纲。章纲 `scope=volume`，每章 synopsis 约 150 汉字（`tolerance=60`）。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。没有正文授权时以 `outline_ready` 交付并停止，范围如实说明（rolling 只交了进入中的那一卷，不能说成全书卷纲）。
 
-卷内状态链取代了原来的分层范围核验：`enter` 与模拟状态必须逐章相等，`exit = enter ⊕ 本章增量`，卷末按 `exit_state` 闭合。它挡住的是资源、位置、知情、时钟和人物变化的自相矛盾；**因果是否可信、节奏是否成立，v2 没有独立复核者**。
+卷内状态链取代了原来的分层范围核验：`enter` 与模拟状态必须逐章相等，`exit = enter ⊕ 本章增量`，卷末按 `exit_state` 闭合，本卷 `required` 的伏笔必须全部 `paid`。它挡住的是资源、位置、知情、时钟、人物变化与伏笔埋收的自相矛盾；**因果是否可信、节奏是否成立，v2 没有独立复核者**。
+
+**伏笔账**在卷纲声明（`hooks:[{id,text,plant,payoff,required,continues}]`：`plant` 窗口落在本卷内、`payoff[0] >= plant[1]`、越卷必须 `continues:true` 且 `required:false`），在章纲执行（`hooks:[{hook,action:plant|payoff,note}]`，只有两个动作；同一 id 各一次、payoff 晚于 plant、必须落在窗口内；未埋就 `hook_refs` 承接即漂移）。事件复用既有 hook 事件、由 `drift.reconcile` 从章纲与 `drift_check` 产出，所以 `state.hooks` 对新书不再是空集，`complete()` 的未交代承诺检查是真实检查。
+
+**文风**用"规格 + 机械代理指标"解决可核对的那一半：卷纲 `style.trend` 说本卷怎么走（`window` 与契约 `style_window` 逐项合并），章纲 `style{pov,rhythm,dialogue_ratio,notes}` 说本章怎么执行；引擎按容差与首章锚点比对句长、段长、对白占比、本章重复度与视角标记，越界以 style finding 进入同一个有界返修。**没有锚点时降级**为只查重复度与视角（锚点样本不足 40 汉字同样视为没有锚点）；视角只看引号外的叙述文本，判不出（`unknown`）不算不符；样本过短时按门槛跳过相应判据（正文不足 40 汉字不判，四字窗口 <20 不判重复度，句长/段长只在锚点与本章汉字量 3 倍以内且句数 ≥3 时比较）。这些指标只保证"文风一致、可核对"，**不证明"好看、人物可信"**。
 
 历史来源不再为每轮派工重建全量摘要和事件索引：逐章不可变目录共享未改前缀，任务只冻结目录入口，补读按冻结范围分页返回完整证据及正文。派工资源与承诺摘要取任务冻结视图；原索引名称保持显式完整读取兼容，数据库没有新增表或隐式迁移。
 

@@ -49,6 +49,12 @@ def drift_items(row):
     for thread in plot.get('threads') or []:
         if isinstance(thread, dict) and text(thread.get('thread')):
             items.append(_drift_item('thread', thread['thread'], {'after': thread.get('after')}, chapter))
+    # The promise account: one row per declared plant/payoff. The engine turns each `kept` row into
+    # the existing hook event, so the writer's comparison is what settles `state.hooks`. The order
+    # follows the engine's own coverage list (plot, then promises, then the state deltas).
+    for entry in row.get('hooks') or []:
+        if isinstance(entry, dict) and text(entry.get('hook')):
+            items.append(_drift_item('hook', entry['hook'], {'action': entry.get('action')}, chapter))
     for entry in row.get('resources') or []:
         if isinstance(entry, dict) and text(entry.get('key')):
             items.append(_drift_item('resources', entry['key'],
@@ -71,18 +77,26 @@ def drift_items(row):
 
 
 def volume_row(ident):
-    """One volume of a blank volume outline: every §3 field present, all values empty."""
+    """One volume of a blank volume outline: every declared field present, all values empty.
+
+    `hooks` and `style` follow the same rule as the delta arrays: an empty array (or an empty trend)
+    is the declaration "this volume opens no promise / states no style shift", while a missing field
+    is nothing the validator can read.
+    """
     return {'id': ident, 'purpose': '', 'arc': '', 'turns': [{'at': '', 'turn': ''}], 'climax': '',
-            'nodes': [], 'threads': [], 'resources': [], 'places': [], 'characters': [],
-            'knowledge': [], 'clock': {'advance_days': 0}, 'exit_state': ''}
+            'nodes': [], 'threads': [], 'hooks': [],
+            'resources': [], 'places': [], 'characters': [],
+            'knowledge': [], 'clock': {'advance_days': 0}, 'exit_state': '',
+            'style': {'trend': '', 'window': {}}}
 
 
 def chapter_row(number, volume=None):
-    """One blank chapter outline row: the required fields plus the four declared delta arrays.
+    """One blank chapter outline row: the required fields plus the declared delta arrays.
 
     The arrays are empty rather than absent on purpose: an empty array is the declaration "nothing
     of this kind changes in this chapter", which is a claim the state chain can check, while a
-    missing field is nothing to check at all.
+    missing field is nothing to check at all. `hooks` follows the same rule — an empty array says the
+    chapter plants and pays off nothing, which the volume's promise ledger then has to survive.
     """
     row = {'chapter': number, 'synopsis': '',
            'plot': {'beat': '', 'nodes': [], 'threads': []},
@@ -90,8 +104,10 @@ def chapter_row(number, volume=None):
            'clock': {'advance_days': 0},
            'enter': [], 'exit': [],
            'disclosures': [], 'world_refs': [], 'new_entities': [],
+           'hooks': [],
            'hook_refs': [], 'reader_refs': [], 'history_refs': [],
            'scenes': [], 'pacing': {},
+           'style': {'pov': '', 'rhythm': '', 'dialogue_ratio': 0, 'notes': ''},
            # Optional workbench protocol: the template states the keys so a writer who declares a
            # full reading dependency knows the names, and 'partial' keeps the conservative default
            # for everyone who does not. Empty here means "nothing declared", not "nothing depends".

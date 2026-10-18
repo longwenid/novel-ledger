@@ -40,7 +40,8 @@ FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '
                 'review_chunk': '复审块大小', 'initial_facts': '初始事实', 'places': '初始地点',
                 'placements': '初始站位', 'arcs': '人物弧', 'editorial_features': '编辑能力',
                 'scope_append_limit': '单轮补写章数上限', 'volume_outline': '卷纲要求',
-                'chapter_outline': '章纲要求', 'anchors': '稳定设定', 'links': '空间连接'}
+                'chapter_outline': '章纲要求', 'style_window': '文风容差',
+                'anchors': '稳定设定', 'links': '空间连接'}
 # Option values that are engine bookkeeping rather than an author-facing decision: the structural gate's
 # tier id and its arithmetic window are already stated in the option's own sentence.
 OPENING_VALUE_HIDDEN = ('tier', 'chapter_window')
@@ -71,12 +72,19 @@ SUB_LABELS.update(arc='卷内弧线', turns='卷内转折', climax='卷末高潮
                   actual='实际', status='比对结果', evidence='正文依据', quote='原文片段',
                   disclosures='读者认知推进', world_refs='世界引用', new_entities='新登场',
                   hook_refs='承接承诺', reader_refs='读者关联', history_refs='历史关联', events='事件')
+# v2.1: the promise ledger and the style specification, on both the volume and the chapter row.
+SUB_LABELS.update(hooks='伏笔账', hook='伏笔', text='对读者的承诺', plant='埋设窗口', payoff='兑现窗口',
+                  action='动作', note='说明', style='文风', trend='本卷文风走向', pov='叙述人称与视角',
+                  rhythm='句法与节奏', dialogue_ratio='对白占比目标', notes='本章例外',
+                  anchor='首章实测指标', voice='文风', tone='基调', style_traits='文风要点',
+                  sentence='句长', paragraph='段长', dialogue='对白', repetition='重复度', person='人称')
 SUB_LABELS['from'] = '起点'
 DRIFT_LABELS = {'kind': '类型', 'key': '坐标', 'planned': '章纲计划', 'actual': '正文实际',
                 'status': '比对结果', 'reason': '说明', 'evidence': '正文依据'}
 DRIFT_STATUS_LABELS = {'kept': '已兑现', 'deviated': '有偏差', 'skipped': '未发生',
                        'clean': '无偏差', 'open': '未处理'}
 HOOK_LABELS = {'open': '待兑现', 'paid': '已兑现', 'closed': '已关闭'}
+HOOK_ACTION_LABELS = {'plant': '埋设', 'payoff': '兑现'}
 STANCE_LABELS = {'knows': '确知', 'believes': '相信', 'suspects': '怀疑', 'disproved': '已推翻'}
 STATUS_LABELS = {'preparing': '开书准备', 'running': '进行中', 'paused': '已暂停', 'completed': '已完本'}
 SECTIONS = (('overview', '概览'), ('contract', '创作约定'), ('world', '世界与选择'),
@@ -357,6 +365,56 @@ def _chain(rows):
                    + '</span>' for row in rows)
 
 
+def _hook_rows(rows, declared=None):
+    """The promise ledger: what a volume declares, or what a chapter acts on.
+
+    A volume row carries the declaration (windows, required, continues); a chapter row carries the
+    action. Both are rendered against the same ledger so a reader can see whether a promise's window
+    still contains a plant/payoff that has not been written yet.
+    """
+    if not rows:
+        return '<span class="note">（无）</span>'
+    by_id = {entry.get('id'): entry for entry in (declared or []) if isinstance(entry, dict)}
+    pieces = ['<ul class="tight">']
+    for entry in rows:
+        if not isinstance(entry, dict):
+            pieces.append('<li>' + _display(entry) + '</li>')
+            continue
+        ident = entry.get('id') or entry.get('hook') or ''
+        bits = []
+        if entry.get('text'):
+            bits.append(_esc(entry['text']))
+        elif ident in by_id and by_id[ident].get('text'):
+            bits.append(_esc(by_id[ident]['text']))
+        if entry.get('action'):
+            bits.append('<span class="pill">' + _esc(HOOK_ACTION_LABELS.get(entry['action'], entry['action'])) + '</span>')
+        if entry.get('plant'):
+            bits.append('埋设窗口 ' + _esc(entry['plant']))
+        if entry.get('payoff'):
+            bits.append('兑现窗口 ' + _esc(entry['payoff']))
+        if entry.get('required') is not None:
+            bits.append('卷末必须兑现' if entry['required'] else '可选')
+        if entry.get('continues'):
+            bits.append('跨卷延续')
+        if entry.get('note'):
+            bits.append(_esc(entry['note']))
+        pieces.append('<li><b>' + _esc(ident) + '</b>（' + '　'.join(bits) + '）</li>')
+    pieces.append('</ul>')
+    return ''.join(pieces)
+
+
+def _style_block(style):
+    """A rendered style specification: trend/window on a volume, execution points on a chapter."""
+    if not style:
+        return '<span class="note">（未声明）</span>'
+    fields = [(key, value) for key, value in style.items() if value not in (None, '', {}, [])]
+    if not fields:
+        return '<span class="note">（未声明）</span>'
+    return '<table class="t">' + ''.join(
+        '<tr><th>' + _esc(SUB_LABELS.get(key, key)) + '</th><td>' + _display(value) + '</td></tr>'
+        for key, value in fields) + '</table>'
+
+
 def _chapter_card(row):
     number = row.get('chapter', '?')
     plot = row.get('plot') or {}
@@ -372,6 +430,8 @@ def _chapter_card(row):
                                ('knowledge', '知情增量', '本章无知情变化。'),
                                ('characters', '人物增量', '本章无人物变化。')):
         pieces.append(_delta_block(title, row.get(field), note))
+    pieces.append('<p class="note">伏笔执行（hooks）</p>' + _hook_rows(row.get('hooks')))
+    pieces.append('<p class="note">本章文风执行点（style）</p>' + _style_block(row.get('style')))
     clock = row.get('clock') or {}
     pieces.append('<p class="note">时钟：本章推进 ' + _esc(clock.get('advance_days', '—')) + ' 天</p>')
     pieces.append('<table class="t"><tr><th>入场状态 enter</th><td>' + _chain(row.get('enter')) + '</td></tr>'
@@ -414,6 +474,11 @@ def _outlines(book):
         if row.get('turns'):
             pieces.append(_timeline('卷内转折', [(str(turn.get('at', '')), turn.get('turn', ''), '', '')
                                                 for turn in row['turns']]))
+        pieces.append('<h4>本卷伏笔账 <span class="pill dim">' + str(len(row.get('hooks') or [])) + ' 条</span></h4>')
+        pieces.append('<p class="note">卷纲声明 promises：plant/payoff 窗口、卷末是否必须兑现、跨卷是否延续；'
+                      '章纲只做 plant/payoff 两个动作，中途再提用 hook_refs 承接。</p>')
+        pieces.append(_hook_rows(row.get('hooks')))
+        pieces.append('<h4>本卷文风走向</h4>' + _style_block(row.get('style')))
         for field, title in (('nodes', '本卷节点'), ('threads', '本卷线路')):
             rows = row.get(field) or []
             pieces.append('<h4>' + _esc(title) + ' <span class="pill dim">' + str(len(rows)) + ' 条</span></h4>')

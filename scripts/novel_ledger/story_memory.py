@@ -158,6 +158,10 @@ def reads(plan):
     result.update(('reader_knowledge', row['topic']) for row in plan.get('disclosures') or []
                   if isinstance(row, dict) and text(row.get('topic')))
     result.update(('hooks', ident) for ident in plan.get('hook_refs', []))
+    # A chapter that opens or closes a promise reads that promise's own state (its status and its
+    # deadline); without this a revision touching the promise would not reach the chapter acting on it.
+    result.update(('hooks', row['hook']) for row in plan.get('hooks') or []
+                  if isinstance(row, dict) and text(row.get('hook')))
     result.update(('reader_knowledge', ident) for ident in plan.get('reader_refs', []))
     result.update(('historical_assertions', ident) for ident in plan.get('history_refs', []))
     result.update(('entities', ident) for ident in plan.get('participants', []))

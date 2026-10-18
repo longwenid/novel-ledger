@@ -10,7 +10,8 @@ from novel_ledger import design_queries, entities, facts, planning, result_templ
 from novel_ledger.contracts import Error
 from novel_ledger.evidence import evidence
 from architecture_table import ADAPTERS, ALLOWED, CORE_EXTERNAL
-from support import contract
+from support import contract, seeded_book, volume_rows
+
 
 
 class DomainBoundaryTests(unittest.TestCase):
@@ -354,6 +355,29 @@ class DomainBoundaryTests(unittest.TestCase):
         context = ast.parse((ROOT / 'scripts' / 'novel_ledger' / 'context.py').read_text(encoding='utf-8'))
         self.assertFalse(any(isinstance(n, ast.ImportFrom) and n.module == 'workflow'
                              for n in ast.walk(context)))
+
+
+class HookDeclarationTests(unittest.TestCase):
+    """The promise ledger's field tables are one declaration, read by templates and checks alike."""
+
+    def test_the_hook_fields_are_declared_in_the_drift_tables(self):
+        from novel_ledger import drift
+        self.assertIn('hooks', drift.VOLUME_FIELDS)
+        self.assertIn('hooks', drift.CHAPTER_FIELDS)
+        self.assertIn('hook', drift.ITEM_KINDS)
+        self.assertTrue(drift.HOOK_ACTIONS)
+
+    def test_a_volume_outline_without_the_hook_array_is_a_shape_error(self):
+        from novel_ledger import drift
+        book = seeded_book(contract(chapters=2, volumes=1))
+        rows = volume_rows(book, ['v1'])
+        rows[0].pop('hooks')
+        with self.assertRaises(Error) as caught:
+            drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+                                          {}, {}, ['v1'], book['state'])
+        self.assertEqual(caught.exception.code, 'design_drift')
+        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+        self.assertIn('volume_hook', criteria, str(caught.exception.details['findings'])[:400])
 
 
 if __name__ == '__main__':

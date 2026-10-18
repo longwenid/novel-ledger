@@ -1,10 +1,11 @@
 """Step three and four: the volume outline and the chapter outline are settlement contracts.
 
 v2 moved the drift judgement into the design stage. A volume outline declares every volume's
-nodes, threads and terminal state; a chapter outline declares what each chapter changes
-(resources, places, knowledge, characters, clock) together with the state it enters on and leaves
-behind. The engine simulates the whole chain before a word is written, so every rejection below
-happens at submit time, with the offending chapter and coordinate named.
+nodes, threads, promises and terminal state; a chapter outline declares what each chapter changes
+(resources, places, knowledge, characters, clock) together with the promise actions it executes and
+the state it enters on and leaves behind. The engine simulates the whole chain before a word is
+written, so every rejection below happens at submit time, with the offending chapter/coordinate
+named.
 """
 import copy
 import sys
@@ -19,8 +20,9 @@ from novel_ledger import drift, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error, han_count
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import (chapter_rows, contract, drive, response, seeded_book, volume_rows,
-                     world_fixture)
+from support import (chapter_rows, contract, drive, response, seeded_book,
+                     volume_rows, world_fixture)
+
 
 
 def outlines(*chapters):
@@ -255,7 +257,8 @@ class ChapterOutlineTests(unittest.TestCase):
 
     def test_a_repair_batch_anchors_on_the_state_the_book_is_actually_in(self):
         # The book has already written chapter 1: the live state is chapter 1's exit state.
-        live, _ = drift.simulate(self.rows[:1], self.state, self.world, self.volume, None)
+        live, _ = drift.simulate(self.rows[:1], self.state, self.world, self.volume,
+                                 self.volume_row)
         tail = self.submit(copy.deepcopy(self.rows), state0=live)
         # Chapter 1 is a stale prefix now; the validator returns the suffix it anchored on.
         self.assertEqual([row['chapter'] for row in tail], [2])
@@ -376,6 +379,212 @@ class ProvenanceTests(unittest.TestCase):
         self.assertIsInstance(row['clock'], dict)
         self.assertIsInstance(row['enter'], list)
         self.assertIsInstance(row['exit'], list)
+        self.assertIsInstance(row['hooks'], list)
+
+
+class VolumeHookTests(unittest.TestCase):
+    """The volume outline declares the promises; the declaration itself is checked mechanically."""
+
+    def setUp(self):
+        self.book = seeded_book(contract(chapters=4, volumes=2))
+        self.contract, self.world, self.state = (self.book['contract'], self.book['world'],
+                                                 self.book['state'])
+        self.rows = volume_rows(self.book, ['v1', 'v2'], hooks=True)
+
+    def submit(self, rows):
+        return drift.validate_volume_outline({'volumes': rows}, self.contract, self.world,
+                                             {}, {}, ['v1', 'v2'], self.state)
+
+    def assertRejected(self, criterion, rows):
+        with self.assertRaises(Error) as caught:
+            self.submit(rows)
+        self.assertEqual(caught.exception.code, 'design_drift')
+        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+        self.assertIn(criterion, criteria, str(caught.exception.details['findings'])[:400])
+        return caught.exception
+
+    def test_a_hook_id_shares_the_volume_namespace_with_nodes_and_threads(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'][0]['id'] = broken[0]['nodes'][0]['id']
+        self.assertRejected('volume_hook', broken)
+        thread_taken = copy.deepcopy(self.rows)
+        thread_taken[0]['hooks'][0]['id'] = thread_taken[0]['threads'][0]['id']
+        self.assertRejected('volume_hook', thread_taken)
+
+    def test_a_payoff_window_must_open_after_the_plant_window_closes(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'][0].update(plant=[2, 2], payoff=[1, 1])
+        self.assertRejected('volume_hook', broken)
+
+    def test_a_promise_paid_after_the_volume_needs_continuing_and_not_required(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'][1].update(continues=False)
+        self.assertRejected('volume_hook', broken)
+
+    def test_a_required_promise_cannot_be_paid_after_the_volume_ends(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'][0].update(payoff=[3, 3])
+        self.assertRejected('volume_hook', broken)
+
+    def test_a_promise_needs_a_concrete_text(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'][0]['text'] = ''
+        self.assertRejected('volume_hook', broken)
+
+    def test_the_default_volume_rows_declare_a_required_and_a_continuing_hook(self):
+        report = self.submit(copy.deepcopy(self.rows))
+        required = report['v1']['hooks'][0]
+        self.assertTrue(required['required'])
+        self.assertFalse(required['continues'])
+        self.assertEqual(required['payoff'], [2, 2])
+        continuing = report['v1']['hooks'][1]
+        self.assertFalse(continuing['required'])
+        self.assertTrue(continuing['continues'])
+        self.assertEqual(continuing['payoff'], [3, 3])
+        self.assertEqual(len(report['v2']['hooks']), 1)   # the last volume has nobody to hand to
+
+    def test_the_promise_ledger_can_be_switched_off_for_an_unrelated_check(self):
+        report = self.submit(volume_rows(self.book, ['v1', 'v2'], hooks=False))
+        self.assertEqual([report['v1']['hooks'], report['v2']['hooks']], [[], []])
+
+
+class ChapterHookTests(unittest.TestCase):
+    """Chapter outlines execute the promises; the chain refuses any execution that cannot settle."""
+
+    def setUp(self):
+        self.book = seeded_book(contract(chapters=4, volumes=2))
+        self.contract, self.world, self.state = (self.book['contract'], self.book['world'],
+                                                 self.book['state'])
+        self.volume = self.contract['volumes'][0]
+        self.volume_row = drift.validate_volume_outline(
+            {'volumes': volume_rows(self.book, ['v1'], hooks=True)}, self.contract, self.world,
+            {}, {}, ['v1'], self.state)['v1']
+        self.rows = chapter_rows(self.book, self.volume, self.state, hooks=True)
+
+    def submit(self, rows):
+        return drift.validate_chapter_outline(
+            {'volume': 'v1', 'chapters': rows}, self.contract['chapter_outline'], self.volume,
+            self.volume_row, self.world, self.state)
+
+    def assertRejected(self, criterion, rows):
+        with self.assertRaises(Error) as caught:
+            self.submit(rows)
+        self.assertEqual(caught.exception.code, 'design_drift')
+        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+        self.assertIn(criterion, criteria, str(caught.exception.details['findings'])[:400])
+        return caught.exception
+
+    def test_the_default_chain_plants_in_the_first_chapter_and_pays_in_the_last(self):
+        rows = self.submit(copy.deepcopy(self.rows))
+        self.assertEqual([entry['action'] for entry in rows[0]['hooks']],
+                         ['plant', 'plant'])
+        self.assertEqual([entry['hook'] for entry in rows[0]['hooks']],
+                         ['hook-v1-required', 'hook-v1-carry'])
+        self.assertEqual(rows[1]['hooks'],
+                         [{'hook': 'hook-v1-required', 'action': 'payoff',
+                           'note': '本卷末兑现本卷承诺。'}])
+
+    def test_the_promise_schedule_can_be_switched_off(self):
+        # With no promise declared, a chapter chain of empty hook arrays is the consistent shape:
+        # the two switches travel together (a promise the volume declared must be executed).
+        outline = drift.validate_volume_outline(
+            {'volumes': volume_rows(self.book, ['v1'], hooks=False)}, self.contract, self.world,
+            {}, {}, ['v1'], self.state)['v1']
+        rows = chapter_rows(self.book, self.volume, self.state, hooks=False)
+        validated = drift.validate_chapter_outline(
+            {'volume': 'v1', 'chapters': rows}, self.contract['chapter_outline'], self.volume,
+            outline, self.world, self.state)
+        self.assertEqual([row['hooks'] for row in validated], [[], []])
+
+    def test_a_plant_for_an_undeclared_promise_is_rejected(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'].append({'hook': 'hook-unknown', 'action': 'plant', 'note': '工程样本。'})
+        self.assertRejected('chapter_hook', broken)
+
+    def test_a_payoff_before_the_plant_is_rejected(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'] = [{'hook': 'hook-v1-required', 'action': 'payoff', 'note': '工程样本。'}]
+        broken[1]['hooks'] = [{'hook': 'hook-v1-required', 'action': 'plant', 'note': '工程样本。'}]
+        self.assertRejected('chapter_hook', broken)
+
+    def test_a_promise_can_only_be_planted_once(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'].append({'hook': 'hook-v1-required', 'action': 'plant', 'note': '工程样本。'})
+        self.assertRejected('chapter_hook', broken)
+
+    def test_a_promise_can_only_be_paid_once(self):
+        broken = copy.deepcopy(self.rows)
+        broken[1]['hooks'].append({'hook': 'hook-v1-required', 'action': 'payoff', 'note': '工程样本。'})
+        self.assertRejected('chapter_hook', broken)
+
+    def test_a_plant_outside_its_window_is_rejected(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'] = [entry for entry in broken[0]['hooks']
+                              if entry['hook'] != 'hook-v1-required']
+        broken[1]['hooks'].append({'hook': 'hook-v1-required', 'action': 'plant', 'note': '工程样本。'})
+        self.assertRejected('chapter_hook', broken)
+
+    def test_a_payoff_outside_its_window_is_rejected(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'].append({'hook': 'hook-v1-required', 'action': 'payoff', 'note': '工程样本。'})
+        self.assertRejected('chapter_hook', broken)
+
+    def test_hook_refs_cannot_continue_an_unplanted_promise(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['hooks'] = [entry for entry in broken[0]['hooks']
+                              if entry['hook'] != 'hook-v1-carry']
+        broken[0]['hook_refs'] = ['hook-v1-carry']
+        self.assertRejected('chapter_hook', broken)
+
+
+class HookClosureTests(unittest.TestCase):
+    """The volume close is where promises either land or are handed to the next volume."""
+
+    def setUp(self):
+        self.book = seeded_book(contract(chapters=4, volumes=2))
+        self.contract, self.world = self.book['contract'], self.book['world']
+        self.volumes = self.contract['volumes']
+        self.state = self.book['state']
+        self.v1_row = drift.validate_volume_outline(
+            {'volumes': volume_rows(self.book, ['v1'], hooks=True)}, self.contract, self.world,
+            {}, {}, ['v1'], self.state)['v1']
+
+    def v1_chapters(self, hooks=True):
+        return chapter_rows(self.book, self.volumes[0], self.state, hooks=hooks)
+
+    def test_an_unpaid_required_promise_is_rejected_at_the_volume_close(self):
+        rows = self.v1_chapters()
+        rows[-1]['hooks'] = []                    # the volume ends without paying its promise
+        with self.assertRaises(Error) as caught:
+            drift.validate_chapter_outline({'volume': 'v1', 'chapters': rows},
+                                           self.contract['chapter_outline'], self.volumes[0],
+                                           self.v1_row, self.world, self.state)
+        self.assertEqual(caught.exception.code, 'design_drift')
+        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+        self.assertIn('drift_closure', criteria, str(caught.exception.details['findings'])[:400])
+
+    def test_a_continuing_promise_may_stay_open_and_is_paid_in_the_next_volume(self):
+        rows = self.v1_chapters()
+        drift.validate_chapter_outline({'volume': 'v1', 'chapters': rows},
+                                       self.contract['chapter_outline'], self.volumes[0],
+                                       self.v1_row, self.world, self.state)
+        after_v1, findings = drift.simulate(rows, self.state, self.world, self.volumes[0],
+                                            self.v1_row)
+        self.assertEqual(findings, [])
+        self.assertEqual(after_v1['hooks']['hook-v1-carry']['status'], 'open')
+        self.assertEqual(after_v1['hooks']['hook-v1-required']['status'], 'paid')
+        v2_row = drift.validate_volume_outline(
+            {'volumes': volume_rows(self.book, ['v2'], hooks=True)}, self.contract, self.world,
+            {}, {'v1': self.v1_row}, ['v2'], after_v1)['v2']
+        v2_rows = chapter_rows(self.book, self.volumes[1], after_v1, hooks=True)
+        drift.validate_chapter_outline({'volume': 'v2', 'chapters': v2_rows},
+                                       self.contract['chapter_outline'], self.volumes[1],
+                                       v2_row, self.world, after_v1)
+        after_v2, findings = drift.simulate(v2_rows, after_v1, self.world, self.volumes[1], v2_row)
+        self.assertEqual(findings, [])
+        self.assertEqual(after_v2['hooks']['hook-v1-carry']['status'], 'paid')
+        self.assertEqual(after_v2['hooks']['hook-v2-required']['status'], 'paid')
+        self.assertEqual({row['status'] for row in after_v2['hooks'].values()}, {'paid'})
 
 
 if __name__ == '__main__':

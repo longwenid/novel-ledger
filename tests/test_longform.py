@@ -20,8 +20,9 @@ from novel_ledger import book_state, story_memory, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import (append_history, contract, drive, plan_extras, response, seeded_book,
-                     tracked_contract)
+from support import (append_history, contract, drive, plan_extras, response,
+                     seeded_book, tracked_contract)
+
 
 
 def rolling_contract(chapters=4, volumes=2):
@@ -227,6 +228,43 @@ class PersistentStateTests(unittest.TestCase):
                 self.assertTrue(all(page['chain'] for page in tail))
             finally:
                 repo.close()
+
+
+class HookHandoverTests(unittest.TestCase):
+    """A promise planted in volume one is paid by the volume the book is actually writing next.
+
+    This is the long-form shape of the v2.1 ledger: the continuing hook stays open across the volume
+    handover, and the next volume's first chapter — whose outline was drafted from the state the
+    book is actually in — pays it. Nothing is re-planned and no dispatch is added.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.repo = SQLiteRepository.initialize(Path(self.temp.name) / 'book',
+                                                seeded_book(rolling_contract(4, 2)))
+        self.addCleanup(self.repo.close)
+        self.app = Application(self.repo)
+
+    def test_a_continuing_promise_crosses_the_volume_handover(self):
+        owner = self.app.run(finish=True, source='工程夹具授权跨卷伏笔完本。')['owner']
+        drive(self.app, owner, until='write')
+        self.app.submit(response(self.app))
+        handoff = drive(self.app, owner, until='write')
+        self.assertEqual(handoff['task']['chapter'], 2)
+        self.app.submit(response(self.app))
+        # Volume one is written: its own promise is paid, the continuing one is still open and due
+        # in the next volume's first chapter.
+        hooks = self.repo.load()['state']['hooks']
+        self.assertEqual(hooks['hook-v1-required']['status'], 'paid')
+        self.assertEqual(hooks['hook-v1-carry']['status'], 'open')
+        self.assertEqual(hooks['hook-v1-carry']['due'], 3)
+        # Finishing the book pays it; the closing audit refuses an open promise (see the completion
+        # tests), so a `ready_to_complete` here is itself the proof that the ledger closed.
+        self.assertEqual(drive(self.app, owner)['action'], 'ready_to_complete')
+        hooks = self.repo.load()['state']['hooks']
+        self.assertEqual(hooks['hook-v1-carry']['status'], 'paid')
+        self.assertTrue(self.app.complete(owner)['completed'])
 
 
 if __name__ == '__main__':

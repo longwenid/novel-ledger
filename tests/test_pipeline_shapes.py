@@ -24,6 +24,7 @@ from novel_ledger.contracts import PIPELINE_SHAPES, SCALE_TIERS
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import check_dispatch, contract, long_prose, response, seeded_book
 
+
 # Every stage the old architecture dispatched and v2 removed. A pipeline that still dispatches one
 # of them is running a review branch that has no owner any more.
 DELETED_STAGES = frozenset({
@@ -62,6 +63,37 @@ def record_stages(app, owner=None, until=None):
         stages.append(work['stage'])
         if until and work['stage'] == until:
             return handoff, Counter(stages)
+        check_dispatch(work)
+        result = response(app)
+        if isinstance(result['data'].get('prose'), str):
+            prose = long_prose(work['chapter'])
+            result['data']['prose'] = prose
+            for item in result['data']['drift_check']['items']:
+                item['evidence'] = {'chapter': work['chapter'], 'quote': prose[:20]}
+        app.submit(result)
+    raise AssertionError('工程流程没有在有限步骤内停止')
+
+
+def drive_ordered(app, owner=None, limit=200):
+    """Advance a whole book with chapter-length drafts, returning the dispatch order as dispatched.
+
+    `record_stages` returns a Counter, which is what shape tests want; a merged receipt or an
+    ahead-of-the-front outline dispatch is a *sequence* claim, so this keeps the order and files the
+    padded prose every large-tier band needs.
+    """
+    if owner is None:
+        lease = app.repo.get(store_keys.CONTROLLER)
+        owner = (lease or {}).get('owner')
+    stages = []
+    for _ in range(limit):
+        handoff = app.advance(owner=owner)
+        if handoff['action'] == 'await_author':
+            app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', owner)
+            continue
+        if handoff['action'] != 'task_ready':
+            return handoff, stages
+        work = app.repo.pending()['input']
+        stages.append(work['stage'])
         check_dispatch(work)
         result = response(app)
         if isinstance(result['data'].get('prose'), str):
@@ -152,6 +184,90 @@ class PipelineShapeTests(unittest.TestCase):
             book = repo.load()
             self.assertEqual(sorted(book['volumes_outline']), ['v1', 'v2', 'v3', 'v4'])
             self.assertEqual(sorted(book['chapter_outlines']), ['v1'])
+        finally:
+            repo.close()
+
+    def test_a_merged_two_volume_tier_hands_its_promise_to_the_next_volume(self):
+        """t1's declared shape, end to end: one outline dispatch, then prose, and a paid promise.
+
+        The merged receipt carries both volumes' chapter outlines, so the engine is the only thing
+        that can carry volume one's continuing promise into volume two: the fixture designs the two
+        chains as one and the engine validates them as one. Both the dispatch order and the settled
+        ledger are asserted, because a merged receipt that lost its promise would still finish.
+        """
+        repo = SQLiteRepository.initialize(self.project, seeded_book(tier_contract('t1', 4, 2)))
+        app = Application(repo)
+        try:
+            owner = app.run(finish=True, source='工程夹具授权 t1 两卷完本。')['owner']
+            handoff, stages = drive_ordered(app, owner)
+            self.assertEqual(handoff['action'], 'ready_to_complete')
+            self.assertEqual(stages, ['volume_outline', 'write', 'write', 'write', 'write'])
+            self.assertNotIn('chapter_outline', stages)
+            book = repo.load()
+            self.assertEqual(sorted(book['chapter_outlines']), ['v1', 'v2'])
+            self.assertEqual([row['chapter'] for row in book['chapter_outlines']['v2']], [3, 4])
+            declared = book['volumes_outline']['v1']['hooks'][1]
+            self.assertTrue(declared['continues'])
+            carry = book['state']['hooks']['hook-v1-carry']
+            self.assertEqual(carry['status'], 'paid')
+            self.assertEqual(carry['due'], declared['payoff'][1])          # 3 == volume two's first
+            self.assertEqual(book['state']['hooks']['hook-v1-required']['status'], 'paid')
+            self.assertEqual(book['state']['hooks']['hook-v2-required']['status'], 'paid')
+            self.assertTrue(app.complete(owner)['completed'])
+        finally:
+            repo.close()
+
+    def test_scope_all_lays_every_volumes_chapter_outlines_before_the_first_word(self):
+        """The pre-laid chain: one chapter-outline dispatch per volume, all before prose starts.
+
+        `scope=all` is the author asking for the whole chain on paper first, so the second volume is
+        designed ahead of the writing front and its chain has to continue from volume one's *designed*
+        close rather than from prose that does not exist yet.
+        """
+        raw = tier_contract('t2', 4, 2)
+        raw['chapter_outline'] = {'scope': 'all', 'words': 150, 'tolerance': 60}
+        repo = SQLiteRepository.initialize(self.project, seeded_book(raw))
+        app = Application(repo)
+        try:
+            owner = app.run(finish=True, source='工程夹具授权预铺两卷章纲。')['owner']
+            handoff, stages = drive_ordered(app, owner)
+            self.assertEqual(handoff['action'], 'ready_to_complete')
+            self.assertEqual(stages[:3], ['volume_outline', 'chapter_outline', 'chapter_outline'])
+            self.assertEqual(stages.count('chapter_outline'), 2)
+            self.assertEqual(stages.count('write'), 4)
+            self.assertFalse(set(stages) & DELETED_STAGES)
+            book = repo.load()
+            self.assertEqual(sorted(book['chapter_outlines']), ['v1', 'v2'])
+            # The ahead-of-front volume's opening chapter continues from the designed close.
+            self.assertEqual(book['chapter_outlines']['v2'][0]['chapter'], 3)
+            self.assertEqual(book['state']['hooks']['hook-v1-carry']['status'], 'paid')
+            self.assertTrue(app.complete(owner)['completed'])
+        finally:
+            repo.close()
+
+    def test_the_foreshadowing_chain_adds_no_dispatch(self):
+        """Promises are declared and executed inside the two outline steps, never as new work.
+
+        v2.1 adds the hook ledger, and the one property that must not move is the dispatch count: a
+        promise is a row on the volume outline and an action on a chapter outline, so the sequence
+        is still volume_outline → chapter_outline → write...
+        """
+        repo = SQLiteRepository.initialize(self.project, seeded_book(contract(chapters=2, volumes=1)))
+        app = Application(repo)
+        try:
+            owner = app.run(finish=True, source='工程夹具授权按伏笔账写完。')['owner']
+            stages = []
+            for _ in range(20):
+                handoff = app.advance(owner=owner)
+                if handoff['action'] == 'await_author':
+                    app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', owner)
+                    continue
+                if handoff['action'] != 'task_ready':
+                    break
+                stages.append(handoff['task']['stage'])
+                app.submit(response(app))
+            self.assertEqual(stages, ['volume_outline', 'chapter_outline', 'write', 'write'])
+            self.assertTrue(repo.load()['volumes_outline']['v1']['hooks'])
         finally:
             repo.close()
 

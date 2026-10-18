@@ -18,7 +18,7 @@ fixtures stay valid by construction so a rejection never means "the fixture was 
 import copy
 import uuid
 
-from novel_ledger import context, facts, store_keys, workflow
+from novel_ledger import context, drift, facts, store_keys, workflow
 from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS, RESULT, digest, han_count,
                                     opening_source)
 from novel_ledger.result_templates import drift_items, template
@@ -179,12 +179,100 @@ def _han(value):
 # Step three: one ~1000-character outline per volume
 # --------------------------------------------------------------------------------------------------
 
-def volume_outline_fixture(app, work):
+def hooks_supported():
+    """Whether the engine this build loads has the v2.1 foreshadowing chain (spec §1).
+
+    The fixtures default their hook declarations on this probe instead of on a hard-coded flag, so
+    the whole suite keeps passing while the drift side is still landing the fields, and starts
+    exercising the chain the moment `VOLUME_FIELDS`/`CHAPTER_FIELDS`/`ITEM_KINDS` declare it. A test
+    that specifically probes hooks passes `hooks=True` and asserts the engine's own behaviour.
+    """
+    return ('hooks' in tuple(getattr(drift, 'VOLUME_FIELDS', ()))
+            and 'hooks' in tuple(getattr(drift, 'CHAPTER_FIELDS', ()))
+            and 'hook' in tuple(getattr(drift, 'ITEM_KINDS', ())))
+
+
+HOOKS_DEFAULT = None
+
+
+def set_hooks_default(value):
+    """Override the hook fixtures' default for the rest of the session (`None` = follow the engine).
+
+    Unittest style: call in a test and `self.addCleanup(set_hooks_default, None)`. Tests that only
+    probe hooks pass `hooks=True` directly instead of changing the default.
+    """
+    global HOOKS_DEFAULT
+    HOOKS_DEFAULT = None if value is None else bool(value)
+
+
+def hooks_ready():
+    """Whether the drift hook chain is complete enough to run end to end on this build.
+
+    The field tables can land before the validator's helper bodies do, and a `NameError` from a
+    half-landed validator would turn every unrelated flow test red. The probe therefore runs a real
+    hook-bearing volume outline through the validator: a structured rejection means the path works
+    (the fixture is valid, so it should pass, but a clean `design_drift` still proves the code ran);
+    a `NameError` means it has not landed yet.
+    """
+    if not hooks_supported():
+        return False
+    try:
+        book = seeded_book(contract())
+        rows = volume_rows(book, ['v1'], hooks=True)
+        drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+                                      {}, {}, ['v1'], book['state'])
+    except NameError:
+        return False
+    except Exception:                       # a structured refusal still means the path executed
+        return True
+    return True
+
+
+def _hooks_on(value):
+    """Whether a fixture row declares promises: explicit wins, else the session default.
+
+    The default follows the engine: once `drift` declares the v2.1 hook tables the fixtures start
+    exercising the chain on their own, and on a build without it they stay out of the way. A test
+    that wants one shape regardless passes `hooks=True`/`hooks=False`.
+    """
+    if value is not None:
+        return bool(value)
+    if HOOKS_DEFAULT is not None:
+        return HOOKS_DEFAULT
+    return hooks_supported()
+
+def volume_hooks(book, volume):
+    """The volume's declared promises: one required in-volume hook plus one continuing one.
+
+    The required hook is planted in the volume's first chapter and paid in its last, which is the
+    tightest window the policy allows; the continuing hook is planted here and paid in the next
+    volume's first chapter, which is the cross-volume shape §1.1 describes. The last volume declares
+    no continuing hook: it has no later volume to pay it in, and `complete()` refuses an open one.
+    """
+    volumes = book['contract']['volumes']
+    index = next(position for position, row in enumerate(volumes) if row['id'] == volume['id'])
+    rows = [{'id': 'hook-%s-required' % volume['id'],
+             'text': '读者看到退回凭据的来历，并要知道它最终由谁负责。',
+             'plant': [volume['first'], volume['first']],
+             'payoff': [volume['end'], volume['end']],
+             'required': True, 'continues': False}]
+    if index + 1 < len(volumes):
+        following = volumes[index + 1]
+        rows.append({'id': 'hook-%s-carry' % volume['id'],
+                     'text': '读者记住那张旧凭据，等着看它最终落到谁手里。',
+                     'plant': [volume['first'], volume['first']],
+                     'payoff': [following['first'], following['first']],
+                     'required': False, 'continues': True})
+    return rows
+
+
+def volume_outline_fixture(app, work, hooks=None):
     """The receipt for `volume_outline`: one row per volume this dispatch answers.
 
-    Declares the nodes and threads the following `chapter_outline` dispatch has to advance, and an
-    `exit_state` the volume's simulated close has to land on. `arc` absorbs whatever length is left
-    after the structured fields so the row's total 汉字 count is exactly the policy's `words`.
+    Declares the nodes and threads the following `chapter_outline` dispatch has to advance, the
+    promises the volume opens and closes (`hooks`), and an `exit_state` the volume's simulated close
+    has to land on. `arc` absorbs whatever length is left after the structured fields so the row's
+    total 汉字 count is exactly the policy's `words`.
 
     On a tier that merges the two artifacts (`merge_chapter_outline`), the same receipt also carries
     `chapters`, grouped by volume id — the engine validates each group with the chapter-outline
@@ -197,35 +285,45 @@ def volume_outline_fixture(app, work):
     words = policy.get('words') or 1000
     tracking = bool(contract.get('narrative_tracking'))
     wanted = payload.get('volume_ids') or [row['id'] for row in contract['volumes']]
+    enabled = _hooks_on(hooks)
     rows = []
     for ident in wanted:
         volume = next(row for row in contract['volumes'] if row['id'] == ident)
-        rows.append(_volume_row(book, volume, words, tracking))
+        rows.append(_volume_row(book, volume, words, tracking, hooks=enabled))
     data = {'volumes': rows}
     if 'chapter_outline' in tuple(payload.get('also') or ()):
-        data['chapters'] = {
-            ident: chapter_rows(book, next(row for row in contract['volumes'] if row['id'] == ident),
-                                book['state'])
-            for ident in wanted}
+        # One receipt, several volumes: the engine validates them in book order and carries the
+        # chain forward, so the fixture has to design them that way too — volume two's opening
+        # chapter continues from volume one's designed close, not from the frozen book state.
+        data['chapters'] = {}
+        state = book['state']
+        for ident, outline in zip(wanted, rows):
+            volume = next(row for row in contract['volumes'] if row['id'] == ident)
+            chapters = chapter_rows(book, volume, state, hooks=enabled)
+            data['chapters'][ident] = chapters
+            state = drift.simulate(chapters, state, book.get('world'), volume, outline)[0]
     return data
 
 
-def volume_rows(book, volume_ids=None, words=None):
+def volume_rows(book, volume_ids=None, words=None, hooks=None):
     """The volume outline rows for `volume_ids`, sized to the policy's per-volume 汉字 target.
 
     Public so a drift-unit test can build the same rows the dispatch fixture builds without an
     application: `drift.validate_volume_outline` is deterministic over (contract, world, rows).
+    `hooks=False` switches every promise off at once, which is how a test isolates the non-hook
+    checks from the hook chain.
     """
     contract = book['contract']
     policy = contract.get('volume_outline') or {}
     target = words if words is not None else policy.get('words') or 1000
     tracking = bool(contract.get('narrative_tracking'))
+    enabled = _hooks_on(hooks)
     wanted = list(volume_ids or [row['id'] for row in contract['volumes']])
     return [_volume_row(book, next(row for row in contract['volumes'] if row['id'] == ident),
-                        target, tracking) for ident in wanted]
+                        target, tracking, hooks=enabled) for ident in wanted]
 
 
-def _volume_row(book, volume, words, tracking):
+def _volume_row(book, volume, words, tracking, hooks=False):
     first, last = volume['first'], volume['end']
     count = last - first + 1
     nodes = [{'id': 'n' + str(chapter), 'kind': 'main',
@@ -243,7 +341,10 @@ def _volume_row(book, volume, words, tracking):
            'nodes': nodes, 'threads': threads,
            'resources': [], 'places': [], 'knowledge': [], 'characters': [],
            'clock': {'advance_days': count},
-           'exit_state': VOLUME_EXIT}
+           'exit_state': VOLUME_EXIT,
+           # A required array in v2.1: an empty one is the declaration "this volume promises nothing
+           # new", which is a claim the chain can read, while a missing field is nothing at all.
+           'hooks': volume_hooks(book, volume) if hooks else []}
     others = _han({key: value for key, value in row.items() if key != 'arc'})
     row['arc'] = _fit_text(ARC_SENTENCE, max(0, words - others))
     return row
@@ -253,15 +354,38 @@ def _volume_row(book, volume, words, tracking):
 # Step four: one chapter outline per volume, carrying the enter/exit state chain
 # --------------------------------------------------------------------------------------------------
 
+def anchor_state(app, book, payload, volume):
+    """The state a chapter-outline chain starts from on this dispatch.
+
+    A volume drafted ahead of the writing front (`anchor: design`) continues from the *designed* end
+    of every earlier volume whose outlines are already installed: no prose exists yet, so nothing has
+    settled, and anchoring it on the frozen book state is what made a two-volume merged receipt
+    unanswerable. The volume about to be written anchors on the projection instead.
+    """
+    state = book['state']
+    if (payload or {}).get('anchor') != 'design':
+        return state
+    for prior in book['contract']['volumes']:
+        if prior['end'] >= volume['first']:
+            break
+        rows = (book.get('chapter_outlines') or {}).get(prior['id'])
+        if rows:
+            outline = (book.get('volumes_outline') or {}).get(prior['id'])
+            state = drift.simulate(rows, state, book.get('world'), prior, outline)[0]
+    return state
+
+
 def chapter_outline_fixture(app, work, resources=True, places=True, knowledge=True,
-                            characters=None, nodes=None, clock_days=1):
+                            characters=None, nodes=None, clock_days=1, hooks=None):
     """The receipt for `chapter_outline`: the volume's chapters, each declaring its deltas.
 
     Every chapter declares a clock advance, a resource spend, a position move and a step up the
     reveal ladder when the projected state has them; each row's `enter` holds the state the
     simulation arrives with and `exit` holds `enter` plus this chapter's deltas, which is the
     redundancy the engine recomputes. Nodes are only advanced on tracked contracts (spec §2:
-    `narrative_tracking=false` may leave `plot.nodes/threads` empty).
+    `narrative_tracking=false` may leave `plot.nodes/threads` empty). `hooks` schedules the volume's
+    declared promises: planted in its first chapter, paid in its last, with the previous volume's
+    continuing hook paid on entry (spec §1.2).
     """
     book = app.repo.load()
     contract = book['contract']
@@ -272,18 +396,21 @@ def chapter_outline_fixture(app, work, resources=True, places=True, knowledge=Tr
     volume = next(row for row in contract['volumes'] if row['id'] == volume_id)
     first = payload.get('from_chapter') or volume['first']
     return {'volume': volume['id'],
-            'chapters': chapter_rows(book, volume, book['state'], first=first, words=words,
+            'chapters': chapter_rows(book, volume, anchor_state(app, book, payload, volume),
+                                     first=first, words=words,
                                      resources=resources, places=places, knowledge=knowledge,
-                                     characters=characters, nodes=nodes, clock_days=clock_days)}
+                                     characters=characters, nodes=nodes, clock_days=clock_days,
+                                     hooks=hooks)}
 
 
 def chapter_rows(book, volume, state, first=None, words=None, resources=True, places=True,
-                 knowledge=True, characters=None, nodes=None, clock_days=1):
+                 knowledge=True, characters=None, nodes=None, clock_days=1, hooks=None):
     """The chapter rows for `volume`, each declaring its deltas and its enter/exit handshake.
 
     `state` is the projected state the chain starts from, and is copied: the caller's state is
     never advanced. Public so a drift-unit test can hand `drift.validate_chapter_outline` rows
-    without paying for an application dispatch.
+    without paying for an application dispatch. `hooks=False` switches the promise schedule off,
+    which is how a test isolates a non-hook check from the chain.
     """
     contract = book['contract']
     policy = contract.get('chapter_outline') or {}
@@ -291,16 +418,45 @@ def chapter_rows(book, volume, state, first=None, words=None, resources=True, pl
     tracking = bool(contract.get('narrative_tracking')) if nodes is None else bool(nodes)
     if characters is None:
         characters = tracking
+    enabled = _hooks_on(hooks)
     scratch = copy.deepcopy(state)
     start = first if first is not None else volume['first']
     return [_chapter_row(scratch, book, volume, number, target,
                          resources=resources, places=places, knowledge=knowledge,
-                         characters=characters, tracking=tracking, clock_days=clock_days)
+                         characters=characters, tracking=tracking, clock_days=clock_days,
+                         hooks=enabled)
             for number in range(start, volume['end'] + 1)]
 
 
+def chapter_hooks(book, volume, number):
+    """The promise actions one chapter executes (spec §1.2).
+
+    Only two actions exist. The volume's own required hook is planted in the first chapter and paid
+    in the last (the same chapter when the volume is a single chapter, which is the short hook the
+    spec allows). A continuing hook is planted on entry and paid by the next volume's first chapter,
+    which pays its predecessor's. Nothing else re-mentions a promise: that is `hook_refs`.
+    """
+    volumes = book['contract']['volumes']
+    index = next(position for position, row in enumerate(volumes) if row['id'] == volume['id'])
+    last_volume = index + 1 == len(volumes)
+    rows = []
+    if number == volume['first']:
+        if index:
+            rows.append({'hook': 'hook-%s-carry' % volumes[index - 1]['id'], 'action': 'payoff',
+                         'note': '本卷开篇兑现上一卷留下的承诺。'})
+        rows.append({'hook': 'hook-%s-required' % volume['id'], 'action': 'plant',
+                     'note': '本卷开篇埋下对读者的具体承诺。'})
+        if not last_volume:
+            rows.append({'hook': 'hook-%s-carry' % volume['id'], 'action': 'plant',
+                         'note': '埋下一条跨卷承诺，留给下一卷兑现。'})
+    if number == volume['end']:
+        rows.append({'hook': 'hook-%s-required' % volume['id'], 'action': 'payoff',
+                     'note': '本卷末兑现本卷承诺。'})
+    return rows
+
+
 def _chapter_row(state, book, volume, number, words, resources=True, places=True,
-                 knowledge=True, characters=None, tracking=False, clock_days=1):
+                 knowledge=True, characters=None, tracking=False, clock_days=1, hooks=False):
     """Build one chapter row and advance `state` by its deltas (the simulation the engine repeats)."""
     contract = book['contract']
     protagonist = (contract.get('protagonist_setup') or {}).get('id') or 'shen'
@@ -309,7 +465,9 @@ def _chapter_row(state, book, volume, number, words, resources=True, places=True
            'resources': [], 'places': [], 'knowledge': [], 'characters': [],
            'clock': {'advance_days': clock_days}, 'enter': [], 'exit': [],
            'disclosures': [], 'world_refs': _world_refs(book), 'new_entities': [],
-           'hook_refs': [], 'reader_refs': [], 'history_refs': [], 'scenes': [], 'pacing': {}}
+           'hook_refs': [], 'reader_refs': [], 'history_refs': [], 'scenes': [], 'pacing': {},
+           # Required in v2.1; `[]` means this chapter executes no promise action.
+           'hooks': chapter_hooks(book, volume, number) if hooks else []}
     deltas = []          # (kind, key, before, after)
     # Clock: the one delta every chapter declares, and the one the prose stub always supports.
     deltas.append(('clock', 'clock', state['clock'], state['clock'] + clock_days))
@@ -427,6 +585,24 @@ def _plain_number(value):
 # Step five: the writer's self-comparison
 # --------------------------------------------------------------------------------------------------
 
+def chapter_row_of(app, work):
+    """The chapter settlement row a dispatch is about, from the frozen material.
+
+    The writer's row travels as a required record (`work['records']['chapter_outline']`); an older
+    or combined dispatch also carries it inline in `payload`. Reading the record first means a
+    context change that empties the payload cannot silently turn the drift_check into an empty one.
+    """
+    payload_row = (work.get('payload') or {}).get('chapter_outline')
+    if isinstance(payload_row, dict) and payload_row:
+        return payload_row
+    name = (work.get('records') or {}).get('chapter_outline')
+    if name:
+        document = app.repo.read_document(name)
+        if isinstance(document, dict):
+            return document
+    return {}
+
+
 def drift_check_fixture(app, work, prose, status='kept', deviations=None):
     """`drift_check` for one chapter: exactly one item per planned delta, before-values projected.
 
@@ -434,11 +610,12 @@ def drift_check_fixture(app, work, prose, status='kept', deviations=None):
     template uses — so the coverage the engine checks and the coverage the writer is asked for are
     one declaration. `actual.from` is the engine's projection of the current state, never the
     writer's guess; on a clean chain it equals `planned.from` because the enter/exit chain already
-    proved it.
+    proved it. Promises are filed as `kind='hook'` rows (`planned={'action': ...}`) when the chapter
+    row declares them and the template does not already pre-fill them.
     """
     book = app.repo.load()
     state = book['state']
-    row = (work.get('payload') or {}).get('chapter_outline') or {}
+    row = chapter_row_of(app, work)
     chapter = row.get('chapter') or work.get('chapter')
     quote = _quote(prose)
     items = []
@@ -449,10 +626,24 @@ def drift_check_fixture(app, work, prose, status='kept', deviations=None):
             actual = {'advance_days': planned.get('advance_days')}
         elif kind in ('node', 'thread'):
             actual = {'after': planned.get('after')}
+        elif kind == 'hook':
+            actual = {'action': planned.get('action')}
         else:
             actual = {'from': project(state, kind, item['key']), 'to': planned.get('to')}
         items.append({'kind': kind, 'key': item['key'], 'planned': planned, 'actual': actual,
                       'status': status, 'reason': '正文中该变化有明确动作与后果。',
+                      'evidence': {'chapter': chapter, 'quote': quote}})
+    filed = {(item['kind'], item['key']) for item in items}
+    for entry in row.get('hooks') or []:
+        if not isinstance(entry, dict) or not entry.get('hook'):
+            continue
+        coordinate = ('hook', entry['hook'])
+        if coordinate in filed:
+            continue
+        action = entry.get('action')
+        items.append({'kind': 'hook', 'key': entry['hook'], 'planned': {'action': action},
+                      'actual': {'action': action}, 'status': status,
+                      'reason': '正文中该承诺按章纲埋下或兑现。',
                       'evidence': {'chapter': chapter, 'quote': quote}})
     return {'items': items, 'unplanned': list(deviations or []), 'verdict': 'clean'}
 
@@ -675,6 +866,7 @@ def plan_extras(plan):
         'clock': {'advance_days': 1}, 'enter': [], 'exit': [],
         'disclosures': [], 'world_refs': [], 'new_entities': [],
         'hook_refs': [], 'reader_refs': [], 'history_refs': [],
+        'hooks': [],
         'scenes': [{'id': 'c%d:s1' % chapter, 'label': '值班室', 'intent': '核对退件来源。',
                     'conflict': '主管以签字制度阻拦。', 'turn': '旧凭据暴露出签字矛盾。',
                     'reads': [], 'depends_on': [], 'present': [], 'speakers': [],
@@ -710,19 +902,66 @@ def append_history(repo, first, last, prose_han=0, entity='shen'):
         previous = row['chain']
 
 
-def long_prose(n, count=140):
-    """A chapter-length unique prose: the chapter number appears inside every 25-character window.
+_MASK = (1 << 64) - 1
 
-    The default is long enough for the widest tier's minimum chapter length (3000 汉字), so a test
-    against a large-tier contract does not trip the substance finding before the point it probes.
+
+def _mix(value):
+    """A 64-bit integer mixer (splitmix-style): deterministic, never the same run twice by accident."""
+    value = (value * 0x9E3779B97F4A7C15) & _MASK
+    value ^= value >> 29
+    value = (value * 0xBF58476D1CE4E5B9) & _MASK
+    value ^= value >> 32
+    value = (value * 0x94D049BB133111EB) & _MASK
+    return value ^ (value >> 31)
+
+
+# A short real sentence at the start of every padded chapter: the receipts' shared evidence anchor
+# (`次日` is the time expression a clock event's evidence must quote) while the padded body keeps the
+# 25-character windows chapter-unique. `他` keeps the narration in the third person that the default
+# fixtures assume; the filler never draws a first/second-person marker.
+PADDED_SEED = '次日，他把退回的箱子放在桌上，'
+_PERSON_MARKERS = '我咱俺你他她它'
+
+
+def _padded_char(seed, step):
+    """One CJK character for the filler, never a narration-person marker."""
+    base = _mix(seed + step * 1009)
+    value = chr(0x4E00 + base % 1800)
+    bump = 0
+    while value in _PERSON_MARKERS:
+        bump += 1
+        value = chr(0x4E00 + (base + bump * 31) % 1800)
+    return value
+
+
+def padded_prose(chapter, need_han):
+    """Deterministic filler prose of at least `need_han` 汉字, safe under the mechanical checks.
+
+    A long-tier chapter needs a real minimum length, and every filler style has a trap: repeating one
+    sentence blows the style proxies' in-chapter 4-gram repetition share, while a small word pool
+    collides too often for the cross-chapter duplication lint. Characters drawn from a wide CJK range
+    by a per-chapter hash are unique four characters at a time, stable across runs (a flaky fixture
+    would be worse than a wrong one), and the same body shape for every chapter, so the anchor
+    comparison has nothing to compare against. The seed sentence is short enough (well under 25
+    characters) that every duplication window still contains hash-derived characters.
     """
-    parts = []
-    for i in range(count):
-        parts.append('第%d章%d段沈桐核对话%d，' % (n, i, n)
-                     + '封条与责任栏对齐%d，' % (i + n)
-                     + '先对名字再开箱%d。' % (i * 2 + n))
-    parts[0] = '次日' + parts[0]          # the receipts' shared evidence anchor
-    return ''.join(parts)
+    need = max(0, int(need_han))
+    prose = PADDED_SEED
+    index = 0
+    while han_count(prose) < need:
+        seed = index * 101 + int(chapter) * 10007
+        prose += ''.join(_padded_char(seed, step) for step in range(11)) + '。'
+        index += 1
+    return prose
+
+
+def long_prose(n, count=140):
+    """A chapter-length prose stub: long enough for the widest tier, clean under the checks.
+
+    The widest contract minimum is 3000 汉字, so the default fills that with `padded_prose`; the
+    chapter number seeds the generator, so two chapters never share a 25-character window.
+    """
+    return padded_prose(n, count * 23)
 
 
 # --------------------------------------------------------------------------------------------------

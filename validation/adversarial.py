@@ -182,8 +182,18 @@ def tamper_drift_wrong_from(data, task):
 
 
 def tamper_drift_kept_mismatch(data, task):
-    """Step five: a row is kept while its actual result differs from the outline's declaration."""
-    item = data['drift_check']['items'][0]
+    """Step five: a row is kept while its actual result differs from the outline's declaration.
+
+    v2.1 added `kind='hook'` rows whose planned/actual are `{'action': …}`; a hook row cannot carry a
+    mismatched *value*, so the case picks the first row that has a comparable one (a `to`, an
+    `advance_days`, or a node/thread `after`) instead of assuming `items[0]` is a delta row.
+    """
+    items = data['drift_check']['items']
+    item = next((row for row in items
+                 if 'to' in row['planned'] or 'advance_days' in row['planned']
+                 or 'after' in row['planned']), None)
+    if item is None:
+        return 'drift_check 里没有可比较的计划值行（夹具变化）', None
     planned = item['planned']
     if 'to' in planned:
         item['actual']['to'] = '与章纲不符的结果'
@@ -191,7 +201,8 @@ def tamper_drift_kept_mismatch(data, task):
         item['actual']['advance_days'] = planned['advance_days'] + 7
     else:
         item['actual']['after'] = 'resolved' if item['actual'].get('after') != 'resolved' else 'seeded'
-    return 'drift_check.items[0] kept 但 actual 与 planned 不符', item
+    return ('drift_check %s/%s kept 但 actual 与 planned 不符'
+            % (item['kind'], item['key'])), item
 
 
 def tamper_drift_verdict(data, task):

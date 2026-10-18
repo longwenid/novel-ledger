@@ -13,7 +13,7 @@ from .contracts import (HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY,
                         OPENING_VERSION, PIPELINE_SHAPES, REDESIGNS,
                         REPAIRS, UNDERSTANDING_CAPABILITY, Job, Outcome,
                         capabilities_for, digest, han_count, require, text, tier_of)
-from . import creation, drift, facts, narrative, planning, world, craft, editorial, understanding, ledger, lint
+from . import creation, drift, facts, narrative, planning, world, craft, editorial, understanding, ledger, lint, style
 from .evidence import evidence
 
 # Where the engine stops moving on its own, and who decides what happens next. The value of this
@@ -155,22 +155,52 @@ def next_volume_outline(book, contract, needed=None):
     return Job('volume_outline', 1, 'volumes', payload={'volume_ids': [v['id'] for v in missing], **extra})
 
 
-def next_chapter_outline(book, contract, volume, ahead=False):
+def next_chapter_outline(book, contract, volume, ahead=False, next_chapter=1):
     """Which volume's chapter outlines to draft next.
 
     `scope=volume` drafts the volume about to be written; `scope=all` keeps drafting ahead until
     every volume's chain is on paper, which is what an author who wants the whole resource chain
     resolved before the first word should choose.
+
+    A volume drafted *ahead* of the writing front states `anchor: design`: its first chapter's entry
+    conditions continue from the previous volume's designed chain rather than from the prose state,
+    because that prose does not exist yet. The volume about to be written anchors on reality.
     """
+    def job_for(target):
+        anchor = 'design' if target['first'] > next_chapter else 'state'
+        return Job('chapter_outline', target['first'], 'volume:' + target['id'],
+                   target['first'], target['end'],
+                   payload={'volume': target['id'], 'anchor': anchor})
+
     if volume['id'] not in (book.get('chapter_outlines') or {}):
-        return Job('chapter_outline', volume['first'], 'volume:' + volume['id'], volume['first'], volume['end'],
-                   payload={'volume': volume['id']})
+        return job_for(volume)
     if ahead and chapter_policy(book).get('scope') == 'all':
         for candidate in contract['volumes']:
             if candidate['id'] not in (book.get('chapter_outlines') or {}):
-                return Job('chapter_outline', candidate['first'], 'volume:' + candidate['id'],
-                           candidate['first'], candidate['end'], payload={'volume': candidate['id']})
+                return job_for(candidate)
     return None
+
+
+def design_anchor(book, contract, volume, payload):
+    """The state a chapter-outline chain continues from.
+
+    A volume drafted ahead of the writing front (`anchor: design`) has no prose before it: its chain
+    continues from the *designed* end of every earlier volume whose outlines are already installed,
+    because that is the only state that exists. The volume about to be written anchors on the real
+    projection instead — simulating designed outlines again there would double-count prose that has
+    already settled.
+    """
+    if (payload or {}).get('anchor') != 'design':
+        return book['state']
+    state = book['state']
+    for prior in contract['volumes']:
+        if prior['end'] >= volume['first']:
+            break
+        rows = (book.get('chapter_outlines') or {}).get(prior['id'])
+        if rows:
+            state, _ = drift.simulate(rows, state, book.get('world'), prior,
+                                      (book.get('volumes_outline') or {}).get(prior['id']))
+    return state
 
 
 def replan_volume_outline(book, contract, chapter, drift_rows, reason):
@@ -226,7 +256,7 @@ def choose(book, headers):
     # Step four: the chapter outlines that carry the drift declarations.
     volume = writing_volume
     require(volume is not None, 'chapter_limit', '到达约定章节边界，需作者改约。')
-    job = next_chapter_outline(book, contract, volume, ahead=not head)
+    job = next_chapter_outline(book, contract, volume, ahead=not head, next_chapter=head + 1)
     if job and not (opening_only and chapter_policy(book).get('scope') != 'all'):
         return job
     if opening_only:
@@ -474,6 +504,8 @@ def apply(book, task, data, actor, sources, priors=None):
     caps = capabilities_for(task)
     enhanced = bool(caps.get('editorial'))
     workbench = caps.get('understanding') == UNDERSTANDING_CAPABILITY
+    # The opening gates run before any contract exists; every later stage has one.
+    contract = editorial.effective_contract(book) if book.get('contract') else None
     row = None
     if stage == 'opening_options':
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
@@ -528,23 +560,32 @@ def apply(book, task, data, actor, sources, priors=None):
         book['volumes_outline'] = old
         ledger.check(data.get('ledger'))
         if 'chapter_outline' in ((task.get('payload') or {}).get('also') or ()):
-            # The merged half. Each volume's chapters are validated by the chapter-outline contract
-            # against the state the book is actually in, exactly as a separate dispatch would be —
-            # one receipt, two checks, no second cold session.
+            # The merged half. Volumes are validated in book order and the chain is carried forward:
+            # volume two's opening chapter may pay off a promise volume one declared in this very
+            # receipt, so validating each volume against the book's frozen state would reject a
+            # receipt that is internally consistent — and a two-volume small tier is the default
+            # shape, not an edge case.
             half = data.get('chapters')
             require(isinstance(half, dict), 'volume_outline',
                     '合并派工须在 chapters 里按卷交出逐章章纲。',
                     {'expect': {'chapters': {'<volume_id>': ['章纲行']}}})
-            for volume_id, rows in outlines.items():
-                volume = next(v for v in contract['volumes'] if v['id'] == volume_id)
+            simulated = book['state']
+            for volume in contract['volumes']:
+                if volume['id'] not in outlines:
+                    continue
+                volume_id = volume['id']
                 require(isinstance(half.get(volume_id), list), 'volume_outline',
                         '合并派工缺少这一卷的章纲：' + volume_id)
                 validated = planning.validate_chapter_outline(
                     {'volume': volume_id, 'chapters': half[volume_id]}, chapter_policy(book),
-                    volume, rows, book.get('world'), book['state'])
+                    volume, outlines[volume_id], book.get('world'), simulated)
                 book.setdefault('chapter_outlines', {})[volume_id] = validated
                 for item in drift.plan_rows(validated):
                     book.setdefault('plans', {})[str(item['chapter'])] = item
+                simulated, chain_findings = drift.simulate(validated, simulated, book.get('world'),
+                                                           volume, outlines[volume_id])
+                require(not chain_findings, 'design_drift', '合并回执的卷内状态链核账未通过。',
+                        {'volume': volume_id, 'findings': chain_findings[:12]})
     elif stage == 'chapter_outline':
         # Step four: the volume's chapter outlines, each declaring what it changes and what state
         # it enters and leaves. The engine simulates the whole chain here, before a word is written.
@@ -556,7 +597,8 @@ def apply(book, task, data, actor, sources, priors=None):
         require(outline is not None, 'chapter_outline', '本卷尚无已登记的卷纲。')
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         chapters = planning.validate_chapter_outline(data, chapter_policy(book), volume, outline,
-                                                    book.get('world'), book['state'])
+                                                    book.get('world'),
+                                                    design_anchor(book, contract, volume, payload))
         first = payload.get('from_chapter') or volume['first']
         known = {r['chapter']: r for r in chapter_rows(book, volume_id) if r['chapter'] < first}
         replaced = {r['chapter']: r for r in chapters if r['chapter'] >= first}
@@ -613,6 +655,15 @@ def apply(book, task, data, actor, sources, priors=None):
         # Mechanical prose defects are judged here, at submission, against the nearest committed
         # chapters: the same code preflight runs, so the producer sees the finding for free.
         findings.extend(lint.draft_findings(prose, priors or [], chapter))
+        # And the style proxies: the checkable half of "did this chapter keep the voice the author
+        # anchored". Consistency, not quality — a chapter can match every number and still be dull.
+        # The volume's own `style.window` overrides the contract's tolerances for this stretch.
+        write_volume = planning.volume_for(editorial.effective_contract(book), chapter)
+        volume_style = ((book.get('volumes_outline') or {}).get(write_volume['id']) or {}).get('style') \
+            if write_volume else None
+        findings.extend(style.compare(prose, plan.get('style'), style.baseline(book),
+                                      style.merged_window(book.get('contract'), volume_style), chapter,
+                                      contract=book.get('contract')))
         if findings:
             route_repair(book, draft, findings, after_repair=stage != 'write')
         else:

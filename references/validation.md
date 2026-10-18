@@ -38,6 +38,8 @@ python3 validation/measure.py --out /path/to/metrics.json
 |---|---|---|
 | 提交、约定与恢复 | 原子初始化、幂等、预检回滚、有限返修和准确版本认可；改约优先完成机械校验，字面规则跨激活与撤销保留；畸形回执与评测清单不留下部分提交。 | test_runtime、test_output_repairs |
 | 章纲与漂移核算 | 卷 id 与 volumes 对齐、字数区间；enter/exit 冗余一致；卷内状态链拒绝人为漂移（资源为负、时钟倒退、位置未知、知情倒退、人物缺 choice/cost、节点重复推进）；卷末按 exit_state 闭合；drift_check 漏项/多项被拒、`actual.from` 取投影而不取自报值、偏差挂账并触发下一章纲重排。 | test_outlines、test_narrative、test_longform |
+| 伏笔账 | 卷纲 hooks 的 id 唯一/窗口合法/`text` 非空/跨卷必须 `continues:true` 且 `required:false`；章纲反例矩阵逐条被拒（未声明就 plant、payoff 早于 plant、同一 id plant 两次、payoff 两次、plant/payoff 越窗、卷末 required 未 paid、`hook_refs` 承接未埋的 hook）；`state.hooks` 非空、跨卷条目带入下一卷；`complete()` 因未兑现承诺拒绝，兑现后通过。 | test_outlines、test_longform、validation/ 的 `repro_hook_*.py` |
+| 文风代理指标 | 句长/段长/对白占比越界出 style finding 并进有界返修；`dialogue_ratio` 目标越界被核；`repetition` 绝对占比上限与视角标记一致性；锚点缺失时只跑重复度与视角两项。 | test_prose_lint、validation/ 的 `repro_style_*.py` |
 | 派工、身份与宿主 | compact 保留完整材料及已填表单；--after 拒绝未提交或旧回调；认领后故障释放租约，非文件交付在认领前拒绝。 | test_runtime、test_host_ports |
 | 模块依赖与端口 | 全作用域 import 白名单、无环与核心 I/O 禁令；用内存账本、替代交付、公开宿主能力和运行工厂实际完成用例。 | test_architecture、test_application_ports、test_domain_boundaries、test_presentation_boundaries、test_host_ports、test_cli_boundary |
 | 存储与组合根 | 同根快照、未变哈希复用、损坏及跨区字段拒绝；文件回收只在提交后执行，回滚保留材料；真实 SQLite、CLI 重开与冻结交付重试。 | test_storage_boundaries、test_bootstrap、test_history |

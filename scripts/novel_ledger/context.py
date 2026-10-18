@@ -6,7 +6,7 @@ import json
 from .contracts import (SCALE_TIERS, TASK, Job, require, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
-from . import briefs, creation, narrative, world, editorial, story_memory, understanding
+from . import briefs, creation, narrative, style, world, editorial, story_memory, understanding
 from .planning import policy_material, volume_for
 from .ports import ContextStore
 from .envelope import validate_work
@@ -49,23 +49,24 @@ STAGE_MATERIAL = {
     'opening_options': ('opening_rejections',),
     'world_model': ('author_feedback', 'opening_basis', 'opening_choices', 'previous_proposal'),
     'opening_contract': ('author_feedback', 'opening_basis', 'opening_choices', 'world_model'),
-    'volume_outline': ('author_feedback', 'contract', 'effective_layout', 'opening_basis',
+    'volume_outline': ('author_feedback', 'contract', 'effective_layout', 'hooks', 'opening_basis',
                        'opening_choices', 'revision_impact', 'revision_instruction', 'state',
-                       'world_model'),
-    'chapter_outline': ('author_feedback', 'contract', 'design_drift', 'effective_layout',
+                       'style', 'world_model'),
+    'chapter_outline': ('author_feedback', 'contract', 'design_drift', 'effective_layout', 'hooks',
                         'previous_chapters', 'revision_impact', 'revision_instruction', 'state',
-                        'volume_outline', 'world_model'),
+                        'style', 'volume_outline', 'world_model'),
     'write': ('author_feedback', 'chapter_outline', 'contract', 'creative_memory', 'design_drift',
-              'disclosure_boundary', 'previous_chapters', 'scene_context', 'scene_sources', 'state',
-              'style_anchor', 'volume_outline', 'word_budget', 'world_core', 'world_records'),
+              'disclosure_boundary', 'hooks', 'previous_chapters', 'scene_context', 'scene_sources',
+              'state', 'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core',
+              'world_records'),
     'repair': ('author_feedback', 'base_draft', 'chapter_outline', 'contract', 'creative_memory',
-               'design_drift', 'disclosure_boundary', 'previous_chapters', 'prior_candidate',
+               'design_drift', 'disclosure_boundary', 'hooks', 'previous_chapters', 'prior_candidate',
                'revision_impact', 'revision_instruction', 'scene_context', 'scene_sources', 'state',
-               'style_anchor', 'volume_outline', 'word_budget', 'world_core', 'world_records'),
+               'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core', 'world_records'),
     'redesign': ('author_feedback', 'base_draft', 'chapter_outline', 'contract', 'creative_memory',
-                 'design_drift', 'disclosure_boundary', 'previous_chapters', 'prior_candidate',
+                 'design_drift', 'disclosure_boundary', 'hooks', 'previous_chapters', 'prior_candidate',
                  'revision_impact', 'revision_instruction', 'scene_context', 'scene_sources', 'state',
-                 'style_anchor', 'volume_outline', 'word_budget', 'world_core', 'world_records'),
+                 'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core', 'world_records'),
 }
 
 
@@ -263,8 +264,71 @@ def chapter_row(book, chapter):
     return None
 
 
+def design_row(book, chapter):
+    """The chapter's design row: the declaration the writer executes, independent of settlement.
+
+    `chapter_row` prefers the materialized settlement row; the style declaration is read from here so
+    a materialization that has not copied a field yet cannot silently drop the chapter's own style.
+    """
+    for rows in (book.get('chapter_outlines') or {}).values():
+        for row in rows or ():
+            if isinstance(row, dict) and row.get('chapter') == chapter:
+                return row
+    return None
+
+
 def volume_row(book, volume):
     return (book.get('volumes_outline') or {}).get(volume['id']) if volume else None
+
+
+def hook_ledger(book, volume=None):
+    """The promise account a design decision reads: what is declared, and what is still open.
+
+    `declared` is every hook any approved volume has registered (cross-volume promises keep their
+    id and are marked `continues`), `open` is the subset the projection still holds as `open`, and
+    `volume` is this volume's own declaration. A designer continuing a promise from an earlier
+    volume needs the id, the text and the original window — re-inventing any of them is how a
+    promise silently becomes two.
+    """
+    declared, current = [], []
+    for ident, row in (book.get('volumes_outline') or {}).items():
+        rows = [entry for entry in (row or {}).get('hooks') or [] if isinstance(entry, dict)]
+        for entry in rows:
+            declared.append({'id': entry.get('id'), 'text': entry.get('text'),
+                             'plant': entry.get('plant'), 'payoff': entry.get('payoff'),
+                             'required': entry.get('required'), 'continues': entry.get('continues'),
+                             'volume': ident})
+            if volume is not None and ident == volume['id']:
+                current.append(entry)
+    open_hooks = [{'id': ident, 'text': hook.get('text', ''), 'due': hook.get('due'),
+                   'status': hook.get('status')}
+                  for ident, hook in sorted((book['state'].get('hooks') or {}).items())
+                  if hook.get('status') == 'open']
+    return {'volume': current, 'declared': declared, 'open': open_hooks,
+            'source': '伏笔账：卷纲声明（plant/payoff 窗口、required、continues），章纲只做 plant/payoff；'
+                      '中途再提一次用 hook_refs 承接，不新增动作。open 是引擎投影里仍未兑现的条目。'}
+
+
+def style_material(book, volume, chapter_row=None):
+    """The style specification one dispatch writes against: contract, anchor, volume, chapter.
+
+    The contract's `voice`/`tone`/`pov`/`style_traits` are the author's decision, the anchor is the
+    chapter the author approved (its measured metrics, not the prose — that record already exists),
+    the volume row states how the style moves, and the chapter row states the execution points for
+    this chapter. The effective tolerances are merged here so the writer compares against the same
+    numbers the engine will use.
+    """
+    contract = book.get('contract') or {}
+    volume_style = (volume or {}).get('style') if isinstance((volume or {}).get('style'), dict) else {}
+    chapter_style = (chapter_row or {}).get('style') if isinstance((chapter_row or {}).get('style'), dict) else {}
+    return {'voice': contract.get('voice', ''), 'tone': contract.get('tone', ''),
+            'pov': contract.get('pov', ''), 'style_traits': list(contract.get('style_traits') or []),
+            'anchor': style.baseline(book),
+            'window': style.merged_window(contract, volume_style),
+            'volume': dict(volume_style), 'chapter': dict(chapter_style),
+            'source': '文风规格：契约 voice/tone/pov/style_traits 是底线，anchor 是作者认可首章的实测指标，'
+                      'volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。'
+                      '机械指标只保证文风一致与可核对，不证明好看或人物可信。'}
 
 
 def _participants(plan, book):
@@ -362,6 +426,15 @@ def build(repo: ContextStore, book, job):
         add('effective_layout', editorial.effective_contract(book)['volumes'], stage in LAYOUT_STAGES)
         if book.get('style_anchor'):
             add('style_anchor', book['style_anchor'])
+    design_stages = ('volume_outline', 'chapter_outline')
+    writing_stages = ('write', 'repair', 'redesign')
+    if stage in design_stages or stage in writing_stages:
+        # The promise account and the style specification every design decision and every draft has
+        # to read: the volume declares the promises and the style trend, the chapter executes them.
+        design_volume = volume_row(book, volume)
+        design_chapter = design_row(book, anchor) if anchor else None
+        add('hooks', hook_ledger(book, design_volume))
+        add('style', style_material(book, design_volume, design_chapter))
     if book.get('author_block'):
         add('author_block', book['author_block'])
     if book.get('creation'):
@@ -444,9 +517,15 @@ def build(repo: ContextStore, book, job):
     if tracking and stage in ('write', 'repair', 'redesign'):
         add('word_budget', narrative.budget_for(book, chapter))
     if stage in ('write', 'repair', 'redesign', 'chapter_outline'):
+        # Only chapters that exist: with `chapter_outline.scope='all'` a later volume's outlines are
+        # designed before any prose is written, and asking the repository for chapters 0 and -1 used
+        # to fail the whole dispatch.
+        written = {row['n']: row for row in repo.headers(book['branch'])}
         previous = []
         for n in range(max(1, anchor - 2), anchor):
-            row = repo.chapter(book['branch'], n)
+            row = written.get(n)
+            if row is None:
+                continue
             previous.append({'chapter': n, 'prose': repo.read_document(row['prose']), 'summary': row['summary']})
         add('previous_chapters', previous)
     payload = copy.deepcopy(job.payload or {})

@@ -326,6 +326,16 @@ CONTRACT_FIELDS = (
     # the first word should choose.
     {'key': 'chapter_outline', 'kind': 'map', 'default': {'scope': 'volume', 'words': 150, 'tolerance': 60},
      'alignment': False, 'optional': True},
+    # v2.1: literary quality is carried by style, not by a reviewer. The author's spec is
+    # qualitative (contract voice/tone, a volume's trend, a chapter's execution points); these are
+    # the tolerances the engine applies to the proxies it can compute for free — see style.py.
+    # `repetition` is an absolute in-chapter share, the others are relative deviations from the
+    # approved first chapter, and `person` is 1 meaning "the narration person must match". The
+    # repetition default is calibrated against ordinary prose (measured 0.04~0.09) rather than
+    # guessed, so it fires on a chapter that repeats itself, not on a chapter that reads normally.
+    {'key': 'style_window', 'kind': 'map',
+     'default': {'sentence': 0.35, 'paragraph': 0.35, 'dialogue': 0.40, 'repetition': 0.12, 'person': 1},
+     'alignment': False, 'optional': True},
     {'key': 'anchors', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'links', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'initial_facts', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},

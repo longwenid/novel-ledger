@@ -30,13 +30,19 @@ from .entities import register as register_entity
 from . import ledger, narrative, spatial, world
 
 # --------------------------------------------------------------- declarations
-VOLUME_FIELDS = ('id', 'purpose', 'arc', 'turns', 'climax', 'nodes', 'threads',
-                 'resources', 'places', 'knowledge', 'characters', 'clock', 'exit_state')
+VOLUME_FIELDS = ('id', 'purpose', 'arc', 'turns', 'climax', 'nodes', 'threads', 'hooks',
+                 'resources', 'places', 'knowledge', 'characters', 'clock', 'exit_state', 'style')
 CHAPTER_FIELDS = ('chapter', 'synopsis', 'plot', 'resources', 'places', 'knowledge', 'characters',
                   'clock', 'enter', 'exit', 'disclosures', 'world_refs', 'new_entities',
-                  'hook_refs', 'reader_refs', 'history_refs', 'scenes', 'pacing')
+                  'hook_refs', 'hooks', 'reader_refs', 'history_refs', 'scenes', 'pacing', 'style')
 # The four increment arrays plus the clock: what a chapter declares it changes.
 DELTA_KINDS = ('resources', 'places', 'knowledge', 'characters', 'clock')
+# The promise account: a volume declares the promises it opens and closes, a chapter acts on them.
+# There are exactly two actions — mid-course reminders are the existing `hook_refs` hand-off.
+HOOK_ACTIONS = ('plant', 'payoff')
+# The status an action leaves in the projection; the outline speaks in actions, the state in statuses.
+HOOK_STATUS = {'plant': 'open', 'payoff': 'paid'}
+HOOK_FIELDS = ('id', 'text', 'plant', 'payoff', 'required', 'continues')
 # Optional workbench protocols a chapter outline may carry: the scene identity and reading
 # dependency declarations the writer makes, and the schemas `story_memory.bind` freezes back onto
 # the row. They are not part of the drift contract, but dropping them would silently disable the
@@ -46,7 +52,7 @@ PROTOCOL_FIELDS = ('scene_schema', 'reading_schema', 'reading_coverage', 'depend
 # What an `enter`/`exit` row may name. A delta array is plural (`characters`), a coordinate is the
 # projection field it reads (`character`), so both spellings are accepted and normalized.
 ENTER_KINDS = ('resources', 'places', 'knowledge', 'character', 'characters', 'clock', 'node', 'thread')
-ITEM_KINDS = ('node', 'thread', 'resources', 'places', 'knowledge', 'characters', 'clock',
+ITEM_KINDS = ('node', 'thread', 'hook', 'resources', 'places', 'knowledge', 'characters', 'clock',
               'disclosure', 'reader_knowledge', 'reader')
 ITEM_STATUSES = ('kept', 'deviated', 'skipped')
 VERDICTS = ('clean', 'deviated')
@@ -118,6 +124,12 @@ def _item(container, key):
     """A projection entry as a dict, whatever the stored shape was."""
     value = (container or {}).get(key)
     return value if isinstance(value, dict) else {}
+
+
+def _window(value):
+    """A declared `[earliest, latest]` chapter window."""
+    return isinstance(value, list) and len(value) == 2 and all(type(n) is int for n in value) \
+        and value[0] <= value[1]
 
 
 def _kind_of(kind):
@@ -461,6 +473,23 @@ def _deltas(chapter, findings):
         coords.append({'kind': 'thread', 'key': row['thread'], 'from': None, 'to': row['after'],
                        'reason': row.get('reason') or '',
                        'detail': {'return_by': row.get('return_by')}})
+    # The promise account: a chapter plants and pays off the promises its volume declared. The
+    # field is mandatory because "this chapter opens no promise" is itself a declaration the chain
+    # has to see; the two actions are the whole vocabulary (a mid-course reminder is `hook_refs`).
+    if not isinstance(chapter.get('hooks'), list):
+        findings.append(_finding(chapter_no, 'hook', 'hooks', 'array', _safe(chapter.get('hooks')),
+                                 '章纲须声明 hooks 数组（本章不动伏笔就给空数组），缺字段不是"没有伏笔"。',
+                                 'chapter_hook', 'blocker', 'outline'))
+    for row in _rows_of(chapter, 'hooks', findings):
+        hook_id, action = row.get('hook'), row.get('action')
+        if not text(hook_id) or action not in HOOK_ACTIONS:
+            findings.append(_finding(chapter_no, 'hook', hook_id, 'action∈plant|payoff', _safe(row),
+                                     '章纲 hooks 需要 {hook,action:plant|payoff,note?}。',
+                                     'chapter_hook', 'blocker', 'outline'))
+            continue
+        coords.append({'kind': 'hook', 'key': hook_id, 'from': None, 'to': action,
+                       'reason': row.get('note') or '',
+                       'detail': {'note': row.get('note')}})
     return coords
 
 
@@ -514,7 +543,16 @@ def _thread_registry(volume_outline):
     return rows
 
 
-def _apply(state, coord, chapter_no, model, nodes, threads, findings):
+def _hook_registry(volume_outline):
+    """The promises one volume declares: id → {text, plant, payoff, required, continues}."""
+    rows = {}
+    for row in ((volume_outline or {}).get('hooks') or []):
+        if isinstance(row, dict) and text(row.get('id')):
+            rows[row['id']] = row
+    return rows
+
+
+def _apply(state, coord, chapter_no, model, nodes, threads, hooks, findings):
     """Apply one normalized increment to the simulated state, with its own mechanical guards."""
     kind, key = coord['kind'], coord['key']
     current = _project(state, kind, key)
@@ -608,11 +646,57 @@ def _apply(state, coord, chapter_no, model, nodes, threads, findings):
             if after == 'dormant':
                 row['return_by'] = coord['detail'].get('return_by')
             state.setdefault('thread_progress', {})[key] = row
+    elif kind == 'hook':
+        action = coord['to']
+        entry = _item(state.get('hooks'), key)
+        declaration = hooks.get(key) or {}
+        if action == 'plant':
+            if entry:
+                findings.append(_finding(chapter_no, kind, key, '未埋设', entry.get('status'),
+                                         '该伏笔已存在：同一承诺只能 plant 一次（承接已埋的承诺用 hook_refs）。',
+                                         'chapter_hook', 'blocker', 'volume'))
+            else:
+                window = declaration.get('plant')
+                if _window(window) and not window[0] <= (chapter_no or 0) <= window[1]:
+                    findings.append(_finding(chapter_no, kind, key, window, chapter_no,
+                                             'plant 不在卷纲声明的埋设窗口内。', 'chapter_hook', 'blocker', 'volume'))
+                payoff = declaration.get('payoff')
+                due = payoff[1] if _window(payoff) else None
+                if type(due) is not int or due < (chapter_no or 0):
+                    findings.append(_finding(chapter_no, kind, key, 'payoff[1] ≥ 本章', _safe(payoff),
+                                             '卷纲没有给出可用的 payoff 窗口，承诺期限（due）无法确定。',
+                                             'chapter_hook', 'blocker', 'volume'))
+                else:
+                    state.setdefault('hooks', {})[key] = {'status': 'open', 'due': due,
+                                                          'text': declaration.get('text'),
+                                                          'plant': chapter_no}
+        elif action == 'payoff':
+            if not entry or entry.get('status') != 'open':
+                findings.append(_finding(chapter_no, kind, key, 'open', entry.get('status'),
+                                         '只有已埋设且未兑现的承诺才能 payoff：payoff 不能早于 plant，也不能重复兑现。',
+                                         'chapter_hook', 'blocker', 'volume'))
+            else:
+                window = declaration.get('payoff')
+                if _window(window) and not window[0] <= (chapter_no or 0) <= window[1]:
+                    findings.append(_finding(chapter_no, kind, key, window, chapter_no,
+                                             'payoff 不在卷纲声明的兑现窗口内。', 'chapter_hook', 'blocker', 'volume'))
+                state['hooks'][key] = {**entry, 'status': 'paid', 'paid': chapter_no}
+        else:
+            findings.append(_finding(chapter_no, kind, key, '|'.join(HOOK_ACTIONS), action,
+                                     '伏笔动作只有 plant 与 payoff 两种。', 'chapter_hook', 'blocker', 'volume'))
     return findings
 
 
 def _closure(state, volume_outline, chapter_no, model, findings):
     """The volume's declared terminals, at tolerance zero, against the simulated last chapter."""
+    for row in (volume_outline or {}).get('hooks') or []:
+        if not isinstance(row, dict) or not text(row.get('id')) or not row.get('required'):
+            continue
+        entry = _item(state.get('hooks'), row['id'])
+        if entry.get('status') != 'paid':
+            findings.append(_finding(chapter_no, 'hook', row['id'], 'paid', entry.get('status'),
+                                     '本卷 required 的伏笔必须在卷末兑现；跨卷伏笔用 continues:true 且 required:false。',
+                                     'drift_closure', 'blocker', 'volume'))
     for row in (volume_outline or {}).get('resources') or []:
         if not isinstance(row, dict) or not text(row.get('key')):
             continue
@@ -660,6 +744,7 @@ def simulate(chapters, state0, world, volume_row=None, volume_outline=None):
     findings = []
     rows = [row for row in (chapters or []) if isinstance(row, dict)]
     nodes, threads = _node_registry(volume_outline), _thread_registry(volume_outline)
+    hooks = _hook_registry(volume_outline)
     for chapter in rows:
         chapter_no = chapter.get('chapter')
         coords = _deltas(chapter, findings)
@@ -674,16 +759,18 @@ def simulate(chapters, state0, world, volume_row=None, volume_outline=None):
                 findings.append(_finding(chapter_no, _kind_of(item['kind']), item['key'], expect, got,
                                          '本章的进入条件与模拟到本章开始的状态不符。',
                                          'drift_chain', 'blocker', 'volume'))
-        # Applying the increments is what makes the next chapter's handshake checkable.
+        # Applying the increments is what makes the next chapter's handshake checkable. The promise
+        # account is tracked by its own state machine, not as an enter/exit coordinate: a chapter
+        # declares which promise it opens or closes, never a before/after pair for it.
         projected = {}
         for item in declared:
             projected[(_kind_of(item['kind']), item['key'])] = item
         for coord in coords:
-            if coord['kind'] == 'clock':
+            if coord['kind'] in ('clock', 'hook'):
                 continue
             projected.setdefault((coord['kind'], coord['key']), None)
         for coord in coords:
-            _apply(state, coord, chapter_no, world, nodes, threads, findings)
+            _apply(state, coord, chapter_no, world, nodes, threads, hooks, findings)
         # Rule 4.4: the declared exit is the engine's own arithmetic, compared value by value.
         declared_exit = {}
         for item in declared:
@@ -759,7 +846,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
     require(submitted == list(allowed), 'volume_outline', '卷纲须按合同顺序恰好覆盖本次派发的卷，不多不少。',
             {'expected': list(allowed), 'got': submitted})
     findings = []
-    seen_nodes, seen_threads = {}, {}
+    seen_nodes, seen_threads, seen_hooks = {}, {}, {}
     for old_id, old in existing.items():
         for row in (old or {}).get('nodes') or []:
             if isinstance(row, dict) and text(row.get('id')):
@@ -767,6 +854,9 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
         for row in (old or {}).get('threads') or []:
             if isinstance(row, dict) and text(row.get('id')):
                 seen_threads[row['id']] = old_id
+        for row in (old or {}).get('hooks') or []:
+            if isinstance(row, dict) and text(row.get('id')):
+                seen_hooks[row['id']] = old_id
     world_ids = _world_ids(world)
     entities = _entity_ids(world, selected) | set(((state or {}).get('entities') or {}))
     report = {}
@@ -841,6 +931,55 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
                 findings.append(_finding(chapter_no, 'thread', thread_id, '唯一', seen_threads[thread_id],
                                          '线路 ID 在本次交付中重复。', 'volume_thread', 'blocker', 'volume'))
             seen_threads[thread_id] = ident
+        hooks = volume.get('hooks')
+        if not isinstance(hooks, list):
+            findings.append(_finding(chapter_no, 'hook', ident, 'array',
+                                     _safe(hooks) if hooks is not None else 'missing',
+                                     '卷纲须声明 hooks 数组：本卷没有伏笔就给空数组，缺字段不是"没有伏笔"。',
+                                     'volume_hook', 'blocker', 'volume'))
+            hooks = []
+        for row in hooks:
+            hook_id = row.get('id') if isinstance(row, dict) else None
+            if not isinstance(row, dict) or not text(hook_id) or not text(row.get('text')) \
+                    or type(row.get('required')) is not bool or type(row.get('continues', False)) is not bool:
+                findings.append(_finding(chapter_no, 'hook', hook_id,
+                                         'id/text/plant/payoff/required/continues', _safe(row),
+                                         '卷纲伏笔需要 id、对读者的具体承诺 text、plant/payoff 窗口、'
+                                         'required:true|false，以及可选的 continues:true。',
+                                         'volume_hook', 'blocker', 'volume'))
+                continue
+            # One namespace for node, thread and hook ids: a promise that shadows a node is a
+            # bookkeeping collision, not two records.
+            carries = row.get('continues') is True
+            shadow = seen_nodes.get(hook_id) or seen_threads.get(hook_id)
+            if shadow:
+                holder = '节点' if hook_id in seen_nodes else '线路'
+                findings.append(_finding(chapter_no, 'hook', hook_id, '全书唯一', shadow,
+                                         '伏笔 ID 与已登记的%s ID 重复：节点/线路/伏笔共用同一命名空间。' % holder,
+                                         'volume_hook', 'blocker', 'volume'))
+            elif hook_id in seen_hooks:
+                # A new volume may continue a promise an earlier volume opened, but only by saying so.
+                if seen_hooks[hook_id] == ident or row.get('continues') is not True:
+                    findings.append(_finding(chapter_no, 'hook', hook_id, '全书唯一', seen_hooks[hook_id],
+                                             '伏笔 ID 重复：本卷内重复声明，或沿用既有卷的伏笔却没有 continues:true。',
+                                             'volume_hook', 'blocker', 'volume'))
+            seen_hooks[hook_id] = ident
+            plant, payoff = row.get('plant'), row.get('payoff')
+            if not _window(plant) or not first <= plant[0] <= plant[1] <= end:
+                findings.append(_finding(chapter_no, 'hook', hook_id, [first, end], _safe(plant),
+                                         '伏笔 plant 窗口须落在本卷章号区间内。',
+                                         'volume_hook', 'blocker', 'volume'))
+                continue
+            if not _window(payoff) or payoff[0] < plant[1]:
+                findings.append(_finding(chapter_no, 'hook', hook_id, {'payoff[0]>=': plant[1]}, _safe(payoff),
+                                         '伏笔 payoff 窗口须为两章区间，且不早于 plant 的最迟章。',
+                                         'volume_hook', 'blocker', 'volume'))
+                continue
+            if payoff[1] > end and (not carries or row.get('required')):
+                findings.append(_finding(chapter_no, 'hook', hook_id,
+                                         'continues:true 且 required:false', _safe(row),
+                                         '兑现窗口越过本卷末的伏笔必须由 continues:true 带入下一卷，因此本卷不能 required。',
+                                         'volume_hook', 'blocker', 'volume'))
         for row in volume.get('resources') or []:
             key = row.get('key') if isinstance(row, dict) else None
             if not isinstance(row, dict) or not text(key) or _number(row.get('from')) is None \
@@ -892,6 +1031,11 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
         normalized['clock'] = {'advance_days': (clock or {}).get('advance_days') or 0}
         normalized['nodes'] = copy.deepcopy(volume.get('nodes') or [])
         normalized['threads'] = copy.deepcopy(volume.get('threads') or [])
+        normalized['hooks'] = [dict(copy.deepcopy(row),
+                                    required=bool(row.get('required')),
+                                    continues=bool(row.get('continues', False)))
+                               for row in hooks if isinstance(row, dict)]
+        normalized['style'] = copy.deepcopy(volume.get('style') or {})
         report[ident] = normalized
     _reject(findings, 'design_drift', '卷纲未通过机械核账。', {'volume_ids': list(allowed)})
     return report
@@ -981,30 +1125,101 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
         entry = []
         _enter_rows(row, entry)
         findings.extend(entry)
+    # The promise account, in two layers: the volume declared which promises exist and when they may
+    # be opened and closed; the chapters may only act on those, exactly once each, in order. Only the
+    # volume's own declarations can be planted, and a promise planted here can be paid off here or
+    # carried to the next volume when the volume declared `continues`.
+    #
+    # The anchor is computed first: a repair batch re-emits the volume's stale prefix, and judging
+    # that prefix against the state the book is actually in would call every promise action it has
+    # already settled a duplicate. Rows before the anchor are history; only the tail is new work.
+    anchor = _anchor(data, chapters, numbers, first, end, state0, world)
+    known_hooks = _hook_registry(volume_row_outline)
+    carried = {ident: entry for ident, entry in ((state0 or {}).get('hooks') or {}).items()
+               if isinstance(entry, dict)}
+    planted, paid = set(), set()
+    for row in chapters:
+        chapter_no = row['chapter']
+        if chapter_no < anchor:
+            continue
+        for item in row.get('hooks') or []:
+            if not isinstance(item, dict):
+                continue
+            hook_id, action = item.get('hook'), item.get('action')
+            if not text(hook_id) or action not in HOOK_ACTIONS:
+                continue                      # shape already reported by `_deltas`
+            declaration = known_hooks.get(hook_id)
+            if declaration is None and hook_id not in carried:
+                findings.append(_finding(chapter_no, 'hook', hook_id, '本卷声明或前卷未兑现的 id', None,
+                                         '章纲执行了既不在本卷卷纲声明、也不是前卷遗留未兑现的伏笔。',
+                                         'chapter_hook', 'blocker', 'outline'))
+                continue
+            if action == 'plant':
+                if hook_id in carried or hook_id in planted:
+                    findings.append(_finding(chapter_no, 'hook', hook_id, '未埋设', 'planted',
+                                             '同一伏笔只能 plant 一次；已埋设的承诺用 hook_refs 承接。',
+                                             'chapter_hook', 'blocker', 'outline'))
+                    continue
+                window = (declaration or {}).get('plant')
+                if _window(window) and not window[0] <= chapter_no <= window[1]:
+                    findings.append(_finding(chapter_no, 'hook', hook_id, window, chapter_no,
+                                             'plant 不在卷纲声明的埋设窗口内。',
+                                             'chapter_hook', 'blocker', 'outline'))
+                planted.add(hook_id)
+                continue
+            if hook_id in paid or (hook_id in carried and carried[hook_id].get('status') != 'open'):
+                findings.append(_finding(chapter_no, 'hook', hook_id, 'open',
+                                         (carried.get(hook_id) or {}).get('status') or 'paid',
+                                         '该伏笔已兑现，不能重复 payoff。',
+                                         'chapter_hook', 'blocker', 'outline'))
+                continue
+            if hook_id not in planted and (carried.get(hook_id) or {}).get('status') != 'open':
+                findings.append(_finding(chapter_no, 'hook', hook_id, 'plant 之后才 payoff', 'payoff',
+                                         'payoff 早于 plant：本卷还没有埋下这个承诺。',
+                                         'chapter_hook', 'blocker', 'outline'))
+                continue
+            window = (declaration or {}).get('payoff')
+            if _window(window) and not window[0] <= chapter_no <= window[1]:
+                findings.append(_finding(chapter_no, 'hook', hook_id, window, chapter_no,
+                                         'payoff 不在卷纲声明的兑现窗口内。',
+                                         'chapter_hook', 'blocker', 'outline'))
+            paid.add(hook_id)
+        for ref in row.get('hook_refs') or []:
+            if text(ref) and ref not in planted and ref not in carried:
+                findings.append(_finding(chapter_no, 'hook', ref, '已埋设', None,
+                                         'hook_refs 承接了尚未埋设的承诺：未埋就承接是漂移。',
+                                         'chapter_hook', 'blocker', 'outline'))
     _reject(findings, 'design_drift', '章纲形状/引用核账未通过。',
             {'volume': volume_row.get('id'), 'first': numbers[0]})
-    anchor = numbers[0]
-    hint = data.get('from_chapter')
-    if type(hint) is int and first < hint <= end and hint in numbers:
-        anchor = hint
-    elif anchor == first and _enter_mismatch(chapters[0], state0, world):
-        # A repair re-derives the rest of the volume from the state the book is in; the prefix it
-        # re-emits is stale by construction, so anchor on the first row whose entry condition is
-        # the truth. Rows without a declared entry condition cannot anchor (they would match
-        # anything), which keeps a wrong first chapter from being skipped.
-        for row in chapters[1:]:
-            if any(item['field'] == 'enter' for item in _enter_rows(row, [])) \
-                    and not _enter_mismatch(row, state0, world):
-                anchor = row['chapter']
-                break
     tail = [row for row in chapters if row['chapter'] >= anchor]
     simulated, chain = simulate(tail, state0, world, volume_row, volume_row_outline)
     _reject(chain, 'design_drift', '章纲状态链核账未通过。',
             {'volume': volume_row.get('id'), 'anchor': anchor})
     _reject([f for f in chain if f.get('criterion') == 'drift_closure'], 'design_drift',
             '章纲卷末闭合核账未通过。', {'volume': volume_row.get('id')})
-    return [_normalize_chapter(row, simulated if row['chapter'] > anchor else state0, world, known_nodes)
+    return [_normalize_chapter(row, simulated if row['chapter'] > anchor else state0, world,
+                               known_nodes, known_hooks)
             for row in tail]
+
+
+def _anchor(data, chapters, numbers, first, end, state0, world):
+    """Where a repair batch stops re-emitting history and starts describing the book's real state.
+
+    A repair re-derives the rest of the volume from the state the book is in, so the prefix it
+    re-emits is stale by construction: the engine anchors on the first row whose declared entry
+    condition is the truth. Rows without a declared entry condition cannot anchor (they would match
+    anything), which keeps a wrong first chapter from being skipped. An explicit `from_chapter` is
+    taken as given.
+    """
+    hint = data.get('from_chapter') if isinstance(data, dict) else None
+    if type(hint) is int and first < hint <= end and hint in numbers:
+        return hint
+    if numbers[0] == first and _enter_mismatch(chapters[0], state0, world):
+        for row in chapters[1:]:
+            if any(item['field'] == 'enter' for item in _enter_rows(row, [])) \
+                    and not _enter_mismatch(row, state0, world):
+                return row['chapter']
+    return numbers[0]
 
 
 def _enter_mismatch(chapter, state, world):
@@ -1019,12 +1234,14 @@ def _enter_mismatch(chapter, state, world):
     return bool(mismatch)
 
 
-def _normalize_chapter(chapter, state, world, registry=None):
+def _normalize_chapter(chapter, state, world, registry=None, hooks=None):
     """A normalized copy of one chapter row: every declared field present, places resolved to ids.
 
     A node action also carries the definition the volume outline registered for it (its line and
-    its dependencies), because the settlement event has to freeze both: the writer declares which
-    node moved, the volume outline owns what that node belongs to.
+    its dependencies), and a promise action carries the volume's declaration (its text and its
+    payoff window), because the settlement event has to freeze both: the writer declares which node
+    moved or which promise it touched, the volume outline owns what that promise is and when it may
+    be closed.
     """
     normalized = {key: copy.deepcopy(chapter.get(key)) for key in CHAPTER_FIELDS}
     normalized['chapter'] = chapter['chapter']
@@ -1066,9 +1283,14 @@ def _normalize_chapter(chapter, state, world, registry=None):
             rows.append(row)
         normalized[field] = rows
     for field in ('disclosures', 'world_refs', 'new_entities', 'hook_refs', 'reader_refs',
-                  'history_refs', 'scenes'):
+                  'history_refs', 'scenes', 'hooks'):
         normalized[field] = copy.deepcopy(chapter.get(field) or [])
     normalized['pacing'] = copy.deepcopy(chapter.get('pacing') or {})
+    normalized['style'] = copy.deepcopy(chapter.get('style') or {})
+    normalized['hook_contracts'] = {
+        item['hook']: copy.deepcopy((hooks or {}).get(item['hook']) or {})
+        for item in normalized['hooks']
+        if isinstance(item, dict) and text(item.get('hook'))}
     for field in PROTOCOL_FIELDS:
         if chapter.get(field) is not None:
             normalized[field] = copy.deepcopy(chapter[field])
@@ -1150,6 +1372,8 @@ def plan_rows(chapters):
             'world_refs': copy.deepcopy(chapter.get('world_refs') or []),
             'new_entities': copy.deepcopy(chapter.get('new_entities') or []),
             'hook_refs': copy.deepcopy(chapter.get('hook_refs') or []),
+            'hooks': copy.deepcopy(chapter.get('hooks') or []),
+            'hook_contracts': copy.deepcopy(chapter.get('hook_contracts') or {}),
             'reader_refs': copy.deepcopy(chapter.get('reader_refs') or []),
             'history_refs': copy.deepcopy(chapter.get('history_refs') or []),
             'enter': copy.deepcopy(chapter.get('enter') or []),
@@ -1166,6 +1390,8 @@ def plan_rows(chapters):
             if chapter.get(field) is not None:
                 row[field] = copy.deepcopy(chapter[field])
         row['dependency_coverage'] = chapter.get('dependency_coverage') or 'partial'
+        if chapter.get('style') is not None:
+            row['style'] = copy.deepcopy(chapter['style'])
         for field in DELTA_KINDS:
             row[field] = copy.deepcopy(chapter.get(field) or ({} if field == 'clock' else []))
         rows.append(row)
@@ -1189,6 +1415,15 @@ def _planned(row):
             planned.append({'kind': 'thread', 'key': thread['thread'],
                             'planned': {'after': thread.get('after')},
                             'detail': {'reason': thread.get('reason'), 'return_by': thread.get('return_by')}})
+    # The promise actions sit beside the node/thread actions: one comparison row per declared step,
+    # in the order the chapter declares them (a same-chapter plant then payoff stays in that order,
+    # which is also the order the events must settle in).
+    for entry in row.get('hooks') or []:
+        if isinstance(entry, dict) and text(entry.get('hook')):
+            planned.append({'kind': 'hook', 'key': entry['hook'],
+                            'planned': {'action': entry.get('action')},
+                            'detail': {'note': entry.get('note')},
+                            'definition': (row.get('hook_contracts') or {}).get(entry['hook']) or {}})
     for entry in row.get('resources') or []:
         if isinstance(entry, dict) and text(entry.get('key')):
             planned.append({'kind': 'resources', 'key': entry['key'],
@@ -1236,6 +1471,8 @@ def _evidence_of(item, chapter, findings):
 def _actual_of(kind, item, projected):
     """(from, to) the writer filed, with `from` optional because the engine projects it."""
     actual = item.get('actual')
+    if kind == 'hook':
+        return None, actual.get('action') if isinstance(actual, dict) else actual
     if kind in ('node', 'thread'):
         if isinstance(actual, dict) and actual.get('after') in (NODE_STATES if kind == 'node' else THREAD_STATES):
             return None, actual.get('after')
@@ -1320,6 +1557,9 @@ def _shadow_apply(shadow, kind, key, after, coordinate=None):
             shadow.setdefault('thread_progress', {})[line] = {'status': 'active'}
     elif kind == 'thread':
         shadow.setdefault('thread_progress', {})[key] = {'status': after}
+    elif kind == 'hook':
+        previous = _item(shadow.get('hooks'), key)
+        shadow.setdefault('hooks', {})[key] = {**previous, 'status': after}
     elif kind == 'disclosure':
         shadow.setdefault('reader_knowledge', {})[key] = {'status': after}
     return shadow
@@ -1424,7 +1664,48 @@ def _event_for(kind, key, item, planned, actual_to, actual_from, shadow, state, 
         if type(due) is int:
             event['return_by'] = due
         return event
+    if kind == 'hook':
+        # The writer files the action it took; the engine owns everything else about the promise:
+        # the text the volume declared and the deadline its payoff window sets.
+        declaration = planned.get('definition') or {}
+        entry = _item((state or {}).get('hooks'), key)
+        note = detail.get('note') or reason
+        if actual_to == 'plant':
+            text_value = declaration.get('text') or item.get('text')
+            window = declaration.get('payoff')
+            due = window[1] if _window(window) else (item.get('due') if type(item.get('due')) is int else None)
+            if not text(text_value) or type(due) is not int:
+                findings.append(_finding(chapter, kind, key, 'text 与 due（由卷纲声明）', _safe(declaration),
+                                         '埋设承诺需要卷纲声明的 text 与 payoff 窗口：引擎据此写入 due。',
+                                         'drift_hook', 'blocker'))
+                return None
+            return {'op': 'hook', 'id': key, 'status': 'open', 'due': due, 'text': text_value,
+                    'before': entry.get('status'), 'reason': note, 'evidence': evidence}
+        if actual_to == 'payoff':
+            if entry.get('status') != 'open':
+                findings.append(_finding(chapter, kind, key, 'open', entry.get('status'),
+                                         '只有已埋设且未兑现的承诺才能 payoff；引擎按投影的真实状态判定。',
+                                         'drift_hook', 'blocker'))
+                return None
+            return {'op': 'hook', 'id': key, 'status': 'paid', 'before': entry.get('status'),
+                    'reason': note or '正文兑现该承诺。', 'evidence': evidence}
+        findings.append(_finding(chapter, kind, key, '|'.join(HOOK_ACTIONS), _safe(actual_to),
+                                 '伏笔自比的动作只有 plant 与 payoff。', 'drift_hook', 'blocker'))
+        return None
     return None
+
+
+def _coverage_key(kind, key, planned):
+    """The identity of one comparison row.
+
+    A promise's plant and its payoff are two steps of the same coordinate — a one-chapter volume
+    legally opens and closes the same promise — so a hook row is identified by its action as well.
+    The clock keeps its single `clock/main` coordinate under whichever spelling came in.
+    """
+    if kind == 'clock':
+        return ('clock', 'clock')
+    action = planned.get('action') if isinstance(planned, dict) else None
+    return (kind, key, action) if kind == 'hook' else (kind, key)
 
 
 def reconcile(drift_check, row, state, world):
@@ -1447,10 +1728,12 @@ def reconcile(drift_check, row, state, world):
     require(isinstance(unplanned, list) and all(isinstance(entry, dict) for entry in unplanned),
             'drift_check', 'drift_check.unplanned 须为对象数组。')
     planned = _planned(row)
-    # 1. Coverage: one item per planned increment, no more and no fewer.
+    # 1. Coverage: one item per planned increment, no more and no fewer. A promise's plant and its
+    # payoff are two separate steps of the same coordinate, so a hook row's identity is
+    # (kind, key, action) — a one-chapter volume legally plants and pays off the same promise.
     expected, seen_items = {}, {}
     for entry in planned:
-        expected[(entry['kind'], entry['key'])] = entry
+        expected[_coverage_key(entry['kind'], entry['key'], entry.get('planned'))] = entry
     for item in items:
         if not isinstance(item, dict):
             findings.append(_finding(chapter, 'item', None, 'object', _safe(item),
@@ -1460,14 +1743,20 @@ def reconcile(drift_check, row, state, world):
         key = item.get('key')
         if kind == 'disclosure':
             continue
-        if kind not in ('node', 'thread', 'resources', 'places', 'knowledge', 'characters', 'clock'):
+        if kind not in ('node', 'thread', 'hook', 'resources', 'places', 'knowledge', 'characters', 'clock'):
             findings.append(_finding(chapter, 'item', key, '|'.join(ITEM_KINDS), kind,
                                      '未知的自比种类。', 'drift_coverage', 'blocker'))
             continue
-        coordinate = ('clock', 'clock') if kind == 'clock' else (kind, key)
+        filed = item.get('planned') if isinstance(item.get('planned'), dict) else {}
+        if kind == 'hook' and filed.get('action') not in HOOK_ACTIONS:
+            findings.append(_finding(chapter, kind, key, 'planned.action∈plant|payoff', _safe(filed),
+                                     'hook 自比行的 planned.action 必须写明是埋设还是兑现，'
+                                     '同一承诺的两步是两行。', 'drift_coverage', 'blocker'))
+            continue
+        coordinate = _coverage_key(kind, key, filed)
         if coordinate in seen_items:
-            findings.append(_finding(chapter, kind, key, '每坐标一行', 'duplicate',
-                                     '同一坐标出现了两行自比。', 'drift_coverage', 'blocker'))
+            findings.append(_finding(chapter, kind, key, '每步一行', 'duplicate',
+                                     '同一步骤出现了两行自比。', 'drift_coverage', 'blocker'))
             continue
         seen_items[coordinate] = item
     for coordinate, entry in expected.items():
@@ -1484,9 +1773,10 @@ def reconcile(drift_check, row, state, world):
     shadow = copy.deepcopy(state) if isinstance(state, dict) else {}
     shadow['_lines'] = {entry['key']: (entry.get('definition') or {}).get('line')
                         for entry in planned if entry['kind'] == 'node'}
-    ordered = [entry for entry in planned if (entry['kind'], entry['key']) in seen_items]
+    ordered = [entry for entry in planned
+               if _coverage_key(entry['kind'], entry['key'], entry.get('planned')) in seen_items]
     for entry in ordered:
-        item = seen_items[(entry['kind'], entry['key'])]
+        item = seen_items[_coverage_key(entry['kind'], entry['key'], entry.get('planned'))]
         kind, key = entry['kind'], entry['key']
         evidence = _evidence_of(item, chapter, findings)
         status = item.get('status')
@@ -1518,6 +1808,7 @@ def reconcile(drift_check, row, state, world):
         # A kept row's result must be the one the outline declared; the planned side speaks a
         # different key per kind (a node/thread declares `after`, the clock `advance_days`).
         expected_kept = (entry['planned'].get('advance_days') if kind == 'clock'
+                         else entry['planned'].get('action') if kind == 'hook'
                          else entry['planned'].get('after') if kind in ('node', 'thread')
                          else entry['planned'].get('to'))
         if status == 'kept' and not _same(kind, actual_to, expected_kept):
@@ -1545,8 +1836,10 @@ def reconcile(drift_check, row, state, world):
                            coordinate=coordinate)
         if event is not None:
             events.append(event)
-            _shadow_apply(shadow, kind, key, actual_to if kind not in ('node', 'thread', 'knowledge', 'disclosure')
-                          else actual_to, coordinate=coordinate)
+            # The shadow tracks projections, not declarations: a promise action becomes the status
+            # the event leaves behind, so a same-chapter payoff sees the plant that preceded it.
+            settled = HOOK_STATUS.get(actual_to, actual_to) if kind == 'hook' else actual_to
+            _shadow_apply(shadow, kind, key, settled, coordinate=coordinate)
     # 3. Unplanned rows: the same before/to rules where they carry values, registered either way.
     for entry in unplanned:
         kind = _kind_of(entry.get('kind'))
@@ -1674,6 +1967,8 @@ def state_mismatch(state, row):
                                      '本章纲声明的进入条件与引擎投影的真实状态不符。',
                                      'drift_chain', 'blocker', 'volume'))
     for coord in _deltas(row, []):
+        if coord['kind'] == 'hook':
+            continue                      # promised steps are judged below, in declaration order
         if coord['kind'] == 'clock' or coord['from'] is None:
             continue
         kind, key = coord['kind'], coord['key']
@@ -1683,6 +1978,22 @@ def state_mismatch(state, row):
             findings.append(_finding(chapter, kind, key, expect, got,
                                      '本章增量声明的前态与引擎投影的真实状态不符。',
                                      'drift_chain', 'blocker', 'volume'))
+    # The promise account, walked in the order the chapter declares it: a same-chapter plant then
+    # payoff is legal, so each step is judged against the status the previous step left behind —
+    # never against the pre-chapter state, which would make every short-hook chapter look like drift.
+    statuses = {ident: _item((state or {}).get('hooks'), ident).get('status')
+                for ident in ((state or {}).get('hooks') or {})}
+    for coord in _deltas(row, []):
+        if coord['kind'] != 'hook':
+            continue
+        hook_id, action = coord['key'], coord['to']
+        current = statuses.get(hook_id)
+        expect = None if action == 'plant' else 'open'
+        if current != expect:
+            findings.append(_finding(chapter, 'hook', hook_id, expect, current,
+                                     '本章纲的伏笔动作与引擎投影的真实承诺状态不符。',
+                                     'drift_chain', 'blocker', 'volume'))
+        statuses[hook_id] = 'open' if action == 'plant' else 'paid'
     return findings
 
 
