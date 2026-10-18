@@ -264,17 +264,18 @@ class RepairDiffTests(unittest.TestCase):
         self.assertIn('rules:r1', diff['named_by_findings'])
         self.assertEqual(diff['changed_but_not_named'], [])
         self.assertIn('characters:shen', diff['unchanged'])
-        # The re-review dispatch carries the summary as an on-demand record and says so in the brief.
+        # The re-review dispatch carries the summary as required material and says so in the brief.
         handoff = self.app.advance()
         self.assertEqual(handoff['task']['stage'], 'world_review')
         work = self.repo.pending()['input']
         self.assertIn('repair_diff', work['records'])
-        self.assertNotIn('repair_diff', work['required'])
+        self.assertEqual(sorted(work['required']), ['opening_choices', 'proposal', 'repair_diff'])
         self.assertIn('返修后重核', work['brief'])
         self.assertIn('repair_diff', work['brief'])
         fetched = self.app.read(work['task_id'] if 'task_id' in work else handoff['task']['task_id'],
                                 record='repair_diff')
         self.assertEqual(fetched['records']['repair_diff']['value']['changed'], diff['changed'])
+        self.assertTrue(fetched['records']['repair_diff']['value']['findings'])
 
     def test_repair_summary_counts_named_changed_and_untouched(self):
         previous = {'rules': [{'id': 'r1', 'principle': '旧规则。'}, {'id': 'r2', 'principle': '稳定规则。'}]}

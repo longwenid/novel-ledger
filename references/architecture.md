@@ -100,7 +100,7 @@ flowchart TD
 | editorial | 正文实现裁决、根修复案例、卷末职责、关闭验收范围、自动回改策略与终审覆盖；只依赖 contracts |
 | facts | 原文定位、事件前值、资源、时钟、站位与历史断言的纯结算 |
 | quality | 首读与独立审稿回执的完整性、一致性、证据核验；作者级发现的形状与“写作端可修”的区分 |
-| workflow | 下一任务和状态转换，内容与篇幅共享修复额度；窄返修守卫、返修复发计数与 repair-stalled 停止点；设计候选额度用尽按剩余问题严重度分流（局部 quality/note 记为未解决项继续，blocker/章范围级交作者）；返修落位时产出 repair_diff 摘要（改了什么/被点名什么/哪些未动）供重核按需读取；按 PIPELINE_SHAPES 安装档位流程形状：微型档合并卷设计（merge_volume_design）与整卷卷纲批次（outline_batch）、骨架+逐章卷纲合并派工（payload.also，同 world+contract 先例） |
+| workflow | 下一任务和状态转换，内容与篇幅共享修复额度；窄返修守卫、返修复发计数与 repair-stalled 停止点；设计候选额度用尽按剩余问题严重度分流（局部 quality/note 记为未解决项继续，blocker/章范围级交作者）；返修落位时产出 repair_diff 摘要（改了什么/被点名什么/哪些未动，携带上一轮 findings）供重核按需读取，t0/t1/t2 重核必读缩减为差异包；按 PIPELINE_SHAPES 安装档位流程形状：t0/t1/t2 整卷卷纲批次（outline_batch）、t0 骨架+逐章卷纲合并派工（payload.also，同 world+contract 先例）、t0/t1 契约随设计核验（merge_contract_review，对齐不过自动回退独立核验） |
 | briefs / result_templates | 按阶段生成任务说明与交付模板；不承担回执核验 |
 | context | 面向 ContextStore 编译冻结来源、必读选择和按需资料，不依赖 workflow |
 | publication | 面向 PublicationReader 的只读交付快照查询 |

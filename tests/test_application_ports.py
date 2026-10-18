@@ -2,9 +2,10 @@
 import copy
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, __file__.rsplit('/', 2)[0] + '/scripts')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from novel_ledger.application import Application
 from novel_ledger import context, workflow, world
 from novel_ledger.contracts import Error, RESULT, SCALE_TIERS, digest
@@ -144,7 +145,9 @@ class ApplicationPortsTests(unittest.TestCase):
     def test_guided_world_opening_delivers_through_the_injected_channel(self):
         app, repo, presentation, _, _ = self.make_app(preparing=True)
         repo.save(workflow.preparing_book('作者按当前开书协议提供完整方向。', guided=True, opening_version=2))
-        tier = SCALE_TIERS[0]
+        # A longer tier, so the contract review itself is dispatched through the injected
+        # channel; t0/t1 activate the combined draft's contract on the engine's alignment.
+        tier = SCALE_TIERS[3]
         raw = contract(tier['chapter_window'][0], tier['volume_count'])
         raw.update({key: copy.deepcopy(tier[key]) for key in ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim')})
         raw.update(tone='冷静而具体。', pov='第三人称限知，只写沈桐的所见所知。', theme='责任如何在人之间传递。', red_lines=[])

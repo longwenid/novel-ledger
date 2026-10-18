@@ -295,11 +295,12 @@ pwsh tools/install-dsh.ps1 -Remove
 
 ```bash
 python3 validation/run_tests.py fast          # 快速边界与关键业务链路
-python3 validation/run_tests.py full          # 自动发现全部工程测试
+python3 validation/run_tests.py full          # 自动发现全部工程测试（串行）
+python -m pytest tests/ -n auto               # 全量并行（装 pytest-xdist 后约 1.5 分钟，本机 16 核实测 470 项 87s）
 python3 validation/measure.py --out validation/metrics.json          # 依赖图与必读材料度量
 ```
 
-快速组保留关键边界，完整组自动收集新增测试；两种入口均可从其他目录运行，失败返回非零状态，可接入 CI。页面模板位于 `scripts/novel_ledger/templates/`，随技能安装，导出时内嵌为离线单文件。
+快速组保留关键边界，完整组自动收集新增测试；两种入口均可从其他目录运行，失败返回非零状态，可接入 CI。日常开发循环用 fast 组；改引擎后的全量回归优先 `pytest -n auto`（用例彼此独立：各建临时项目与 SQLite，可安全并行；未装 xdist 时退回串行入口）。最慢的是修订边界/叙事全流程驱动（单条 15～25s），并行下由多核吸收。页面模板位于 `scripts/novel_ledger/templates/`，随技能安装，导出时内嵌为离线单文件。
 
 测试使用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。全量项数以本机运行为准（`python3 validation/run_tests.py full`，当前约 400 项，另有无符号链接特权的宿主会跳过的项），详细记录见 [验收记录](validation/results.md)。当前工程度量见 [metrics.json](validation/metrics.json)，包含所有函数内导入；纯规则依赖仍无环。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
 

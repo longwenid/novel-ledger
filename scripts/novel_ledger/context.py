@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, TASK, Job, checks_for, dump, digest, require, tier_of)
+from .contracts import (CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, SCALE_TIERS, TASK, Job, checks_for, dump, digest, require, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
 from . import briefs, creation, narrative, scopes, world, editorial, story_memory, understanding
@@ -48,21 +48,21 @@ PROJECTIONS = (
 STAGE_MATERIAL = {
     'opening_options': ('opening_rejections',),
     'world_model': ('author_feedback', 'opening_basis', 'opening_choices', 'previous_proposal'),
-    'world_review': ('opening_basis', 'opening_choices', 'proposal'),
+    'world_review': ('opening_basis', 'opening_choices', 'proposal', 'repair_diff'),
     'opening_contract': ('author_feedback', 'opening_basis', 'opening_choices', 'world_model'),
     'contract_review': ('contract_amendment', 'opening_basis', 'opening_choices', 'plan', 'profiles',
                         'proposal', 'story', 'world_model'),
     'book_plan': ('author_feedback', 'contract', 'disclosure_boundary', 'effective_layout', 'plan',
                   'previous_proposal', 'profiles', 'revision_instruction', 'state', 'story',
                   'world_model', 'world_records'),
-    'design_review': ('author_feedback', 'contract', 'effective_layout', 'proposal',
+    'design_review': ('author_feedback', 'contract', 'effective_layout', 'proposal', 'repair_diff',
                       'revision_instruction', 'state', 'world_model'),
     'volume_plan': ('author_feedback', 'contract', 'design:book', 'effective_layout',
                     'progress_frontier', 'revision_instruction', 'state', 'world_model'),
     'volume_outline': ('author_feedback', 'contract', 'outline_bridge', 'state', 'volume_design',
                        'world_model'),
-    'outline_review': ('author_feedback', 'contract', 'outline_bridge', 'proposal', 'state',
-                       'volume_design', 'world_model'),
+    'outline_review': ('author_feedback', 'contract', 'outline_bridge', 'proposal', 'repair_diff',
+                       'state', 'volume_design', 'world_model'),
     'plan': ('author_feedback', 'contract', 'creative_memory', 'effective_layout', 'frontier:book',
              'frontier:volume:v1', 'frontier:volume:v2', 'plan', 'previous_chapters', 'profiles',
              'progress_frontier', 'revision_instruction', 'state', 'story', 'volume_outline_window',
@@ -95,6 +95,18 @@ STAGE_MATERIAL = {
     'alignment_review': ('alignment_hold', 'alignment_proposal', 'contract', 'effective_layout',
                          'frontier:book', 'frontier:volume:v1', 'profiles', 'scene_context', 'state',
                          'story', 'style_anchor'),
+}
+
+
+# What a re-review still must read after a repair. The narrow-repair invariant proves every
+# record no finding named came back byte-identical, so re-deriving the full context adds no
+# information: the delta packet is the findings (inside repair_diff), the diff itself, the new
+# candidate, and the one or two documents a fix is judged against. Everything else stays
+# available on demand (`read --record`), and a first review still reads the full set.
+DELTA_REVIEW_KEEP = {
+    'world_review': frozenset({'opening_choices', 'proposal'}),
+    'design_review': frozenset({'contract', 'proposal'}),
+    'outline_review': frozenset({'contract', 'proposal', 'volume_design'}),
 }
 
 
@@ -210,6 +222,12 @@ def _brief(book, job, version=CHECKS_VERSION):
             'chapters 逐章给 chapter/synopsis/world_refs/node_ids，覆盖 payload.volume_outline 的 first~last 全部章；'
             'synopsis 是可直接落笔的情节推进说明（谁、做什么、结果与代价），不是节点复述，'
             '章与节点的窗口和披露顺序保持一致。')
+    if job.stage == 'plan' and payload.get('outline_seed'):
+        return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book), 'checks_version': version}) + (
+            '\n\n## 模板已按已核验卷纲预填\n'
+            'node_ids/world_refs 照抄卷纲（增删须有理由——节点归属在卷纲核验时已定）；'
+            '六个叙述字段从 synopsis 起稿，逐项改写成各自的角色（目标/阻碍/选择/代价/变化/结尾），'
+            '同一段文字原样复制六份会被拒绝；participants 补齐本章真实参与人。')
     if job.stage in ('world_review', 'design_review', 'outline_review'):
         notes = ''
         proposal = book.get('proposal') or {}
@@ -219,10 +237,16 @@ def _brief(book, job, version=CHECKS_VERSION):
                       '本候选的冻结材料（chapter 0）同时包含全书骨架与本卷逐章 synopsis：'
                       'causality/disclosure/threads 的检查须同时覆盖骨架节点与逐章 synopsis 的一致性'
                       '（章落在节点窗口内、披露顺序不重复不超前、钩子按约定兑现），证据可引 chapter 0 的 synopsis 原文。')
+        if job.stage == 'design_review' and (book.get('contract_review') or {}).get('reviewer') == 'design_review(merged)':
+            notes += ('\n\n## 约定随设计核验（合并档）\n'
+                      '本档位的开书约定按引擎对齐检查直接生效，未另派独立契约核验：author_constraints 项须对照生效约定'
+                      '逐项判断（字段一致、禁区完整、体量派生、时间窗口），发现约定级问题按 findings 上交——'
+                      '能由改写解决的给修复范围，属于作者决定的给 decision。')
         if proposal.get('repair_diff'):
-            notes += ('\n\n## 返修后重核\n'
-                      '上一轮返修实际改动范围见 read --record repair_diff（named_by_findings/changed/added/removed/unchanged）。'
-                      '先核对该记录与上一轮 findings 一一对应、未被点名的部分未动，再做整体验证；'
+            notes += ('\n\n## 返修后重核（差异核对）\n'
+                      '本任务是差异重核，必读已缩减为上一轮意见与改动摘要：repair_diff 携带 findings（上一轮逐条意见）、'
+                      'named_by_findings/changed/unchanged（本轮实际改动）。核对顺序：① 每条 finding 是否被如实回应；'
+                      '② 改动是否只落在被点名处；③ 抽查若干 unchanged 记录确认摘要可信。未点的材料按需 read --record，'
                       '不手工 diff 两版文件，也不读引擎源码推返修规则。')
         if notes:
             return briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book), 'checks_version': version}) + notes
@@ -230,21 +254,39 @@ def _brief(book, job, version=CHECKS_VERSION):
 
 
 def scale_tier(book):
-    """The tier row this project was sized to, or None when the contract came in without a tier."""
-    return tier_of(book.get('contract') or {})
+    """The tier row this project was sized to, or None when no tier is known yet.
+
+    The contract is the tier's usual carrier, but the world dispatch runs before it exists —
+    world and contract ride in one receipt — so the frozen scale choice is the only declaration
+    available there. Reading it keeps the tier-scoped domain list the brief and the validator
+    share: without the fallback a t0 project's world brief widened to all ten domains while the
+    check accepted six, and the reviewer charged the extra records as off-tier padding.
+    """
+    tier = tier_of(book.get('contract') or {})
+    if tier is not None:
+        return tier
+    chosen = creation.selected(book.get('creation') or {}) if book.get('creation') else {}
+    tier_id = (chosen.get('scale') or {}).get('tier')
+    return next((row for row in SCALE_TIERS if row['id'] == tier_id), None)
 
 
 def _scale_line(book):
     """The chosen size class, spelled out for the world brief."""
     contract = book.get('contract') or {}
     volumes = contract.get('volumes') or []
-    if not volumes:
-        return ''
     tier = scale_tier(book)
-    last = volumes[-1]['end']
-    return '%s，%d 卷共 %d 章，每章 %s～%s 汉字' % (
-        (tier['name'] + '档') if tier else '已定体量', len(volumes), last,
-        contract.get('chapter_min'), contract.get('chapter_max'))
+    if volumes:
+        last = volumes[-1]['end']
+        return '%s，%d 卷共 %d 章，每章 %s～%s 汉字' % (
+            (tier['name'] + '档') if tier else '已定体量', len(volumes), last,
+            contract.get('chapter_min'), contract.get('chapter_max'))
+    if tier:
+        # Pre-contract dispatch: the tier row already proves the volume count and chapter band,
+        # so the size section is not silently dropped on the one dispatch that needs it most.
+        return '%s，%d 卷共 %d 章，每章 %s～%s 汉字' % (
+            tier['name'] + '档', tier['volume_count'], tier['chapters'],
+            tier['chapter_min'], tier['chapter_max'])
+    return ''
 
 
 def _selection_line(option, budget=120):
@@ -469,7 +511,15 @@ def build(repo: ContextStore, book, job):
             add('volume_design', {k: v for k, v in design.items() if k not in ('chapters', 'outline_reviews')})
             add('outline_bridge', chapters[-1:] if chapters else [])
         if chapters and stage == 'plan':
-            add('volume_outline_window', [c for c in chapters if job.first <= c['chapter'] <= job.last])
+            window = [c for c in chapters if job.first <= c['chapter'] <= job.last]
+            add('volume_outline_window', window)
+            if [c['chapter'] for c in window] == list(range(job.first, job.last + 1)):
+                # The reviewed outline already decided what each chapter advances; seeding the
+                # receipt from it means the plan refines a reviewed draft instead of re-deriving
+                # one from a record the worker then has to fetch anyway.
+                payload['outline_seed'] = [{'chapter': c['chapter'], 'synopsis': c['synopsis'],
+                                            'node_ids': list(c['node_ids']),
+                                            'world_refs': list(c.get('world_refs') or [])} for c in window]
         if chapters and stage in ('write', 'repair', 'redesign', 'chapter_review', 'alignment_plan'):
             add('chapter_outline', next((c for c in chapters if c['chapter'] == chapter), None))
     if enhanced:
@@ -554,6 +604,12 @@ def build(repo: ContextStore, book, job):
     # neither copies every summary nor re-reads every historical event.
     add('history_source', repo.history_snapshot(book['branch']), False)
     required = thin_required(records, required)
+    if stage in DELTA_REVIEW_KEEP and 'repair_diff' in records:
+        # The delta re-review shape: the narrow-repair guard already proved the unnamed records
+        # are byte-identical, so they move to on-demand instead of being re-derived in full.
+        keep = DELTA_REVIEW_KEEP[stage]
+        required = [name for name in required if name in keep]
+        required.append('repair_diff')
     brief = _brief(book, Job(stage, chapter, job.scope, job.first, job.last, payload), version)
     task = {'schema': TASK, 'stage': stage, 'chapter': chapter, 'scope': job.scope,
             'first': job.first, 'last': job.last, 'payload': payload, 'branch': book['branch'],

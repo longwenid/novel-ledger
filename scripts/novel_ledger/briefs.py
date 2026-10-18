@@ -190,6 +190,18 @@ def self_check_block(stage_name, version):
             *['- %s：%s' % (name, hint) for name, hint in rows], '']
 
 
+# Stages whose receipt carries findings[]. The field's shape is asymmetric with the same key in
+# checks[] — a list there, a single object here — and the blank template shows only an empty
+# findings list, so four reviewers in one live run each spent a preflight round discovering it.
+# Stated in the brief instead; a guard test derives the set from the blank templates.
+FINDING_STAGES = frozenset({'alignment_review', 'chapter_review', 'contract_review', 'design_review',
+                            'outline_review', 'revision_review', 'scope_review', 'scope_synthesis',
+                            'world_review'})
+FINDING_SHAPE = ('findings[].evidence 是单个 {chapter,quote,start?} 对象——同一个键在 checks[] 里才是数组；'
+                 '实质 finding 还须给 target_chapter（只取本任务冻结材料里的章号，设计/卷纲/约定核验为 0）'
+                 '与 repair_scope=local|chapter，note 可省修复范围。')
+
+
 def stage(name, payload=None):
     """Cold workers receive the rules of their stage without inheriting controller history."""
     payload = payload or {}
@@ -294,7 +306,8 @@ def stage(name, payload=None):
     # criteria, read from the same table: a first draft that fails a criterion the brief could have
     # asked about costs an independent session, the full material and a repair round to discover.
     self_check = self_check_block(name, payload.get('checks_version', CHECKS_VERSION))
+    shape = (' ' + FINDING_SHAPE) if name in FINDING_STAGES else ''
     return ('\n'.join([rule + time_rule + extra + handoff + enhanced + authority + memory + repair_rule]
                       + self_check)
-            + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，'
+            + shape + ' 字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，'
               '来源不足时按冻结哈希补读，不读源码猜格式。')

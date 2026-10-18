@@ -229,9 +229,13 @@ class OpeningTests(unittest.TestCase):
         self.app.submit(receipt(self.app, data))
         self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
         self.app.submit(receipt(self.app, review_data(self.app)))
-        self.assertEqual(self.app.advance()['task']['stage'], 'contract_review')
-        self.app.submit(receipt(self.app, review_data(self.app)))
-        return self.app.advance()
+        handoff = self.app.advance()
+        if handoff.get('action') == 'task_ready' and handoff['task']['stage'] == 'contract_review':
+            # Longer tiers review the contract on its own; t0/t1 activate it on the engine's
+            # alignment check and the judgment rides the design review instead.
+            self.app.submit(receipt(self.app, review_data(self.app)))
+            handoff = self.app.advance()
+        return handoff
 
     def test_an_author_level_finding_waits_for_the_author_and_then_redrafts(self):
         """A premise conflict is the author's to settle, not a repair round for a writer."""

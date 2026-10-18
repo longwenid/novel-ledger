@@ -182,7 +182,7 @@ class NarrativeTests(unittest.TestCase):
         self.assertCode('story_closure',narrative.closure,b)
 
     def test_budget_reads_the_derived_band(self):
-        raw=json.loads((Path(__file__).resolve().parents[1]/'assets/contract.example.json').read_text())
+        raw=json.loads((Path(__file__).resolve().parents[1]/'assets/contract.example.json').read_text(encoding='utf-8'))
         c=planning.validate_contract(raw)
         last=c['volumes'][-1]['end']
         self.assertEqual(c['word_range'],[last*c['chapter_min'],last*c['chapter_max']])

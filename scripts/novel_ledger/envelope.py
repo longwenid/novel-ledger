@@ -30,6 +30,7 @@ WORK_PAYLOAD_FIELDS = (
     'original_plan', 'prior_sessions', 'original_prose_hash',   # revision_review carry
     'volume_outline',                                           # outline policy for this batch
     'node_ids', 'node_criteria',                                # chapter_review node contracts
+    'outline_seed',                                             # plan rows seeded from the reviewed outline
     'author_question_hash',                                     # contract_review author question
     'review_key', 'scope_first', 'scope_last', 'review_tree', 'root',
     'part_id', 'level', 'children', 'first', 'last',            # bounded coverage tree

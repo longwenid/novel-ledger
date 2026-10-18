@@ -216,6 +216,42 @@ class DomainBoundaryTests(unittest.TestCase):
         # A stage the review judges without a producer counterpart renders nothing extra.
         self.assertNotIn('提交前自检', briefs.stage('chapter_review', {'checks_version': contracts.CHECKS_VERSION}))
 
+    def test_the_finding_shape_is_stated_where_the_blank_template_cannot_show_it(self):
+        """findings[].evidence is one object while the same key in checks[] is a list.
+
+        The blank template can only offer an empty findings list, so the asymmetry has to be told
+        in the brief; four reviewers in one live run each spent a preflight round on it. This
+        derives the finding-bearing stages from the templates themselves, so a stage that gains
+        findings without the brief line fails here instead of in a cold worker's second attempt.
+        """
+        from novel_ledger import briefs, contracts, result_templates, stages
+
+        def carries_findings(node):
+            if isinstance(node, dict):
+                return 'findings' in node or any(carries_findings(value) for value in node.values())
+            if isinstance(node, list):
+                return any(carries_findings(value) for value in node)
+            return False
+
+        payload = {'volume_outline': {'scope': 'rolling', 'words': 500, 'tolerance': 50,
+                                      'world_hash': 'h', 'first': 1, 'last': 2}}
+        derived = set()
+        for stage in stages.STAGES:
+            try:
+                blank = result_templates.template(stage, 1, {}, payload=payload)
+            except Exception:                      # a dynamic shape is checked by its own owner
+                continue
+            if carries_findings(blank):
+                derived.add(stage)
+        self.assertEqual(derived, set(briefs.FINDING_STAGES))
+        for stage in sorted(briefs.FINDING_STAGES):
+            with self.subTest(stage=stage):
+                self.assertIn(briefs.FINDING_SHAPE,
+                              briefs.stage(stage, {'checks_version': contracts.CHECKS_VERSION}))
+        # A stage without findings does not pay for the line.
+        self.assertNotIn(briefs.FINDING_SHAPE,
+                         briefs.stage('book_plan', {'checks_version': contracts.CHECKS_VERSION}))
+
     def test_every_stage_declares_the_material_it_must_read(self):
         """The same completeness rule as deliverable blocks, for the other half of a dispatch.
 

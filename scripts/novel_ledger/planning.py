@@ -289,6 +289,10 @@ def validate_plans(data, first, last, known_nodes, state, contract, world=None, 
     previous = {n: p for n, p in (known_plans or {}).items() if not first <= p['chapter'] <= last}
     for plan in plans:
         require(all(text(plan.get(k)) for k in ('goal', 'obstacle', 'choice', 'cost', 'change', 'ending')), 'plan', '章计划需要目标、阻碍、选择、代价、变化和结尾。')
+        require(not all(plan.get(k) == plan['goal'] for k in ('obstacle', 'choice', 'cost', 'change', 'ending')),
+                'plan', '六项不能是同一段文字的复制：目标/阻碍/选择/代价/变化/结尾各自回答不同问题。',
+                {'recover': '模板从已核验 synopsis 起稿时六个字段是同一段占位——逐项改写成各自的角色，'
+                            'synopsis 只说明发生了什么，不替代各项判断。'})
         require(isinstance(plan.get('node_ids'), list) and plan['node_ids'] and all(text(n) and n in known_nodes for n in plan['node_ids']), 'plan', '章计划须引用有效设计节点。')
         participants = plan.get('participants')
         require(isinstance(participants, list) and participants and all(text(p) for p in participants)

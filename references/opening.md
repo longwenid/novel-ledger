@@ -121,7 +121,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 | 结构门 | 引擎即时返回档位板，主干展示。 | await_choice，无任务或 Worker；方案回执按 opening_system 拒绝。 |
 | 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 系统不代选；换组和返回保留记录。 |
 | 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务同时包含 world_model 与 opening_contract，回执为世界字段加 contract；以任务 stages、payload.also 和模板为准。 |
-| 独立核验 | 依次派 world_review、contract_review。 | 世界通过后才核验其约定；旧任务独立下发 opening_contract 时仍按原任务执行。 |
+| 独立核验 | 依次派 world_review、contract_review。**t0/t1 契约随设计核验**：世界通过后引擎用同一套对齐校验（含与已核验世界的 world_rules 逐字一致）直接激活合并派工起草的约定，判断并入其后的 design_review（author_constraints 项对照生效约定）；返修动过世界导致对齐不过时自动回退独立契约核验。t2+ 与单独下发的 opening_contract 仍走独立 contract_review。 | 世界通过后才核验其约定；旧任务独立下发 opening_contract 时仍按原任务执行。 |
 | 骨架与卷纲 | 按已核验约定设计并核验骨架、卷方向和逐章说明。**微型档（t0）默认合并派工**：骨架与整卷逐章卷纲同一个回执交付、同一次 design_review 核验，不再分批派 volume_outline；其余档位见 [叙事推进](narrative.md#滚动卷纲)。 | 策略、批次与实际覆盖见 [叙事推进](narrative.md#滚动卷纲)。 |
 | 交付 | outline_ready 按 planning_mode/coverage 交付；关闭卷纲时为 world_ready。 | world_view.html_path 指向统一 book.html，另交 world.json 的绝对路径；视图失败可 advance 重建。 |
 

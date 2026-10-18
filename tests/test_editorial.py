@@ -143,12 +143,12 @@ class EditorialTests(unittest.TestCase):
         self.assertEqual(drive(self.app, owner)['action'], 'ready_to_complete')
         complete = self.app.complete(owner)
         result = delivery.deliver_completion(self.repo, bookpage.render, workspace=local_workspace(self.repo))
-        first = Path(result['files'][0]['path']).read_text()
+        first = Path(result['files'][0]['path']).read_text(encoding='utf-8')
         b = self.repo.load()
         b['contract']['title'] = '当前投影标题变化不改变完本快照'
         self.repo.save(b)
         repeated = delivery.deliver_completion(self.repo, bookpage.render, workspace=local_workspace(self.repo))
-        self.assertEqual(Path(repeated['files'][0]['path']).read_text(), first)
+        self.assertEqual(Path(repeated['files'][0]['path']).read_text(encoding='utf-8'), first)
         self.assertEqual(result['snapshot_hash'], complete['snapshot_hash'])
         self.assertEqual(result['chapters'], repeated['chapters'])
         self.assertEqual(result['files'], repeated['files'])
@@ -515,7 +515,7 @@ class EvaluationTests(unittest.TestCase):
             (base / 'manifest.json').write_text(dump(manifest), encoding='utf-8')
             result = quality_eval.prepare(base / 'manifest.json', base / 'run')
             case = result['cases'][0]
-            work = json.loads(Path(case['input']).read_text())
+            work = json.loads(Path(case['input']).read_text(encoding='utf-8'))
             self.assertNotIn('私有原稿', dump(work))
             first = {'case_id': work['case_id'], 'input_hash': digest(work), 'data': {'reads': [
                 {'chapter': 1, 'desire': '承担责任。', 'obstacle': '处境危险。', 'change': '选择行动。', 'read_on_reason': '后果如何。'}]}}
@@ -537,7 +537,7 @@ class EvaluationTests(unittest.TestCase):
             (base / 'manifest.json').write_text(dump(manifest), encoding='utf-8')
             prepared = quality_eval.prepare(base / 'manifest.json', base / 'run')
             case = prepared['cases'][0]
-            work = json.loads(Path(case['input']).read_text())
+            work = json.loads(Path(case['input']).read_text(encoding='utf-8'))
             first = {'case_id': work['case_id'], 'input_hash': digest(work), 'data': {'reads': [
                 {'chapter': 1, 'desire': '交钱。', 'obstacle': '钱不够。', 'change': '交出钱。', 'read_on_reason': '看后果。'}]}}
             (base / 'first.json').write_text(dump(first), encoding='utf-8')

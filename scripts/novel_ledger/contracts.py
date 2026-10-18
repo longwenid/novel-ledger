@@ -262,12 +262,12 @@ SCALE_WINDOW = 3          # how many consecutive tiers one board shows
 # keep the separate layer say so here; a guard test derives the coverage requirement from the
 # tier table itself, so a new tier cannot arrive without declaring its shape.
 PIPELINE_SHAPES = {
-    't0': {'merge_volume_design': True, 'outline_batch': 'volume'},
-    't1': {'merge_volume_design': False, 'outline_batch': 'window'},
-    't2': {'merge_volume_design': False, 'outline_batch': 'window'},
-    't3': {'merge_volume_design': False, 'outline_batch': 'window'},
-    't4': {'merge_volume_design': False, 'outline_batch': 'window'},
-    't5': {'merge_volume_design': False, 'outline_batch': 'window'},
+    't0': {'merge_volume_design': True, 'outline_batch': 'volume', 'merge_contract_review': True},
+    't1': {'merge_volume_design': False, 'outline_batch': 'volume', 'merge_contract_review': True},
+    't2': {'merge_volume_design': False, 'outline_batch': 'volume', 'merge_contract_review': False},
+    't3': {'merge_volume_design': False, 'outline_batch': 'window', 'merge_contract_review': False},
+    't4': {'merge_volume_design': False, 'outline_batch': 'window', 'merge_contract_review': False},
+    't5': {'merge_volume_design': False, 'outline_batch': 'window', 'merge_contract_review': False},
 }
 
 

@@ -22,11 +22,12 @@
 ```bash
 python3 validation/run_tests.py fast
 python3 validation/run_tests.py full
+python -m pytest tests/ -n auto          # 全量并行（装 pytest-xdist；用例各建临时项目，可安全并行）
 python3 <skill-creator>/scripts/quick_validate.py ROOT
 python3 validation/measure.py --out /path/to/metrics.json
 ```
 
-`fast` 固定覆盖架构、端口替换、角色与首读隔离、有限预算、修订授权及端到端交付；`full` 自动发现 tests/ 中全部测试。两种入口均在失败时返回非零状态，可供本机或 CI 调用；`--list` 仅列出案例，`-v` 显示逐项结果。新增关键边界时维护快速组，新增测试始终由完整组自动收集。快速检查通过后，跨模块重构仍须完整回归；原 unittest discovery 命令继续可用。
+`fast` 固定覆盖架构、端口替换、角色与首读隔离、有限预算、修订授权及端到端交付（含档位形状声明与 findings/批次规则守卫）；`full` 自动发现 tests/ 中全部测试。两种入口均在失败时返回非零状态，可供本机或 CI 调用；`--list` 仅列出案例，`-v` 显示逐项结果。全量回归优先用 pytest 并行入口（16 核实测 470 项约 87 秒，串行约 10 分钟；最慢的修订边界/叙事全流程驱动单条 15～25 秒，由多核吸收）。新增关键边界时维护快速组，新增测试始终由完整组自动收集。快速检查通过后，跨模块重构仍须完整回归；原 unittest discovery 命令继续可用。
 
 `validation/anchor_check.py` 核对仓库内全部 markdown 锚点引用可解析（改标题或挪小节后运行）。quick_validate 属宿主自带工具，路径按本机实际安装替换；它是可选的附加校验，缺失时不影响上面的测试与测量。Windows 控制台默认 GBK：测试与 CLI 自身按 UTF-8 读写，但外部校验脚本可能仍按本地编码读文件，此时对全部命令加 `PYTHONUTF8=1`。
 

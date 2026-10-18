@@ -69,12 +69,12 @@ submit 的 accepted=true 表示回执已接受，不等于正文通过：verdict
 | 阶段 | data |
 |---|---|
 | opening_options | 当前门 gate 与 2～3 个 options，详见 [逐门开书](opening.md) |
-| world_model / world_review | 完整世界记录与独立核验；默认 world_model 同时起草 data.contract，按 payload.also 和模板交付，详见 [世界模型](world.md)。返修后的重核可按需 `read --record repair_diff`（上一轮改了什么、findings 点名了什么、哪些记录未动），不手工 diff 两版文件 |
-| opening_contract | 默认随世界起草，世界通过后再 contract_review；单独派发时读冻结的核验世界。约定不得更改用户选择，模板由 CONTRACT_FIELDS 派生 |
+| world_model / world_review | 完整世界记录与独立核验；默认 world_model 同时起草 data.contract，按 payload.also 和模板交付，详见 [世界模型](world.md)。返修后的重核是差异核对：必读缩减为 repair_diff（携带上一轮 findings 与改动摘要）加新候选，不手工 diff 两版文件 |
+| opening_contract | 默认随世界起草，世界通过后按档位进入约定核验（t0/t1 随 design_review，t2+ 与改约走 contract_review，见 [逐门开书](opening.md)）；单独派发时读冻结的核验世界。约定不得更改用户选择，模板由 CONTRACT_FIELDS 派生 |
 | book_plan / volume_plan | intent/ending_conditions/nodes。节点 id/line/cause/choice/cost/outcome/disclosure/depends_on；ID 唯一，引用存在，无因果环。可选 ledger 账目行：一旦给出，四则关系提交时验算，后续工件同键同值 |
 | volume_outline / outline_review | 逐章卷纲有界批次与独立设计核验；world_hash/chapters、脑暴选案及篇幅规则见 [叙事推进](narrative.md) |
-| design_review / contract_review | verdict/checks/findings/obligations；独立核验 proposal 来源，证据 chapter=0 |
-| plan | plans 恰好覆盖冻结窗口；chapter/goal/obstacle/choice/cost/change/ending/node_ids/participants，可带 new_entities/obligations/schedule 与可选 ledger 行（同键与已核验设计一致） |
+| design_review / contract_review | verdict/checks/findings/obligations；独立核验 proposal 来源，证据 chapter=0。t0/t1 的开书约定随 design_review 核验（author_constraints 对照生效约定），contract_review 仍用于改约与 t2+；返修后重核同样走差异核对 |
+| plan | plans 恰好覆盖冻结窗口；chapter/goal/obstacle/choice/cost/change/ending/node_ids/participants，可带 new_entities/obligations/schedule 与可选 ledger 行（同键与已核验设计一致）。窗口在已核验卷纲内时模板由卷纲预填（node_ids/world_refs 照抄，六字段从 synopsis 起稿逐项改写，六份相同文字原样提交被拒） |
 | profiles | 恰好覆盖 payload.entities；entity/desire/fear/limit/voice/knowledge_boundary |
 | alignment_plan / alignment_review | 独立改案提案 reason/plan/designs 与设计核验；通过仍重新章审，见编辑能力 |
 | write / repair / redesign | title/完整 prose/summary/具体 self_check；不交 events 或 candidate_events。提交时机械判据直接判定：章幅区间、跨章逐字重复（≥25 字）、对白引号体例、西文残留，命中按名返修不消耗独立审 |
@@ -90,7 +90,7 @@ submit 的 accepted=true 表示回执已接受，不等于正文通过：verdict
 
 checks 恰好覆盖模板，各项 {id,result:pass或fix,reason,evidence:[...]}。证据 {chapter,quote,start?}；缺 start 时引文必须唯一。time/language 附 challenge={risk,disposition:satisfied或violated,reason,evidence}，对应 pass/fix。
 
-findings=[{criterion,severity:blocker或quality或note,reason,evidence,target_chapter,repair_scope:local或chapter}]。实质 finding 与 fix 检查一致，须给 target_chapter 与 repair_scope；note 可省修复范围。修复起点不从举证位置猜。`repair_scope` 拒绝会带 `valid_chapters`：target_chapter 只能取本任务冻结材料包含的章号——全书设计/卷纲/约定核验的冻结材料是 chapter 0，缺陷无论落在第几章都记 0，具体章写进 reason 的修订范围。reason 说明具体问题、影响和修订建议，evidence 保留精确原文，不另加字段。义务逐项回 {id,result,reason,evidence}，未履行者须关联带 obligation_id 的实质 finding。
+findings=[{criterion,severity:blocker或quality或note,reason,evidence,target_chapter,repair_scope:local或chapter}]。实质 finding 与 fix 检查一致，须给 target_chapter 与 repair_scope；note 可省修复范围。修复起点不从举证位置猜。`evidence` 是单个 {chapter,quote,start?} 对象——同一个键在 checks[] 里才是数组，空模板只能给出空的 findings 列表，因此这条形状随阶段简报下发。`repair_scope` 拒绝会带 `valid_chapters`：target_chapter 只能取本任务冻结材料包含的章号——全书设计/卷纲/约定核验的冻结材料是 chapter 0，缺陷无论落在第几章都记 0，具体章写进 reason 的修订范围。reason 说明具体问题、影响和修订建议，evidence 保留精确原文，不另加字段。义务逐项回 {id,result,reason,evidence}，未履行者须关联带 obligation_id 的实质 finding。
 
 severity=author 表示问题出在作者约定本身，任何改写都无法解决：它不写 target_chapter/repair_scope，改带 decision={id,question,options:[{label,impact}]}，question 须是作者能直接回答的问题，options 至少两个并说明取舍后果。程序把该发现挂到既有作者通道（暂停项目、pause_reason 取 question、resume 拒绝绕过），不安排写作端返修，也不消耗返修额度；作者选定选项后记录进 author_decision_history 并并入作者原话，候选按新前提重新起草，改约定本身的问题仍走改约核验。只有世界模型、设计、卷纲、改约、改案与跨章核验这些正文未定型的阶段有该通道，章内审稿仍只报能由改写解决的缺陷。一份回执最多上交一条 author 发现（一次只有一个待决问题），且只有 author 级发现可以携带 decision。
 

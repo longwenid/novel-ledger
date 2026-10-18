@@ -87,7 +87,12 @@ def response(app, task_id=None, session=None, claim=None):
                                     dict(id='B', premise='先追查货物流向，再回查签字矛盾。', tradeoff='延迟确认经手人。', world_refs=refs)],
                         selected='A', selection_reason='工程样本：卷末责任与现有规则相接。')
     elif stage == 'volume_outline':
-        data = outline_fixture(app, work['payload']['volume_outline'], work['scope'])
+        book = app.repo.load()
+        # A tier that merges the volume design into the book design has no volume-scope node, so
+        # the outline references the node that actually exists instead of the scope it would expect.
+        known = {node['id'] for design in book['designs'].values() for node in design.get('nodes', [])}
+        anchor = work['scope'] if work['scope'] in known else 'book'
+        data = outline_fixture(app, work['payload']['volume_outline'], anchor)
     elif stage == 'plan':
         book = app.repo.load()
         volume_id = next(v['id'] for v in book['contract']['volumes'] if v['first'] <= n <= v['end'])

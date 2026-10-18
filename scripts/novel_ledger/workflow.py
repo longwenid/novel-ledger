@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (AUTHOR_CHANNEL_STAGES, AUTHOR_SEVERITY, FAST_REVIEW_BLOCK, HOOK_LINKS_CAPABILITY,
+from .contracts import (AUTHOR_CHANNEL_STAGES, AUTHOR_SEVERITY, Error, FAST_REVIEW_BLOCK, HOOK_LINKS_CAPABILITY,
                         OPENING_BOUNDS_CAPABILITY, OPENING_VERSION, READING_DEPENDENCIES_CAPABILITY, REPAIRS, REDESIGNS,
                         SCENE_IDENTITY_CAPABILITY, UNDERSTANDING_CAPABILITY, PIPELINE_SHAPES, tier_of,
                         Job, Outcome, capabilities_for, checks_for, digest, han_count, require, text)
@@ -82,6 +82,20 @@ def merges_volume_outline(book):
     volumes = contract.get('volumes') or []
     return (tier is not None and len(volumes) == 1
             and PIPELINE_SHAPES.get(tier['id'], {}).get('outline_batch') == 'volume')
+
+
+def merges_contract_review(book):
+    """Whether this tier's opening contract activates on engine alignment plus the design review.
+
+    The combined dispatch already validates the contract mechanically against the world it was
+    drafted with, and the design review's checklist (author_constraints above all) judges the
+    same material against the live contract — so for short books a separate cold contract review
+    only pays for latency. Long books keep it: changing a contract there is expensive, and the
+    extra pair of eyes is cheap by comparison. Declared per tier in PIPELINE_SHAPES.
+    """
+    opening = book.get('creation') or {}
+    tier = tier_id(opening)
+    return tier is not None and bool(PIPELINE_SHAPES.get(tier, {}).get('merge_contract_review'))
 
 
 def new_book(contract, source=''):
@@ -628,7 +642,8 @@ def repair_summary(previous, candidate, findings):
 
     A re-review used to verify scope by hand: diffing two result files with scratch scripts and
     reading engine source to guess the rule. The comparison the guard already makes is rendered
-    once here and handed over as the `repair_diff` record instead.
+    once here and handed over as the `repair_diff` record instead — with the findings that
+    prompted the repair, so the re-review can check each was answered without archaeology.
     """
     before, after = identified_items(previous or {}), identified_items(candidate)
     named = named_items(previous or {}, findings or [])
@@ -639,7 +654,8 @@ def repair_summary(previous, candidate, findings):
             'added': sorted(key for key in after if key not in before),
             'removed': removed,
             'unchanged': sorted(set(before) - set(changed) - set(removed)),
-            'changed_but_not_named': sorted(key for key in changed if key not in named)}
+            'changed_but_not_named': sorted(key for key in changed if key not in named),
+            'findings': findings or []}
 
 
 def named_items(previous, findings):
@@ -715,9 +731,28 @@ def apply(book, task, data, actor, sources):
         elif review['verdict'] == 'pass':
             book['world'] = proposal['data']
             book['world_review'] = {'receipt': review, 'producer': proposal['producer'], 'reviewer': actor}
-            book['proposal'] = book.get('contract_draft') or None
-            book.pop('contract_draft', None)
-            book['creation']['phase'] = 'contract'
+            draft = book.pop('contract_draft', None)
+            if draft and merges_contract_review(book):
+                # The combined opening draft's contract activates on the engine's own alignment
+                # check against the now-verified world; the judgment pass rides the design
+                # review, whose author_constraints criterion reads the live contract. When a
+                # repair moved the world under the contract, that check fails here and the
+                # contract falls back to its own separate review instead of activating blind.
+                try:
+                    creation.validate_contract(planning.validate_contract(draft['data']), book['creation'], book['world'])
+                except Error:
+                    book['proposal'] = draft
+                    book['creation']['phase'] = 'contract'
+                else:
+                    book['pending_contract'] = draft
+                    book['pending_contract_reviewer'] = 'design_review(merged)'
+                    book['proposal'] = None
+            elif draft:
+                book['proposal'] = draft
+                book['creation']['phase'] = 'contract'
+            else:
+                book['proposal'] = None
+                book['creation']['phase'] = 'contract'
         else:
             proposal['attempts'] += 1
             proposal['findings'] = review['findings']
@@ -792,8 +827,10 @@ def apply(book, task, data, actor, sources):
             design = book['designs'][proposal['scope']]
             existing = design.setdefault('chapters', [])
             volume = planning.volume_for(editorial.effective_contract(book), chapter)
+            # A merged alias design on a world-less project carries no world_hash of its own;
+            # the outline binds the same (null) version the design does either way.
             require(proposal['first'] == (existing[-1]['chapter'] + 1 if existing else volume['first'])
-                    and proposal['data']['world_hash'] == design['world_hash'], 'outline_coverage', '批次必须接续已核验前缀，不能覆盖已有卷纲或更换世界版本。')
+                    and proposal['data']['world_hash'] == design.get('world_hash'), 'outline_coverage', '批次必须接续已核验前缀，不能覆盖已有卷纲或更换世界版本。')
             existing.extend(copy.deepcopy(proposal['data']['chapters']))
             design.setdefault('outline_reviews', []).append({'first': proposal['first'], 'last': proposal['last'],
                 'producer': proposal['producer'], 'reviewer': actor, 'receipt': review, 'data_hash': digest(proposal['data'])})

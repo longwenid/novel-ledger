@@ -72,6 +72,18 @@ def template(stage, chapter, sources, obligations=(), extra=(), version=CHECKS_V
     if stage == 'alignment_plan':
         return {'reason': '', 'plan': {}, 'designs': []}
     if stage == 'plan':
+        seed = (payload or {}).get('outline_seed')
+        if seed:
+            # The reviewed outline already chose each chapter's nodes and world references; the
+            # six narrative fields start from the synopsis for the worker to rewrite into their
+            # own roles. Submitting the copies verbatim is rejected by the plan validator.
+            return {'plans': [dict(chapter=row['chapter'],
+                                   goal=row['synopsis'], obstacle=row['synopsis'],
+                                   choice=row['synopsis'], cost=row['synopsis'],
+                                   change=row['synopsis'], ending=row['synopsis'],
+                                   node_ids=list(row['node_ids']), world_refs=list(row['world_refs']),
+                                   participants=[])
+                              for row in seed]}
         return {'plans': []}
     if stage == 'volume_plan' and (payload or {}).get('volume_outline'):
         policy = payload['volume_outline']
