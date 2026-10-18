@@ -380,5 +380,67 @@ class HookDeclarationTests(unittest.TestCase):
         self.assertIn('volume_hook', criteria, str(caught.exception.details['findings'])[:400])
 
 
+class WebnovelSettingMethodTests(unittest.TestCase):
+    """The opening's setting generators are web-serial methods with a required output.
+
+    Rewriting the lenses from generic literary moves (混搭/倒置/闭环…) to web-serial setting
+    generators is an author decision, so the wording is not pinned here. What the engine can check is
+    the shape — a unique label, a method and an explicit "what must come out of it" — that the four
+    generator families the decision names are covered, and that the world/edge gate notes carry the
+    constraints the option writer has to satisfy (a visible ladder, an accountable scarce resource,
+    a first conflict inside the opening three chapters, and room to add layers).
+    """
+
+    def lenses(self):
+        from novel_ledger import contracts
+        return contracts.LENSES
+
+    def test_every_lens_is_a_nonempty_method_triple(self):
+        from novel_ledger import creation
+        lenses = self.lenses()
+        self.assertGreaterEqual(len(lenses), 10)
+        labels = [label for label, _point, _structure in lenses]
+        self.assertEqual(len(set(labels)), len(labels), 'lens labels must be unique')
+        self.assertEqual(list(creation.LENSES), labels,
+                         'the dispatch names the same labels the table declares')
+        for label, point, structure in lenses:
+            with self.subTest(lens=label):
+                self.assertEqual(label, label.strip())
+                self.assertGreaterEqual(len(label), 3)
+                self.assertGreaterEqual(len(point.strip()), 20,
+                                        'a lens needs a method, not a label')
+                self.assertGreaterEqual(len(structure.strip()), 15,
+                                        'a lens must state what it has to produce')
+
+    def test_the_lenses_cover_the_four_web_serial_generator_families(self):
+        labels = [label for label, _point, _structure in self.lenses()]
+        self.assertTrue(any('金手指' in label for label in labels),
+                        'no advantage-supply generator in ' + repr(labels))
+        self.assertTrue(any('等级' in label for label in labels),
+                        'no level-ladder generator in ' + repr(labels))
+        self.assertTrue(any('换图' in label or '对手' in label for label in labels),
+                        'no opponent/stage-escalation generator in ' + repr(labels))
+        self.assertTrue(any('通货' in label for label in labels),
+                        'no hard-currency generator in ' + repr(labels))
+
+    def test_the_world_and_edge_gate_notes_state_their_constraints(self):
+        from novel_ledger import creation
+        from novel_ledger.contracts import OPENING_DIRECTION_GATES
+        note = creation.gate_note(3, 'world')
+        self.assertTrue(note.strip())
+        for word in ('等级', '资源', '三章'):
+            self.assertIn(word, note)
+        for word in ('等级', '资源', '三章', '加层'):
+            self.assertIn(word, OPENING_DIRECTION_GATES['world'])
+        self.assertIn('供料', OPENING_DIRECTION_GATES['edge'])
+        # The world gate note belongs to opening/3; the earlier gate set never carried one.
+        self.assertEqual(creation.gate_note(2, 'world'), '')
+
+    def test_the_legacy_literary_labels_are_gone(self):
+        labels = {label for label, _point, _structure in self.lenses()}
+        self.assertEqual({'混搭', '倒置', '绑定', '闭环'} & labels, set(),
+                         'legacy literary lenses are back in the label table')
+
+
 if __name__ == '__main__':
     unittest.main()

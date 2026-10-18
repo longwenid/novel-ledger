@@ -169,33 +169,55 @@ DEFAULT_NAME_CHARS = []
 # Work-directory artifacts the controller may regenerate; everything else in a task directory
 # is authored by a Worker and is never rewritten behind its back.
 FORM_ARTIFACTS = ('input.json', 'result.template.json', 'brief.md', 'dispatch.md', 'catalog.md')
-# Brainstorm methods. A lens is a way to make the next option genuinely different, not a label:
-# the axis spends one slot of the choice, the method says how to vary it. Kept beside the
-# contract fields because option quality is part of the author-facing contract.
+# Setting-generation methods for the opening gates. A method is a way to make the next option
+# genuinely different, not a label: the axis spends one slot of the choice, the method says how to
+# vary it. Kept beside the contract fields because option quality is part of the author-facing
+# contract.
+#
+# v3 rewrite: the earlier table was general literary brainstorming (mixing, inversion, binding,
+# closure…) and a real run kept returning options the author rejected as 「格局太小」「不够网文」.
+# The default direction is a male-channel long serial, and settings there are *built to spend*: an
+# edge the world has to keep feeding, a ladder the reader can see, opponents that arrive with the
+# next map, one hard currency somebody allocates, and enough headroom for a million characters.
+# Each method therefore states what it must produce, and the third element is that check. The
+# general craft discipline these replaced still applies — it lives in references/hatch.md.
 LENSES = (
-    ('混搭', '让两种差异化设定深度参与因果，双方都必须改变故事走向；只贴皮不算混搭。',
-     '提出两个各自成立的设定，再指出它们互相牵制的具体后果。'),
-    ('倒置', '颠覆类型固有假定，并把反转在终局回溯闭环；为求新奇而无回收不算。',
-     '先写清被倒置的那条公理，再给出终局如何回到它。'),
-    ('代价', '让突破必须支付不可逆的实质代价，代价直接改变人物后续抉择；一次性的痛感不算。',
-     '写清代价的具体形态，以及它如何限制下一次选择。'),
-    ('限制', '用严苛限制驱动破局策略，让主角靠判断而非能力取胜；限制可随时取消不算。',
-     '写清限制的边界与破局要用的具体手段。'),
-    ('认知差', '用信息差制造不可逆选择，让知道本身带来风险；靠误会拖延不算。',
-     '写清谁知道什么、这层差如何逼出选择。'),
-    ('规则推演', '把一条底层规则推到社会结构与经济秩序的极限；只在中段使用不算。',
-     '写清规则的边界，以及它挤压出的制度、代价与冲突。'),
-    ('绑定', '让主角与核心对手在物理或命运上深度绑定，无法简单消灭；换个人当对手不算。',
-     '写清绑定的机制，以及双方各自被限制的动作。'),
-    ('闭环', '让终局与初始预期形成有据可依的反转，全程伏笔支撑；临时改口不算。',
-     '写清初始预期、终局事实与中间需要埋设的线索。'),
-    # 从 v3 的创意方法移植：格局与商业化是实机换组意见里最常缺的两样（「格局太小」）。
-    ('生态位', '把故事放进一个被垄断的生态位：谁垄断什么、主角撬动哪一环、新平衡由谁付账；只换皮不换生态位不算。',
-     '写清垄断者、被撬动的环节，以及主角介入后的新秩序。'),
-    ('阶梯', '让第一卷到终局的赌注逐级抬高，每级都走已建立的规则与代价；只在中段抬高不算。',
-     '写出三级赌注、每级的兑现物与对手升格方式。'),
-    ('商业化倒推', '从读者要的爽点节奏倒推设定：短线兑现密度、章末钩与卷内高潮先定，设定为节奏服务；设定好看而节奏空转不算。',
+    ('金手指倒推', '先定主角独一份的优势，再让世界的资源、势力与等级围着它长出来：它的升级材料、'
+                   '克制它的对手、想抢它的组织，都要能从世界里持续产出；只给一个外挂不算。',
+     '写清优势是什么、每次使用要什么、世界里有谁在供料、谁在抢它，以及它开篇三章第一次怎么用上。'),
+    ('等级闭环', '把力量做成读者能预期的台阶（境界/段位/星级/职位），每级都有明确的升级条件与可量化'
+                 '资源；条件写在世界里，读者随时能答"下一步要什么"。',
+     '列出三级台阶：每级的名字、升级条件、拿到什么、卡在哪，以及谁在把守这个门槛。'),
+    ('对手换图', '按舞台层级排对手（村镇→城池→宗门→王朝→界域），每次胜利把舞台推高一级，新舞台'
+                 '自带新资源与新规则；靠误会或临时加设定维持的梯度不算。',
+     '写出前三级对手、每级挡住的具体利益，以及主角胜利后换到哪张图、图上有什么新东西。'),
+    ('硬通货', '世界必须有一种可记账的稀缺资源（灵石/贡献点/积分/信用/丹药），谁分配它谁就有权，'
+               '冲突围绕分配权与获取渠道展开；只当背景名词不算。',
+     '写清货币名、来源、稀缺点、分配者，以及主角第一次为它出手的场合与代价。'),
+    ('身份马甲', '主角在多个势力里有不同身份，制造扮猪吃虎、打脸与信息差；每个身份都要带暴露风险，'
+                 '身份之间不能互相打架。',
+     '写出至少两个身份、各自的用处、暴露会失去什么，以及第一次差点暴露的场合。'),
+    ('套路反打', '在类型固有桥段上翻一层：读者熟悉的那一步照走，代价或结果反过来；为反而反、'
+                 '让读者看不懂规则不算。',
+     '先写清被反打的那条套路，再写反转后谁吃亏、爽点落在哪一句。'),
+    ('代价上限', '主角的优势必须在开篇就带上可见的代价与明确的上限，代价改变后续抉择；'
+                 '后期靠临时削弱或加强来维持平衡不算。',
+     '写清代价的具体形态、上限在哪，以及它如何限制下一次选择。'),
+    ('爽点倒推', '从读者要的兑现节奏倒推设定：短线兑现密度、章末钩与卷内高潮位置先定，设定为节奏'
+                 '服务；设定好看而节奏空转不算。',
      '列出短线兑现的密度、两个卷内高潮的位置与开篇三章的第一个爽点。'),
+    ('生态位垄断', '把故事放进一个被垄断的生态位：谁垄断什么、主角撬动哪一环、新平衡由谁付账；'
+                   '只换皮不换生态位不算。',
+     '写清垄断者、被撬动的环节，以及主角介入后的新秩序。'),
+    ('数据面板', '把成长做成可核对的数字（属性、等级、任务、贡献、排行榜），让读者随时看见进步了'
+                 '多少；数字要有人认账，随便写的等级不算。',
+     '写清面板上会出现哪几项、每项怎么变，以及谁承认这张榜（排名对资源分配有什么实际后果）。'),
+    ('记忆点标签', '给世界与主角造几个一眼能记住、能被读者复述的标签（称号、流派、道具、口号），'
+                   '名字要能搜索、能出现在章末钩里。',
+     '写出三个可传播的标签，说明它们第一次出现在哪一幕、由谁说出。'),
+    ('长线续航', '设定必须撑住长篇：敌人、地图、资源与等级都留了继续加层的位置，不靠临时改设定'
+                 '续命；三十章就把牌打光不算。',
+     '写出第二卷与终局各新增什么层级，并说明它与你现在写的规则同源。'),
 )
 # Volume-level turn methods: what makes a volume mid-point change direction instead of
 # stacking everything on the finale. Used when planning the current volume.
@@ -253,10 +275,14 @@ OPENING_DIRECTION_GATES = {
     'genre': '男频题材要连承诺一起给：爽点是什么、读者看谁赢谁、他在这个故事里想要什么。',
     'voice': '叙述先定人称与视角范围：贴住主角的限知视角便于持续给爽点与信息差；语感短句推进、对白带信息。',
     'scale': '长篇连载体量：这一门只选档位，别在这里讨论剧情；相邻档的差别要落到节奏与线索数量上。',
-    'edge': '金手指或稀缺优势要能被反复使用并升级：说清它怎么来、分几层、每层的条件与代价、上限在哪。',
+    'edge': '金手指或稀缺优势要能被反复使用并升级：说清它怎么来、分几层、每层的条件与代价、上限在哪；'
+            '世界里要有供料链（升级材料从哪来、谁在抢），不是一次性外挂。',
     'protagonist': '主角处境要自带压力与上升通道，欲望具体可量化，底线会在关键选择上真的挡住他。',
     'relationships': '关系要同时给出助力和背叛风险（兄弟、师徒、对手绑定、家族），感情线定分量与处理方式，不是围着主角转的配角团。',
-    'world': '世界机制要为冲突持续供料：规则清楚、边界可验证，能不断产出对手、资源与身份差，不做纯氛围设定。',
+    'world': '世界设定要能被花掉：至少一条读者看得见的等级或台阶（附升级条件）、一种可记账的稀缺资源'
+             '（附分配者）、一个有权分配它的组织；主角的优势必须在开篇三章的第一场冲突里用上，'
+             '并被规则承认（谁认它、谁抢它）。同时留好加层位置：敌人、地图、资源与等级都要能继续往上长。'
+             '规则清楚、边界可验证，不做纯氛围设定。',
     'opposition': '对抗要能逐卷抬高一级（局部→势力→体系）：第一卷对手挡着什么利益、每次胜利换来多强的对手、终局面对谁。',
     'payoff': '兑现方式写清楚（脱困、打脸、升级、资源、地位、基建、复仇、争霸），短线三五章一个小兑现，章末留钩，终局要兑现开篇承诺的那场胜利。',
     'title': '书名按男频搜索习惯给：关键词直接点出题材与金手指或身份优势，一眼能看懂看点，不用意象化短名。',

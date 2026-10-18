@@ -105,12 +105,33 @@ WORLD_SELF_CHECK = (
 )
 
 
+# The concrete pieces the world has to hand the later steps, one per existing world section. The
+# web-serial method list changed what the world gate asks for; these are the same fields the
+# validator already reads, so the brief asks for usable material instead of an encyclopedia entry.
+WORLD_PIECES = (
+    ('rules', '至少一条读者看得见的等级/台阶：写清升级条件、每一级的门槛，以及违反规则的后果。'),
+    ('economy', '一种可记账的稀缺资源（硬通货）：来源、生产、分配者、稀缺点，以及为它产生的冲突。'),
+    ('factions', '至少一个有权分配该资源的组织：压迫要落成具体考核、任务或贡献，不写抽象的「势力强大」。'),
+    ('mechanisms', '有特殊机制时：原理/代价/限制/失效条件之外，补上升级材料从哪来、谁在抢（供料链）。'),
+    ('geography', '留出下一张地图（换图）的位置与通行条件：门槛是什么、谁掌握入口、越过去要付什么。'),
+    ('characters', '主角优势与台阶在人物侧的可升级点：欲望与底线之外，写清他现在站在哪一级、下一级怎么上。'),
+)
+WORLD_PIECE_NOTE = ('这些设定是被后续卷纲/章纲消费的：台阶→人物与知情状态、硬通货→章纲资源增量（进漂移账）、'
+                    '地图→章纲 places（进位置校验）。所以每条都要写成「能用」的具象设定'
+                    '（谁、在哪、要什么、付什么代价），不是百科条目；这一章用不上的设定不要写进来。')
+
+
 def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections=None):
     """World plus contract in one dispatch: what the world owes, and what the contract must keep."""
     lines = ['# ' + BRIEFS['world_model'], '',
              '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。'
              '完整记录须有稳定 id 与 links=[领域:id]；同时给 premise、story_capacity 与准确的 selection_hash。'
              '不要写"待补"，写进去的域都要能落到具体场景。', '']
+    lines.extend(['## 世界要产出哪些网文可用件（就用现有字段，不新增字段）',
+                  *['- %s（%s）：%s%s' % (name, world.LABELS[name], text,
+                                         '' if not sections or name in set(sections) else '（本档位不要求该领域，留空即可）')
+                    for name, text in WORLD_PIECES],
+                  WORLD_PIECE_NOTE, ''])
     if sections:
         # Same declaration the validator uses: asking for ten domains while the check happens to
         # accept a smaller world is how a micro project ends up writing records nobody reads and

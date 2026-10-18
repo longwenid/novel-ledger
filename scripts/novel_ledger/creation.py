@@ -220,6 +220,12 @@ GATE_NOTES = {
         'voice': '本门只决定"怎么讲"：人称与视角范围是硬决定，语感是同一门的阅读质地。每个方案的 scene 与 pitch 都用该方案的人称写出来，让作者读到的不是解释，而是这个人称讲出来的样子；不要在本门讨论情节走向。',
         'edge': '本门只决定核心优势与成长线：advantage 优势是什么、origin 怎么得到、growth 分几层与每层升级条件、cost 每次使用的代价、ceiling 上限在哪。写清楚它在开篇三章内第一次怎么用上；不要写成世界观说明或力量体系百科，也不要替作者决定题材。本门排在主角门之前，主角的姓名与身份还没决定：用「主角」指代，不要在本门给他起名、定职业或写编制——本门文本会被约定逐字保留，写进去的名字会与主角门后来选定的人冲突。',
         'opposition': '本门只决定对抗与梯度：第一卷谁挡着他、挡着什么具体利益、每次胜利换来多强的对手、终局面对谁。梯度必须是可执行的加码方式，不靠误会或临时改设定维持；不要在本门重述世界规则。',
+        'world': '本门决定世界前提、机制与禁区，按网文设定生成的口径来写：① 至少一条读者看得见的等级或台阶，'
+                 '带升级条件（境界/段位/星级/职位都行）；② 一种可记账的稀缺资源，写清来源、稀缺点与谁在分配；'
+                 '③ 一个有权分配它的组织（宗门/家族/公司/官方），它的压迫要能落成具体考核、任务或贡献点；'
+                 '④ 主角优势的供料链：升级材料从哪来、谁在抢、世界怎么持续产出它；⑤ 留加层位置——敌人、地图、'
+                 '资源与等级都要能往上涨，不靠临时改设定续命。写"能用"的设定：开篇三章的第一场冲突里就要用上'
+                 '其中至少两件，不做纯氛围世界观。',
         'protagonist': '本门决定主角身份、处境与底线，并执行反套路命名纪律：姓氏贴世界与阶层（市井用常见姓与俗字，世家才配行辈雅字，别扎堆潇洒姓）、俗字与双字名优先（单字玄乎名是重灾区）、称呼链一次想好（全名→日常称呼→诨名/职衔）、口语测试三遍（放进街坊对白念着像网文签名档就换）。套路组合（潇洒姓×玄乎单字）会以 name_warnings 出现在板面上。',
         'payoff': '本门只决定读者一路拿到什么以及最后兑现成什么：plan 里的兑现方式、短线密度与章末钩、卷内高潮位置，以及终局兑现开篇承诺的那场胜利与母题。不要写成章节大纲，也不要在这里改对抗梯度。',
         'title': '本门只决定书名。按男频搜索习惯给真正可用的候选名：关键词直接点出题材与核心优势或身份优势，一眼能看懂看点；不要给"待定""暂名一"这类占位符，不要意象化短名，也不要重新讨论故事内容。',
@@ -249,9 +255,14 @@ def value_fields(gate, version=OPENING_VERSION):
 
 
 # The delivery contract for one option: proposals, not arguments. The lens shapes how the option is
-# found; it must not appear in what the author reads.
+# found; it must not appear in what the author reads. The interception list is derived from the live
+# method table plus the legacy names: a method renamed in a later protocol must not become a word a
+# worker can safely write into a pitch, and options written under the old table must keep being
+# rejected for the same reason.
 OPTION_CONTRACT = contracts.OPTION_CONTRACT
-LENS_WORDS = ('透镜', '落地要求', '典型落法', '混搭', '倒置', '代价递进', '认知差', '规则推演', '闭环')
+LEGACY_LENS_WORDS = ('混搭', '倒置', '代价递进', '认知差', '规则推演', '绑定', '闭环', '阶梯', '商业化倒推')
+LENS_WORDS = tuple(dict.fromkeys(
+    ('透镜', '落地要求', '典型落法') + tuple(row[0] for row in contracts.LENSES) + LEGACY_LENS_WORDS))
 
 
 def _reject_lens_language(option):
