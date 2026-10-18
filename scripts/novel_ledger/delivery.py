@@ -23,6 +23,16 @@ def json_write(path, value):
 # verbatim instead of re-deriving a presentation from the JSON return: a live run had to redirect
 # advance's stdout to a file (GBK consoles garble UTF-8) and then hand-write a markdown card for
 # every gate, paying main-session tokens to re-render what the engine already knows.
+# Advisory groups the engine may attach to a board. Each keeps its own heading: a naming note and a
+# "this setting is already taken" note are different conversations, and folding them under one title
+# would read as one problem. Nothing here blocks a choice — the author decides — so the card renders
+# them as advice, never as a rejection reason.
+BOARD_WARNINGS = (
+    ('name_warnings', '命名提示'),
+    ('premise_warnings', '设定同质化提示'),
+)
+
+
 def render_board_card(board):
     gate = board.get('gate') or {}
     letters = 'ABCDEF'
@@ -44,10 +54,14 @@ def render_board_card(board):
             lines.append('- **画面**：')
             lines.extend('  - %s' % row for row in scenes)
         lines.append('')
-    warnings = board.get('name_warnings') or []
-    if warnings:
-        lines.append('## 命名提示')
-        lines.extend('- %s' % row.get('message', '') for row in warnings)
+    for key, title in BOARD_WARNINGS:
+        rows = [row for row in board.get(key) or [] if isinstance(row, dict)]
+        if not rows:
+            continue
+        lines.append('## ' + title)
+        lines.extend('- %s%s' % (('方案%s：' % row['option']) if row.get('option') else '',
+                                 row.get('message') or row.get('code') or '')
+                     for row in rows)
         lines.append('')
     lines.append('---')
     lines.append('回复 **A / B / C** 选择；**换一组**（附原因更好）；**D** 自定义一句方向；**返回某门**改已选项。')

@@ -24,7 +24,7 @@ from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import CONTROLLER_STAGES, Error
 from novel_ledger.result_templates import template
 from novel_ledger.sqlite_store import SQLiteRepository
-from test_opening import rows_for, shown
+from test_opening import rows_for, walk_to
 
 GATE_RECEIPT = {'genre': {'genre': '都市异能', 'reader_promise': '看他从仓库夜班把签字责任查到底。', 'tone': '冷硬利落。'},
                 'voice': {'pov': '第三人称限知。', 'voice': '短句推进。', 'style_traits': ['少解释多动作。', '章末留钩。']}}
@@ -93,12 +93,7 @@ class InlineOpeningTests(unittest.TestCase):
         self.assertEqual(CONTROLLER_STAGES, frozenset({'opening_options'}))
 
     def test_cliche_protagonist_names_come_back_as_board_warnings_not_blocks(self):
-        state = self.app.repo.load()['creation']
-        for _gate in ('genre', 'origin', 'voice', 'scale', 'edge'):
-            offered = shown(state)
-            state = creation.pick(offered, offered['board']['options'][0]['id'],
-                                  offered['board']['hash'], '作者选它。')
-        self.assertEqual(creation.current(state)['id'], 'protagonist')
+        state = walk_to(self.app.repo.load()['creation'], 'protagonist')
         rows = rows_for('protagonist')
         rows[0]['value'] = {**rows[0]['value'], 'name': '沈砚'}
         offered = creation.offer(state, {'gate': 'protagonist', 'options': rows})

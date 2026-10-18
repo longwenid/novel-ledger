@@ -20,7 +20,7 @@ import uuid
 
 from novel_ledger import context, drift, facts, store_keys, workflow
 from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS, RESULT, digest, han_count,
-                                    opening_source, policy_default)
+                                    opening_source, policy_default, require)
 from novel_ledger.result_templates import drift_items, template
 
 
@@ -44,7 +44,7 @@ def link_or_skip(case, link, target, target_is_directory=False):
 # --------------------------------------------------------------------------------------------------
 
 def contract(chapters=2, volumes=1, volume_words=None, chapter_words=None,
-             volume_tolerance=None, chapter_tolerance=None):
+             volume_tolerance=None, chapter_tolerance=None, v5_rows=False):
     """A small, complete author contract with the two v2 outline policies declared.
 
     `chapter_min`/`chapter_max` are deliberately tiny: these tests drive whole books, and the prose
@@ -52,6 +52,12 @@ def contract(chapters=2, volumes=1, volume_words=None, chapter_words=None,
     declarations (`contracts.policy_default`) so a fixture can never disagree with the band the
     validator applies; a test may still shrink them explicitly to exercise the length check without
     writing a page of filler.
+
+    `v5_rows` adds the opening/5 structural rows (`world_tiers`, `world_ladder`). A contract written
+    before opening/5 has neither, and that is the default shape: a guided opening projects its own
+    choices over the base contract, so a hand-written v5 contract only needs the rows when the test
+    is about them. The stand-in rows below are exactly the declared shapes, no extra keys, because
+    the validator compares the row key set for equality.
     """
     volume_policy = policy_default('volume_outline')
     chapter_policy = policy_default('chapter_outline')
@@ -63,28 +69,38 @@ def contract(chapters=2, volumes=1, volume_words=None, chapter_words=None,
         chapter_policy['words'] = chapter_words
     if chapter_tolerance is not None:
         chapter_policy['tolerance'] = chapter_tolerance
-    return {'narrative_tracking': False, 'editorial_features': False,
-            'volume_outline': volume_policy,
-            'chapter_outline': chapter_policy,
-            'title': '夜班退件', 'genre': '都市生活',
-            'reader_promise': '一个夜班工人查清退件来源并承担自己的选择。',
-            'ending': '退件来源公开，工人承担违规开箱的后果。', 'world_premise': '一座仓库的夜班退件纠纷。',
-            'story_engine': '核对退件来源，追查签字责任。', 'opposition': '主管担心调查影响考核。',
-            'voice': '以动作、物件、对白和后果呈现夜班人情。', 'allow_special_mechanism': False,
-            'style_traits': ['少重复解释。', '因果承接完整。'],
-            'relationships': ['同事互相依赖，却各自担心承担责任。'],
-            'protagonist_setup': {'id': 'shen', 'name': '沈桐', 'identity': '夜班工人',
-                                  'desire': '查清责任。', 'limit': '不牵连无关同事。'},
-            'world_rules': ['夜班退件必须登记负责人。'],
-            'chapter_min': 12, 'chapter_max': 90, 'chapter_aim': 60,
-            'word_range': [12 * chapters, 200 * chapters],
-            'volumes': [{'id': 'v' + str(i + 1), 'purpose': '查明来源并面对后果。',
-                         'end': (i + 1) * chapters // volumes} for i in range(volumes)],
-            'entities': [{'id': 'shen', 'name': '沈桐', 'kind': 'person'}],
-            'initial_resources': [{'holder': 'shen', 'asset': '车费', 'unit': '元', 'quantity': '4'}],
-            # Two places so a chapter outline can declare a position delta without inventing one.
-            'places': [{'id': 'office', 'name': '值班室'}, {'id': 'yard', 'name': '仓库后院'}],
-            'placements': {'shen': 'office'}}
+    raw = {'narrative_tracking': False, 'editorial_features': False,
+           'volume_outline': volume_policy,
+           'chapter_outline': chapter_policy,
+           'title': '夜班退件', 'genre': '都市生活',
+           'reader_promise': '一个夜班工人查清退件来源并承担自己的选择。',
+           'ending': '退件来源公开，工人承担违规开箱的后果。', 'world_premise': '一座仓库的夜班退件纠纷。',
+           'story_engine': '核对退件来源，追查签字责任。', 'opposition': '主管担心调查影响考核。',
+           'voice': '以动作、物件、对白和后果呈现夜班人情。', 'allow_special_mechanism': False,
+           'style_traits': ['少重复解释。', '因果承接完整。'],
+           'relationships': ['同事互相依赖，却各自担心承担责任。'],
+           'protagonist_setup': {'id': 'shen', 'name': '沈桐', 'identity': '夜班工人',
+                                 'desire': '查清责任。', 'limit': '不牵连无关同事。'},
+           'world_rules': ['夜班退件必须登记负责人。'],
+           'chapter_min': 12, 'chapter_max': 90, 'chapter_aim': 60,
+           'word_range': [12 * chapters, 200 * chapters],
+           'volumes': [{'id': 'v' + str(i + 1), 'purpose': '查明来源并面对后果。',
+                        'end': (i + 1) * chapters // volumes} for i in range(volumes)],
+           'entities': [{'id': 'shen', 'name': '沈桐', 'kind': 'person'}],
+           'initial_resources': [{'holder': 'shen', 'asset': '车费', 'unit': '元', 'quantity': '4'}],
+           # Two places so a chapter outline can declare a position delta without inventing one.
+           'places': [{'id': 'office', 'name': '值班室'}, {'id': 'yard', 'name': '仓库后院'}],
+           'placements': {'shen': 'office'}}
+    if v5_rows:
+        # opening/5's two structural rows, each exactly the declared shape (the validator compares
+        # the row's key set for equality). A contract written before opening/5 has neither; that
+        # compatibility path is exercised with `v5_rows=False`.
+        raw['world_tiers'] = [{'name': '一阶登记员', 'condition': '连续夜班满一年',
+                               'gain': '可独立开箱核对', 'cost': '每次核对耗掉一夜精力',
+                               'limit': '只对本仓库的退件有效'}]
+        raw['world_ladder'] = [{'stage': '夜班作业区', 'scope': '局部', 'growth': '地盘',
+                                'new_rule': '退件必须登记负责人', 'cost': '得罪当班同事'}]
+    return raw
 
 
 def world_fixture(raw=None):
@@ -95,13 +111,18 @@ def world_fixture(raw=None):
     seeded path therefore installs this model, whose records line up one-for-one with what the
     outline fixtures reference: `rules:r1`, `geography:office`, `geography:yard`,
     `characters:shen`, and an economy record for the contract's starting resource.
+
+    A contract that already carries the opening/5 structural rows (`world_tiers`,
+    `world_resource`, `world_ladder`) gets them mirrored into `powers`/`economy`/`geography` (and
+    `cosmology` for a grand rung), because the three bindings are what the world validator checks
+    when the choices declared them.
     """
     raw = raw or contract()
     protagonist = (raw.get('protagonist_setup') or {}).get('id') or 'shen'
     name = (raw.get('protagonist_setup') or {}).get('name') or '沈桐'
     rules = raw.get('world_rules') or ['夜班退件必须登记负责人。']
     assets = [row.get('asset') for row in raw.get('initial_resources') or [] if row.get('asset')] or ['车费']
-    return {
+    model = {
         'premise': raw.get('world_premise') or '一座仓库的夜班退件纠纷。',
         'story_capacity': '仓库、夜班、退件流程与签字制度足以承载一次来源核对与责任追查。',
         'geography': [_place('office', '值班室'), _place('yard', '仓库后院')],
@@ -123,13 +144,48 @@ def world_fixture(raw=None):
                         'links': ['rules:r1']}],
         'mysteries': [],
         'mechanisms': [],
+        # opening/5's two grand sections: declared empty here so a legacy world keeps its shape
+        # (`world.index` and the section walk read every declared section).
+        'powers': [],
+        'cosmology': [],
     }
+    for index, tier in enumerate(raw.get('world_tiers') or [], 1):
+        model['powers'].append({'id': 'tier%d' % index, 'name': tier.get('name', ''),
+                                'condition': tier.get('condition', ''), 'gain': tier.get('gain', ''),
+                                'cost': tier.get('cost', ''), 'limit': tier.get('limit', ''),
+                                'links': []})
+    resource = raw.get('world_resource') or {}
+    if resource:
+        allocator = resource.get('allocator') or '主管'
+        model['economy'].append({'id': 'currency', 'resource': resource.get('name', ''),
+                                 'production': resource.get('source') or '夜班结余',
+                                 'distribution': '由' + allocator + '按班次登记后分配。',
+                                 'scarcity': '每班只放行固定份额。',
+                                 'conflict': '谁拿到分配权谁定责任。', 'links': []})
+    from novel_ledger import world as world_module
+    grand = _choose_attr(world_module, 'COSMOLOGY_SCOPES', _GRAND_SCOPES)
+    for index, level in enumerate(raw.get('world_ladder') or [], 1):
+        stage = level.get('stage', '')
+        if not stage:
+            continue
+        if level.get('scope') in grand:
+            model['cosmology'].append({'id': 'layer%d' % index, 'name': stage,
+                                       'inhabitant': '在' + stage + '活动的势力与居民。',
+                                       'law': '进入' + stage + '后适用的规则。',
+                                       'entry': '沿' + stage + '的入口推进入场。', 'links': []})
+        else:
+            model['geography'].append(_place('stage%d' % index, stage,
+                                             environment=stage + '的空间与环境。'))
+    return model
 
 
-def _place(ident, name):
-    return {'id': ident, 'name': name, 'environment': '夜间照明的作业区。',
-            'resources': '退回的货物与登记册。', 'access': '夜班人员可进。',
-            'story_pressure': '退件必须有人签字。', 'links': []}
+def _place(ident, name, **extra):
+    row = {'id': ident, 'name': name, 'environment': '夜间照明的作业区。',
+           'resources': '退回的货物与登记册。', 'access': '夜班人员可进。',
+           'story_pressure': '退件必须有人签字。', 'links': []}
+    row.update(extra)
+    row['links'] = list(extra.get('links') or [])
+    return row
 
 
 def seeded_book(raw=None):
@@ -316,25 +372,54 @@ def volume_outline_fixture(app, work, hooks=None):
     return data
 
 
-def volume_rows(book, volume_ids=None, words=None, hooks=None):
+def volume_rows(book, volume_ids=None, words=None, hooks=None, stage=None):
     """The volume outline rows for `volume_ids`, sized to the policy's per-volume 汉字 target.
 
     Public so a drift-unit test can build the same rows the dispatch fixture builds without an
     application: `drift.validate_volume_outline` is deterministic over (contract, world, rows).
     `hooks=False` switches every promise off at once, which is how a test isolates the non-hook
-    checks from the hook chain.
+    checks from the hook chain. `stage` may be a list of rungs to assign by volume order (a test
+    building a book without an opening needs the ladder explicitly), or a single stage for all.
     """
     contract = book['contract']
     policy = contract.get('volume_outline') or {}
     target = words if words is not None else policy.get('words') or 2500
     tracking = bool(contract.get('narrative_tracking'))
     enabled = _hooks_on(hooks)
-    wanted = list(volume_ids or [row['id'] for row in contract['volumes']])
-    return [_volume_row(book, next(row for row in contract['volumes'] if row['id'] == ident),
-                        target, tracking, hooks=enabled) for ident in wanted]
+    volumes = contract['volumes']
+    wanted = list(volume_ids or [row['id'] for row in volumes])
+    rows = []
+    for ident in wanted:
+        volume = next(row for row in volumes if row['id'] == ident)
+        chosen = None
+        if isinstance(stage, (list, tuple)):
+            position = next((index for index, row in enumerate(volumes) if row['id'] == ident), 0)
+            chosen = stage[min(position, len(stage) - 1)] if stage else ''
+        elif stage is not None:
+            chosen = stage
+        rows.append(_volume_row(book, volume, target, tracking, hooks=enabled, stage=chosen))
+    return rows
 
 
-def _volume_row(book, volume, words, tracking, hooks=False):
+def volume_stage(book, volume):
+    """The rung of the opening's scale ladder this volume sits on (opening/5 §6).
+
+    The engine requires a volume's `stage` to be one of the declared ladder stages, rising
+    monotonically with the contract's volume order. A book opened before the ladder existed declares
+    none, and then the field stays empty — the same behaviour as every older protocol.
+    """
+    from novel_ledger import creation
+    opening = book.get('creation') or {}
+    choices = creation.selected(opening) if opening else {}
+    levels = _ladder_levels(choices)
+    if not levels:
+        return ''
+    volumes = book['contract']['volumes']
+    index = next((position for position, row in enumerate(volumes) if row['id'] == volume['id']), 0)
+    return levels[min(index, len(levels) - 1)].get('stage', '')
+
+
+def _volume_row(book, volume, words, tracking, hooks=False, stage=None):
     first, last = volume['first'], volume['end']
     count = last - first + 1
     nodes = [{'id': 'n' + str(chapter), 'kind': 'main',
@@ -345,6 +430,7 @@ def _volume_row(book, volume, words, tracking, hooks=False):
     threads = [{'id': 'line-' + volume['id'], 'kind': 'main', 'purpose': '核对退件来源并承担后果。',
                 'ending_condition': '来源公开且责任落实。', 'required': True}]
     row = {'id': volume['id'], 'purpose': VOLUME_PURPOSE,
+           'stage': volume_stage(book, volume) if stage is None else stage,
            'arc': '',
            'turns': [{'at': '卷中', 'turn': '旧凭据暴露出签字矛盾。'},
                      {'at': '卷尾', 'turn': '沈桐公开来源并接受处理。'}],
@@ -697,12 +783,78 @@ def _quote(prose):
 
 
 # --------------------------------------------------------------------------------------------------
-# The guided opening's world and contract (only used when a test drives the ten gates)
+# The guided opening's world and contract (only used when a test drives the gates)
 # --------------------------------------------------------------------------------------------------
 
+# The scope enum's grand end: from these scales on, a world model needs a `cosmology` section
+# (opening/5 §2/§5). Read from the engine when it declares the table, with the spec's frozen values as
+# the fallback so the fixture works while the implementation is still landing.
+_GRAND_SCOPES = ('一界', '星海', '诸天')
+
+
+def _choose_attr(module, name, fallback):
+    value = getattr(module, name, None)
+    return tuple(value) if value else tuple(fallback)
+
+
+def _world_tiers(choices):
+    return [row for row in ((choices.get('world') or {}).get('tiers') or [])
+            if isinstance(row, dict)]
+
+
+def _world_resource(choices):
+    value = (choices.get('world') or {}).get('resource')
+    return value if isinstance(value, dict) else {}
+
+
+def _ladder_levels(choices):
+    return [row for row in ((choices.get('ladder') or {}).get('ladder') or [])
+            if isinstance(row, dict) and row.get('stage')]
+
+
+def required_sections_for(tier, choices):
+    """The sections this world must fill, from the engine's own declaration when it has one.
+
+    opening/5 makes the requirement depend on what the gates declared (`declared_sections`), so the
+    fixture must ask the engine rather than re-derive it; a build that still has the one-argument
+    signature falls back to the tier floor, which is what every older protocol used.
+    """
+    from novel_ledger import world as world_module
+    try:
+        return tuple(world_module.required_sections(tier, choices))
+    except TypeError:
+        return tuple(world_module.required_sections(tier))
+
+
+def _generic_record(section, index, tiers):
+    """One placeholder record for a required section the choices did not populate."""
+    from novel_ledger import world as world_module
+    fields = world_module.SECTIONS[section]
+    name = {
+        'geography': '仓库后院', 'history': '旧交接制度', 'rules': '夜班退件必须登记负责人。',
+        'factions': '夜班班组', 'economy': '车费', 'society': '登记制度',
+        'everyday': '夜班交接', 'characters': '沈桐', 'mysteries': '退件来源',
+        'mechanisms': '有代价的机制', 'powers': '一阶登记员', 'cosmology': '仓库之界',
+    }.get(section, section + str(index))
+    row = {'id': '%s%d' % (section[:3], index)}
+    for field in fields:
+        row[field] = name if field in ('name', 'principle', 'practice', 'institution',
+                                       'resource', 'period', 'truth', 'layer') else name + '的' + field
+    row.setdefault('name', name)
+    row['links'] = []
+    return row
+
+
 def _opening_model(book):
-    """A minimal world model that satisfies `world.validate` for the choices already made."""
-    from novel_ledger import creation
+    """A world model that satisfies `world.validate` for the choices already made.
+
+    opening/5 binds the gates to the world: the declared tier ladder must exist verbatim in
+    `powers`, the hard currency must exist in `economy` with its allocator named, and every rung of
+    the scale ladder must have a same-named record in `geography`/`cosmology`/`factions`/`powers`.
+    The fixture therefore mirrors the choices into those sections instead of writing a generic world;
+    the section set it fills is what the engine says this tier and these choices require.
+    """
+    from novel_ledger import creation, world as world_module
     opening = book.get('creation') or {}
     choices = creation.selected(opening)
     premises = (choices.get('world') or {}).get('world_premise') or '一座仓库的夜班退件纠纷。'
@@ -710,6 +862,10 @@ def _opening_model(book):
     protagonist = choices.get('protagonist') or {}
     ident = protagonist.get('id') or 'shen'
     name = protagonist.get('name') or '沈桐'
+    tiers = _world_tiers(choices)
+    resource = _world_resource(choices)
+    levels = _ladder_levels(choices)
+    grand = _choose_attr(world_module, 'COSMOLOGY_SCOPES', _GRAND_SCOPES)
     model = {'selection_hash': opening.get('selection_hash') or '',
              'premise': premises,
              'story_capacity': '仓库、夜班与签字制度足以承载一次来源核对和一场责任追查。',
@@ -721,7 +877,7 @@ def _opening_model(book):
                              'limit': protagonist.get('limit') or '不牵连无关同事。',
                              'knowledge_boundary': '只知自己经手的货物。',
                              'links': []}],
-             'mysteries': [], 'mechanisms': []}
+             'mysteries': [], 'mechanisms': [], 'powers': [], 'cosmology': []}
     model['rules'] = [{'id': 'r1', 'principle': '夜班退件必须登记负责人。',
                        'scope': '本仓库夜班退件。', 'limits': '只约束已登记退件。',
                        'consequences': '违反者承担登记责任。', 'links': []}]
@@ -731,6 +887,41 @@ def _opening_model(book):
                                 'cost': mechanism.get('cost') or '每次使用都要付出代价。',
                                 'limits': '、'.join(mechanism.get('limits') or []) or '限一次。',
                                 'failure_condition': '代价无法支付时失效。', 'links': []}]
+    # The declared tier ladder, verbatim, as the powers section's records.
+    for index, tier in enumerate(tiers, 1):
+        model['powers'].append({'id': 'tier%d' % index,
+                                'name': tier.get('name', ''), 'condition': tier.get('condition', ''),
+                                'gain': tier.get('gain', ''), 'cost': tier.get('cost', ''),
+                                'limit': tier.get('limit', ''), 'links': []})
+    # The hard currency: an economy row whose resource is the declared name and whose distribution
+    # names the declared allocator (the engine checks that the allocator text appears on the record).
+    if resource:
+        allocator = resource.get('allocator') or '夜班主管'
+        model['economy'].append({'id': 'currency', 'resource': resource.get('name', ''),
+                                 'production': resource.get('source') or '夜班结余',
+                                 'distribution': '由' + allocator + '按班次登记后分配。',
+                                 'scarcity': '每班只放行固定份额。',
+                                 'conflict': '谁拿到分配权谁定责任。', 'links': []})
+    # Every rung of the scale ladder gets a same-named record; a rung at the grand scales lands in
+    # cosmology, which is also what makes that section required.
+    for index, level in enumerate(levels, 1):
+        stage = level.get('stage', '')
+        scope = level.get('scope') or ''
+        if scope in grand:
+            model['cosmology'].append({'id': 'layer%d' % index, 'name': stage,
+                                       'inhabitant': '在' + stage + '活动的势力与居民。',
+                                       'law': '进入' + stage + '后适用的规则。',
+                                       'entry': '沿' + stage + '的入口推进入场。', 'links': []})
+        else:
+            model['geography'].append(_place('stage%d' % index, stage,
+                                             environment=stage + '的空间与环境。'))
+    # Whatever the engine still requires gets one concrete placeholder record, so the fixture is
+    # accepted on every tier without pretending to be a full world.
+    tier_id = ((choices.get('scale') or {}).get('tier')) or None
+    for section in required_sections_for(tier_id, choices):
+        if section == 'mechanisms' or model.get(section):
+            continue
+        model[section] = [_generic_record(section, 1, tiers)]
     return model
 
 
@@ -784,6 +975,151 @@ def _opening_contract(book, model):
 # The receipt
 # --------------------------------------------------------------------------------------------------
 
+# Synthetic option texts for the opening gates. They must satisfy the engine's option contract as
+# well as the gate's value shape: two options whose drivers do not share a shape, two to three
+# concrete scenes of at least twelve characters, and no self-description of the creative method (the
+# option text is what the author reads, not a note about how it was generated).
+_OPTION_DRIVERS = ('从一张签错的封条入手，逼主管当场对质。',
+                   '先被调去守后院，再从交接单上找缺口。',
+                   '把退件箱直接寄给承运方，逼对方签字确认。')
+_OPTION_TRADEOFFS = ('相比另案，放弃更快的升职路线。',
+                     '相比另案，放弃稳定的夜班岗位。',
+                     '相比另案，放弃同事的信任。')
+_OPTION_SCENES = ('夜班仓库里，他把退件箱推到灯下，翻出封条上的签名。',
+                  '凌晨的登记台前，他逐页核对自己经手的那一栏。',
+                  '货站卸货口，他拦住要开走的车，要求当场核对凭据。')
+# Which leaf of the fixture value the second option changes, so the two options are different
+# directions rather than one idea written twice.
+_OPTION_ALT = {'genre': 'reader_promise', 'premise': 'novelty', 'origin': 'arrival', 'voice': 'voice',
+               'world': 'world_premise', 'ladder': 'scale.opening', 'edge': 'advantage',
+               'protagonist': 'identity', 'relationships': 'relationships',
+               'opposition': 'opposition', 'payoff': 'ending', 'title': 'title'}
+_LADDER_STAGE_NAMES = ('值班室', '货站', '分拨中心', '跨域承运网', '全国承运网', '界门',
+                       '界外走廊', '诸天渡口')
+
+
+def opening_gate_values(book):
+    """One valid value per opening gate for the protocol this book was opened under.
+
+    Tier-dependent gates (the world's tier ladder and the scale ladder, plus the theme anchor's
+    deadline) read the tier the structural gate already answered, so the generated values stay
+    inside the floors the engine declared in `contracts.DEFAULTS['world_ladder']`.
+    """
+    from novel_ledger import contracts, creation
+    opening = book.get('creation') or {}
+    choices = creation.selected(opening)
+    version = creation.opening_version(opening)
+    scale = choices.get('scale') or {}
+    tier = next((row for row in contracts.SCALE_TIERS if row['id'] == scale.get('tier')), None)
+    floors = contracts.DEFAULTS['world_ladder']
+    tier_count = floors['tier_min'].get(tier['id'], 3) if tier else 3
+    stage_count = floors['stage_min'].get(tier['id'], 3) if tier else 3
+    limit = floors['anchor_max_chapter'] if tier is None else min(floors['anchor_max_chapter'],
+                                                                 tier['chapter_window'][1])
+    scopes = contracts.WORLD_SCOPES
+    growths = contracts.WORLD_GROWTHS
+    tiers = [{'name': '%d阶登记员' % (index + 1),
+              'condition': '连续夜班满%d年且无差错' % (index + 1),
+              'gain': '可独立开箱核对第%d批退件' % (index + 1),
+              'cost': '每次核对耗掉%d夜精力' % (index + 1),
+              'limit': '只对本仓库第%d批退件有效' % (index + 1)}
+             for index in range(tier_count)]
+    levels = [{'stage': _LADDER_STAGE_NAMES[index], 'scope': scopes[index % len(scopes)],
+               'growth': growths[index % len(growths)],
+               'new_rule': '第%d级起适用的规则：过级要凭证' % (index + 1),
+               'cost': '第%d级的代价：欠下守门人的人情' % (index + 1)}
+              for index in range(stage_count)]
+    values = {
+        'genre': {'genre': '都市异能', 'reader_promise': '看他从仓库夜班一路把签字责任查到底。',
+                  'tone': '冷硬利落，偶尔留一点暖。'},
+        'premise': {'novelty': '这个世界的退件签字会改写责任归属，谁签谁背。',
+                    'first_cause': '上一轮签字制度崩过一次，才有了现在的登记规矩。',
+                    'stance': '利用', 'dark_side': '制度'},
+        'origin': {'family': '魂穿', 'arrival': '车祸后醒在这座仓库的夜班宿舍，带着上一世的核对习惯。',
+                   'cost': '原身的旧账跟着他，同事只当他忽然变了一个人。'},
+        'voice': {'pov': '第三人称限知，只跟沈桐的所见所知。', 'voice': '短句推进，对白带信息。',
+                  'style_traits': ['少解释多动作。', '章末留钩。']},
+        'world': {'world_premise': '一座仓库的夜班退件纠纷。',
+                  'mechanism': {'mode': 'none', 'principle': '只有普通规章与人情。',
+                                'cost': '行动承担现实责任。', 'limits': []},
+                  'red_lines': ['没有超自然能力。'], 'allow_special_mechanism': False,
+                  'tiers': tiers,
+                  'resource': {'name': '车费', 'source': '夜班结余',
+                               'allocator': '夜班主管按班次登记后发放'}},
+        'ladder': {'scale': {'opening': '开局只看得见仓库这片夜班作业区，读者跟着一间屋子往外看。',
+                             'terminal': '体系', 'unchanged': '上层机构与签字制度跨卷不变'},
+                   'ladder': levels},
+        'edge': {'advantage': '他能读出签字上被压过的第二层笔迹。',
+                 'origin': '仓库夜班十年练出来的手感。',
+                 'growth': '三层：认笔迹、认印章、认改过的日期。',
+                 'cost': '每次细看都要熬掉一夜的精力。',
+                 'ceiling': '能读出工具痕迹，读不出签字人的真实身份。'},
+        'protagonist': {'id': 'shen', 'name': '沈桐', 'identity': '夜班退件工，背着一笔自己的旧账。',
+                        'desire': '查清退件来源并洗掉自己的违规记录。', 'limit': '不牵连无关同事。'},
+        'relationships': {'relationships': ['同事互相依赖，却各自担心承担责任。',
+                                            '主管是他的旧师父，也是最想压住这件事的人。']},
+        'opposition': {'opposition': '第一卷对手是压签的主管，之后每卷抬一级：货站、承运商、写字楼里的签字链。',
+                       'story_engine': '核对退件来源，追查签字责任。'},
+        'payoff': {'plan': {'ways': ['核对签字打脸推责的人', '拿到被压的第二层笔迹', '把责任按证据落回原位'],
+                            'cadence': '三到五章一次小兑现，章末留一个待查的封条。',
+                            'hooks': '每卷中段翻出上一层签字链，卷尾落一次责任。'},
+                   'ending': '退件来源公开，工人承担违规开箱的后果，压签链条被拆开。',
+                   'theme': '责任怎样在人之间传递。',
+                   'anchor': {'deliverable': '公开退件来源并把责任按证据落回原位。',
+                              'deadline_chapter': str(min(6, limit))}},
+        'title': {'title': '夜班退件：我能读出第二层笔迹'},
+    }
+    narrowed = {}
+    for gate, value in values.items():
+        if gate not in creation.gate_ids(version):
+            continue
+        owned = set(creation.value_fields(gate, version))
+        narrowed[gate] = {key: copy.deepcopy(entry) for key, entry in value.items()
+                          if key in owned}
+    return narrowed
+
+
+def _vary_option(value, path):
+    """Change one leaf so the second option is a different direction, not a relabelled one."""
+    target = value
+    parts = path.split('.')
+    for part in parts[:-1]:
+        target = target[part]
+    leaf = parts[-1]
+    if isinstance(target[leaf], list):
+        target[leaf] = target[leaf] + ['另一种落法：旧师父既护他也压他。']
+    else:
+        target[leaf] += '（另一种落法）'
+
+
+def opening_options(work, book=None):
+    """A worker-shaped result for one `opening_options` dispatch: two valid options for this gate.
+
+    Every gate is answered by a cold worker except the structural one, so a driven test needs a
+    receipt for whichever gate comes next; the option shape is the engine's own contract (distinct
+    driver openings, two or three concrete scenes, no self-description of the creative method).
+    """
+    from novel_ledger import creation
+    gate = ((work.get('payload') or {}).get('gate') or {}).get('id')
+    values = opening_gate_values(book or {})
+    require(gate in values and gate not in creation.SYSTEM_GATES.get(
+        creation.opening_version((book or {}).get('creation') or {}), ()), 'opening_gate',
+        '没有这一门的夹具值。', {'gate': gate, 'known': sorted(values)})
+    first = values[gate]
+    second = copy.deepcopy(first)
+    _vary_option(second, _OPTION_ALT[gate])
+    options = []
+    for index, value in enumerate((first, second)):
+        options.append({'id': 'AB'[index], 'title': '方案' + 'AB'[index],
+                        'premise': '这一版具体怎么走：' + 'AB'[index] + '。',
+                        'pitch': '看一眼就想翻开的那句话' + 'AB'[index] + '。',
+                        'scene': [_OPTION_SCENES[index], _OPTION_SCENES[index + 1]],
+                        'driver': _OPTION_DRIVERS[index], 'tradeoff': _OPTION_TRADEOFFS[index],
+                        'fit_reason': '承接已选题材，把推进压在一件具体物件上' + 'AB'[index] + '。',
+                        'value': value})
+    return {'gate': gate, 'options': options}
+
+
 def response(app, task_id=None, session=None, claim=None):
     """A protocol-valid receipt for whatever task is pending (or `task_id`)."""
     task = app.repo.task(task_id) if task_id else app.repo.pending()
@@ -793,7 +1129,9 @@ def response(app, task_id=None, session=None, claim=None):
     book = app.repo.load()
     payload = work.get('payload') or {}
     extra = tuple(payload.get('also') or ())
-    if stage == 'volume_outline':
+    if stage == 'opening_options':
+        data = opening_options(work, book)
+    elif stage == 'volume_outline':
         data = volume_outline_fixture(app, work)
     elif stage == 'chapter_outline':
         data = chapter_outline_fixture(app, work)

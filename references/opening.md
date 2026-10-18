@@ -54,40 +54,63 @@ AI 起名高度趋同（潇洒姓×玄乎单字是重灾区，同一个玄乎字
 
 ## 门序与字段归属
 
-新项目门序由 `creation.GATES_V4` 定义（`opening/4` 在题材门之后插入**来历门**：`genre → origin → voice → scale → edge → protagonist → relationships → world → opposition → payoff → title`，共 11 门）；直接选择字段由 `contracts.CONTRACT_FIELDS.opening` 按版本声明，推导输入由 `creation.DERIVATION_INPUTS` 声明。**已有项目保留自己的门序**：`creation/3`（`GATES_V3` 十门）、`creation/2`（`GATES_V2`）与 `creation/1`（`GATES_V1`）继续按各自协议运行，不迁移、不按新门重读旧选择。下表供理解当前版本，实际交付以本任务简报列出的允许字段为准：
+新项目门序由 `creation.GATES_V5` 定义（`opening/5`：`genre → premise → origin → voice → scale → world → ladder → edge → protagonist → relationships → opposition → payoff → title`，共 **13 门**）；直接选择字段由 `contracts.CONTRACT_FIELDS.opening` 按版本声明，推导输入由 `creation.DERIVATION_INPUTS` 声明。**已有项目保留自己的门序**，按各自协议继续运行，不迁移、不按新门重读旧选择：
+
+| 开书协议 | 门数 | 门序要点 |
+|---|---:|---|
+| `creation/5`（当前，`opening/5`） | 13 | 题材 → **核心脑洞** → 来历 → 视角 → 体量（结构门）→ **世界结构** → **格局升格** → 优势 → 主角 → 关系 → 对抗 → 兑现 → 书名 |
+| `creation/4` | 11 | 在 `creation/3` 的题材门后插入来历门 |
+| `creation/3` | 10 | 男频长篇方向重设（`GATES_V3`） |
+| `creation/2` / `creation/1` | 10 / 8 | 各自 `GATES_V2` / `GATES_V1` |
+
+下表供理解当前版本，实际交付以本任务简报列出的允许字段为准：
 
 | # | 门 | 类型 | 作者要回答的一件事 | value |
 |---|---|---|---|---|
 | 1 | `genre` 题材、频道与读者承诺 | 创意门 | 卖什么、谁看、爽点承诺是什么、什么基调 | genre/reader_promise/tone |
-| 2 | `origin` 主角来历：魂穿、身穿、本土或其他 | 创意门 | 他从哪来、带来了什么、代价或麻烦是什么 | family/arrival/cost（约定字段 `protagonist_origin`） |
-| 3 | `voice` 叙述人称与语感 | 创意门 | 谁在讲、能看多远、读起来是什么质地 | pov/voice/style_traits |
-| 4 | `scale` 体量与分卷 | **结构门（引擎即时）** | 这本书多大、多少卷、每章多长 | tier/chapter_min/chapter_max/chapter_aim/volume_count/chapters/chapter_window（总字数区间 word_range 是派生结果：章数 × 每章区间，作者与 Worker 都不用填） |
-| 5 | `edge` 核心优势与成长线 | 创意门 | 他靠什么赢、怎么变强、代价与上限 | advantage/origin/growth/cost/ceiling（约定字段 `core_edge`） |
-| 6 | `protagonist` 主角身份、处境与底线 | 创意门 | 他从哪开始、要什么、底线在哪 | id/name/identity/desire/limit |
-| 7 | `relationships` 核心关系与情感线 | 创意门 | 助力与背叛风险在哪、感情线多重 | relationships（至少一条） |
-| 8 | `world` 世界前提、机制与禁区 | 创意门 | 世界怎么持续供料、有无特殊机制及其代价、绝不写什么 | world_premise、mechanism{mode,principle,cost,limits}、red_lines、allow_special_mechanism |
-| 9 | `opposition` 主要对抗与冲突梯度 | 创意门 | 第一卷谁挡着、怎么逐卷抬高、终局面对谁 | opposition/story_engine |
-| 10 | `payoff` 爽点兑现与终局 | 创意门 | 读者一路拿到什么、怎么兑现、最后兑现成什么 | 爽点方案（约定字段 `payoff_plan`，含 ways/cadence/hooks）、ending、theme |
-| 11 | `title` 书名 | 创意门 | 叫什么 | title |
+| 2 | `premise` 核心脑洞与第一推动力 | 创意门 | 世界比同类多了什么规则、第一推动力是什么、主角与体系什么关系、暗面从哪来 | novelty/first_cause/stance/dark_side（约定字段 `core_premise`） |
+| 3 | `origin` 主角来历：魂穿、身穿、本土或其他 | 创意门 | 他从哪来、带来了什么、代价或麻烦是什么 | family/arrival/cost（约定字段 `protagonist_origin`） |
+| 4 | `voice` 叙述人称与语感 | 创意门 | 谁在讲、能看多远、读起来是什么质地 | pov/voice/style_traits |
+| 5 | `scale` 体量与分卷 | **结构门（引擎即时）** | 这本书多大、多少卷、每章多长 | tier/chapter_min/chapter_max/chapter_aim/volume_count/chapters/chapter_window（总字数区间 word_range 是派生结果：章数 × 每章区间，作者与 Worker 都不用填） |
+| 6 | `world` 世界结构：位阶、硬通货、机制与禁区 | 创意门 | 读者看得见的位阶有几级、硬通货由谁分配、机制与禁区是什么 | world_premise、mechanism{mode,principle,cost,limits}、red_lines、allow_special_mechanism、tiers[{name,condition,gain,cost,limit}]（约定字段 `world_tiers`）、resource{name,source,allocator}（约定字段 `world_resource`） |
+| 7 | `ladder` 格局尺度与升格阶梯 | 创意门 | 第一章读者能看见多大、最后走到哪、跨卷不变的上层结构是什么、每一级靠什么升 | scale{opening,terminal,unchanged}（约定字段 `world_scale`）、ladder[{stage,scope,growth,new_rule,cost}]（约定字段 `world_ladder`） |
+| 8 | `edge` 核心优势与成长线 | 创意门 | 他靠什么赢、怎么变强、代价与上限 | advantage/origin/growth/cost/ceiling（约定字段 `core_edge`） |
+| 9 | `protagonist` 主角身份、处境与底线 | 创意门 | 他从哪开始、要什么、底线在哪 | id/name/identity/desire/limit |
+| 10 | `relationships` 核心关系与情感线 | 创意门 | 助力与背叛风险在哪、感情线多重 | relationships（至少一条） |
+| 11 | `opposition` 主要对抗与冲突梯度 | 创意门 | 第一卷谁挡着、怎么逐卷抬高、终局面对谁 | opposition/story_engine |
+| 12 | `payoff` 爽点兑现、主题锚点与终局 | 创意门 | 读者一路拿到什么、最后兑现成什么、第几章前必须兑现哪一句主题 | 爽点方案（约定字段 `payoff_plan`，含 ways/cadence/hooks）、ending、theme、anchor{deliverable,deadline_chapter}（约定字段 `promise_anchor`） |
+| 13 | `title` 书名 | 创意门 | 叫什么 | title |
 
-**来历门的位置与作用**：它在题材门之后、视角门之前——主角带着什么进场，是这一门唯一要决定的事，而它会被后面的优势门（优势从哪来）、主角门（开局处境与压力）与世界门（谁能识破、谁在追）读取。四个方向各自给一个方案：**魂穿**（带另一个人的记忆与知识来，麻烦在原主身份、旧账与知情者）、**身穿**（带自己的身体与随身之物来，麻烦在没有身份、来历看得见）、**本土**（生在世上，没有穿越红利，靠出身、资源与选择上位）、**其他**（重生/觉醒/召唤/借体/登陆/飞升一类，必须先说清机制与代价）。每个方案写清三件事：带来了什么；这个世界谁会起疑、谁知道；这份来历在开篇三章怎么变成压力或机会。
+**核心脑洞门（`premise`）**：紧跟题材门，因为它决定后面所有门读什么。四问各自成键：`novelty`（世界比同类多了什么规则）与 `first_cause`（第一推动力）各 ≥12 字符；`stance`（主角与规则体系的关系）∈ **顺从 / 利用 / 对抗**；`dark_side`（世界暗面来源）∈ **外神 / 天灾 / 系统 / 上层剥削 / 制度 / 人心**——枚举不接受同义词。四键都不得写"待补 / 暂定 / 略 / 同上"。板面另有**只提示不拦**的告警（`creation.premise_warnings`，挂到板面的 `premise_warnings`）：`novelty`+`first_cause` 命中 `contracts.SETTING_CLICHES`（序列 / 途径 / 克苏鲁 / 克系 / 系统 / 幕后黑手 / 第四天灾 / 诸天 / 无限流 / 模拟器 / 签到 / 存档重开）时给 `premise_public_setting`，提示"这条组合已被头部占位，novelty 必须写清你新增的规则或资源"。
 
-人称与视角在人物、世界与对抗之前定下来，所以 `voice` 排在题材门与来历门之后、其余各门之前：后续各门的 scene 都用该方案的人称写。题材门的画面发生在人称选择前，只作体验预览，不替作者锁定人称。世界规则约束后续对抗的加码方式，关系门同时提供助力和背叛风险，书名承接已选题材与核心优势。**世界门与优势门按网文设定生成口径出案**：至少一条读者看得见的等级台阶（带升级条件）、一种可记账的硬通货（带分配者）、一个有权分配它的组织、主角优势的供料链，并留好加层位置——世界设定要能被花掉，开篇三章的第一场冲突至少用上其中两件（口径与检查见 [创意工具箱](hatch.md#设定生成方法)）。
+**世界门与格局门（`world` / `ladder`）**：世界门从"一句话前提 + 机制"升级为结构化交付，格局门再把它抬到全书尺度。
 
-无预填、换组或回退时，十一门为 10 次创意方案生成（默认主干自执，不派工）与 11 次作者选择；结构门当次给板。已有要求跳过相应门，实际次数随作者操作变化，不作为固定用量承诺。
+- `world.tiers`：每条恰好 `name`/`condition`/`gain`/`cost`/`limit` 五键且皆非空文本，`name` 不重复；条数 ≥ `DEFAULTS['world_ladder']['tier_min'][tier]`（t0 为 2，t1/t2 为 3，t3–t5 为 4）。`world.resource`：恰好 `name`/`source`/`allocator` 三键且皆非空文本。
+- `ladder.scale.opening` ≥8 字符（第一章读者能看见的边界）、`scale.unchanged` ≥8 字符（**跨卷不变的上层结构**）、`scale.terminal` ∈ **局部 / 势力 / 体系 / 文明**。
+- `ladder.ladder[]`：每条恰好 `stage`/`scope`/`growth`/`new_rule`/`cost` 五键且皆非空文本，`stage` 不重复；条数 ≥ `DEFAULTS['world_ladder']['stage_min'][tier]`（t0/t1 为 2，t2 为 3，t3–t5 为 4）。
+- `scope` ∈ **局部 / 一城 / 一域 / 一界 / 星海 / 诸天**，并按这个顺序**单调不减**；`growth` ∈ **地盘 / 势力 / 规则 / 认知 / 文明**，条数 ≥3 时至少一条是 `规则`/`认知`/`文明`（防"只换地图"）。
+- `terminal` 要与层级表一致：`文明` → 存在 `growth=='文明'`；`体系` → 存在 `'规则'`；`势力` → 存在 `'势力'`；`局部` → 仅允许 `t0`/`t1`。
+- `stage` 要写成**世界里能落成一条记录的名字**（地点/位面/势力/位阶名），不要写"第一卷"这类编号——世界模型会按名字逐字核对（见 [三条逐字绑定](world.md#三条逐字绑定)）。
+- `payoff.anchor`：`deliverable` ≥12 字符，`deadline_chapter` 为纯数字字符串，`1 ≤ N ≤ min(DEFAULTS['world_ladder']['anchor_max_chapter'], 该档 chapter_window 上限)`（默认上限 30 章，约番茄十万字首秀）。
+
+**来历门的位置与作用**：它在题材门与脑洞门之后、视角门之前——主角带着什么进场，是这一门唯一要决定的事，而它会被后面的优势门（优势从哪来）、主角门（开局处境与压力）与世界门（谁能识破、谁在追）读取。四个方向各自给一个方案：**魂穿**（带另一个人的记忆与知识来，麻烦在原主身份、旧账与知情者）、**身穿**（带自己的身体与随身之物来，麻烦在没有身份、来历看得见）、**本土**（生在世上，没有穿越红利，靠出身、资源与选择上位）、**其他**（重生/觉醒/召唤/借体/登陆/飞升一类，必须先说清机制与代价）。每个方案写清三件事：带来了什么；这个世界谁会起疑、谁知道；这份来历在开篇三章怎么变成压力或机会。
+
+人称与视角在人物、世界与对抗之前定下来，所以 `voice` 排在题材门、脑洞门与来历门之后、其余各门之前：后续各门的 scene 都用该方案的人称写。题材门的画面发生在人称选择前，只作体验预览，不替作者锁定人称。世界结构门先于格局门（格局阶梯要踩在世界已有的位阶、地域与势力上），格局门先于优势门与对抗门（升格层级决定了对手怎么换图）。**世界门与格局门按网文设定生成口径出案**：至少一条读者看得见的等级台阶（带升级条件）、一种可记账的硬通货（带分配者）、一个有权分配它的组织、主角优势的供料链，并留好加层位置——世界设定要能被花掉，开篇三章的第一场冲突至少用上其中两件（口径与检查见 [创意工具箱](hatch.md#设定生成方法)）。
+
+无预填、换组或回退时，十三门为 12 次创意方案生成（默认主干自执，不派工）与 13 次作者选择；结构门当次给板。已有要求跳过相应门，实际次数随作者操作变化，不作为固定用量承诺。
 
 方案字段以当前 brief 和模板为准，构思方法见 [创意工具箱](hatch.md)。`voice` 与 `title` 这类单一决定门另有专门交付要求：叙述门的每个 scene 用该方案的人称展示实际效果，书名门给真正可用的候选名，不交占位符。
 
 ## 默认方向（起点/番茄男频长篇网文）
 
-十一门的默认方向是**起点/番茄男频长篇网文**，声明在 `contracts.OPENING_DIRECTION`（共用做法）与 `contracts.OPENING_DIRECTION_GATES`（每门要点），由 `briefs.opening_options` 与 `briefs.world_model` 逐门渲染进简报，所以冷启动的方案生成者不必猜市场口味：
+十三门的默认方向是**起点/番茄男频长篇网文**，声明在 `contracts.OPENING_DIRECTION`（共用做法）与 `contracts.OPENING_DIRECTION_GATES`（每门要点，必须正好覆盖这 13 个门 id），由 `briefs.opening_options` 与 `briefs.world_model` 逐门渲染进简报，所以冷启动的方案生成者不必猜市场口味：
 
 - 开篇三章内给压力与第一个可见收益；主角有可升级的稀缺优势或金手指，升级有条件与代价；每卷对手与舞台抬高一级；短线小兑现与长线悬念交替，章末留钩；冲突落到资源、名额、地位、复仇、守护、真相这类具体利益；题材走男频主流落点；语感短句推进、对白带信息；体量按长篇连载预期起步。
-- 每门还有一条要点：题材连承诺一起给（爽点是什么、看谁赢谁），来历决定开局手里有什么（魂穿带记忆与知识、身穿带随身之物与体质、本土扎根世界，其他写法先说清机制与代价），视角便于持续给爽点与信息差，世界机制持续供料，主角身份自带上升通道，关系同时给出助力与背叛风险，推进动力能反复加码，终局兑现开篇承诺的那场胜利，书名按男频搜索习惯点出看点。
+- 每门还有一条要点：题材连承诺一起给（爽点是什么、看谁赢谁），脑洞说清世界比同类多了什么规则与第一推动力（暗面从哪来、主角是顺从还是对抗），来历决定开局手里有什么（魂穿带记忆与知识、身穿带随身之物与体质、本土扎根世界，其他写法先说清机制与代价），视角便于持续给爽点与信息差，世界结构持续供料（位阶、硬通货、分配者），格局阶梯每级抬高一次舞台与规则，主角身份自带上升通道，关系同时给出助力与背叛风险，推进动力能反复加码，终局兑现开篇承诺的那场胜利，书名按男频搜索习惯点出看点。
 
 这是**默认而非硬要求**：作者原话或已选方向与它冲突时一律以作者为准，方案与核验都不因为"不合男频"判错；作者要的是别的方向时，简报里这句话和这条约束同时存在。要改这个默认，改 `contracts` 里那两张表即可，其余文档与简报随之变化。
 
-`init` 新建项目使用 `novel-ledger.creation/4` 十一门协议（男频长篇方向，含来历门），creation 状态保存所用门序版本；存储布局另使用 novel-ledger/3。协议版本与数据库版本各自负责自己的结构，不能通过修改版本号转换旧库。
+`init` 新建项目使用 `novel-ledger.creation/5` 十三门协议（男频长篇方向，含核心脑洞门与格局升格门），creation 状态保存所用门序版本；存储布局另使用 novel-ledger/3。协议版本与数据库版本各自负责自己的结构，不能通过修改版本号转换旧库。
 
 ## 结构门（体量与分卷）
 
@@ -124,8 +147,8 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 | 结构门 | 引擎即时返回档位板，主干展示。 | await_choice，无任务或 Worker；方案回执按 opening_system 拒绝。 |
 | 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 系统不代选；换组和返回保留记录。 |
 | 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务同时包含 world_model 与 opening_contract（payload.also），回执为世界字段加 contract；以任务 stages、payload.also 和模板为准。 |
-| 机械校验与激活 | 世界与约定**不再有独立核验阶段**：提交时由引擎校验字段、links 引用、选择一致性与约定对齐（含与所选世界的 world_rules 逐字一致），通过即在同一事务激活约定；失败按 `repair` 预算有界返修。 | 校验只证明字段、引用和声明一致，不证明世界承载或因果成立；判断留给卷纲与章纲的状态链，以及作者抽读。 |
-| 卷纲 | 约定生效后按 `advance` 派 `volume_outline`：默认 `scope=all`，一次交全部卷、每卷 2000–3000 汉字（目标 2500）；`scope=rolling` 时进入该卷前交该卷。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。 | 形状、校验与覆盖见 [叙事推进](narrative.md#卷纲)。 |
+| 机械校验与激活 | 世界与约定**不再有独立核验阶段**：提交时由引擎校验字段、links 引用、选择一致性与约定对齐（含与所选世界的 world_rules 逐字一致），以及门里声明的位阶/硬通货/格局阶梯在世界模型里的**三条逐字绑定**（见 [世界模型](world.md#三条逐字绑定)）；通过即在同一事务激活约定；失败按 `repair` 预算有界返修。 | 校验只证明字段、引用和声明一致，不证明世界承载或因果成立；判断留给卷纲与章纲的状态链，以及作者抽读。 |
+| 卷纲 | 约定生效后按 `advance` 派 `volume_outline`：默认 `scope=all`，一次交全部卷、每卷 2000–3000 汉字（目标 2500）；`scope=rolling` 时进入该卷前交该卷。v5 项目每卷还要给 `stage`：**逐字取已选格局阶梯里的一级，且按卷序只升不降**（字段与校验见 [协议](protocol.md) 与 [世界模型](world.md#三条逐字绑定)）。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。 | 形状、校验与覆盖见 [叙事推进](narrative.md#卷纲)。 |
 | 章纲 | 每卷进入前派一次 `chapter_outline`：该卷每章极简章纲（资源/位置/知情/时钟/人物/情节增量与 enter/exit），提交时按卷内状态链逐章模拟。 | 漂移字段与核算见 [叙事推进](narrative.md#章纲)。 |
 | 交付 | outline_ready 按实际卷纲覆盖交付；关闭卷纲时为 world_ready。 | world_view.html_path 指向统一 book.html，另交 world.json 的绝对路径；视图失败可 advance 重建。 |
 
@@ -135,7 +158,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 
 ## 操作与恢复
 
-已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"payoff":{"ending":"作者指定结局。","theme":"母题。"},"title":{"title":"书名"},"scale":{"tier":"t0"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t0`～`t5`，`t0` 为五万字级的微型档），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前 creation 协议；新项目的 `novel-ledger.creation/4` 使用上表十一门（`origin` 承担主角来历，`payoff` 承担终局与母题，`edge` 承担核心优势）。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
+已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"payoff":{"ending":"作者指定结局。","theme":"母题。"},"title":{"title":"书名"},"scale":{"tier":"t0"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t0`～`t5`，`t0` 为五万字级的微型档），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前 creation 协议；新项目的 `novel-ledger.creation/5` 使用上表十三门（`premise` 承担核心脑洞，`origin` 承担主角来历，`world` 承担位阶与硬通货，`ladder` 承担格局尺度与阶梯，`payoff` 承担终局、母题与主题锚点，`edge` 承担核心优势）。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
 
 ```bash
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" init
@@ -154,6 +177,6 @@ board 哈希由主控从展示响应恢复，用户不需知道。选择绑定�
 
 ## 约定
 
-默认 opening_contract 随 world_model 起草，读取闭合选择和同轮候选世界；候选世界与候选约定由引擎按同一套机械校验在提交时判定（字段、links 引用、与各门选择逐字一致），通过即原子激活，**没有独立核验阶段**。单独下发的 opening_contract 读取其冻结的已核验世界。逐门 value 的字段保留（主角门存为 protagonist_setup，关系门映射到 relationships，机制允许范围由世界门给出）。选定承诺、基调、视角、体量、世界前提、主角、关系、推进、终局、母题、书名和文风不得改变；卷职责、名称和初始化细节由系统推导，并在卷纲提交时与 `contract.volumes` 一一比对。对齐字段从同一字段声明派生，不通过合并整份 value 覆盖其他门。
+默认 opening_contract 随 world_model 起草，读取闭合选择和同轮候选世界；候选世界与候选约定由引擎按同一套机械校验在提交时判定（字段、links 引用、与各门选择逐字一致），通过即原子激活，**没有独立核验阶段**。单独下发的 opening_contract 读取其冻结的已核验世界。逐门 value 的字段保留（主角门存为 protagonist_setup，关系门映射到 relationships，机制允许范围由世界门给出）。选定承诺、基调、核心脑洞、主角来历、视角、体量、世界结构（位阶与硬通货）、格局尺度与升格阶梯、主角、关系、推进、终局、主题锚点、母题、书名和文风不得改变；卷职责、名称和初始化细节由系统推导，并在卷纲提交时与 `contract.volumes` 一一比对。对齐字段从同一字段声明派生，不通过合并整份 value 覆盖其他门。
 
 约定还须保留所选禁区（red_lines 是逐门所选禁区的超集），并在 entities 中保留所选主角，kind 为 person，id 与 name 与 protagonist_setup 一致，否则核验报 opening_alignment。result.template.json 由约定字段表派生，含全部对齐字段（含 title 与空 entities 骨架）；结构校验拒绝未知字段，因此模板不接受的字段不要提交。`tone`/`theme`/`pov` 自 opening/2 起由作者选定：模板里有这三个字段，逐门开书必须逐字保留；自备约定（`init --contract`）可以不带它们，不追溯要求补选。书名自 opening/2 起也由作者在最后一门选定，约定工人不再代拟。

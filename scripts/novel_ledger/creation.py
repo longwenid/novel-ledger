@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import copy
 from . import contracts
-from .contracts import (OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_TIERS, SCALE_WINDOW, alignment_for,
-                        digest, require, text)
+from .contracts import (DEFAULTS, OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_TIERS, SCALE_WINDOW,
+                        alignment_for, digest, require, text)
 
 GATES_V1 = (
     ('genre', '题材与读者体验'),
@@ -65,12 +65,33 @@ GATES_V4 = (
     ('payoff', '爽点兑现与终局'),
     ('title', '书名'),
 )
-GATE_SETS = {1: GATES_V1, 2: GATES_V2, 3: GATES_V3, 4: GATES_V4}
+# opening/5 is the setting redesign the 2024-2026 male-channel evidence asks for (see
+# validation/opening5-spec.md): the core idea becomes its own gate before anything that has to grow
+# out of it, the world gate delivers its ladder and hard currency as structured rows the world model
+# must keep verbatim, 格局 (how big the stage gets and what survives each escalation) becomes its own
+# gate, and the payoff gate anchors one promise to a chapter inside the window the platforms reward.
+# A project opened under an earlier version keeps its own gate set: creation.schema carries it.
+GATES_V5 = (
+    ('genre', '题材、频道与读者承诺'),
+    ('premise', '核心脑洞与第一推动力'),
+    ('origin', '主角来历：魂穿、身穿、本土或其他'),
+    ('voice', '叙述人称与语感'),
+    ('scale', '体量与分卷'),
+    ('world', '世界结构：位阶、硬通货、机制与禁区'),
+    ('ladder', '格局尺度与升格阶梯'),
+    ('edge', '核心优势与成长线'),
+    ('protagonist', '主角身份、处境与底线'),
+    ('relationships', '核心关系与情感线'),
+    ('opposition', '主要对抗与冲突梯度'),
+    ('payoff', '爽点兑现、主题锚点与终局'),
+    ('title', '书名'),
+)
+GATE_SETS = {1: GATES_V1, 2: GATES_V2, 3: GATES_V3, 4: GATES_V4, 5: GATES_V5}
 # No bare `GATES` alias on purpose: which gate set applies is a property of the project's creation
 # document, so every lookup goes through gates(state) instead of a module-level constant.
 # Gates the engine answers itself from a table it has already proved satisfiable. A worker must not
 # invent them, and no dispatch is spent on them.
-SYSTEM_GATES = {1: (), 2: ('scale',), 3: ('scale',), 4: ('scale',)}
+SYSTEM_GATES = {1: (), 2: ('scale',), 3: ('scale',), 4: ('scale',), 5: ('scale',)}
 # Inputs used by the world/scale derivation rules rather than copied into a contract.
 # Direct choices and the protagonist value shape come from CONTRACT_FIELDS.opening.
 DERIVATION_INPUTS = {'world': ('world_premise', 'mechanism', 'red_lines'),
@@ -242,7 +263,30 @@ VALUE_RULES = {
         'title': 'title 书名：男频搜索式可用名（点出题材与优势），不是占位符',
     },
 }
-# A gate whose delivery contract needs one more sentence than the value shape can carry.
+# opening/5 inherits every opening/4 rule verbatim and rewrites the four gates whose answer became
+# structured: the core idea, the world's ladder and hard currency, 格局, and the payoff anchor. The
+# floors the new checks read are the closed scale gate's tier, so the rules have to say so — a worker
+# that does not know how many rungs its size class needs would write a ladder the check refuses.
+VALUE_RULES[5] = {
+    **VALUE_RULES[4],
+    'premise': 'novelty 核心脑洞：这个世界比同类多出来的那一条规则/资源/分配方式（≥12字，写规则，不写外挂名字）；'
+               'first_cause 第一推动力：过去发生了哪件事、今天还在推什么（≥12字）；'
+               'stance 主角与这套规则体系的关系，只能填"顺从"/"利用"/"对抗"；'
+               'dark_side 世界恶意的来源，只能填"外神"/"天灾"/"系统"/"上层剥削"/"制度"/"人心"',
+    'world': 'world_premise 世界前提、mechanism={mode:none或bounded, principle, cost, limits:数组}、'
+             'tiers 位阶阶梯数组（每级 {name,condition,gain,cost,limit}，条数按已选档位下限）、'
+             'resource 硬通货 {name,source,allocator}、red_lines 禁区数组、'
+             'allow_special_mechanism 布尔（必须等于 mode=="bounded"）',
+    'ladder': 'scale={opening 第一章可见边界（≥8字）, terminal 终局等级（局部/势力/体系/文明）, '
+              'unchanged 跨卷不变的上层结构（≥8字，写清升格为什么不作废已写的卷）}；'
+              'ladder 层级数组（每条 {stage,scope,growth,new_rule,cost}，条数按已选档位下限）：'
+              'stage 是世界里能落成一条记录的名字（地点/位面/势力/位阶，不是"第一卷"）；'
+              'scope 取 局部/一城/一域/一界/星海/诸天 且只升不降；growth 取 地盘/势力/规则/认知/文明，'
+              '三级以上至少一级是规则/认知/文明；new_rule 这一级新增或改变的规则、cost 升上去要付的新代价',
+    'payoff': 'plan={ways 兑现方式数组, cadence 短线兑现密度与章末钩, hooks 卷内高潮位置}（约定字段 payoff_plan 存这份 plan）、'
+              'ending 终局兑现的那场胜利、theme 母题、'
+              'anchor={deliverable 第 N 章前必须兑现什么（≥12字）, deadline_chapter 最迟章号（纯数字，不超过档位上限定）}',
+}
 GATE_NOTES = {
     2: {
         'pov': '本门只决定一件事：谁在讲。每个方案的 scene 用该方案的人称写出来，让作者读到的不是解释，而是这个人称讲出来的样子；pitch 也一样。不要在本门讨论情节走向。',
@@ -284,6 +328,42 @@ GATE_NOTES = {
         'payoff': '本门只决定读者一路拿到什么以及最后兑现成什么：plan 里的兑现方式、短线密度与章末钩、卷内高潮位置，以及终局兑现开篇承诺的那场胜利与母题。不要写成章节大纲，也不要在这里改对抗梯度。',
         'title': '本门只决定书名。按男频搜索习惯给真正可用的候选名：关键词直接点出题材与核心优势或身份优势，一眼能看懂看点；不要给"待定""暂名一"这类占位符，不要意象化短名，也不要重新讨论故事内容。',
     },
+}
+# opening/5 keeps every opening/4 note verbatim where the gate still asks the same question, and
+# rewrites the four whose answer became structured. Copying rather than re-typing matters here: the
+# origin/voice/edge/protagonist/opposition/title notes were paid for with real runs.
+GATE_NOTES[5] = {
+    **GATE_NOTES[4],
+    'premise': '本门只决定世界的脑洞，不决定情节也不决定主角。四个方向各给一个方案，每个方案写清：'
+               '① novelty——这个世界比同类多出来的那一条规则/资源/分配方式（写规则，不写"系统""面板"这类名字）；'
+               '② first_cause——过去发生的哪件事造成了它，今天还在推什么；'
+               '③ stance——主角与这套规则的关系是顺从、利用还是对抗（对抗要写清他凭什么能对抗）；'
+               '④ dark_side——世界的恶意来自外部不可抗力（外神/天灾/系统）还是人心与制度（上层剥削/制度/人心）。'
+               '判定标准：这条规则能不能持续供料（资源从哪来、谁在争、等级怎么排）。'
+               '命中已被头部作品占位的公共设定组合会在板面上以 premise_warnings 提示，那是提示不是否决。'
+               '不要在本门写主角姓名、具体情节或章节安排。',
+    'world': '本门决定世界结构：前提、机制、禁区，以及读者看得见的两样硬货。'
+             '① tiers 位阶阶梯：按已选档位的下限给足条数，每级写 name（读者会念的名字）、condition（升级条件，'
+             '写世界里的门槛而不是"努力"）、gain（拿到什么）、cost（这一级要付的代价，不是数值罚款而是选择代价）、'
+             'limit（天花板在哪）；② resource 硬通货：name 名称、source 从哪来、allocator 谁在分配——'
+             '分配者必须是世界里的具体组织或制度，不写"官方"这类虚指。'
+             '另外保留：③ 主角优势的供料链（升级材料从哪来、谁在抢）；④ 加层位置（敌人、地图、资源与等级都能往上长）；'
+             '⑤ 开篇三章的第一场冲突里至少用上两件。门里给的 tiers 与 resource 会被世界模型逐字保留，'
+             '不要写成百科式的力量体系全表，也不要替后面的门决定格局与终局。',
+    'ladder': '本门只决定格局：多大、怎么变大、什么不变。'
+              '① scale.opening 写第一章读者能看见的边界（一条街/一座城/一个地下层），不要写"整个世界"；'
+              '② scale.terminal 选终局面对的等级（局部/势力/体系/文明），它决定读者预期这本书最终打多大；'
+              '③ scale.unchanged 写跨卷不变的上层结构——纪元、真相层、恒定矛盾或规则性对手，'
+              '它同时回答"升格为什么不让前面几卷作废"；④ ladder 层级表：stage 起一个世界里能落成记录的名字'
+              '（不要"第一卷"），scope 取空间尺度且只升不降，growth 写这一级变大的是什么，'
+              'new_rule 写这一级新增或改变的规则，cost 写升上去要付的新代价。'
+              '三级以上至少要有一级变大的是规则、认知或文明，否则就是换地图；终局等级必须与层级表对得上。'
+              '不要在本门写具体对手的名字，也不要改世界规则（上一门已定）。',
+    'payoff': '本门只决定读者一路拿到什么、最后兑现成什么，以及前期先验证哪一件事。'
+              'plan 里的兑现方式、短线密度与章末钩、卷内高潮位置；ending 写终局兑现开篇承诺的那场胜利；theme 写母题；'
+              'anchor 写主题锚点：deliverable 是"世界再大也必须先兑现的那件事"（≥12字），deadline_chapter 用纯数字'
+              '写最迟章号，且不得超过已选档位的上限——这个锚点是宏大设定的对价，读者要在前三十章内看到它兑现。'
+              '不要写成章节大纲，也不要在这里改对抗梯度。',
 }
 
 
@@ -389,8 +469,8 @@ def system_board(state):
 
 def validate_value(gate, value, version=OPENING_VERSION, choices=None):
     require(isinstance(value, dict), 'opening_option', '每个方案须有结构化 value。')
-    if version in (3, 4):
-        return _validate_value_modern(gate, value, version)
+    if version in (3, 4, 5):
+        return _validate_value_modern(gate, value, version, choices)
     if version == 2:
         return _validate_value_v2(gate, value)
     return _validate_value_v1(gate, value, choices or {})
@@ -483,18 +563,43 @@ def _validate_value_v2(gate, value):
         require(text(value.get('title')), 'opening_option', '书名方案需要可用的书名。')
 
 
-def _validate_value_modern(gate, value, version=3):
-    """opening/3 and /4: the same ownership rule, with the male-channel decisions as first-class gates.
+def _validate_value_modern(gate, value, version=3, choices=None):
+    """opening/3, /4 and /5: the same ownership rule, with the male-channel decisions as first-class gates.
 
-    /4 only inserts the origin gate; every other gate keeps the checks it had in /3, so the two
-    versions share one body parameterised by `version` rather than a copy that can drift.
+    /5 keeps every check /3 and /4 made and adds the structured setting gates (premise, world's
+    ladder and currency, 格局, the payoff anchor), so the three versions share one body parameterised
+    by `version` rather than copies that can drift. The new checks read the closed `scale` gate for
+    their floors: how many rungs a size class has to show is a property of that tier, not a constant.
     """
     allowed = value_fields(gate, version)
     unknown = sorted(set(value) - set(allowed))
     require(gate in gate_ids(version) and not unknown, 'opening_option', 'value 只能包含本门负责的字段。',
             {'gate': gate, 'unknown_fields': unknown, 'allowed_fields': list(allowed),
              'recover': '删除额外字段；修改此前决定须 back 返回对应门。'})
-    if gate == 'origin':
+    tier_id = ((choices or {}).get('scale') or {}).get('tier')
+    tier = next((row for row in SCALE_TIERS if row['id'] == tier_id), None)
+    floors = DEFAULTS['world_ladder']
+    if gate == 'premise':
+        keys = ('novelty', 'first_cause', 'stance', 'dark_side')
+        require(all(text(value.get(key)) for key in keys), 'opening_option',
+                '核心脑洞需要 novelty/first_cause/stance/dark_side 四项，逐项写清，不留空。',
+                {'missing': [key for key in keys if not text(value.get(key))], 'expect': list(keys)})
+        for key in ('novelty', 'first_cause'):
+            require(len(value[key].strip()) >= 12, 'opening_option',
+                    '脑洞的 %s 至少 12 字：一句话说不清新增了什么规则/资源，就还没有脑洞。' % key,
+                    {'field': key, 'got': value[key], 'recover': '写清这条规则替世界新增了资源、分配方式还是代价。'})
+        require(value['stance'] in contracts.STANCES, 'opening_option',
+                'stance 只能是顺从/利用/对抗之一：主角与这套规则体系的关系要能一眼看懂。',
+                {'valid': list(contracts.STANCES), 'got': value['stance']})
+        require(value['dark_side'] in contracts.DARK_SIDES, 'opening_option',
+                'dark_side 只能取已登记的世界恶意来源。',
+                {'valid': list(contracts.DARK_SIDES), 'got': value['dark_side'],
+                 'recover': '外部不可抗力取外神/天灾/系统，人心与制度取上层剥削/制度/人心。'})
+        placeholders = [word for word in ('待补', '暂定', '同上', '略')
+                        if any(word in value[key] for key in keys)]
+        require(not placeholders, 'opening_option', '脑洞四问不接受占位词，必须写实际内容。',
+                {'found': placeholders})
+    elif gate == 'origin':
         forms = ('魂穿', '身穿', '本土', '其他')
         require(value.get('family') in forms, 'opening_option', '来历方向须是这四个之一。',
                 {'valid_families': list(forms), 'got': value.get('family'),
@@ -541,6 +646,10 @@ def _validate_value_modern(gate, value, version=3):
                 'opening_option', '世界方案需要禁区数组（可以为空，但必须是数组）。')
         require(type(value.get('allow_special_mechanism')) is bool and value['allow_special_mechanism'] == (mechanism['mode'] == 'bounded'),
                 'opening_option', '机制允许范围必须与机制类型一致：有机制为真，无机制为假。')
+        if version >= 5:
+            _validate_world_structures(value, tier_id, floors)
+    elif gate == 'ladder':
+        _validate_ladder(value, tier_id, floors)
     elif gate == 'opposition':
         require(text(value.get('opposition')) and text(value.get('story_engine')),
                 'opening_option', '对抗方案需要对抗梯度与持续推进的动力。')
@@ -551,8 +660,120 @@ def _validate_value_modern(gate, value, version=3):
                 'opening_option', '爽点方案 plan.ways 至少列一条兑现方式（脱困、打脸、升级、资源、地位、基建、复仇、争霸等）。')
         _require_keys(plan, ('cadence', 'hooks'), '爽点方案 plan')
         _require_keys(value, ('ending', 'theme'), '爽点方案')
+        if version >= 5:
+            _validate_promise_anchor(value, tier, floors)
     elif gate == 'title':
         require(text(value.get('title')), 'opening_option', '书名方案需要可用的书名。')
+
+
+def _validate_world_structures(value, tier_id, floors):
+    """opening/5's world gate hands the world model two things it must keep verbatim.
+
+    The ladder and the hard currency used to be prose inside `world_premise`, and the world dispatch
+    re-invented them — the drift this redesign exists to remove. Structured here, the same rows are
+    checked again against the world model's records (`world.validate`), so the gate's decision is the
+    only version of it.
+    """
+    tiers = value.get('tiers')
+    require(isinstance(tiers, list) and tiers, 'opening_option',
+            '世界方案需要位阶阶梯 tiers：读者看得见的台阶，逐级给字段。')
+    minimum = floors['tier_min'].get(tier_id, 3)
+    require(len(tiers) >= minimum, 'opening_option',
+            '本档位至少要 %d 级位阶：台阶太少，读者看不到可预期的成长。' % minimum,
+            {'tier': tier_id, 'minimum': minimum, 'got': len(tiers)})
+    names = []
+    for row in tiers:
+        _require_keys(row if isinstance(row, dict) else {}, ('name', 'condition', 'gain', 'cost', 'limit'), '位阶条目')
+        require(isinstance(row, dict) and set(row) == {'name', 'condition', 'gain', 'cost', 'limit'},
+                'opening_option', '位阶条目只能有 name/condition/gain/cost/limit 五个字段。',
+                {'got': sorted(row) if isinstance(row, dict) else row})
+        names.append(row['name'])
+    require(len(names) == len(set(names)), 'opening_option', '位阶名称不能重复。', {'names': names})
+    resource = value.get('resource')
+    require(isinstance(resource, dict) and set(resource) == {'name', 'source', 'allocator'}
+            and all(text(resource.get(key)) for key in ('name', 'source', 'allocator')),
+            'opening_option', '硬通货需要 name 名称、source 来源、allocator 分配者三项，不能留空。',
+            {'got': resource})
+
+
+def _validate_ladder(value, tier_id, floors):
+    """opening/5's 格局 gate: a countable ladder that widens, changes something, and cannot void itself."""
+    scale = value.get('scale')
+    require(isinstance(scale, dict) and set(scale) == {'opening', 'terminal', 'unchanged'}
+            and all(text(scale.get(key)) for key in ('opening', 'terminal', 'unchanged')),
+            'opening_option', '格局门需要 scale={opening 可见边界, terminal 终局等级, unchanged 不变的上层结构}。',
+            {'got': scale})
+    require(scale['terminal'] in contracts.WORLD_TERMINALS, 'opening_option',
+            'terminal 只能取终局等级表里的值。',
+            {'valid': list(contracts.WORLD_TERMINALS), 'got': scale['terminal']})
+    for key in ('opening', 'unchanged'):
+        require(len(scale[key].strip()) >= 8, 'opening_option',
+                'scale.%s 至少 8 字：边界与「升格为什么不让前面的卷作废」都要写实。' % key,
+                {'field': key, 'got': scale[key]})
+    rows = value.get('ladder')
+    require(isinstance(rows, list) and rows, 'opening_option', '格局门需要 ladder 层级数组。')
+    minimum = floors['stage_min'].get(tier_id, 3)
+    require(len(rows) >= minimum, 'opening_option',
+            '本档位至少要 %d 级格局阶梯。' % minimum,
+            {'tier': tier_id, 'minimum': minimum, 'got': len(rows)})
+    seen, ranks, growths = set(), [], []
+    for row in rows:
+        _require_keys(row if isinstance(row, dict) else {},
+                      ('stage', 'scope', 'growth', 'new_rule', 'cost'), '格局层级')
+        require(isinstance(row, dict) and set(row) == {'stage', 'scope', 'growth', 'new_rule', 'cost'},
+                'opening_option', '层级条目只能有 stage/scope/growth/new_rule/cost 五个字段。',
+                {'got': sorted(row) if isinstance(row, dict) else row})
+        require(row['scope'] in contracts.WORLD_SCOPES, 'opening_option',
+                'scope 只能取空间尺度表里的值，且写成世界里的名字。',
+                {'valid': list(contracts.WORLD_SCOPES), 'got': row['scope'], 'row': row})
+        require(row['growth'] in contracts.WORLD_GROWTHS, 'opening_option',
+                'growth 只能取「这一级变大的是什么」表里的值。',
+                {'valid': list(contracts.WORLD_GROWTHS), 'got': row['growth'], 'row': row})
+        require(row['stage'] not in seen, 'opening_option', '格局层级名不能重复。', {'stage': row['stage']})
+        seen.add(row['stage'])
+        ranks.append(contracts.WORLD_SCOPES.index(row['scope']))
+        growths.append(row['growth'])
+    require(ranks == sorted(ranks), 'opening_option',
+            '格局阶梯的空间尺度只能只升不降：格局不能越写越小。',
+            {'scopes': [row['scope'] for row in rows], 'order': list(contracts.WORLD_SCOPES)})
+    if len(rows) >= 3:
+        require(any(growth in ('规则', '认知', '文明') for growth in growths), 'opening_option',
+                '三级以上的阶梯至少要有一级变大的是规则、认知或文明，否则只是换地图。',
+                {'growths': growths, 'recover': '把其中一级的 growth 改成规则/认知/文明，并写清这一级新增的规则与代价。'})
+    terminal = scale['terminal']
+    needs = {'文明': ('文明',), '体系': ('规则',), '势力': ('势力',)}.get(terminal)
+    if needs:
+        require(any(growth in needs for growth in growths), 'opening_option',
+                '终局等级与阶梯对不上：%s 需要在阶梯里有一级 growth 是 %s。' % (terminal, '/'.join(needs)),
+                {'terminal': terminal, 'needs': list(needs), 'growths': growths})
+    else:
+        require(tier_id in ('t0', 't1'), 'opening_option',
+                '终局只到「局部」只适用于微型/短篇档位；长篇的终局要写在世界之上的等级。',
+                {'tier': tier_id, 'terminal': terminal})
+
+
+def _validate_promise_anchor(value, tier, floors):
+    """The payoff anchor is the counterweight to a grand world: one promise with a chapter deadline.
+
+    Evidence (validation/research-brainstorm-trends.md §4) puts the reader-verifiable window around
+    the first 100k characters; the ladder's own floor is the tier's chapter window when that is
+    tighter. `deadline_chapter` is digits so the check is arithmetic, not interpretation.
+    """
+    anchor = value.get('anchor')
+    require(isinstance(anchor, dict) and set(anchor) == {'deliverable', 'deadline_chapter'}
+            and all(text(anchor.get(key)) for key in ('deliverable', 'deadline_chapter')),
+            'opening_option', '爽点门需要 anchor={deliverable 第 N 章前兑现什么, deadline_chapter 最迟章号}。',
+            {'got': anchor})
+    require(len(anchor['deliverable'].strip()) >= 12, 'opening_option',
+            'anchor.deliverable 至少 12 字：写清世界再大也必须先兑现的那件事。', {'got': anchor['deliverable']})
+    deadline = anchor['deadline_chapter'].strip()
+    require(deadline.isdigit() and int(deadline) > 0, 'opening_option',
+            'anchor.deadline_chapter 用纯数字写最迟章号（例：28），不写「第28章」这类文字。',
+            {'got': anchor['deadline_chapter']})
+    cap = floors['anchor_max_chapter'] if tier is None else min(floors['anchor_max_chapter'], tier['chapter_window'][1])
+    require(int(deadline) <= cap, 'opening_option',
+            '主题锚点最迟章不能超过 %d：宏大要靠前期可验证的兑现撑着。' % cap,
+            {'cap': cap, 'got': deadline, 'tier': (tier or {}).get('id')})
 
 
 def _require_keys(value, keys, label):
@@ -579,6 +800,28 @@ def name_warnings(gate, options):
             warnings.append({'option': option.get('id'), 'code': 'protagonist_name_cliche',
                              'message': '「%s」是 AI 起名重灾组合（潇洒姓×玄乎单字），读者一眼批量脸；'
                                         '按主角门的命名纪律换贴世界与阶层的名字。' % name})
+    return warnings
+
+
+def premise_warnings(gate, options):
+    """Advisory flags for a core idea built on a setting the current headliners already own.
+
+    Systems, sequences, 克系+民俗, 无限流 and 幕后黑手 are public settings: free to use, and therefore
+    worth nothing as a novelty claim (validation/research-brainstorm-trends.md §1.2). The warning
+    names the collision and asks what this world gained; it never blocks a choice — same severity as
+    the protagonist-name warning, for the same reason: the author decides.
+    """
+    warnings = []
+    if gate.get('id') != 'premise':
+        return warnings
+    for option in options:
+        value = option.get('value') if isinstance(option.get('value'), dict) else {}
+        text_value = ' '.join(str(value.get(key, '')) for key in ('novelty', 'first_cause'))
+        found = [word for word in contracts.SETTING_CLICHES if word in text_value]
+        if found:
+            warnings.append({'option': option.get('id'), 'code': 'premise_public_setting',
+                             'message': '「%s」是被头部作品占位的公共设定组合，读者会当熟面孔：novelty 必须写清'
+                                        '这个世界因此新增的规则/资源/分配方式，而不是这套设定本身。' % '、'.join(found)})
     return warnings
 
 
@@ -609,6 +852,9 @@ def offer(state, data, strict_bounds=True):
     warnings = name_warnings(gate, options)
     if warnings:
         board['name_warnings'] = warnings
+    setting = premise_warnings(gate, options)
+    if setting:
+        board['premise_warnings'] = setting
     board['hash'] = digest(board)
     state['board'] = board
     state['history'].append({'action': 'offer', 'board': board})
@@ -721,7 +967,7 @@ def validate_contract(contract, state, world):
             'opening_incomplete', '全部选择和世界核验完成后才能形成约定。')
     if version >= 2:
         for gate in ids:
-            validate_value(gate, choices[gate], version)
+            validate_value(gate, choices[gate], version, choices)
     expected, derived, authored = _v1_groups(choices) if version == 1 else _v2_groups(choices, version)
     expected = {key: value for key, value in expected.items() if key in alignment_for(version) and key not in derived}
     groups = (set(expected), derived, set(authored))

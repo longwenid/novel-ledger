@@ -16,9 +16,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import drift, planning, workflow
+from novel_ledger import creation, drift, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import Error, han_count
+from novel_ledger.contracts import DEFAULTS, Error, han_count
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import (chapter_rows, contract, drive, response, seeded_book,
                      volume_rows, world_fixture)
@@ -28,6 +28,32 @@ from support import (chapter_rows, contract, drive, response, seeded_book,
 def outlines(*chapters):
     """A chapter_outline receipt around the given rows."""
     return {'chapters': list(chapters)}
+
+
+def ladder_value(scopes=('一城', '一界')):
+    """An opening/5 格局 ladder value: the volume stages have to be these strings verbatim."""
+    names = ('青云城', '青云界', '诸天之外')
+    return {'scale': {'opening': '第一章只见一座仓库与一条夜班线。',
+                      'terminal': '势力',
+                      'unchanged': '跨卷不变的是登记制度本身。'},
+            'ladder': [{'stage': names[index], 'scope': scope,
+                        'growth': ('地盘', '规则', '文明')[index],
+                        'new_rule': '第%d级起适用的新规则：登记与通行。' % (index + 1),
+                        'cost': '升到第%d级要付出的代价：旧身份作废。' % (index + 1)}
+                       for index, scope in enumerate(scopes)]}
+
+
+def ladder_book(ladder=True):
+    """A seeded book whose opening declared a scale ladder (or a legacy book that declared none)."""
+    book = seeded_book(contract(chapters=4, volumes=2))
+    if ladder:
+        state = creation.begin('工程夹具：格局阶梯。', version=5)
+        state['selections'] = [{'gate': 'ladder',
+                                'option': {'id': 'A', 'title': '方案A', 'premise': '工程夹具。',
+                                           'value': ladder_value()},
+                                'source': '作者选它。'}]
+        book['creation'] = state
+    return book
 
 
 class VolumeOutlineTests(unittest.TestCase):
@@ -119,6 +145,69 @@ class VolumeOutlineTests(unittest.TestCase):
         book['volumes_outline'] = {'v1': self.submit(self.rows[:1], wanted=('v1',))['v1']}
         job = workflow.next_volume_outline(book, book['contract'])
         self.assertEqual(job.payload['volume_ids'], ['v2'])
+
+
+class VolumeStageTests(unittest.TestCase):
+    """opening/5 §6: the scale ladder lands on the volumes, verbatim and only climbing."""
+
+    def test_the_stage_field_is_part_of_the_volume_row_shape(self):
+        self.assertIn('stage', drift.VOLUME_FIELDS)
+        self.assertEqual(drift.VOLUME_FIELDS[drift.VOLUME_FIELDS.index('purpose') + 1], 'stage')
+        rows = volume_rows(seeded_book(contract(chapters=4, volumes=2)), ['v1', 'v2'])
+        for row in rows:
+            self.assertIn('stage', row)
+
+    def test_a_legacy_opening_leaves_every_stage_empty(self):
+        book = ladder_book(ladder=False)
+        rows = volume_rows(book, ['v1', 'v2'])
+        self.assertEqual([row['stage'] for row in rows], ['', ''])
+        report = drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+                                               {}, {}, ['v1', 'v2'], book['state'])
+        self.assertEqual([report['v1']['stage'], report['v2']['stage']], ['', ''])
+
+    def test_a_declared_ladder_fills_the_stages_in_contract_order(self):
+        book = ladder_book()
+        choices = creation.selected(book['creation'])
+        rungs = [row['stage'] for row in choices['ladder']['ladder']]
+        rows = volume_rows(book, ['v1', 'v2'])
+        self.assertEqual([row['stage'] for row in rows], rungs[:2])
+        report = drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+                                               choices, {}, ['v1', 'v2'], book['state'])
+        self.assertEqual([report['v1']['stage'], report['v2']['stage']], rungs[:2])
+
+    def test_a_fixture_stage_that_does_not_come_from_the_ladder_is_refused(self):
+        book = ladder_book()
+        choices = creation.selected(book['creation'])
+        rows = volume_rows(book, ['v1', 'v2'])
+        rows[1]['stage'] = '工程夹具自造的层级'
+        with self.assertRaises(Error) as caught:
+            drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+                                          choices, {}, ['v1', 'v2'], book['state'])
+        self.assertEqual(caught.exception.code, 'design_drift')
+        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+        self.assertIn('volume_stage', criteria, str(caught.exception.details)[:300])
+
+    def test_a_descending_pair_of_stages_is_refused(self):
+        book = ladder_book()
+        choices = creation.selected(book['creation'])
+        rungs = [row['stage'] for row in choices['ladder']['ladder']]
+        rows = volume_rows(book, ['v1', 'v2'])
+        rows[0]['stage'], rows[1]['stage'] = rungs[1], rungs[0]
+        with self.assertRaises(Error) as caught:
+            drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+                                          choices, {}, ['v1', 'v2'], book['state'])
+        self.assertEqual(caught.exception.code, 'design_drift')
+        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+        self.assertIn('volume_stage', criteria, str(caught.exception.details)[:300])
+
+    def test_the_tier_floor_for_a_ladder_is_declared_once_in_defaults(self):
+        """The floors live in `contracts.DEFAULTS` alone; this pins the frozen table."""
+        floors = DEFAULTS['world_ladder']
+        self.assertEqual(floors['tier_min'],
+                         {'t0': 2, 't1': 3, 't2': 3, 't3': 4, 't4': 4, 't5': 4})
+        self.assertEqual(floors['stage_min'],
+                         {'t0': 2, 't1': 2, 't2': 3, 't3': 4, 't4': 4, 't5': 4})
+        self.assertEqual(floors['anchor_max_chapter'], 30)
 
 
 class ChapterOutlineTests(unittest.TestCase):

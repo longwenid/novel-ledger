@@ -119,11 +119,15 @@ class DomainBoundaryTests(unittest.TestCase):
                  'characters': [character],
                  'mysteries': [{'id': 'm1', 'truth': '退件是主管放的', 'disclosure': '卷末', 'causal_role': '追查责任',
                                 'links': []}],
-                 'mechanisms': [], 'geography': [], 'history': [], 'factions': [], 'economy': []}
+                 'mechanisms': [], 'geography': [], 'history': [], 'factions': [], 'economy': [],
+                 'powers': [], 'cosmology': []}
         self.assertEqual(world.validate(model, choices, 'h', sections='t0'), model)
         self.assertEqual(world.required_sections('t0'),
                          ('rules', 'society', 'everyday', 'characters', 'mysteries', 'mechanisms'))
-        self.assertEqual(world.required_sections('t3'), world.ALL_SECTIONS)
+        # opening/5 added two grand sections to the table, but they are not part of every tier's
+        # floor: the floor is what the tier's own line walks through.
+        self.assertNotEqual(world.required_sections('t3'), world.ALL_SECTIONS)
+        self.assertEqual(len(world.required_sections('t3')), 10)
         for tier, names in world.TIER_SECTIONS.items():
             with self.subTest(tier=tier):
                 self.assertTrue(set(names) <= set(world.SECTIONS), '档位域表只能用已登记的领域')
@@ -256,7 +260,7 @@ class DomainBoundaryTests(unittest.TestCase):
         """
         from novel_ledger import creation
         from novel_ledger.contracts import OPENING_DIRECTION_GATES, OPENING_VERSION
-        for version in (1, 2, 3, OPENING_VERSION):
+        for version in (1, 2, 3, 4, OPENING_VERSION):
             with self.subTest(version=version):
                 self.assertIn(version, creation.VALUE_RULES, '每版必须有规则块')
                 gates = creation.gate_ids(version)
@@ -266,7 +270,9 @@ class DomainBoundaryTests(unittest.TestCase):
                 self.assertLessEqual(set(notes), set(gates), '门内说明只能属于本版已有的门')
                 for gate, note in notes.items():
                     self.assertTrue(note.strip())
-        for version in (3, OPENING_VERSION):
+        # The direction table was introduced with the male-channel redesign (v3) and grew with each
+        # later gate set; the two earliest protocols keep their own briefs instead.
+        for version in (3, 4, OPENING_VERSION):
             with self.subTest(direction_for=version):
                 self.assertLessEqual(set(creation.gate_ids(version)), set(OPENING_DIRECTION_GATES),
                                      '重设计后的每一门必须有方向口径')
@@ -276,13 +282,14 @@ class DomainBoundaryTests(unittest.TestCase):
     def test_the_current_gate_set_owns_every_alignment_field_it_claims(self):
         """The male-channel redesign is a gate set, so its ownership must close without a project.
 
-        opening/4 adds the origin gate to the ten of opening/3; both are checked, because a new gate
-        that forgot to own its contract field only fails much later, at contract alignment.
+        Each later protocol adds gates without renaming the older decisions; every version's
+        alignment fields therefore have to be owned by exactly one of its gates, or a new gate that
+        forgot its field only fails much later, at contract alignment.
         """
         from novel_ledger import creation
         from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS,
                                             OPENING_VERSION, alignment_for, opening_source)
-        for version, size in ((3, 10), (OPENING_VERSION, 11)):
+        for version, size in ((3, 10), (4, 11), (OPENING_VERSION, 13)):
             gates = [ident for ident, _title in creation.GATE_SETS[version]]
             with self.subTest(version=version):
                 self.assertEqual(len(gates), size)
@@ -296,13 +303,42 @@ class DomainBoundaryTests(unittest.TestCase):
                 derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}
                 self.assertEqual(owned | derived, set(alignment_for(version)))
                 self.assertEqual(owned & derived, set())
-        self.assertIn('protagonist_origin', {row['key'] for row in CONTRACT_FIELDS
-                                             if opening_source(row, OPENING_VERSION)})
-        # The new gate is reached right after the genre, and it owns the whole projected value.
-        self.assertEqual([ident for ident, _t in creation.GATE_SETS[OPENING_VERSION]][:2],
-                         ['genre', 'origin'])
-        self.assertEqual(creation.value_fields('origin', OPENING_VERSION),
-                         ('family', 'arrival', 'cost'))
+        sources = {row['key'] for row in CONTRACT_FIELDS
+                   if row.get('since', 1) <= OPENING_VERSION and opening_source(row, OPENING_VERSION)}
+        for key in ('protagonist_origin', 'core_premise', 'world_tiers', 'world_resource',
+                    'world_scale', 'world_ladder', 'promise_anchor'):
+            self.assertIn(key, sources)
+        # The v5 order: the core idea right after the genre, the origin behind it, and the world
+        # structure before the scale ladder that steps on it.
+        gates = [ident for ident, _title in creation.GATE_SETS[OPENING_VERSION]]
+        self.assertEqual(gates[:4], ['genre', 'premise', 'origin', 'voice'])
+        self.assertEqual(gates.index('world') + 1, gates.index('ladder'))
+        self.assertEqual(creation.value_fields('premise', OPENING_VERSION),
+                         ('novelty', 'first_cause', 'stance', 'dark_side'))
+
+    def test_the_world_section_table_separates_the_floor_from_the_grand_sections(self):
+        """opening/5 adds `powers`/`cosmology`; the per-tier floor does not become the whole table.
+
+        A tier's floor is the world its line walks through. The two structural sections are required
+        only when the opening declared something that lives there (`world.tiers`/`world.resource`/
+        a grand scale on the ladder), which is what keeps a legacy ten-section world valid.
+        """
+        from novel_ledger import world
+        self.assertEqual(len(world.ALL_SECTIONS), 12)
+        self.assertIn('powers', world.ALL_SECTIONS)
+        self.assertIn('cosmology', world.ALL_SECTIONS)
+        declared = {
+            'world': {'tiers': [{'name': '一阶登记员'}], 'resource': {'name': '车费'}},
+            'ladder': {'ladder': [{'stage': '全国承运网', 'scope': '一界'}]},
+        }
+        sections = world.required_sections('t3', declared)
+        self.assertIn('powers', sections, 'declared tiers must be mirrored in the world')
+        self.assertIn('cosmology', sections, 'a grand scale needs the cosmology section')
+        self.assertLessEqual(set(world.required_sections('t3')), set(sections))
+        # A legacy choice set declares neither, and its floor stays the ten original domains.
+        self.assertEqual(tuple(world.declared_sections({})), ())
+        self.assertEqual(set(world.required_sections('t3', {})),
+                         set(world.required_sections('t3')))
 
     def test_every_protocol_derives_its_alignment_fields_from_gates_it_has(self):
         """A gate set that re-sources or renames a gate must still resolve every alignment field.
@@ -317,7 +353,7 @@ class DomainBoundaryTests(unittest.TestCase):
         from novel_ledger import creation
         from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS, alignment_for,
                                             opening_source)
-        for version in (2, 3, 4):
+        for version in (2, 3, 4, 5):
             for row in CONTRACT_FIELDS:
                 if row.get('since', 1) > version or row['key'] in DERIVED_FIELDS \
                         or row['key'] not in alignment_for(version):

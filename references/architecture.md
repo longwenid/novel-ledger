@@ -89,12 +89,12 @@ flowchart TD
 
 | 文件 | 权威职责 |
 |---|---|
-| contracts | 协议标识、约定字段表与按版本过滤的对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
+| contracts | 协议标识、约定字段表与按版本过滤的对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、开书枚举与共享数值默认（`DEFAULTS`，含 `world_ladder` 的位阶/阶梯条数下限与主题锚点上限）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
 | ports | 持久化、只读查询、冻结编译、交付与宿主用例的能力契约；只依赖 contracts，不持有具体资源 |
-| creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；门序按协议版本冻结（creation/1 八门、creation/2 十门、creation/3 十门男频方向、creation/4 十一门含来历门），结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
-| world | 丰富世界记录、关联及选择一致性，保持设计与事实分离 |
+| creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；门序按协议版本冻结（creation/1 八门、creation/2 十门、creation/3 十门男频方向、creation/4 十一门含来历门、creation/5 十三门含核心脑洞门与格局升格门），结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
+| world | 丰富世界记录（12 领域 + 可选深字段）、关联、选择一致性，以及门里声明的位阶/硬通货/格局阶梯三条逐字绑定；保持设计与事实分离 |
 | planning | 作者约定、卷纲与章纲的落库校验、`new_entities` 与场景形状 |
-| drift | 卷纲/章纲的机械校验、卷内状态链模拟（`simulate`，含伏笔 `plant`/`payoff` 状态机）与执笔漂移核算（`reconcile`，产出 hook 事件）；依赖 contracts/entities/narrative/spatial/ledger/world/evidence |
+| drift | 卷纲/章纲的机械校验（含 v5 卷 `stage` 逐字取阶梯一级且只升不降）、卷内状态链模拟（`simulate`，含伏笔 `plant`/`payoff` 状态机）与执笔漂移核算（`reconcile`，产出 hook 事件）；依赖 contracts/entities/narrative/spatial/ledger/world/evidence |
 | style | 文风代理指标的纯核心：`metrics`（句长/段长/对白占比/本章重复度/视角标记）、`baseline`（首章锚点）与 `compare`（按契约 `style_window` 产出 style findings）；零派工，只依赖 contracts |
 | narrative | 线路、节点、知情、人物当前状态与动态篇幅的纯规则 |
 | entities / evidence / design_queries | 实体注册、原文证据与设计节点查询的纯共享规则，领域模块直接复用 |
@@ -130,7 +130,7 @@ flowchart TD
 
 - 约定形状只有一处定义：contracts.CONTRACT_FIELDS（字段、类型、占位、可选性、是否参与对齐、自哪个开书版本起生效）。交付模板（result_templates.template → contracts.contract_skeleton）、结构校验（planning.validate_contract → contracts.contract_errors）和对齐核验（creation.validate_contract）全部由它派生；新增约定字段只改这张表，对齐表与字段表不一致时报 alignment_schema。对齐字段按开书版本过滤（contracts.alignment_for）：后来新增的字段不会变成旧约定没做过、却被追溯追责的决定。
 - 逐门开书中，直接选择字段的唯一来源也声明在 CONTRACT_FIELDS.opening：`(门 ID, value 字段)`，主角整份选择通过字段的 shape 声明；`None` 表示该门的 value 整份投影到约定字段（来历门即 `opening: ('origin', None)` → `protagonist_origin`，shape 为 `family/arrival/cost`）。creation 从同一声明派生各门允许的输入字段和约定对齐值；世界与体量的推导输入单列在 creation.DERIVATION_INPUTS。方案提交、intake 和闭合选择的约定核验均拒绝跨门及未知字段，错误带 allowed_fields/unknown_fields。对齐值逐字段读取，禁止整份 value 合并覆盖其他门的决定。
-- 开书协议版本随项目文档冻结：creation 状态的 `schema`（novel-ledger.creation/N）决定门序、value 规则与对齐范围，方案篇幅上界由新任务的 opening-bounds/1 能力冻结，不重验旧已接受方案板。新项目使用 `creation/4`（`opening/4`，11 门含来历门）；旧项目保留自己的门序（creation/3 十门、creation/2、creation/1），不迁移、不按新门重读旧选择。存储 schema 为 novel-ledger/3，因项目真源改为不可变分区而升级；已有 v3 可继续使用，v2 及更早库明确拒绝，不提供隐式迁移。
+- 开书协议版本随项目文档冻结：creation 状态的 `schema`（novel-ledger.creation/N）决定门序、value 规则与对齐范围，方案篇幅上界由新任务的 opening-bounds/1 能力冻结，不重验旧已接受方案板。新项目使用 `creation/5`（`opening/5`，13 门含核心脑洞门与格局升格门）；旧项目保留自己的门序（creation/4 十一门、creation/3 十门、creation/2、creation/1），不迁移、不按新门重读旧选择。存储 schema 为 novel-ledger/3，因项目真源改为不可变分区而升级；已有 v3 可继续使用，v2 及更早库明确拒绝，不提供隐式迁移。
 - 作者可见的方案板有两类来源：创意门的板子由主干自执（未内联时派新空历史 Worker）生成；结构门（体量与分卷）的档位板由引擎按 contracts.SCALE_TIERS 当次给出，不派工、不等待，Worker 回执按 opening_system 拒绝。引擎只给经证明写得完的档位，选择仍由作者做出，程序不替作者决定。
 - 体量窗口只决定展示哪些档位；相邻档位与最大档由完整 SCALE_TIERS 决定。同一档位在不同窗口的说明与数值一致，窗口最后一项不因此成为最大档。
 
@@ -202,8 +202,8 @@ revision_blocked 表示超界方案已经原子保存，正式稿和章节额度
 
 | 工程目标 | 实现选择 |
 |---|---|
-| 开书与试章 | 零输入逐门选择（主干自执），完成后自动创建丰富世界并做机械校验；完整约定也可导入，首章定调保持 |
-| 分卷与逐章设计 | 世界模型直接产出各卷卷纲（每卷 2000–3000 汉字，目标 2500，默认一次交全部卷；含伏笔账 `hooks` 与文风走向 `style.trend`）；进入每卷前交该卷章纲（每章约 150 汉字 + 漂移字段 + enter/exit + 伏笔 `plant`/`payoff` + 文风 `style`） |
+| 开书与试章 | 零输入逐门选择（主干自执，13 门：脑洞门问"多了什么规则"，世界门交位阶与硬通货，格局门交升格阶梯），完成后自动创建 12 领域世界并做机械校验与三条逐字绑定；完整约定也可导入，首章定调保持 |
+| 分卷与逐章设计 | 世界模型直接产出各卷卷纲（每卷 2000–3000 汉字，目标 2500，默认一次交全部卷；v5 项目每卷 `stage` 逐字取格局阶梯一级且只升不降；含伏笔账 `hooks` 与文风走向 `style.trend`）；进入每卷前交该卷章纲（每章约 150 汉字 + 漂移字段 + enter/exit + 伏笔 `plant`/`payoff` + 文风 `style`） |
 | 事实连续性 | 章纲状态链在设计期逐章模拟资源前值与守恒、时钟、知情、位置、人物变化与伏笔埋收，卷末按 exit_state 闭合（容差 0）且 required 伏笔全 paid |
 | 执笔核账 | `drift_check` 逐项自比（覆盖、前态、去向、偏差理由与引文），引擎核算后按既有事实判据入账；伏笔事件由 `drift.reconcile` 产出 |
 | 文学质量 | **没有独立复核**：文风由规格（卷纲 `style.trend` + 章纲 `style`）加 `style` 代理指标按契约 `style_window` 比对首章锚点，只保证**文风一致、可核对**；越界进有界返修。**不证明"好看、人物可信"**——文学判断靠作者抽读或离线评测工具（`scripts/quality_eval.py`） |

@@ -896,8 +896,9 @@ class Application:
         # checked for choice alignment, so that check runs exactly when the record exists.
         opening = book.get('creation')
         if book.get('world') and opening:
-            world.validate(book['world'], creation.selected(opening), opening['selection_hash'],
-                           sections=world.required_sections(workflow.tier_id(opening)))
+            choices = creation.selected(opening)
+            world.validate(book['world'], choices, opening['selection_hash'],
+                           sections=world.required_sections(workflow.tier_id(opening), choices))
             creation.validate_contract(book['contract'], opening, book['world'])
         rows = self.repo.headers(book['branch'])
         state = self.replay(book['branch'], book['contract'])

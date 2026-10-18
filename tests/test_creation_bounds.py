@@ -6,10 +6,11 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from novel_ledger import creation, workflow
+from novel_ledger import creation, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error
 from novel_ledger.sqlite_store import SQLiteRepository
+from support import contract
 
 
 def options(version=2, pitch_length=40, scene_count=3):
@@ -75,6 +76,33 @@ class CreationBoundsTests(unittest.TestCase):
                 self.assertEqual(repo.pending()['input']['capabilities']['opening_bounds'], 'opening-bounds/1')
             finally:
                 repo.close()
+
+    def test_a_contract_written_before_opening_five_still_loads_without_its_rows(self):
+        """The v5 structural rows are optional: an old contract has neither and must not be refused."""
+        legacy = contract(v5_rows=False)
+        self.assertNotIn('world_tiers', legacy)
+        self.assertNotIn('world_ladder', legacy)
+        checked = planning.validate_contract(copy.deepcopy(legacy))
+        self.assertNotIn('world_tiers', checked)
+        book = workflow.new_book(legacy)
+        self.assertIn('volumes', book['contract'])
+        self.assertNotIn('world_tiers', book['contract'])
+        self.assertNotIn('world_ladder', book['contract'])
+
+    def test_the_v5_rows_accept_exactly_their_declared_fields(self):
+        """A hand-written v5 contract states one rung and one ladder level, key set exact."""
+        checked = planning.validate_contract(contract(v5_rows=True))
+        self.assertEqual(len(checked['world_tiers']), 1)
+        self.assertEqual(len(checked['world_ladder']), 1)
+        extra = contract(v5_rows=True)
+        extra['world_tiers'][0]['unexpected'] = '越界字段。'
+        self.assertCode('contract', planning.validate_contract, extra)
+        missing = contract(v5_rows=True)
+        del missing['world_ladder'][0]['cost']
+        self.assertCode('contract', planning.validate_contract, missing)
+        empty = contract(v5_rows=True)
+        empty['world_tiers'] = []
+        self.assertCode('contract', planning.validate_contract, empty)
 
 
 if __name__ == '__main__':

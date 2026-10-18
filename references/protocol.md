@@ -6,15 +6,21 @@
 
 本页说明字段与机械核验，创作判断见 [创作与自比](craft.md)。填写时以当前任务的 capabilities、brief 和 result.template.json 为准，不自行增删字段或预填结论；格式不确定用 `check`，处理入口见 [运行](runtime.md)。
 
-约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威，模板与结构校验均由它派生。未知字段按 contract 拒绝，标为 optional 的数组/映射缺省时补空值；有 default 的字段采用表中默认值，其余按表检查必填。当前存储为 novel-ledger/3，已有 v3 可继续使用，v2 及更早数据库拒绝打开。协议版本为 `2.0.0`：v2 与 v1 是流水线换代，v1 的冻结任务（回执带 `checks_version`/`obligations`、要求首读，或阶段名为 `plan`/`book_plan` 等已删阶段的）在本版本不能执行，需按新协议重新派工。开书协议版本为 `opening/4`（`novel-ledger.creation/4`，11 门，来历门排在题材门之后）；旧版本按各自门序继续运行（creation/3 十门、creation/2、creation/1），不迁移、不按新门重读旧选择。
+约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威，模板与结构校验均由它派生。未知字段按 contract 拒绝，标为 optional 的数组/映射缺省时补空值；有 default 的字段采用表中默认值，其余按表检查必填。当前存储为 novel-ledger/3，已有 v3 可继续使用，v2 及更早数据库拒绝打开。协议版本为 `2.0.0`：v2 与 v1 是流水线换代，v1 的冻结任务（回执带 `checks_version`/`obligations`、要求首读，或阶段名为 `plan`/`book_plan` 等已删阶段的）在本版本不能执行，需按新协议重新派工。开书协议版本为 `opening/5`（`novel-ledger.creation/5`，13 门，含核心脑洞门与格局升格门）；旧版本按各自门序继续运行（creation/4 十一门、creation/3 十门、creation/2、creation/1），不迁移、不按新门重读旧选择。
 
 ## 作者约定
 
-核心字段包括 title/reader_promise/ending/genre、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism，完整必填项按模板检查；`protagonist_origin`（主角来历）自 `opening/4` 起由来历门产生，见下表。`tone`/`theme`/`pov` 在 opening/2 中由作者选择并逐字保留；自备约定可缺省，不追溯要求补选。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。总字数区间 word_range 是派生字段：由章数与每章区间算出，作者与派工材料都不填，也不参与开书对齐。
+核心字段包括 title/reader_promise/ending/genre、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism，完整必填项按模板检查；`protagonist_origin`（主角来历）自 `opening/4` 起由来历门产生，`core_premise`/`world_scale`/`world_ladder`/`world_tiers`/`world_resource`/`promise_anchor` 六个自 `opening/5` 起由脑洞门/格局门/世界门/兑现门产生，见下表。`tone`/`theme`/`pov` 在 opening/2 中由作者选择并逐字保留；自备约定可缺省，不追溯要求补选。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。总字数区间 word_range 是派生字段：由章数与每章区间算出，作者与派工材料都不填，也不参与开书对齐。
 
 | 设置 | 默认与作用 |
 |---|---|
 | protagonist_origin | `{family, arrival, cost}`（**optional、since `opening/4`、参与对齐**）：`family` 只能是"魂穿"/"身穿"/"本土"/"其他"之一，`arrival` 是"怎么来、带来了什么"，`cost` 是代价或麻烦；来历门的 value 整份投影到本字段（`opening: ('origin', None)`）。旧约定没有这个字段，不追溯要求补选 |
+| core_premise | `{novelty, first_cause, stance, dark_side}`（**optional、since `opening/5`、参与对齐**）：核心脑洞四问。`novelty`/`first_cause` 各 ≥12 字符；`stance` ∈ 顺从/利用/对抗；`dark_side` ∈ 外神/天灾/系统/上层剥削/制度/人心。脑洞门的 value 整份投影（`opening: ('premise', None)`） |
+| world_scale | `{opening, terminal, unchanged}`（**optional、since `opening/5`、参与对齐**）：`opening` 第一章读者能看见的边界（≥8 字符）、`terminal` ∈ 局部/势力/体系/文明、`unchanged` 跨卷不变的上层结构（≥8 字符）；格局门的 `scale` 投影（`opening: ('ladder', 'scale')`） |
+| world_ladder | rows（`blank: False, count: 1`；**optional、since `opening/5`、参与对齐**）：行 `stage`/`scope`/`growth`/`new_rule`/`cost`。`scope` ∈ 局部/一城/一域/一界/星海/诸天 且按此序单调不减；`growth` ∈ 地盘/势力/规则/认知/文明，≥3 条时至少一条是规则/认知/文明；条数 ≥ `DEFAULTS['world_ladder']['stage_min'][tier]`（t0/t1 2、t2 3、t3–t5 4）。格局门的 `ladder` 投影（`opening: ('ladder', 'ladder')`） |
+| world_tiers | rows（`blank: False, count: 1`；**optional、since `opening/5`、参与对齐**）：行 `name`/`condition`/`gain`/`cost`/`limit`，`name` 不重复，条数 ≥ `DEFAULTS['world_ladder']['tier_min'][tier]`（t0 2、t1/t2 3、t3–t5 4）。世界门的 `tiers` 投影（`opening: ('world', 'tiers')`） |
+| world_resource | `{name, source, allocator}`（**optional、since `opening/5`、参与对齐**）：硬通货的名称、来源、分配者；世界门的 `resource` 投影（`opening: ('world', 'resource')`） |
+| promise_anchor | `{deliverable, deadline_chapter}`（**optional、since `opening/5`、参与对齐**）：主题锚点——`deliverable` ≥12 字符，`deadline_chapter` 为纯数字字符串且 `1 ≤ N ≤ min(DEFAULTS['world_ladder']['anchor_max_chapter'], 该档 chapter_window 上限)`（默认 30 章）。兑现门的 `anchor` 投影（`opening: ('payoff', 'anchor')`） |
 | volume_outline | `{scope:'all', words:2500, tolerance:500}`（**每卷 2000–3000 汉字**，目标 2500，下限 2000）；`words` 是**每卷**汉字数，scope 为 all（一次交全部卷）或 rolling（进卷前交该卷）；空对象 `{}` 关闭卷纲 |
 | chapter_outline | `{scope:'volume', words:150, tolerance:60}`；`words` 是**每章 synopsis** 汉字数，scope 为 volume 或 all |
 | style_window | `{sentence:0.35, paragraph:0.35, dialogue:0.40, repetition:0.12, person:1}`（optional、不参与对齐）：文风代理指标的容差；前四项是相对偏差上限（`repetition` 为本章内部高重复的绝对占比上限，实测校准：正常散文 0.04~0.09、复读文本 0.79~0.99），`person=1` 表示视角标记必须与声明一致；卷纲 `style.window` 与契约**逐项合并**（先用契约补默认，再按合法键与合法数值逐个覆盖），作者可改约调整。见 [文风](narrative.md#文风) |
@@ -22,7 +28,9 @@
 | editorial_features | true；编辑能力要求叙事跟踪，关闭跟踪时也须关闭编辑能力；人物、场景与补丁字段见 [编辑能力](editorial.md) |
 | planning_window / review_interval / review_chunk / review_fanout / verification | **保留字段，v2 基本不再读取**（legacy）：只用于加载旧项目与旧冻结任务的原字段解释，当前流程不按它们调度或分块。**例外**：`planning_window` 仍被修订边界读取（`editorial.revision_policy` 的 limit，缺省 `REVISION_LIMIT_DEFAULT`），决定自动回改的“最近 limit 章”窗口；其余四个字段没有读取点 |
 
-**跨层共享的数值默认单点声明在 `contracts.DEFAULTS`**，由 `contracts.policy_default(key)` 取用（取回的是副本，调用方改不动那唯一一份声明）：卷纲/章纲策略、`style_window` 与文风门槛（`style_floor_han`/`style_min_sentences`/`style_min_ngrams`/`style_ngram`/`style_short_sentence`/`style_same_order`）、返修额度（`repairs`/`redesigns`/`stall_after_rounds`）都在那里。契约字段默认值、`drift`/`style` 的校验、`context`/`workflow` 的兜底以及测试夹具全部读它——改一个默认值只需改一处；`tests/test_architecture.py::test_shared_numeric_defaults_are_declared_once` 会挡住重新硬编码。**这不改变分层纪律**：层边界仍由 `tests/architecture_table.py` 管，`DEFAULTS` 只管“同一个值只能有一个来源”。
+**开书枚举**（取值单点声明在 `contracts.py`，文档只列可用值）：`WORLD_SCOPES` 局部/一城/一域/一界/星海/诸天；`WORLD_GROWTHS` 地盘/势力/规则/认知/文明；`WORLD_TERMINALS` 局部/势力/体系/文明；`STANCES` 顺从/利用/对抗；`DARK_SIDES` 外神/天灾/系统/上层剥削/制度/人心；`COSMOLOGY_SCOPES` 一界/星海/诸天（格局到这些尺度时世界模型的 `cosmology` 必填）；`SETTING_CLICHES` 序列/途径/克苏鲁/克系/系统/幕后黑手/第四天灾/诸天/无限流/模拟器/签到/存档重开（脑洞门板面提示，**只提示不拦**）。这些枚举与 `DEFAULTS['world_ladder']`（`tier_min`/`stage_min`/`anchor_max_chapter`）一样，改一处即可。
+
+**跨层共享的数值默认单点声明在 `contracts.DEFAULTS`**，由 `contracts.policy_default(key)` 取用（取回的是副本，调用方改不动那唯一一份声明）：卷纲/章纲策略、`style_window` 与文风门槛（`style_floor_han`/`style_min_sentences`/`style_min_ngrams`/`style_ngram`/`style_short_sentence`/`style_same_order`）、开书位阶/阶梯条数下限与主题锚点上限（`world_ladder` 的 `tier_min`/`stage_min`/`anchor_max_chapter`）、返修额度（`repairs`/`redesigns`/`stall_after_rounds`）都在那里。契约字段默认值、`drift`/`style`/`world` 的校验、`context`/`workflow` 的兜底以及测试夹具全部读它——改一个默认值只需改一处；`tests/test_architecture.py::test_shared_numeric_defaults_are_declared_once` 会挡住重新硬编码。**这不改变分层纪律**：层边界仍由 `tests/architecture_table.py` 管，`DEFAULTS` 只管“同一个值只能有一个来源”。
 
 t0/t1 的 `PIPELINE_SHAPES` 只保留 `merge_chapter_outline=True`：本卷卷纲与章纲由一次派工、一份回执交付，两个契约各自校验同一份回执；其余档位分两次派工。
 
@@ -73,7 +81,7 @@ submit 的 accepted=true 表示回执已接受，不等于正文通过：字数�
 | opening_options | 当前门 gate 与 2～3 个 options，详见 [逐门开书](opening.md) |
 | opening_contract | 默认随世界起草；单独派发时读冻结的已采纳世界，模板由 CONTRACT_FIELDS 派生 |
 | world_model | 完整世界记录；默认同时起草 data.contract（payload.also），提交时由引擎机械校验引用、领域与选择一致性 |
-| volume_outline | `volumes[]`：id/purpose/arc/turns/climax/nodes/threads/**hooks**/style/resources/places/characters/knowledge/clock/exit_state；`hooks` 必填可为空（`{id,text,plant,payoff,required,continues}`），`style.trend` 必填；每卷 2000–3000 汉字（目标 2500），校验见 [叙事推进](narrative.md#卷纲) 与 [伏笔账](narrative.md#伏笔账卷纲声明章纲执行) |
+| volume_outline | `volumes[]`：id/purpose/**stage**/arc/turns/climax/nodes/threads/**hooks**/style/resources/places/characters/knowledge/clock/exit_state；`stage` 在 v5 项目必填，**逐字等于已选格局阶梯里的一级**，且按合同卷序**只升不降**（旧开书没有 ladder choice 时允许为空）；`hooks` 必填可为空（`{id,text,plant,payoff,required,continues}`），`style.trend` 必填；每卷 2000–3000 汉字（目标 2500），校验见 [叙事推进](narrative.md#卷纲)、[伏笔账](narrative.md#伏笔账卷纲声明章纲执行) 与 [三条逐字绑定](world.md#三条逐字绑定) |
 | chapter_outline | `volume` + `chapters[]`：synopsis、plot.beat、四个增量数组、enter/exit、disclosures、world_refs、new_entities、**hooks**、**style**；`hooks` 必填可为空（`{hook,action:plant/payoff,note}`，只有这两个动作），`style` 的 `pov`/`rhythm` 必填；每章约 150 汉字，状态链见 [叙事推进](narrative.md#章纲) |
 | write / repair / redesign | title/完整 prose/summary/drift_check/具体 self_check；工作台模式下可带顶层 `understanding` 增量（引擎在入库时更新作品理解）；提交时机械判定字数区间、跨章逐字重复（≥25 字）、对白引号体例、西文残留，核算漂移，并跑文风代理指标（见 [文风](narrative.md#文风)） |
 

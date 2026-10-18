@@ -169,12 +169,14 @@ def _brief(book, job):
         return briefs.opening_options(payload.get('gate', {}), payload.get('lens_brief', ''), previous,
                                       creation.opening_version(book['creation']))
     if job.stage == 'world_model':
-        # The brief and the validator read the same tier declaration, so the world the worker is
-        # asked for is the world the check accepts.
+        # The brief and the validator read the same declaration: the tier's base domains plus the
+        # domains this opening's own gates declared (a tier ladder needs `powers`, a grand scale
+        # needs `cosmology`), so the world the worker is asked for is the world the check accepts.
         tier = scale_tier(book)
+        choices = creation.selected(book['creation']) if book.get('creation') else {}
         return briefs.world_model(previous=previous, repair=bool(payload.get('repair')),
                                   scale=_scale_line(book),
-                                  sections=world.required_sections(tier['id'] if tier else None))
+                                  sections=world.required_sections(tier['id'] if tier else None, choices))
     text = briefs.stage(job.stage, {**payload, 'editorial': editorial.enabled(book)})
     if job.stage == 'volume_outline' and previous:
         # The volume outline is the first dispatch that has to build on every closed gate at once;
@@ -219,7 +221,76 @@ def _scale_line(book):
     return ''
 
 
-def _selection_line(option, budget=120):
+# The nested decision maps an opening/5 gate hands back: each is read by a later gate, so the line
+# expands the fields that decide direction rather than printing the object.
+SELECTION_MAPS = (
+    ('scale', ('opening', 'terminal', 'unchanged')),        # 格局尺度：开局边界/终局等级/跨卷不变
+    ('resource', ('name', 'allocator')),                    # 硬通货与分配者
+    ('anchor', ('deliverable', 'deadline_chapter')),        # 主题锚点与最迟兑现章
+)
+# The flat decisions a later gate must keep, in the order the line reads them. The short ones come
+# first because they decide everything downstream (which rule the world adds, how the protagonist
+# stands toward it, what the terminal rung is); the prose fields follow and take whatever budget is
+# left. The v1–v4 keys keep their relative order inside their group, so their lines render as before.
+SELECTION_SHORT = ('genre', 'novelty', 'first_cause', 'stance', 'dark_side', 'terminal', 'opening',
+                   'unchanged', 'advantage', 'identity', 'title', 'pov', 'tone')
+SELECTION_PROSE = ('reader_promise', 'opposition', 'world_premise', 'story_engine', 'ending',
+                   'voice', 'relationships', 'origin')
+
+
+def _selection_parts(value):
+    """The (label, text) pairs a later gate should see: decisions first, then maps, then prose.
+
+    A gate's value is a mix: flat decisions (novelty, stance, world_premise) and structured ones
+    (the ladder's scale map, the hard currency, the promise anchor). The short decisions read first
+    because they carry the direction a later gate has to keep; the structured maps are expanded per
+    field so a later gate sees "terminal=体系" instead of an object it would have to open; the long
+    prose fields fill whatever budget is left, because a truncated sentence costs less than a lost
+    decision.
+    """
+    seen = set()
+
+    def emit(label, entry, cap=24):
+        if label in seen or not isinstance(entry, str) or not entry.strip():
+            return None
+        seen.add(label)
+        text = entry.strip()
+        return label, text if len(text) <= cap else text[:cap] + '…'
+
+    def scalar(key):
+        entry = value.get(key)
+        # A relation gate's gist is its first relation: an empty list is never a chosen direction.
+        if isinstance(entry, list) and entry and isinstance(entry[0], str) and entry[0].strip():
+            entry = entry[0]
+        return emit(key, entry)
+
+    for key in SELECTION_SHORT:
+        pair = scalar(key)
+        if pair:
+            yield pair
+    for key, fields in SELECTION_MAPS:
+        entry = value.get(key)
+        if not isinstance(entry, dict):
+            continue
+        for field in fields:
+            pair = emit(field, entry.get(field))
+            if pair:
+                yield pair
+    ladder = value.get('ladder')
+    if isinstance(ladder, list):
+        stages = [row['stage'].strip() for row in ladder
+                  if isinstance(row, dict) and isinstance(row.get('stage'), str) and row['stage'].strip()]
+        if stages:
+            pair = emit('ladder', '→'.join(stages))
+            if pair:
+                yield pair
+    for key in SELECTION_PROSE:
+        pair = scalar(key)
+        if pair:
+            yield pair
+
+
+def _selection_line(option, budget=240):
     """One compact line per closed choice: the direction, not a copy of the record.
 
     A later gate builds on everything already decided, so the line has to carry the fields that
@@ -227,19 +298,14 @@ def _selection_line(option, budget=120):
     single field happened to come first. Reading only one field is how a protagonist gate produced
     three consistent-sounding people in another era: the chosen genre text never reached it. The
     exact values still live in opening_choices and are re-checked when the contract is formed, so
-    this line stays a summary under a fixed budget rather than a second copy of the record.
+    this line stays a summary under a fixed budget rather than a second copy of the record. The
+    budget and the per-field cap grew with opening/5: a brainstorm gate, a ladder and a hard currency
+    are three more decisions every later gate has to keep, and dropping a whole category costs a
+    round trip while truncating one sentence costs nothing.
     """
-    value = option.get('value', {})
     parts = []
-    for key in ('genre', 'reader_promise', 'advantage', 'identity', 'opposition', 'world_premise',
-                'story_engine', 'ending', 'pov', 'voice', 'tone', 'title', 'relationships'):
-        entry = value.get(key)
-        # A relation gate's gist is its first relation: an empty list is never a chosen direction.
-        if isinstance(entry, list) and entry and isinstance(entry[0], str) and entry[0].strip():
-            entry = entry[0]
-        if not isinstance(entry, str) or not entry.strip():
-            continue
-        parts.append(key + '=' + entry.strip())
+    for key, entry in _selection_parts(option.get('value', {})):
+        parts.append(key + '=' + entry)
         if sum(len(part) for part in parts) >= budget:
             break
     line = option.get('title', '')

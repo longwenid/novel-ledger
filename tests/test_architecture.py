@@ -133,11 +133,29 @@ class ArchitectureTests(unittest.TestCase):
         for key in ('volume_outline', 'chapter_outline', 'style_window'):
             with self.subTest(policy=key):
                 self.assertEqual(skeleton[key], contracts.policy_default(key))
+        # opening/5's structural floors: per-tier minimums for the world's tier ladder and the scale
+        # ladder, plus the theme-anchor deadline ceiling. The opening gates read that one declaration.
+        ladder = contracts.DEFAULTS['world_ladder']
+        self.assertEqual(set(ladder), {'tier_min', 'stage_min', 'anchor_max_chapter'})
+        tiers = {row['id'] for row in contracts.SCALE_TIERS}
+        self.assertEqual(set(ladder['tier_min']), tiers)
+        self.assertEqual(set(ladder['stage_min']), tiers)
+        for mapping in ('tier_min', 'stage_min'):
+            for tier_id in tiers:
+                with self.subTest(floor=mapping, tier=tier_id):
+                    self.assertIs(type(ladder[mapping][tier_id]), int)
+                    self.assertGreaterEqual(ladder[mapping][tier_id], 2)
+        self.assertIs(type(ladder['anchor_max_chapter']), int)
+        self.assertGreater(ladder['anchor_max_chapter'], 0)
+        creation_source = (ROOT / 'scripts' / 'novel_ledger' / 'creation.py').read_text(encoding='utf-8')
+        self.assertIn("DEFAULTS['world_ladder']", creation_source,
+                      '开书门必须读共享声明，不得自己写死位阶/阶梯下限')
         # The same numbers must not reappear as literals outside the declaration. Only the shared
         # ones are listed: a module-local threshold (a lint window, a time marker set) is that
         # module's business and stays where it is.
         literals = ("'words': 2500", '"words": 2500', "'tolerance': 500", "'repetition': 0.12",
-                    '{"scope": "all"', "'scope': 'all', 'words'")
+                    '{"scope": "all"', "'scope': 'all', 'words'",
+                    "'anchor_max_chapter': 30", "'tier_min': {'t0'", "'stage_min': {'t0'")
         for name, path in self.sources.items():
             if name == 'contracts':
                 continue

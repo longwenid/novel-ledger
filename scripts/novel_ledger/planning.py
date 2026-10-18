@@ -155,8 +155,18 @@ def validate_contract(raw):
         # container is a shape the validator has to see; an empty string is a decision nobody made,
         # so an optional text field stays absent rather than being written in as blank.
         for row in CONTRACT_FIELDS:
-            if row['key'] not in contract and row['default'] not in ('', None):
-                contract[row['key']] = copy.deepcopy(row['default'])
+            if row['key'] in contract:
+                continue
+            default = row['default']
+            if default in ('', None):
+                continue
+            if default == [] and row.get('blank') is False and row.get('count', 1) > 0:
+                # A field that must carry at least `count` rows cannot be satisfied by injecting an
+                # empty list: that writes in a decision nobody made and then rejects its own default
+                # on the very next line. An optional field simply stays absent; a required one is
+                # reported as a missing field, which is the truth about the receipt.
+                continue
+            contract[row['key']] = copy.deepcopy(default)
     complaints = contract_errors(contract)
     require(not complaints, 'contract', '约定结构不成立：' + '；'.join(complaints[:6]))
     contract.setdefault('chapter_aim', min(contract['chapter_max'], max(contract['chapter_min'], 3500)))

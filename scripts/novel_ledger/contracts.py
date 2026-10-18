@@ -17,7 +17,7 @@ SCHEMA = 'novel-ledger/3'
 # database schema: a new gate set only changes a JSON document inside the book record, so raising the
 # storage version would lock every existing project out for no benefit. A project whose creation state
 # is version 1 keeps the gate set it was opened with.
-OPENING_VERSION = 4
+OPENING_VERSION = 5
 TASK = 'novel-ledger.task/1'
 RESULT = 'novel-ledger.result/1'
 # The dispatch's own copy of who it is: data for cross-checking, never a permission.
@@ -65,6 +65,16 @@ DEFAULTS = {
     'repairs': 2,
     'redesigns': 1,
     'stall_after_rounds': 2,
+    # opening/5's two new gates are the ones a web serial lives on, so their floors are numbers, not
+    # prose: how many rungs the reader-visible ladder must show at each size class, how many stages
+    # the 格局 ladder must walk, and how late the theme anchor may land. `anchor_max_chapter` is the
+    # reader-verifiable window the platforms actually reward (~100k characters at a 3.5k chapter
+    # target); a small tier's own chapter window is tighter, so the check takes the smaller of the two.
+    'world_ladder': {
+        'tier_min': {'t0': 2, 't1': 3, 't2': 3, 't3': 4, 't4': 4, 't5': 4},
+        'stage_min': {'t0': 2, 't1': 2, 't2': 3, 't3': 4, 't4': 4, 't5': 4},
+        'anchor_max_chapter': 30,
+    },
 }
 
 
@@ -72,6 +82,34 @@ def policy_default(key):
     """A policy's default, copied: callers must not be able to mutate the one declaration."""
     value = DEFAULTS[key]
     return copy.deepcopy(value) if isinstance(value, (dict, list)) else value
+
+
+# --------------------------------------------------------------------------------------------------
+# opening/5's setting vocabulary, declared once for the gates, the world model and the checks.
+#
+# The 2024-2026 male-channel research (validation/opening5-spec.md §2) says the genre's live
+# decisions are a world rule that keeps feeding the story, a ladder the reader can count, and an
+# escalation that changes the rules instead of the map. Enumerating the answers is what makes them
+# checkable at the gate instead of re-invented three dispatches later.
+#
+#   WORLD_SCOPES     the space a 格局 stage is fought over, in the order it may widen
+#   WORLD_GROWTHS    what actually gets bigger at that stage — a map swap alone is the failure mode
+#   WORLD_TERMINALS  the grade the ending must face; it has to match the ladder it was promised with
+#   STANCES          the protagonist's relation to the rule system (顺从/利用/对抗 — the 博弈型 turn)
+#   DARK_SIDES       where the world's malice comes from: an outside force, or people and institutions
+WORLD_SCOPES = ('局部', '一城', '一域', '一界', '星海', '诸天')
+WORLD_GROWTHS = ('地盘', '势力', '规则', '认知', '文明')
+WORLD_TERMINALS = ('局部', '势力', '体系', '文明')
+STANCES = ('顺从', '利用', '对抗')
+DARK_SIDES = ('外神', '天灾', '系统', '上层剥削', '制度', '人心')
+# A ladder that reaches these scopes ranges beyond one map, so the world model has to carry a
+# 空间与位面 domain for it. Told to the world dispatch and read by the same check.
+COSMOLOGY_SCOPES = ('一界', '星海', '诸天')
+# Combinations the current headliners already own: the public settings a new book can transplant
+# for free, and therefore the ones a proposal has to prove it adds a rule to. Advisory only — the
+# board shows the warning, the author keeps the choice (same severity as the name-cliche warning).
+SETTING_CLICHES = ('序列', '途径', '克苏鲁', '克系', '系统', '幕后黑手', '第四天灾',
+                   '诸天', '无限流', '模拟器', '签到', '存档重开')
 
 
 # Frozen task capabilities: which version of a protocol a dispatch was planned under. A consumer reads
@@ -218,6 +256,25 @@ LENSES = (
     ('长线续航', '设定必须撑住长篇：敌人、地图、资源与等级都留了继续加层的位置，不靠临时改设定'
                  '续命；三十章就把牌打光不算。',
      '写出第二卷与终局各新增什么层级，并说明它与你现在写的规则同源。'),
+    # The opening/5 methods. The first twelve make a setting spendable; these five are what the
+    # 2024-2026 evidence says a setting needs to still be there in volume six — a source for the
+    # world's malice, an epoch above the current map, a rule the protagonist can play against, a
+    # growth line that is not a number, and one visible carrier per backstage truth.
+    ('世界暗面', '先定世界的恶意从哪来：外部不可名状（外神/天灾/系统），还是上层对人的剥削与制度失灵。'
+                 '暗面必须持续供料——谁在收割、谁在承担、代价落到谁头上；换地图不换这条矛盾。',
+     '写清恶意的来源、它今天正在拿走什么、主角第一次被它拿走的东西，以及至少两个也在承担它的人。'),
+    ('纪元断层', '在世界上面压一层读者一时看不见的时间结构：上一个纪元留下了什么（遗迹、旧神、'
+                 '遗留规则、还在运转的机构），主角每上一级就更靠近它；这一层不随地图更换而作废。',
+     '写出上个纪元的名字与它留下的三样东西、现在谁在用它、以及主角在第几卷会碰到它。'),
+    ('规则博弈', '把规则当对手而不是背景：主角对体系是顺从、利用还是对抗，至少一条读者看得见的规则'
+                 '会被他利用或改写，改写的代价与反噬写清；规则不能被主角单方面宣布无效。',
+     '写出被博弈的那条规则、主角的立场（顺从/利用/对抗）、第一次利用或改写的场合，以及反噬落在谁身上。'),
+    ('非数值成长', '成长不只靠数值：认知迭代、心性、关系、真相掌握各给一条能兑现的线，让读者在'
+                   '等级之外也能感到他变了；只更新面板不算成长。',
+     '写出等级之外的两条成长线、各自第一次兑现的场合，以及它如何改变他下一步的选择。'),
+    ('表层锚点', '每条底层设定都要绑定一个开篇就能看见的载体（一件物、一个场景、一次冲突），'
+                 '底层概设可以后揭，表层必须先叫座；只写在设定文档里等于没有。',
+     '为三条底层设定各写一个载体，并说明它出现在开篇三章的哪一幕、由谁看见。'),
 )
 # Volume-level turn methods: what makes a volume mid-point change direction instead of
 # stacking everything on the finale. Used when planning the current volume.
@@ -254,7 +311,7 @@ SCALE_TIERS = (
      'chapter_max': 6000, 'volume_count': 10, 'chapters': 600, 'chapter_window': [489, 666],
      'note': '群像规模的多线交织、反复的势力更替与长期伏笔回收；对节奏控制要求最高'},
 )
-# The default direction of the ten opening gates: male-channel long-form web fiction as it is
+# The default direction of the opening gates: male-channel long-form web fiction as it is
 # serialised on 起点/番茄. It says how a cold option writer should shape a proposal, never what the
 # author is allowed to choose — the author's own words, or an option already chosen, always win over
 # this default, and a gate that conflicts with it is not a protocol error.
@@ -267,12 +324,24 @@ OPENING_DIRECTION = (
     '题材走男频主流落点：玄幻修真、都市异能或职场逆袭、历史权谋、科幻末世、悬疑探案及其混搭。',
     '语感偏连载网文：短句推进、对白带信息、解释服从场景；不用纯文学式的氛围铺陈与心理长段。',
     '体量按长篇连载预期起步，默认窗口落在标准到超长之间，需要短篇或微型时换组向下取。',
+    # opening/5: a bigger idea is not a louder one. These three say what "bigger" has to mean
+    # mechanically — the world keeps feeding the edge, escalation changes the rules, and the
+    # backstage stays backstage until a visible carrier can introduce it.
+    '脑洞要能供料：主角的优势、势力为什么争、等级怎么排都由那条新规则长出来；只给一个外挂名字不算。',
+    '格局从局部起步但必须可升格：每升一级换的是规则与收获类型，不只是地名；升格不能让上一卷的势力与地点作废。',
+    '设定分表层与底层：底层概设（纪元、真相、力量阶梯）可以后揭，但开篇三章必须至少用上两件看得见的东西。',
 )
 # Per-gate emphasis. Every gate of the current gate set declares one, so the gate set cannot be
 # redesigned without saying what the default direction means for each gate (a guard test derives
 # that requirement from the gate table itself).
 OPENING_DIRECTION_GATES = {
     'genre': '男频题材要连承诺一起给：爽点是什么、读者看谁赢谁、他在这个故事里想要什么。',
+    # opening/5: the one novelty question, asked before anything that has to grow out of it. A
+    # public setting (system, sequence, 克系+民俗, 无限流) is free to use and therefore worth
+    # nothing on its own; what the author is buying here is the rule the world gained.
+    'premise': '核心脑洞要写成一条世界规则，而不是一个外挂名字：它替这个世界新增了什么资源、什么分配方式、'
+               '什么代价；第一推动力是过去发生的哪件事、今天还在推什么；主角对这套规则是顺从、利用还是对抗；'
+               '世界的恶意是外部不可抗力还是人心与制度。四项都要能落到具体冲突上，不写气氛与设定百科。',
     # opening/4: 魂穿/身穿/本土 is the first thing a male-channel reader infers from the premise, and
     # it decides what the protagonist brings before anything else is chosen — so it is its own gate,
     # right after the genre gate, and every later gate (edge, protagonist, world) reads it.
@@ -285,12 +354,22 @@ OPENING_DIRECTION_GATES = {
             '世界里要有供料链（升级材料从哪来、谁在抢），不是一次性外挂。',
     'protagonist': '主角处境要自带压力与上升通道，欲望具体可量化，底线会在关键选择上真的挡住他。',
     'relationships': '关系要同时给出助力和背叛风险（兄弟、师徒、对手绑定、家族），感情线定分量与处理方式，不是围着主角转的配角团。',
-    'world': '世界设定要能被花掉：至少一条读者看得见的等级或台阶（附升级条件）、一种可记账的稀缺资源'
-             '（附分配者）、一个有权分配它的组织；主角的优势必须在开篇三章的第一场冲突里用上，'
-             '并被规则承认（谁认它、谁抢它）。同时留好加层位置：敌人、地图、资源与等级都要能继续往上长。'
-             '规则清楚、边界可验证，不做纯氛围设定。',
+    'world': '世界设定要能被花掉：位阶阶梯给成结构化条目（每级名字、升级条件、得到什么、代价、天花板），'
+             '一种可记账的稀缺资源（名称、来源、分配者），一个有权分配它的组织；主角的优势必须在开篇三章的第一场'
+             '冲突里用上，并被规则承认（谁认它、谁抢它）。门里选的位阶与硬通货要逐字进世界模型（powers 与 economy 同名记录），'
+             '留好加层位置：敌人、地图、资源与等级都要能继续往上长。规则清楚、边界可验证，不做纯氛围设定。',
     'opposition': '对抗要能逐卷抬高一级（局部→势力→体系）：第一卷对手挡着什么利益、每次胜利换来多强的对手、终局面对谁。',
-    'payoff': '兑现方式写清楚（脱困、打脸、升级、资源、地位、基建、复仇、争霸），短线三五章一个小兑现，章末留钩，终局要兑现开篇承诺的那场胜利。',
+    # opening/5: 格局 is where "bigger" is either promised or paid for. The ladder is a list of
+    # stages the volumes will actually walk, so it has to be countable, monotone, and change
+    # something other than the place name. `unchanged` is the answer to "what survives every
+    # escalation" — the layer above the map that keeps the earlier volumes from being voided.
+    'ladder': '格局要写成可数、可升、不作废的一份阶梯：第一章读者能看见的边界写清（一条街/一座城/一界）；'
+              '每一级给舞台名（必须是世界里能落成一条记录的名字，不是「第一卷」）、空间尺度（局部→一城→一域→一界→'
+              '星海→诸天，只升不降）、这一级变大的是什么（地盘/势力/规则/认知/文明）、新增或改变的规则、以及升上去要付的新代价；'
+              '三级以上至少要有一级变大的是规则、认知或文明，否则只是换地图；终局面对的等级（局部/势力/体系/文明）必须与阶梯对得上；'
+              '跨卷不变的上层结构（纪元、真相层、恒定矛盾或规则性对手）要单独写一句，说明升格为什么不作废已写的卷。',
+    'payoff': '兑现方式写清楚（脱困、打脸、升级、资源、地位、基建、复仇、争霸），短线三五章一个小兑现，章末留钩，终局要兑现开篇承诺的那场胜利。'
+              '再给一个主题锚点：第 N 章前必须兑现的那件事（写清兑现什么、最迟第几章），它是「世界再大也要前期可验证」的落点。',
     'title': '书名按男频搜索习惯给：关键词直接点出题材与金手指或身份优势，一眼能看懂看点，不用意象化短名。',
 }
 SCALE_WINDOW = 3          # how many consecutive tiers one board shows
@@ -357,7 +436,32 @@ CONTRACT_FIELDS = (
      'shape': ('advantage', 'origin', 'growth', 'cost', 'ceiling'), 'opening': ('edge', None)},
     {'key': 'payoff_plan', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 3,
      'shape': ('ways', 'cadence', 'hooks'), 'opening': ('payoff', 'plan')},
+    # opening/5's core-idea gate. Four keys rather than one paragraph because each is checked: the
+    # novelty is what the world gained, the first cause is what keeps pushing it, the stance is how
+    # the protagonist stands to the rule system, and the dark side names where the world's malice
+    # comes from. A public setting can be reused for free; the novelty is the part that is owned.
+    {'key': 'core_premise', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 5,
+     'shape': ('novelty', 'first_cause', 'stance', 'dark_side'), 'opening': ('premise', None)},
+    # opening/5's payoff anchor: what must be delivered by which chapter, so a grand world still
+    # proves itself inside the window the platforms actually measure.
+    {'key': 'promise_anchor', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 5,
+     'shape': ('deliverable', 'deadline_chapter'), 'opening': ('payoff', 'anchor')},
     {'key': 'world_premise', 'kind': 'text', 'default': '', 'alignment': True},
+    # opening/5's world gate: the reader-visible ladder and the hard currency, structured because
+    # the world model has to keep them verbatim (`powers` / `economy` records of the same name).
+    # Unstructured, they were prose in `world_premise` that the world dispatch re-invented.
+    {'key': 'world_tiers', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True, 'since': 5,
+     'shape': ('name', 'condition', 'gain', 'cost', 'limit'), 'exact': True, 'blank': False, 'count': 1,
+     'opening': ('world', 'tiers')},
+    {'key': 'world_resource', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 5,
+     'shape': ('name', 'source', 'allocator'), 'opening': ('world', 'resource')},
+    # opening/5's 格局 gate: the opening's visible boundary, the grade the ending faces, the layer
+    # that survives every escalation, and the ladder the volumes are required to walk in order.
+    {'key': 'world_scale', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 5,
+     'shape': ('opening', 'terminal', 'unchanged'), 'opening': ('ladder', 'scale')},
+    {'key': 'world_ladder', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True, 'since': 5,
+     'shape': ('stage', 'scope', 'growth', 'new_rule', 'cost'), 'exact': True, 'blank': False, 'count': 1,
+     'opening': ('ladder', 'ladder')},
     {'key': 'voice', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('voice', 'voice')},
     # Decided by the author at the opening gates since opening/2. Optional keeps a hand-written
     # `init --contract` file and every contract written before opening/2 loadable; a guided opening of
@@ -545,6 +649,13 @@ def contract_errors(raw):
                 complaints.append(key + ' 须为数组。')
             elif row.get('blank') is False and len(value) < row.get('count', 1):
                 complaints.append(key + ' 须提供至少 ' + str(row.get('count', 1)) + ' 条完整记录。')
+            elif row.get('exact') and row.get('shape'):
+                # A row that declares `exact` states its whole key set: an undeclared key inside a
+                # structured row is the same defect as an undeclared contract field, only one level
+                # down. `volumes` stays non-exact because the engine derives `first` onto its rows.
+                allowed = set(row['shape'])
+                if any(not isinstance(entry, dict) or set(entry) != allowed for entry in value):
+                    complaints.append(key + ' 的每条记录只能有这些字段：' + '/'.join(row['shape']))
             continue
         if kind == 'map':
             if not isinstance(value, dict) or any(field not in value for field in row.get('shape', ())):

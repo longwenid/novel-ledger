@@ -81,9 +81,10 @@ def volume_row(ident):
 
     `hooks` and `style` follow the same rule as the delta arrays: an empty array (or an empty trend)
     is the declaration "this volume opens no promise / states no style shift", while a missing field
-    is nothing the validator can read.
+    is nothing the validator can read. `stage` is the chosen rung of the opening's ladder; an opening
+    that declared no ladder leaves it empty, which is the pre-opening/5 shape.
     """
-    return {'id': ident, 'purpose': '', 'arc': '', 'turns': [{'at': '', 'turn': ''}], 'climax': '',
+    return {'id': ident, 'purpose': '', 'stage': '', 'arc': '', 'turns': [{'at': '', 'turn': ''}], 'climax': '',
             'nodes': [], 'threads': [], 'hooks': [],
             'resources': [], 'places': [], 'characters': [],
             'knowledge': [], 'clock': {'advance_days': 0}, 'exit_state': '',

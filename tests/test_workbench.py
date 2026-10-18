@@ -17,7 +17,7 @@ from novel_ledger import context, facts, revision_impact, story_memory, understa
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error, Job, digest
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, drive, plan_extras, response, seeded_book
+from support import contract, drive, long_prose, plan_extras, prose_stub, response, seeded_book
 
 
 def interpretation(ident='fear', chapter=1, quote='他没有回答。', **extra):
@@ -305,6 +305,47 @@ class ReadingImpactTests(unittest.TestCase):
         rows[3]['plan'].pop('reading_coverage')
         self.assertEqual(revision_impact.analyze(rows, 1, {'mode': 'reading',
                          'reading_changes': [{'kind': 'character', 'key': 'shen'}]})['chapter_actions'][-1]['action'], 'review')
+
+
+class GuidedV5WorkbenchTests(unittest.TestCase):
+    """A thirteen-gate opening still files its memory with the chapter that produced it.
+
+    The workbench is on for every new book, so the guided path and the memory path are one flow: the
+    writer's own interpretation travels in the same receipt as the prose and lands atomically with
+    the chapter it cites.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.project = Path(self.temp.name) / 'book'
+        self.repo = SQLiteRepository.initialize(self.project, workflow.preparing_book(guided=True))
+        self.app = Application(self.repo)
+
+    def tearDown(self):
+        self.repo.close()
+        self.temp.cleanup()
+
+    def test_a_thirteen_gate_book_writes_a_chapter_and_files_its_memory(self):
+        from novel_ledger import creation
+        handoff = drive(self.app)
+        self.assertEqual(handoff['action'], 'outline_ready')
+        book = self.repo.load()
+        self.assertEqual(creation.opening_version(book['creation']), 5)
+        self.assertEqual(len(book['creation']['selections']), 13)
+        self.assertIn('understanding', book)                 # the workbench is on for a new book
+        run = self.app.run(through=1, source='作者授权试写一章。')
+        drive(self.app, run['owner'], until='write')
+        candidate = response(self.app)
+        number = self.repo.pending()['input']['chapter']
+        quote = prose_stub(number)[:14]                      # the stub's opening, cited as evidence
+        candidate['data']['prose'] = quote + long_prose(number, count=110)
+        candidate['data']['understanding'] = [interpretation(quote=quote)]
+        outcome = self.app.submit(candidate)
+        self.assertEqual(outcome['committed_chapter'], 1)
+        self.assertEqual(understanding.latest(self.repo.load()['understanding'])['fear']['status'],
+                         'tentative')
+        self.assertIn('作品理解', bookpage.render(self.repo))
+        self.assertTrue(self.app.audit()['ok'])
 
 
 if __name__ == '__main__':

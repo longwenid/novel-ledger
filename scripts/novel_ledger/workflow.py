@@ -1,6 +1,7 @@
 """Pure lifecycle decisions and stage transitions. No repository or host imports.
 
-The pipeline is five steps: the ten opening gates decide, one dispatch writes the world and the
+The pipeline is five steps: the opening gates decide (their count belongs to the project's own
+opening version — the current gate set asks thirteen), one dispatch writes the world and the
 contract, one writes every volume's outline, one writes a volume's chapter outlines, and each
 chapter is drafted against its own outline. Step five is a comparison the writer files with its
 prose (`drift_check`) and the engine reconciles against the projected state — there is no reviewer
@@ -518,8 +519,9 @@ def apply(book, task, data, actor, sources, priors=None):
         # own contract, so the world half is split off before world.validate sees it.
         also = (task.get('payload') or {}).get('also') or ()
         draft = {key: value for key, value in data.items() if key != 'contract'} if 'opening_contract' in also else data
-        model = world.validate(draft, creation.selected(opening), opening['selection_hash'],
-                               sections=world.required_sections(tier_id(opening)))
+        choices = creation.selected(opening)
+        model = world.validate(draft, choices, opening['selection_hash'],
+                               sections=world.required_sections(tier_id(opening), choices))
         book['world'] = model
         if 'opening_contract' in also:
             planning.enforce(planning.active_policy(book.get('lexical_policy')), 'opening_contract', data.get('contract'))

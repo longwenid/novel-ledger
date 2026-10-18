@@ -15,7 +15,7 @@ from novel_ledger.bootstrap import local_application as Application, local_works
 from novel_ledger.contracts import ENFORCEMENT, Error, dump
 from novel_ledger import delivery, facts, host, planning, workflow
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, drive, response, seeded_book
+from support import contract, drive, long_prose, prose_stub, response, seeded_book
 
 
 def app_stage(repo):
@@ -736,6 +736,70 @@ class DomainTests(unittest.TestCase):
         self.assertEqual(declared - actual, set())          # nothing is declared that does not exist
         self.assertIn('initialize', SQLiteRepository.__dict__)   # the constructor side of the contract
 
+
+
+class GuidedOpeningV5Tests(unittest.TestCase):
+    """A new project opens on the thirteen-gate setting protocol and writes through it.
+
+    The gates themselves are covered in test_opening; what this class pins is the hand-off: thirteen
+    decisions, one world receipt plus the contract it implies, every volume's outline, one volume's
+    chapter outlines, and only then a word of prose — with no reviewer anywhere in between.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.project = Path(self.temp.name) / 'book'
+        self.repo = SQLiteRepository.initialize(self.project, workflow.preparing_book(guided=True))
+        self.app = Application(self.repo)
+
+    def tearDown(self):
+        self.repo.close()
+        self.temp.cleanup()
+
+    def chapter_receipt(self):
+        """A write receipt whose prose lands inside the tier's band without echoing itself.
+
+        The tier the default window opens on writes 2500~4500 汉字 per chapter, so the fixture stub
+        is padded with varied text; the stub's own opening is kept verbatim because the writer's
+        drift_check cites it as evidence.
+        """
+        candidate = response(self.app)
+        number = self.repo.pending()['input']['chapter']
+        candidate['data']['prose'] = prose_stub(number)[:14] + long_prose(number, count=110)
+        return candidate
+
+    def test_the_thirteen_gates_end_at_the_design_boundary_without_prose(self):
+        from novel_ledger import creation
+        self.assertEqual(creation.gate_ids(5), tuple(gate for gate, _title in creation.GATES_V5))
+        self.assertEqual(len(creation.GATES_V5), 13)
+        handoff = drive(self.app)
+        self.assertEqual(handoff['action'], 'outline_ready')
+        book = self.repo.load()
+        self.assertEqual(creation.opening_version(book['creation']), 5)
+        self.assertEqual(len(book['creation']['selections']), 13)
+        self.assertEqual(book['creation']['phase'], 'ready')
+        self.assertEqual(self.repo.headers('main'), [])
+        # The six opening/5 contract fields are decisions, so the contract carries all of them.
+        for key in ('core_premise', 'world_scale', 'world_ladder', 'world_tiers', 'world_resource',
+                    'promise_anchor'):
+            self.assertIn(key, book['contract'], key)
+        self.assertEqual(sorted(book['volumes_outline']), [row['id'] for row in book['contract']['volumes']])
+        # With `chapter_outline.scope == 'volume'` and no prose authorization, the design boundary
+        # hands over the volume outlines and keeps the chapter outlines for the writing step.
+        self.assertEqual(book['contract']['chapter_outline']['scope'], 'volume')
+        self.assertEqual(book['chapter_outlines'], {})
+        self.assertTrue(self.app.audit()['ok'])
+
+    def test_an_authorized_chapter_is_written_through_the_v5_opening(self):
+        drive(self.app)
+        run = self.app.run(through=1, source='作者授权试写一章。')
+        handoff = drive(self.app, run['owner'], until='write')
+        self.assertEqual(handoff['task']['chapter'], 1)
+        outcome = self.app.submit(self.chapter_receipt())
+        self.assertEqual(outcome['committed_chapter'], 1)
+        self.assertEqual([row['n'] for row in self.repo.headers('main')], [1])
+        self.assertGreaterEqual(self.repo.load()['state']['clock'], 1)
+        self.assertTrue(self.app.audit()['ok'])
 
 
 if __name__ == '__main__':

@@ -84,6 +84,58 @@ class BookPageTests(unittest.TestCase):
             self.assertIn(label, page)
         self.assertIn('第三人称限知，只跟沈桐的所见与所知。', page)
 
+    def test_the_v5_contract_fields_render_with_their_own_labels(self):
+        """The six opening/5 contract fields are decisions, so the page names them, not raw keys."""
+        book = self.repo.load()
+        book['contract'].update(
+            core_premise={'novelty': '登记制度本身会记住每一个签字的人。',
+                          'first_cause': '旧登记制度在一次退件事故后自我封闭。',
+                          'stance': '利用', 'dark_side': '上层剥削'},
+            world_scale={'opening': '第一章只见一座仓库与一条夜班线。', 'terminal': '势力',
+                         'unchanged': '跨卷不变的是登记制度本身。'},
+            world_tiers=[{'name': '一阶登记员', 'condition': '完成一次退件核对。',
+                          'gain': '可调阅一层凭据。', 'cost': '承担一层登记责任。',
+                          'limit': '不得超过一层权限。'}],
+            world_ladder=[{'stage': '青云城', 'scope': '一城', 'growth': '地盘',
+                           'new_rule': '城内登记由城主分配。', 'cost': '失去旧身份。'}],
+            world_resource={'name': '登记凭证', 'source': '夜班结余里扣下的一份。',
+                            'allocator': '夜班主管'},
+            promise_anchor={'deliverable': '第 12 章前必须当众兑现一次责任落位。',
+                            'deadline_chapter': '12'})
+        self.repo.save(book)
+        page = bookpage.render(self.repo)
+        for label in ('核心脑洞', '格局尺度', '升格阶梯', '位阶阶梯', '硬通货', '主题锚点'):
+            self.assertIn(label, page, label)
+        for value in ('登记制度本身会记住每一个签字的人。', '第一章只见一座仓库与一条夜班线。',
+                      '一阶登记员', '青云城', '登记凭证',
+                      '第 12 章前必须当众兑现一次责任落位。'):
+            self.assertIn(value, page, value)
+        # The nested keys are labelled too: raw JSON keys would read as a field that was skipped.
+        for label in ('核心新规则', '第一推动力', '世界暗面来源', '必须兑现的东西', '最迟兑现章'):
+            self.assertIn(label, page, label)
+
+    def test_powers_and_cosmology_render_as_their_own_world_sections(self):
+        """The two new domains get their frozen section titles and their record content."""
+        book = self.repo.load()
+        model = dict(premise='仓库', story_capacity='退件与责任', selection_hash='fixture')
+        for section, fields in world.SECTIONS.items():
+            model[section] = [{**{field: section + ' ' + field for field in fields},
+                               'id': section + '1', 'links': []}]
+        model['powers'] = [{'id': 'rank1', 'name': '一阶登记员', 'condition': '完成一次退件核对。',
+                            'gain': '可调阅一层凭据。', 'cost': '承担一层登记责任。',
+                            'limit': '不得超过一层权限。', 'links': []}]
+        model['cosmology'] = [{'id': 'layer1', 'name': '青云界', 'inhabitant': '界内势力与居民。',
+                               'law': '跨界需要通行凭证。', 'entry': '沿旧凭据的入口进入。',
+                               'links': []}]
+        book['world'] = model
+        self.repo.save(book)
+        page = bookpage.render(self.repo)
+        self.assertIn(world.LABELS['powers'], page)
+        self.assertIn(world.LABELS['cosmology'], page)
+        for value in ('一阶登记员', '完成一次退件核对。', '青云界', '跨界需要通行凭证。'):
+            self.assertIn(value, page, value)
+        self.assertIn('12 条', page)          # every declared domain renders its own record count
+
     def test_structural_choice_renders_as_a_size_not_as_a_scene_pitch(self):
         from novel_ledger import creation, workflow
 

@@ -6,7 +6,8 @@ from .contracts import require
 # Every stage a task can be frozen under. A stage missing here is not dispatched;
 # briefs and deliverable templates refuse it instead of degrading to an empty shape.
 #
-# The five-step pipeline (v2): the ten opening gates decide, one dispatch writes the world and
+# The five-step pipeline (v2): the opening gates decide (thirteen under creation/5, fewer for the
+# gate sets a project was opened with), one dispatch writes the world and
 # the contract, one writes every volume's ~1000-character outline, one writes a volume's chapter
 # outlines (resource/place/knowledge/plot deltas), and each chapter is drafted against its own
 # outline with the engine reconciling the writer's self-comparison. There is no reviewer stage:

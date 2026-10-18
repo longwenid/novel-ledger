@@ -8,7 +8,7 @@
 - **形态**：`scripts/novel.py` 一个 CLI + `scripts/novel_ledger/` 模块（核心规则与流程处理普通值，具体存储、文件交付和进程在外层装配）+ 一个 SQLite 项目库。
 - **当前版本**：`2.0.0`，数据库 schema 仍是 `novel-ledger/3`（已有 v3 可继续使用，v2 及更早库显式拒绝，不做隐式升级）。v2 与 v1 是**流水线换代**：v1 的冻结任务（回执带 `checks_version`/`obligations`、要求首读，或阶段名为 `plan`/`book_plan` 等已删阶段的）在本版本不能执行，需按新协议重新派工；存储结构没有迁移。
 
-**流水线是五步**：十一门开书（含主角来历门，主干自执）→ 世界模型与约定 → 每卷 2000–3000 汉字（目标 2500）的极简卷纲（含伏笔账与文风走向）→ 含资源/位置/情节漂移字段、伏笔执行与文风声明的极简章纲 → 按章纲执笔并自比，引擎机械核账。**设计层审查与章级独立审已全部删除**（作者决定），判据从"写完之后靠独立审稿者"前移到"章纲声明 + 卷内状态链 + 引擎核算 + 文风代理指标"。
+**流水线是五步**：十三门开书（含核心脑洞门与格局升格门，主干自执）→ 世界模型与约定（12 领域）→ 每卷 2000–3000 汉字（目标 2500）的极简卷纲（含伏笔账与文风走向）→ 含资源/位置/情节漂移字段、伏笔执行与文风声明的极简章纲 → 按章纲执笔并自比，引擎机械核账。**设计层审查与章级独立审已全部删除**（作者决定），判据从"写完之后靠独立审稿者"前移到"章纲声明 + 卷内状态链 + 引擎核算 + 文风代理指标"。
 
 **代价必须说清楚，不粉饰**：不再有独立 agent 复核文学质量与阅读体验。引擎能证明的是"正文与章纲声明一致、文风与锚点一致"——**文风代理指标只保证文风一致、可核对，不证明"这一章好看、人物可信"**。需要真正的文学判断时，只能人工抽读全文，或用离线盲测工具，或另行发起一次修订。详见 [返工与成本](references/rework.md) 第五节。
 
@@ -103,15 +103,15 @@ settings、canon、intent、execution 共同构成**一个作品事务聚合**�
 
 | 步 | 阶段 | 派工形态 | 产物 |
 |---|---|---|---|
-| 1 | `opening_options` ×11 门 | 主干自执（不派子 agent） | `opening_choices` / `opening_basis` |
-| 2 | `world_model`（payload.also=opening_contract） | 1 次 | 世界 + 约定；提交时机械校验，无审查阶段 |
-| 3 | `volume_outline` | 1 次（`scope=all` 时含全部卷；`rolling` 时进卷前 1 次） | 每卷 2000–3000 汉字（目标 2500）的极简卷纲：卷职责/弧线/转折 + **伏笔账 `hooks`**（窗口、required、跨卷）+ **文风走向 `style.trend`** |
+| 1 | `opening_options` ×13 门 | 主干自执（不派子 agent） | `opening_choices` / `opening_basis` |
+| 2 | `world_model`（payload.also=opening_contract） | 1 次 | 世界（12 领域）+ 约定；门里声明的位阶/硬通货/格局阶梯做**三条逐字绑定**；提交时机械校验，无审查阶段 |
+| 3 | `volume_outline` | 1 次（`scope=all` 时含全部卷；`rolling` 时进卷前 1 次） | 每卷 2000–3000 汉字（目标 2500）的极简卷纲：卷职责/弧线/转折 + **`stage`（逐字取格局阶梯一级、只升不降）** + **伏笔账 `hooks`**（窗口、required、跨卷）+ **文风走向 `style.trend`** |
 | 4 | `chapter_outline` | 每卷 1 次（进入该卷前） | 该卷每章极简章纲：资源/位置/情节/知情/人物/时钟增量 + `enter`/`exit` + **伏笔执行 `hooks`（plant/payoff）** + **文风 `style`** |
 | 5 | `write` | 每章 1 次 | 正文 + `drift_check` 自比 + 引擎核算入账（含 hook 事件）+ 文风代理指标；不符 → `repair`/`redesign` 有界返修 |
 
 **钩子与文风的落点**：伏笔在**卷纲声明、章纲执行**——卷纲给出 `plant`/`payoff` 窗口与 `required`/`continues`，章纲只做 `plant` 与 `payoff` 两个动作（中途再提用 `hook_refs`），事件由 `drift.reconcile` 产出，写手不手写事件；文风由**卷纲 `style.trend`（定性走向）+ 章纲 `style`（本章执行）**声明，提交时由 `style.py` 的五条代理指标按契约 `style_window` 容差与首章锚点比对。
 
-**第 1 步的 11 门**（`opening/4`）顺序是 `genre → origin → voice → scale → edge → protagonist → relationships → world → opposition → payoff → title`。其中 `origin` **主角来历门**排在题材门之后、视角门之前：它只决定主角从哪来、带来了什么、代价或麻烦是什么（魂穿/身穿/本土/其他），而这份来历会被后面的优势门（优势从哪来）、主角门（开局压力）与世界门（谁会起疑、谁在追）读取。已有项目保留自己的门序（creation/3 十门、creation/2、creation/1），不迁移。
+**第 1 步的 13 门**（`opening/5`）顺序是 `genre → premise → origin → voice → scale → world → ladder → edge → protagonist → relationships → opposition → payoff → title`。三个新/改的门各有分工：`premise` **核心脑洞门**紧跟题材门（世界比同类多了什么规则、第一推动力、主角与体系的关系、暗面从哪来），它决定后面所有门读什么；`world` **世界结构门**交位阶阶梯与硬通货（读者看得见的级别 + 谁在分配）；`ladder` **格局升格门**交开局尺度、升格层级表与跨卷不变的上层结构。已有项目保留自己的门序（creation/4 十一门、creation/3 十门、creation/2、creation/1），不迁移。
 
 t0/t1 由 `PIPELINE_SHAPES.merge_chapter_outline` 把本卷卷纲与章纲合成一次派工，两个契约各自校验同一份回执。完整的阶段集合只有 8 个：`opening_options`、`opening_contract`、`world_model`、`volume_outline`、`chapter_outline`、`write`、`repair`、`redesign`。
 
@@ -122,7 +122,7 @@ t0/t1 由 `PIPELINE_SHAPES.merge_chapter_outline` 把本卷卷纲与章纲合成
 | 流程 | 子 agent 派工 | 构成 |
 |---|---:|---|
 | 旧（独立写审） | ≈100+ | 2 次世界/约定审、2 次设计审、5 次卷纲 + 5 次卷纲审、约 9 次章计划、25 次章审、若干范围审 |
-| 新（五步） | ≈28 | 11 门（主干自执，不计子 agent）+ 1 次世界 + 1 次卷纲 + 1 次章纲 + 25 次执笔 |
+| 新（五步） | ≈28 | 13 门（主干自执，不计子 agent）+ 1 次世界 + 1 次卷纲 + 1 次章纲 + 25 次执笔 |
 
 省下来的时间与 token 是设计收益；**质量判断的独立性是代价**，两者不能相互替代。
 
@@ -215,7 +215,7 @@ SQLite 中的七张表各司其职：
 一次完整生命周期：
 
 ```
-init ──► 逐门选择（11 门，一门一件事，主干自执）──► 世界模型与完整约定合并起草 ──► 机械校验后激活
+init ──► 逐门选择（13 门，一门一件事，主干自执）──► 世界模型与完整约定合并起草 ──► 机械校验后激活
    └─ 或 --contract 直接导入完整约定
         │
         ▼
@@ -363,6 +363,10 @@ Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与
 ## 叙事推进与长篇材料
 
 新约定默认启用叙事跟踪：卷纲按卷登记主线、支线与暗线及其终局条件，章纲给出每章的节点与线路状态变化，资源/位置/知情/时钟/人物增量由卷内状态链逐章模拟。`narrative_tracking=false` 时节点与线路可空，但四类增量仍必需。完整协议见 [叙事推进](references/narrative.md)。
+
+**世界模型是 12 个领域**（原 10 个 + `powers` 力量与位阶阶梯、`cosmology` 空间与位面），并给旧领域加了可选深字段（`history.epoch/carryover`、`geography.scale/counter_space`、`factions.survives_scale_up`、`mysteries.reveal_window/survival`）。**门里选的必须在世界里落地**：`world` 门声明的每条位阶要在 `powers` 有逐字同名记录、硬通货要在 `economy` 有同名 `resource` 且文本里出现声明的 `allocator`、`ladder` 的每级 `stage` 要在 `geography`/`cosmology`/`factions`/`powers` 有逐字同名记录——这三条逐字绑定在提交时机械核对。旧开书（v1–v4）没有这些 choice，行为不变，旧世界（10 域）仍能通过一致性复检。
+
+**格局阶梯落到卷上**：v5 项目的每卷卷纲要给 `stage`，逐字取已选阶梯里的一级，并按卷序**只升不降**；`promise_anchor`（第 N 章前必须兑现的主题锚点）与 `world_scale.unchanged`（跨卷不变的上层结构）本轮只做声明，在卷纲/章纲简报里点名承接，不加机械校验。
 
 卷纲默认 `scope=all`：约定生效后一次交全部卷，每卷 2000–3000 汉字（目标 2500，`words=2500`、`tolerance=500`）。`scope=rolling` 改为进入该卷前交该卷；空对象 `{}` 表示关闭卷纲。章纲 `scope=volume`，每章 synopsis 约 150 汉字（`tolerance=60`）。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。没有正文授权时以 `outline_ready` 交付并停止，范围如实说明（rolling 只交了进入中的那一卷，不能说成全书卷纲）。
 

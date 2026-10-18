@@ -1,8 +1,17 @@
-"""Rich world definitions; never mutate canonical facts or character knowledge."""
+"""Rich world definitions; never mutate canonical facts or character knowledge.
+
+opening/5 widened the world from ten flat domains to twelve: `powers` (the reader-visible ladder of
+ranks) and `cosmology` (spaces and planes) join the ten, and the older domains gained optional deep
+fields (an epoch's carry-over, a counter-space, why a faction survives a scale-up, when a mystery is
+revealed). The two new domains are required exactly when the opening declared something that has to
+land in them, and what it declared must exist here word for word — that binding is what stops a gate
+decision from being decoration.
+"""
 from __future__ import annotations
 
 import copy
 from .contracts import require, text
+from . import contracts
 
 SECTIONS = {
     'geography': ('name', 'environment', 'resources', 'access', 'story_pressure'),
@@ -15,73 +24,201 @@ SECTIONS = {
     'characters': ('name', 'role', 'desire', 'limit', 'knowledge_boundary'),
     'mysteries': ('truth', 'disclosure', 'causal_role'),
     'mechanisms': ('principle', 'cost', 'limits', 'failure_condition'),
+    # opening/5. `powers` mirrors the world gate's rank ladder field by field; `cosmology` is a space
+    # or plane: its name, who lives there, what law holds, and how one enters.
+    'powers': ('name', 'condition', 'gain', 'cost', 'limit'),
+    'cosmology': ('name', 'inhabitant', 'law', 'entry'),
 }
 LABELS = {'geography': '地理与通行', 'history': '历史与当下影响', 'rules': '世界规则', 'factions': '势力与利益',
           'economy': '资源与经济', 'society': '社会制度', 'everyday': '生活日常', 'characters': '人物与关系',
-          'mysteries': '隐秘信息与披露', 'mechanisms': '特殊机制与代价'}
+          'mysteries': '隐秘信息与披露', 'mechanisms': '特殊机制与代价',
+          'powers': '力量与位阶阶梯', 'cosmology': '空间与位面'}
 ALL_SECTIONS = tuple(SECTIONS)
+# The ten domains a world written before opening/5 carries. A tier's floor is drawn from these, never
+# from ALL_SECTIONS: a project already running has no `powers`/`cosmology` key, and requiring them in
+# its `_audit` re-check would fail a book that was written correctly under the old contract.
+LEGACY_SECTIONS = ('geography', 'history', 'rules', 'factions', 'economy', 'society', 'everyday',
+                   'characters', 'mysteries', 'mechanisms')
+GRAND_SECTIONS = ('powers', 'cosmology')
+# Deep fields a record may carry. None of them is required; a field that is written must say
+# something, because a placeholder in a deep field reads exactly like a decision that was never made.
+OPTIONAL_FIELDS = {
+    'history': ('epoch', 'carryover'),
+    'geography': ('scale', 'counter_space'),
+    'factions': ('survives_scale_up',),
+    'mysteries': ('reveal_window', 'survival'),
+}
 # Which sections a world must fill, by scale tier. A world is read by every later dispatch, so its
 # floor has to be the world this book's line actually walks through. Declared once and read by both
 # the brief and this validator, because a brief that asks for a small world while the check demands
 # ten domains is a requirement disagreeing with its own check — a real micro project paid for that in
 # four repair rounds and 55 records. Sections outside the tier stay in the shape and may be empty.
+# The grand domains are in no tier's floor: they become required through what the opening declared
+# (see `declared_sections`), which is also what the §5 bindings check.
 TIER_SECTIONS = {
     't0': ('rules', 'society', 'everyday', 'characters', 'mysteries', 'mechanisms'),
     't1': ('geography', 'rules', 'society', 'everyday', 'characters', 'mysteries', 'mechanisms'),
     't2': ('geography', 'history', 'rules', 'society', 'everyday', 'characters', 'mysteries', 'mechanisms'),
-    't3': ALL_SECTIONS,
-    't4': ALL_SECTIONS,
-    't5': ALL_SECTIONS,
+    't3': LEGACY_SECTIONS,
+    't4': LEGACY_SECTIONS,
+    't5': LEGACY_SECTIONS,
 }
 
 
-def required_sections(tier_id=None):
-    """The sections this tier's world must fill; every tier still delivers the full shape."""
-    return tuple(TIER_SECTIONS.get(tier_id) or ALL_SECTIONS)
+def _ordered(names):
+    """A set of section names in the one canonical order this file declares."""
+    wanted = set(names)
+    return tuple(section for section in SECTIONS if section in wanted)
+
+
+def declared_sections(choices):
+    """What the opening declared the world must therefore carry.
+
+    The world gate's rank ladder lands in `powers`; a 格局 ladder that reaches a 界 or wider lands in
+    `cosmology`. An opening that declared neither asks for nothing extra, which is what keeps every
+    v1–v4 project's required set exactly what it was. A selection that is not the declared shape
+    yields nothing rather than raising: the gate owns that shape, the world model only reads it.
+    """
+    extra = []
+    world_choice = choices.get('world') if isinstance(choices, dict) else None
+    if isinstance(world_choice, dict) and world_choice.get('tiers'):
+        extra.append('powers')
+    ladder_choice = choices.get('ladder') if isinstance(choices, dict) else None
+    rows = ladder_choice.get('ladder') if isinstance(ladder_choice, dict) else None
+    scopes = {row.get('scope') for row in rows or [] if isinstance(row, dict)}
+    if scopes & set(contracts.COSMOLOGY_SCOPES):
+        extra.append('cosmology')
+    return tuple(extra)
+
+
+def required_sections(tier_id=None, choices=None):
+    """The sections this tier's world must fill: the tier's floor plus what the opening declared."""
+    base = TIER_SECTIONS.get(tier_id) or ALL_SECTIONS
+    return _ordered(tuple(base) + declared_sections(choices))
 
 
 def index(model):
     return {section + ':' + row['id']: row for section in SECTIONS for row in model.get(section, [])}
 
 
+def _record_text(row):
+    """Everything a world record says, as one string: where a declared allocator has to show up."""
+    parts = []
+    for value in row.values():
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, list):
+            parts.extend(item for item in value if isinstance(item, str))
+        elif isinstance(value, dict):
+            parts.extend(item for item in value.values() if isinstance(item, str))
+    return ' '.join(parts)
+
+
+def _bindings(model, choices):
+    """The three verbatim bindings: a gate's decision must exist in the world, word for word.
+
+    Each is checked only when the opening declared it, so a project written before opening/5 is not
+    asked about decisions nobody made. Extra records are allowed — the world may be grander than the
+    ladder the gates chose.
+    """
+    complaints = []
+    world_choice = (choices or {}).get('world') or {}
+    for row in world_choice.get('tiers') or []:
+        if not isinstance(row, dict):
+            continue
+        match = next((item for item in model.get('powers') or [] if item.get('name') == row.get('name')), None)
+        same = match is not None and all(match.get(field) == row.get(field) for field in SECTIONS['powers'])
+        if not same:
+            complaints.append({'rule': 'world_tiers→powers 逐字等值（name/condition/gain/cost/limit）',
+                               'expect': {field: row.get(field) for field in SECTIONS['powers']},
+                               'got': ({field: match.get(field) for field in SECTIONS['powers']}
+                                       if match else None)})
+    resource = world_choice.get('resource') or {}
+    if resource:
+        name, allocator = resource.get('name'), resource.get('allocator')
+        match = next((item for item in model.get('economy') or [] if item.get('resource') == name), None)
+        if match is None or not text(allocator) or allocator not in _record_text(match):
+            complaints.append({'rule': 'world_resource→economy 同名 resource 且记录文本里出现 allocator',
+                               'expect': {'resource': name, 'allocator': allocator},
+                               'got': ({'resource': match.get('resource'),
+                                        'distribution': match.get('distribution')} if match else None)})
+    for row in ((choices or {}).get('ladder') or {}).get('ladder') or []:
+        stage = row.get('stage') if isinstance(row, dict) else None
+        if not text(stage):
+            continue
+        holders = [section for section in ('geography', 'cosmology', 'factions', 'powers')
+                   if any(item.get('name') == stage for item in model.get(section) or [])]
+        if not holders:
+            complaints.append({'rule': 'world_ladder 每一级 stage 在 geography/cosmology/factions/powers 有同名 name 记录',
+                               'expect': stage, 'got': []})
+    require(not complaints, 'world_alignment', '世界模型与门里声明的设定没有逐字对上。',
+            {'rule': '门里选的位阶表/硬通货/格局阶梯必须在世界模型里有同名记录',
+             'expect': 'powers 全字段等值；economy 同名 resource 且记录文本含 allocator；'
+                       '阶梯每级在 geography/cosmology/factions/powers 有同名 name',
+             'got': complaints[:8], 'mismatches': len(complaints),
+             'recover': '把门里选定的那一行逐字写进对应领域的记录；世界可以比阶梯更长，但不能对不上。'})
+
+
+def _required_from(sections, choices):
+    """The required set from however this caller names it: a tier id, an explicit list, or nothing."""
+    if isinstance(sections, str):
+        return required_sections(sections, choices)
+    if sections is not None:
+        return _ordered(tuple(sections) + declared_sections(choices))
+    tier = ((choices or {}).get('scale') or {}).get('tier')
+    return required_sections(tier, choices)
+
+
 def validate(data, choices, selection_hash, sections=None):
-    required = required_sections(sections) if isinstance(sections, str) else tuple(sections or required_sections())
+    required = _required_from(sections, choices)
     require(isinstance(data, dict) and data.get('selection_hash') == selection_hash
             and text(data.get('premise')) and text(data.get('story_capacity')), 'world', '世界需要准确选择版本、核心前提和长篇承载说明。')
     require(data['premise'] == choices['world']['world_premise'], 'world_alignment', '世界前提须与所选方案逐字一致。',
             {'rule': '逐字相等；不是包含、缩写或改写', 'expect': choices['world']['world_premise'],
              'got': data.get('premise'), 'source': 'opening_choices.world.world_premise'})
+    # A world written before a domain existed has no key for it; normalize the shape here so the same
+    # record can be re-audited under a contract that names the new domains.
+    model = copy.deepcopy(data)
     all_ids = set()
     for section, fields in SECTIONS.items():
-        rows = data.get(section)
+        rows = model.get(section)
+        if rows is None:
+            rows = []
+            model[section] = rows
         require(isinstance(rows, list), 'world_section', '世界缺少结构领域：' + section)
         require(bool(rows) or section in ('mechanisms',) or section not in required, 'world_section',
-                '本档位要求填写的世界领域必须有实际内容：' + section,
-                {'required_sections': list(required), 'recover': '按档位只填这条主线走得到的领域，其余留空数组。'})
+                '本档位/本次选择要求填写的世界领域必须有实际内容：' + section,
+                {'required_sections': list(required), 'recover': '按档位与门里选定的设定只填这条主线走得到的领域，其余留空数组。'})
         for row in rows:
             require(isinstance(row, dict) and text(row.get('id')) and all(text(row.get(k)) for k in fields), 'world_record', '世界记录缺少具体内容：' + section)
             key = section + ':' + row['id']
             require(key not in all_ids, 'world_id', '世界记录 ID 重复。')
             all_ids.add(key)
             require(isinstance(row.get('links'), list) and all(text(ref) for ref in row['links']), 'world_links', '世界记录须声明关联引用，独立记录可用空数组。')
+            for field in OPTIONAL_FIELDS.get(section, ()):
+                if field in row:
+                    require(text(row[field]), 'world_optional', '世界记录的可选深字段要么不写，写了就必须是非空文本。',
+                            {'record': key, 'field': field, 'got': str(row[field])[:120],
+                             'recover': '补成具体文字，或删掉这个键；空字符串等于没写却占了位。'})
     for section in SECTIONS:
-        for row in data[section]:
+        for row in model[section]:
             missing = [ref for ref in row['links'] if ref not in all_ids]
             require(not missing, 'world_reference', '世界关联引用不存在。',
                     {'record': section + ':' + row['id'], 'missing': missing,
                      'expect': 'links 只能引用本世界里已存在的 领域:id 记录；独立记录用空数组'})
-    names = [c['name'] for c in data['characters']]
+    names = [c['name'] for c in model['characters']]
     require(len(names) == len(set(names)), 'world_identity', '世界人物称呼不能歧义。')
     protagonist = choices['protagonist']
     require(any(c['id'] == protagonist['id'] and c['name'] == protagonist['name'] and c['desire'] == protagonist['desire']
-                and c['limit'] == protagonist['limit'] for c in data['characters']), 'world_alignment', '世界模型须保留所选主角的身份、欲望和底线。',
+                and c['limit'] == protagonist['limit'] for c in model['characters']), 'world_alignment', '世界模型须保留所选主角的身份、欲望和底线。',
             {'rule': 'characters 里须有一条记录的 id/name/desire/limit 与所选主角逐字相同',
              'expect': {k: protagonist[k] for k in ('id', 'name', 'desire', 'limit')},
              'source': 'opening_choices.protagonist'})
     mode = choices['world']['mechanism']['mode']
-    require((mode == 'none' and not data['mechanisms']) or (mode == 'bounded' and bool(data['mechanisms'])), 'world_alignment', '世界机制必须遵守已选的无机制或有限机制方向。',
+    require((mode == 'none' and not model['mechanisms']) or (mode == 'bounded' and bool(model['mechanisms'])), 'world_alignment', '世界机制必须遵守已选的无机制或有限机制方向。',
             {'selected_mode': mode,
              'rule': '所选 mode=none 时 mechanisms 必须为空数组；mode=bounded 时至少一条',
              'source': 'opening_choices.world.mechanism.mode'})
+    _bindings(model, choices)
     require(set(data) <= {'selection_hash', 'premise', 'story_capacity', *SECTIONS}, 'world_fields', '世界模型不得夹带正文事件或事实结算。')
-    return copy.deepcopy(data)
+    return model

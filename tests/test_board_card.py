@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / 'tests'))
 from novel_ledger import creation, delivery, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.sqlite_store import SQLiteRepository
-from test_opening import rows_for, shown
+from test_opening import rows_for, shown, walk_to
 from test_opening_inline import gate_result
 
 
@@ -65,11 +65,7 @@ class BoardCardTests(unittest.TestCase):
         self.assertIsNone(handoff.get('board_card'))
 
     def test_name_warnings_surface_on_the_card(self):
-        state = self.app.repo.load()['creation']
-        for _gate in ('genre', 'origin', 'voice', 'scale', 'edge'):
-            offered = shown(state)
-            state = creation.pick(offered, offered['board']['options'][0]['id'],
-                                  offered['board']['hash'], '作者选它。')
+        state = walk_to(self.app.repo.load()['creation'], 'protagonist')
         rows = rows_for('protagonist')
         rows[0]['value'] = {**rows[0]['value'], 'name': '沈砚'}
         offered = creation.offer(state, {'gate': 'protagonist', 'options': rows})

@@ -41,6 +41,10 @@ FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '
                 'placements': '初始站位', 'arcs': '人物弧', 'editorial_features': '编辑能力',
                 'scope_append_limit': '单轮补写章数上限', 'volume_outline': '卷纲要求',
                 'chapter_outline': '章纲要求', 'style_window': '文风容差',
+                # opening/5: the brainstorm gate's four questions, the ladder's scale, the tier
+                # ladder, the hard currency, and the promise anchor.
+                'core_premise': '核心脑洞', 'world_scale': '格局尺度', 'world_ladder': '升格阶梯',
+                'world_tiers': '位阶阶梯', 'world_resource': '硬通货', 'promise_anchor': '主题锚点',
                 'anchors': '稳定设定', 'links': '空间连接'}
 # Option values that are engine bookkeeping rather than an author-facing decision: the structural gate's
 # tier id and its arithmetic window are already stated in the option's own sentence.
@@ -78,6 +82,16 @@ SUB_LABELS.update(hooks='伏笔账', hook='伏笔', text='对读者的承诺', p
                   rhythm='句法与节奏', dialogue_ratio='对白占比目标', notes='本章例外',
                   anchor='首章实测指标', voice='文风', tone='基调', style_traits='文风要点',
                   sentence='句长', paragraph='段长', dialogue='对白', repetition='重复度', person='人称')
+# opening/5: the brainstorm gate's four answers, the ladder and tier tables, the hard currency, the
+# promise anchor, the world's optional deep fields, and the two grand domains' own fields.
+SUB_LABELS.update(novelty='核心新规则', first_cause='第一推动力', dark_side='世界暗面来源',
+                  opening='开局可见边界', terminal='终局等级', unchanged='跨卷不变的上层结构',
+                  stage='升格层级', scope='适用范围/尺度', growth='变大的是什么', new_rule='这一级新增的规则',
+                  condition='晋升条件', gain='得到什么', allocator='分配者',
+                  deliverable='必须兑现的东西', deadline_chapter='最迟兑现章',
+                  epoch='纪元/分期', carryover='上一纪元的延续', counter_space='对立空间',
+                  survives_scale_up='跨卷仍在场的原因', reveal_window='披露排期', survival='真相揭开后的生存问题',
+                  layer='层名', inhabitant='谁在', law='法则', entry='怎么进')
 SUB_LABELS['from'] = '起点'
 DRIFT_LABELS = {'kind': '类型', 'key': '坐标', 'planned': '章纲计划', 'actual': '正文实际',
                 'status': '比对结果', 'reason': '说明', 'evidence': '正文依据'}
@@ -318,11 +332,17 @@ def _world(book):
     pieces.append('<h3>世界模型</h3><div class="card"><table class="t">'
                   '<tr><th>前提</th><td>' + _esc(model['premise']) + '</td></tr>'
                   '<tr><th>长篇承载</th><td>' + _esc(model['story_capacity']) + '</td></tr></table></div>')
+    # The record total, so a reader can see at a glance whether the world is the size the tier asked
+    # for: the per-domain counts below answer "what is in this one", not "how much world is there".
+    filled = [section for section in WORLD_SECTIONS if model.get(section)]
+    total = sum(len(model.get(section) or []) for section in WORLD_SECTIONS)
+    pieces.append('<p class="note">世界记录共 <b>' + str(total) + ' 条</b>，覆盖 ' + str(len(filled))
+                  + ' 个领域；其余领域按本档位留空，下面按领域列出。</p>')
     nodes, edges, seen = [], [], set()
     for section in WORLD_SECTIONS:
         for record in model.get(section, []):
             ident = section + ':' + record['id']
-            label = record.get('name') or record.get('period') or record.get('resource') or record.get('institution') or record.get('practice') or record.get('principle') or record.get('truth') or record['id']
+            label = record.get('name') or record.get('layer') or record.get('period') or record.get('resource') or record.get('institution') or record.get('practice') or record.get('principle') or record.get('truth') or record['id']
             nodes.append(dict(id=ident, label=label, group=WORLD_LABELS[section], target=_anchor('world', ident), detail=label + ' · ' + WORLD_LABELS[section]))
             for ref in record.get('links', []):
                 pair = tuple(sorted((ident, ref)))
@@ -341,7 +361,7 @@ def _world(book):
         for record in records:
             links = record.get('links') or []
             pieces.append('<div class="card node-detail" id="' + _anchor('world', section + ':' + record['id']) + '"><b>'
-                          + _esc(record.get('name') or record.get('period') or record.get('resource') or record.get('institution') or WORLD_LABELS[section]) + '</b><table class="t">' + ''.join(
+                          + _esc(record.get('name') or record.get('layer') or record.get('period') or record.get('resource') or record.get('institution') or WORLD_LABELS.get(section, section)) + '</b><table class="t">' + ''.join(
                 '<tr><th>' + _esc(SUB_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
                 for k, v in record.items() if k not in ('id', 'links')) + '</table>'
                 + ('<p class="note">关联：' + ''.join('<a class="pill" href="#' + _anchor('world', ref) + '">' + _esc(ref) + '</a>' for ref in links) + '</p>' if links else '') + '</div>')

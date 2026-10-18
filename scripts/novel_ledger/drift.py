@@ -30,7 +30,7 @@ from .entities import register as register_entity
 from . import ledger, narrative, spatial, world
 
 # --------------------------------------------------------------- declarations
-VOLUME_FIELDS = ('id', 'purpose', 'arc', 'turns', 'climax', 'nodes', 'threads', 'hooks',
+VOLUME_FIELDS = ('id', 'purpose', 'stage', 'arc', 'turns', 'climax', 'nodes', 'threads', 'hooks',
                  'resources', 'places', 'knowledge', 'characters', 'clock', 'exit_state', 'style')
 CHAPTER_FIELDS = ('chapter', 'synopsis', 'plot', 'resources', 'places', 'knowledge', 'characters',
                   'clock', 'enter', 'exit', 'disclosures', 'world_refs', 'new_entities',
@@ -823,6 +823,19 @@ def _length_policy(policy, fallback_words, fallback_tolerance):
     return words, tolerance
 
 
+def _ladder_stages(selected):
+    """The 格局 rungs a v5 opening chose, in order; empty for an opening that never chose one.
+
+    A volume names the rung it plays on, and the rungs only climb: the contract's volume order is the
+    story's order, so the same index sequence has to be non-decreasing across the whole book.
+    A selection that is not the declared shape yields no rungs rather than raising: the gate already
+    owns that shape, and a half-written project must still be able to read its own outline.
+    """
+    choice = selected.get('ladder') if isinstance(selected, dict) else None
+    rows = choice.get('ladder') if isinstance(choice, dict) else None
+    return [row for row in (rows or []) if isinstance(row, dict) and text(row.get('stage'))]
+
+
 def validate_volume_outline(data, contract, world, selected=None, existing=None, missing_ids=None,
                             state=None):
     """Check and normalize the volume outline batch; returns `{volume_id: row}`.
@@ -859,6 +872,8 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
                 seen_hooks[row['id']] = old_id
     world_ids = _world_ids(world)
     entities = _entity_ids(world, selected) | set(((state or {}).get('entities') or {}))
+    ladder = _ladder_stages(selected)
+    rungs = [row['stage'] for row in ladder]
     report = {}
     for volume in volumes:
         ident = volume['id']
@@ -871,6 +886,12 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
             findings.append(_finding(chapter_no, 'volume', ident, 'purpose/arc/climax/exit_state', _safe(
                 {k: volume.get(k) for k in ('purpose', 'arc', 'climax', 'exit_state')}),
                 '卷纲需要职责、卷内弧线、卷末高潮与卷末状态各一句。', 'volume_shape', 'blocker', 'volume'))
+        # A v5 opening that chose a 格局 ladder names one rung per volume, verbatim; an opening that
+        # never chose one leaves `stage` empty and nothing here changes for it.
+        if ladder and volume.get('stage') not in rungs:
+            findings.append(_finding(chapter_no, 'stage', ident, rungs, _safe(volume.get('stage')),
+                                     '本卷的格局层级必须逐字取自已选阶梯里的一级。',
+                                     'volume_stage', 'blocker', 'volume'))
         fallback = DEFAULTS['volume_outline']
         policy = _length_policy((contract.get('volume_outline') or {}),
                                 fallback['words'], fallback['tolerance'])
@@ -1025,6 +1046,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
         normalized = {key: copy.deepcopy(volume.get(key, [])) for key in VOLUME_FIELDS}
         normalized['id'] = ident
         normalized['purpose'] = purpose
+        normalized['stage'] = volume.get('stage') or ''
         normalized['arc'] = volume.get('arc') or ''
         normalized['climax'] = volume.get('climax') or ''
         normalized['exit_state'] = volume.get('exit_state') or ''
@@ -1039,6 +1061,26 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
                                for row in hooks if isinstance(row, dict)]
         normalized['style'] = copy.deepcopy(volume.get('style') or {})
         report[ident] = normalized
+    if ladder:
+        # The rungs climb across the whole book, not just this batch: a rolling dispatch is checked
+        # against the volumes already on record, and the contract's volume order is the story order.
+        rank = {stage: index for index, stage in enumerate(rungs)}
+        walked = []
+        for contract_volume in rows:
+            source = next((row for row in volumes if row.get('id') == contract_volume['id']),
+                          existing.get(contract_volume['id'])) or {}
+            stage = source.get('stage') if isinstance(source, dict) else None
+            if text(stage):
+                walked.append((contract_volume['id'], contract_volume['first'], rank.get(stage)))
+        for position in range(1, len(walked)):
+            if walked[position][2] is None or walked[position - 1][2] is None:
+                continue
+            if walked[position][2] < walked[position - 1][2]:
+                findings.append(_finding(walked[position][1], 'stage', walked[position][0],
+                                         '按合同卷序只升不降', [row['stage'] for row in ladder[:walked[position][2] + 1]],
+                                         '格局阶梯按合同卷序单调不减：后面的卷不能退回更小的层级。',
+                                         'volume_stage', 'blocker', 'volume'))
+                break
     _reject(findings, 'design_drift', '卷纲未通过机械核账。', {'volume_ids': list(allowed)})
     return report
 

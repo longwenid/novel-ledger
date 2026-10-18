@@ -25,8 +25,10 @@ BRIEFS = {
 
 
 def direction_block(gates=()):
-    """The house default the ten gates aim at, rendered for the worker drafting this dispatch.
+    """The house default the current gate set aims at, rendered for the worker drafting this dispatch.
 
+    The gate count belongs to the project's own opening version, so nothing here names a number: the
+    per-gate emphasis is read off the declared table for whichever gates this dispatch asks about.
     It is a default, not a constraint: the brief says so next to the rules, because a worker that
     treats the market lean as a requirement would refuse an author who wants something else.
     """
@@ -100,25 +102,85 @@ WORLD_SELF_CHECK = (
     'selection_hash 与本任务冻结的选择逐字一致（不一致直接拒）。',
     '每个域的记录都有稳定 id 与 links=[领域:id]，引用的 id 都真实存在。',
     '本档位列出的领域每个至少一条实写记录；已选无特殊机制时 mechanisms 必须是空数组。',
+    '三条逐字绑定：门里选的位阶表进 powers、硬通货进 economy（分配者写进分配方式）、'
+    '格局阶梯每一级有一条同名记录；声明了却没落地会被 world_alignment 拒。',
+    '可选深字段写了就必须非空（epoch/carryover/scale/counter_space/survives_scale_up/'
+    'reveal_window/survival），不写不影响通过。',
     'premise 与 story_capacity 说清这个世界靠什么持续供料，不写「待补」。',
     '同一份回执里的 contract 逐字保留已选字段，不替作者改决定。',
 )
 
 
-# The concrete pieces the world has to hand the later steps, one per existing world section. The
-# web-serial method list changed what the world gate asks for; these are the same fields the
-# validator already reads, so the brief asks for usable material instead of an encyclopedia entry.
-WORLD_PIECES = (
-    ('rules', '至少一条读者看得见的等级/台阶：写清升级条件、每一级的门槛，以及违反规则的后果。'),
-    ('economy', '一种可记账的稀缺资源（硬通货）：来源、生产、分配者、稀缺点，以及为它产生的冲突。'),
-    ('factions', '至少一个有权分配该资源的组织：压迫要落成具体考核、任务或贡献，不写抽象的「势力强大」。'),
-    ('mechanisms', '有特殊机制时：原理/代价/限制/失效条件之外，补上升级材料从哪来、谁在抢（供料链）。'),
-    ('geography', '留出下一张地图（换图）的位置与通行条件：门槛是什么、谁掌握入口、越过去要付什么。'),
-    ('characters', '主角优势与台阶在人物侧的可升级点：欲望与底线之外，写清他现在站在哪一级、下一级怎么上。'),
+# The seven layers the worldbuilding evidence finds in long-running serials — core idea, power
+# ladder, space and planes, epoch history, factions and interests, resources and economy, truth and
+# disclosure — plus the surface half (society and everyday life) the same evidence separates from the
+# underlying design. Every item names the world section it is written into; no field is invented here.
+WORLD_LAYERS = (
+    ('核心理念（底层）', (
+        ('rules', '世界的底层规则：读者看得见的等级/台阶与门槛，升级条件、违反后果都要能落成场景；'
+                  '规则之间不得互相否定。'),
+        ('mechanisms', '有特殊机制时：原理/代价/限制/失效条件，外加升级材料从哪来、谁在抢（供料链）；'
+                       '已选无特殊机制时保持空数组。'),
+    )),
+    ('力量阶梯（底层）', (
+        ('powers', '位阶阶梯：每条 {name,condition,gain,cost,limit}。'
+                   '**门里 world 门选的位阶表（world_tiers）必须逐字进这里**：name/condition/gain/cost/limit '
+                   '与作者选定的一字不差，世界可以更长（允许更多高阶记录），但不能少、不能改写。'),
+    )),
+    ('空间与位面（底层）', (
+        ('geography', '空间结构：尺度（可选深字段 scale：城/域/界…）、通行条件、'
+                      '以及对立空间（可选深字段 counter_space：入侵面、里世界、异空间）。'
+                      '**格局阶梯每一级的 stage 要在本域或 cosmology/factions/powers 里有一条同名记录。**'),
+        ('cosmology', '层名 name、谁在 inhabitant、什么法则 law、怎么进 entry。'
+                      '**格局尺度到「一界/星海/诸天」时本域必填**（只写到一城一域时可以留空）。'),
+    )),
+    ('纪元史（底层）', (
+        ('history', '纪元名/分期（可选深字段 epoch）与上一纪元如何延续到当下（可选深字段 carryover）；'
+                    '历史要能解释当下的利益与矛盾，不是背景年表。'),
+    )),
+    ('势力与利益（底层）', (
+        ('factions', '至少一个有权分配硬通货的组织：压迫要落成具体考核、任务或贡献；'
+                     '跨卷仍在场的势力写清它靠什么延续（可选深字段 survives_scale_up），'
+                     '避免上一卷势力到下一卷作废。'),
+        ('characters', '主角在阶梯上的位置与可升级点：欲望与底线之外，写清他现在站在哪一级、下一级怎么上。'),
+    )),
+    ('资源与经济（底层）', (
+        ('economy', '硬通货：**门里 world 门选的 resource（name/source/allocator）必须进这里**——'
+                    'resource 与声明的 name 逐字相同，且这条记录的文本里要出现声明的 allocator'
+                    '（分配者写进分配方式）。再补稀缺点与为它产生的冲突。'),
+    )),
+    ('真相与披露层（底层）', (
+        ('mysteries', '世界的真相与读者认知的推进：披露排期（可选深字段 reveal_window）、'
+                      '以及真相揭开之后人物还要面对什么（可选深字段 survival）。'
+                      '这一层决定长篇的悬念续航，不要只写一句「幕后有人」。'),
+    )),
+    ('表层呈现（社会与日常）', (
+        ('society', '制度、习惯与执行方式：普通人在这个世界的日常处境，以及它怎样持续产出压力。'),
+        ('everyday', '生活细节与器物：能被写进场景的日常，用来给宏大设定落地，不做纯氛围铺陈。'),
+    )),
 )
-WORLD_PIECE_NOTE = ('这些设定是被后续卷纲/章纲消费的：台阶→人物与知情状态、硬通货→章纲资源增量（进漂移账）、'
-                    '地图→章纲 places（进位置校验）。所以每条都要写成「能用」的具象设定'
-                    '（谁、在哪、要什么、付什么代价），不是百科条目；这一章用不上的设定不要写进来。')
+WORLD_PIECE_NOTE = ('这三条绑定是机械核对的，写错会被 world_alignment 直接拒：'
+                    '① 门里选的位阶表（world_tiers）逐字进 powers；'
+                    '② 门里选的硬通货（world_resource）进 economy，分配者写进分配方式；'
+                    '③ 格局阶梯每一级（ladder 的 stage）在本世界有一条同名记录'
+                    '（geography/cosmology/factions/powers 任一）。'
+                    '另外这些设定是被后续卷纲/章纲消费的：位阶→人物与知情状态、硬通货→章纲资源增量（进漂移账）、'
+                    '地图与位面→章纲 places（进位置校验）。所以每条都要写成「能用」的具象设定'
+                    '（谁、在哪、要什么、付什么代价），不是百科条目；本档位用不上的领域留空数组。')
+
+
+def _world_piece_lines(sections):
+    """The layer skeleton rendered for one dispatch, marking domains this tier does not require."""
+    required = set(sections) if sections else None
+    lines = []
+    for layer, items in WORLD_LAYERS:
+        rows = [(name, text) for name, text in items if required is None or name in required]
+        if not rows:
+            continue
+        lines.append('- **%s**' % layer)
+        for name, text in rows:
+            lines.append('  - %s（%s）：%s' % (name, world.LABELS.get(name, name), text))
+    return lines
 
 
 def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections=None):
@@ -127,16 +189,15 @@ def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections
              '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。'
              '完整记录须有稳定 id 与 links=[领域:id]；同时给 premise、story_capacity 与准确的 selection_hash。'
              '不要写"待补"，写进去的域都要能落到具体场景。', '']
-    lines.extend(['## 世界要产出哪些网文可用件（就用现有字段，不新增字段）',
-                  *['- %s（%s）：%s%s' % (name, world.LABELS[name], text,
-                                         '' if not sections or name in set(sections) else '（本档位不要求该领域，留空即可）')
-                    for name, text in WORLD_PIECES],
+    lines.extend(['## 世界要产出哪些网文可用件（按七层骨架，就用现有字段，不新增字段）',
+                  *_world_piece_lines(sections),
                   WORLD_PIECE_NOTE, ''])
     if sections:
-        # Same declaration the validator uses: asking for ten domains while the check happens to
-        # accept a smaller world is how a micro project ends up writing records nobody reads and
-        # repairing four times.
-        labels = '、'.join('%s（%s）' % (name, world.LABELS[name]) for name in sections)
+        # Same declaration the validator uses: asking for the full twelve domains while the check
+        # happens to accept a smaller world is how a micro project ends up writing records nobody
+        # reads and repairing four times. The list is the tier's domains plus whatever this opening's
+        # own gates declared (a tier ladder adds `powers`, a grand scale adds `cosmology`).
+        labels = '、'.join('%s（%s）' % (name, world.LABELS.get(name, name)) for name in sections)
         empty = '、'.join(name for name in world.SECTIONS if name not in sections)
         lines.extend(['## 本档位要填的领域', '本项目按体量只需要：' + labels + '。'
                       + ('其余领域（' + empty + '）保留为空数组，不要为凑数写进来；' if empty else '')
@@ -144,8 +205,9 @@ def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections
                         '已选无特殊机制时 mechanisms 必须为空数组，有限机制时至少一条。', ''])
     if scale:
         # A world is read by every later dispatch, so its size is a recurring cost, not a one-off.
-        # Ten domains at "at least one record" is a floor, not a target: a single-volume micro book
-        # only needs the institutions and people its one line actually walks through.
+        # The twelve domains at "at least one record" is a floor, not a target — and this tier asks
+        # for only some of them: a single-volume micro book only needs the institutions and people
+        # its one line actually walks through.
         lines.extend(['## 规模要与已选体量相称', '本项目的体量与分卷是：' + scale + '。'
                       '世界只需支撑这条主线走完：写进每条记录前先问它会在哪一章被用到，用不上的城市史、势力谱系与日常细节不要为凑数写进来；'
                       '每多一条记录，之后每一次派工都要多读它。story_capacity 用一句话说清这个世界能撑住多少章、靠什么持续供料。', ''])
@@ -162,7 +224,7 @@ def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections
         lines.append('## 已选方向（不得改动）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
         lines.append('')
-    lines.extend(direction_block(('world', 'protagonist', 'engine', 'ending')))
+    lines.extend(direction_block(('world', 'ladder', 'premise', 'opposition', 'payoff', 'protagonist')))
     lines.extend(['## 同一份提交里还要给约定', OPTION_CONTRACT,
                   '约定必须逐字保留已选字段；模板里 contract 一节的字段骨架照填。', ''])
     lines.extend(_check_block('提交前自检（这些是机械校验会直接判的）',
@@ -214,6 +276,7 @@ def self_check_block():
 VOLUME_CHECK_HINTS = (
     'volumes 的 id 与顺序和 payload.volume_ids / contract.volumes 一一对应，不多不少。',
     '每卷汉字数落在 words±tolerance；purpose、arc、climax、exit_state、style.trend 都不能空。',
+    'stage 取已选格局阶梯里的一级并逐字一致，按卷序只升不降（旧开书没有阶梯时允许留空）。',
     'node/thread/hook 的 id 全书唯一，不覆盖已批准的 id；node/thread window 落在本卷章号区间内。',
     'hooks 每条 plant 必须落在本卷章号区间；payoff[0] >= plant[1]；越过卷末的必须 continues=true 且 required=false。',
     'resources/places/knowledge/characters 引用的 key/entity 必须已存在于世界模型或既有状态。',
@@ -240,6 +303,9 @@ def stage(name, payload=None):
         'opening_contract': '把已选方向与已核验世界整理为完整约定，严格保留对齐字段，按模板逐字段填写，不增加正文事实。',
         'volume_outline': '交付 volumes：恰好覆盖本批次的每一卷（payload.volume_ids），顺序与 contract.volumes 一致。'
                           '每卷是约 words 汉字的极简卷纲，把这一卷的因果骨架说完（words±tolerance 按性质是每卷总量，不是每段）。'
+                          'stage 必填（opening/5 项目）：从已选格局阶梯里取一级，逐字写那一级的 stage 名；'
+                          '按合同卷序只升不降（后一卷的层级序号不得低于前一卷），不写「第一卷」这类编号——'
+                          '阶梯每一级在世界模型里都有同名记录，卷纲的 stage 必须对得上。'
                           'purpose ≤60 汉字说这一卷的职责；arc 约 250 汉字写开局处境→关键转折→卷末局面；'
                           'turns 至少两条转折（at 取「卷中」「卷尾」或「第N章附近」）；climax 写卷末高潮与兑现物；'
                           'nodes 给 {id,kind:main|side|hidden,purpose,ending_condition,required,window:[本卷最早章,本卷最晚章]}；'
