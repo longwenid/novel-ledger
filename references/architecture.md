@@ -33,7 +33,6 @@ compact 是派工返回视图，冻结任务、正文和材料保持完整。任
 
 ```mermaid
 flowchart TD
-    %% svg 待重新生成：本图新增 drift 节点，docs/architecture.svg 仍是旧版，见 docs/README.md 更新流程
     CLI[命令入口 novel.py] --> BOOT[组合根 bootstrap]
     BOOT --> APP[应用编排 application]
     BOOT --> CTX[冻结编译 context]
@@ -86,7 +85,7 @@ flowchart TD
 
 图中“纯领域规则”汇总规则模块，略去逐域边以保持可读；`drift` 单列，因为它是判据前移的主入口，同时被 workflow 直接调用。完整依赖白名单、所有作用域的导入、核心 I/O 禁令和无环约束由 `tests/test_architecture.py` 强制。替换验证须通过实际用例观察结果：内存账本跑通生命周期、只读账本生成交付、替代宿主与运行工厂执行公开入口，真实组合根另验收事务与文件效果衔接。具体回归入口按 [改动类型选择验证](validation.md#按改动类型选择验证)，完整边集由 `validation/measure.py` 测量。
 
-架构图存放于 [docs/architecture.svg](../docs/architecture.svg)。图表与字段的说明各自引用对应真源，不在派生文件或其他文档中另立一套结构要求。
+架构图以 Mermaid 块形式存放在本文件（真源），快照存于 [docs/architecture.mmd](../docs/architecture.mmd) 与 README，三处逐字一致；**仓库不保存渲染件**，需要图片时从快照现场导出。图表与字段的说明各自引用对应真源，不在派生文件或其他文档中另立一套结构要求。
 
 | 文件 | 权威职责 |
 |---|---|

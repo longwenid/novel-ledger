@@ -30,7 +30,6 @@ novel-ledger 把这些问题当**账本问题**处理：让每一章的事实有
 
 ```mermaid
 flowchart TD
-    %% svg 待重新生成：本图新增 drift 节点，docs/architecture.svg 仍是旧版，见 docs/README.md 更新流程
     CLI[命令入口 novel.py] --> BOOT[组合根 bootstrap]
     BOOT --> APP[应用编排 application]
     BOOT --> CTX[冻结编译 context]
@@ -75,7 +74,7 @@ flowchart TD
     DOMAIN --> C
 ```
 
-上图表示层级间的主要源码依赖。`novel.py` 只依赖基础契约与组合根，`bootstrap` 通过 LocalRuntime 统一提供初始化、用例、导出与宿主入口。组合根将具体存储、冻结编译、文件交付、时钟和 ID 生成器接到应用端口，`Application` 只使用注入的能力。图中“纯领域规则”合并展示规则模块（`drift` 单列，因为它是判据前移的主入口）；完整模块依赖由白名单与无环守护检查。渲染图见 [docs/architecture.svg](docs/architecture.svg)（**待重新生成**：本次新增 `drift` 节点与连线，SVG 仍是旧版），真源为 [references/architecture.md](references/architecture.md)；README 和 mmd 快照逐字一致，测试核对“画出的边必须被白名单允许、画出的节点必须解析到真实模块或已声明的聚合组”，但图是摘要，不画出全部允许边。
+上图表示层级间的主要源码依赖。`novel.py` 只依赖基础契约与组合根，`bootstrap` 通过 LocalRuntime 统一提供初始化、用例、导出与宿主入口。组合根将具体存储、冻结编译、文件交付、时钟和 ID 生成器接到应用端口，`Application` 只使用注入的能力。图中“纯领域规则”合并展示规则模块（`drift` 单列，因为它是判据前移的主入口）；完整模块依赖由白名单与无环守护检查。真源为 [references/architecture.md](references/architecture.md) 的 Mermaid 块，快照存于 [docs/architecture.mmd](docs/architecture.mmd) 与本文件、三处逐字一致；**仓库不存渲染件**（需要图片时用任意 Mermaid 渲染器从 mmd 现场导出）。测试核对“画出的边必须被白名单允许、画出的节点必须解析到真实模块或已声明的聚合组”，但图是摘要，不画出全部允许边。
 
 ### 分层与职责
 

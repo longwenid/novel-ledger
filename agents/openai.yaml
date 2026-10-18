@@ -1,4 +1,4 @@
 interface:
   display_name: "长篇小说工作台"
-  short_description: "按作者要求开书、续写和修订长篇网文，结合创作记忆、独立写审与准确版本交付"
-  default_prompt: "使用 $novel-ledger 按我的已有要求推进小说创作，保留作者决定，完成独立写审并交付实际成果。"
+  short_description: "按作者要求开书、续写和修订长篇网文：卷纲与章纲状态链、执笔自比与引擎机械核账"
+  default_prompt: "使用 $novel-ledger 按我的已有要求推进小说创作，保留作者决定，按章纲执笔并完成自比核账后交付实际成果。"
