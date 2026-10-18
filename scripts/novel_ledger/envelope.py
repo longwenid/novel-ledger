@@ -9,13 +9,14 @@ from __future__ import annotations
 
 from .contracts import require
 
-# Fields the freeze compiler always produces. A worker's access token, sealed
-# first-read material and the dispatch brief are added by other owners, so they
-# are declared optional rather than required.
+# Fields the freeze compiler always produces. A worker's access token and the dispatch brief are
+# added by other owners, so they are declared optional rather than required. `prose` remains declared
+# because the compiler still emits it: no v2 stage is a blind review, so it is always empty, but the
+# key keeps the envelope rejecting an undeclared field instead of silently accepting one.
 WORK_FIELDS = ('schema', 'stage', 'chapter', 'scope', 'first', 'last', 'payload', 'branch',
-               'revision', 'records', 'required', 'checks_version', 'narrative_tracking',
-               'capabilities', 'policy', 'prose', 'blind', 'obligations')
-WORK_OPTIONAL = ('brief', 'first_read', 'first_read_hash')
+               'revision', 'records', 'required', 'narrative_tracking',
+               'capabilities', 'policy', 'prose')
+WORK_OPTIONAL = ('brief',)
 # `payload` is the one work field whose contents a stage decides on, so its keys are declared as
 # well. Without this, "an undeclared field is rejected" held for the envelope but not for the
 # container everything else travels in: the compiler wrote keys the consumers (briefs, result
@@ -23,18 +24,12 @@ WORK_OPTIONAL = ('brief', 'first_read', 'first_read_hash')
 WORK_PAYLOAD_FIELDS = (
     'gate', 'round', 'creative_lens', 'lens_brief',            # one opening gate's board
     'also',                                                    # combined world + contract dispatch
-    'entities',                                                # profiles for these participants
-    'mode', 'repair', 'proposed_chapter',                       # re-design and alignment dispatch
-    'replan', 'unmet',                                         # why a window is planned again
+    'mode', 'repair',                                          # redesign / bounded outline repair
     'understanding', 'editorial',                               # capability flags the brief reads
-    'original_plan', 'prior_sessions', 'original_prose_hash',   # revision_review carry
-    'volume_outline',                                           # outline policy for this batch
-    'node_ids', 'node_criteria',                                # chapter_review node contracts
-    'outline_seed',                                             # plan rows seeded from the reviewed outline
-    'author_question_hash',                                     # contract_review author question
-    'review_key', 'scope_first', 'scope_last', 'review_tree', 'root',
-    'part_id', 'level', 'children', 'first', 'last',            # bounded coverage tree
-    'remedies', 'closure',                                      # root scope closure
+    'volume_ids',                                               # which volumes a volume_outline batch answers
+    'volume', 'from_chapter', 'drift', 'reason',                # chapter_outline batch and its re-plan input
+    'volume_outline', 'chapter_outline',                        # the volume row / the chapter row handed to a writer
+    'design_drift',                                             # drift rows a re-plan must absorb
 )
 
 # Fields the local delivery adapter renders for one dispatch. Guides are attached
@@ -43,9 +38,9 @@ TASK_FIELDS = ('schema', 'task_id', 'input_hash', 'stage', 'chapter', 'scope', '
                'prose_files', 'task_path', 'result_path', 'project_path', 'host_log_path',
                'process', 'requires_new_worker', 'review_session', 'version', 'claim', 'baseline',
                'commands', 'stages', 'note', 'redispatch_count', 'material_bytes', 'identity_path')
-# A locked dispatch hides the formal material: it carries the first-read brief and
-# path instead, and only an unlocked dispatch adds the input/template/records set.
-TASK_OPTIONAL = ('brief', 'first_read_path', 'guides', 'input_path', 'template_path',
+# A dispatch carries the formal material; the locked first-read form is gone with the review
+# stages, so the envelope has one shape instead of two.
+TASK_OPTIONAL = ('brief', 'guides', 'input_path', 'template_path',
                  'records', 'required', 'brief_path', 'dispatch_path', 'stale_result_session',
                  'catalog_path')
 

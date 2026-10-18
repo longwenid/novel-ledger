@@ -1,10 +1,10 @@
 # 丰富世界模型
 
-何时读：选择结束后的 world_model/world_review、世界补读和约定整理。
+何时读：逐门选择结束后的 world_model、世界补读和约定整理。
 
 ## 适用范围与来源
 
-逐门选择结束后自动进入世界创建。设计者读取 opening_choices/opening_basis，绑定 selection_hash，不再要求作者填百科表。所选前提、主角、机制范围和禁区是约束；世界如何承载持续行动、冲突与后果由设计者展开并独立核验。
+逐门选择结束后自动进入世界创建。设计者读取 opening_choices/opening_basis，绑定 selection_hash，不再要求作者填百科表。所选前提、主角、机制范围和禁区是约束；世界如何承载持续行动、冲突与后果由设计者展开。
 
 ## 创建内容
 
@@ -25,28 +25,41 @@
 
 每条有稳定 id 与 links=[领域:id]，引用须存在。文字为完整具体说明，不用“待补”“同上”。保留所选主角欲望底线，不能把无机制改成外挂，也不得越过世界门所选禁区。丰富度来自因果、利益和场景承载，条目数量不证明丰富。
 
-地域影响通行和资源，历史影响制度与势力，日常能进入人物行动；避免孤立百科和统一动机。体量决定展开尺度，世界可丰富，远期章细纲继续滚动。
+地域影响通行和资源，历史影响制度与势力，日常能进入人物行动；避免孤立百科和统一动机。体量决定展开尺度，世界可丰富，远期章纲继续滚动。
 
-## 独立核验
+## 机械校验与采纳
 
-world_model 候选不更新正文事实。新 world_review 完整读选择和候选（证据 chapter=0），分别核对选择、规则、空间、历史、势力、经济、社会、人物、披露和长篇承载。逐项理由及引文，具体指出失效风险；通过后采纳，fix 回原设计有界修复。
+world_model 候选不更新正文事实。**世界之后没有独立核验阶段**：提交时由引擎机械校验字段形状、links 引用是否存在、领域是否落在本档位声明内、记录 id 是否唯一，以及世界与所选前提、机制范围、禁区是否一致。通过即在同一事务采纳；失败按名返回，走既有 `repair` 预算有界返修，不新增阶段。
 
-机械校验只证明字段、引用和声明一致。审稿者从候选引文说明具体风险、对后续人物选择或情节的影响及修复方向，沿现有检查项判断，不增设评分或记录数量门槛。隐秘真相与未来意图不直接变为人物知情或已发生事件。
+机械校验只证明字段、引用和声明一致：**世界的因果承载、长期供料能力和失效风险没有人独立复核**。这类问题只能在后面暴露——卷纲的 `exit_state` 与章纲的卷内状态链在设计与执笔期才能证明它能否供料；需要独立判断时由作者抽读候选，或另行发起一次修订。
+
+隐秘真相与未来意图不直接变为人物知情或已发生事件。
 
 ## 约定与交付
 
-默认 world_model 在同一任务中起草世界和完整约定；检查 task.stages、payload.also 与模板，按要求把约定放入 data.contract。world_review 只核验世界，世界通过后再由独立 contract_review 核验约定；不把候选世界先当作已成立事实。单独的 opening_contract 任务沿自己的冻结材料执行，开书交接见 [系统执行](opening.md#系统执行)。
+默认 world_model 在同一任务中起草世界和完整约定；检查 task.stages、payload.also 与模板，按要求把约定放入 data.contract。世界与候选约定由引擎按同一套机械校验在提交时判定（约定字段、与各门选择逐字一致、world_rules 与候选世界逐字一致），通过后原子激活，**没有独立核验阶段**。单独的 opening_contract 任务沿自己的冻结材料执行，开书交接见 [系统执行](opening.md#系统执行)。
 
 | 交付对象 | 来源与时机 |
 |---|---|
-| book.html | 世界与约定核验后合并完整设定、已选方向和核验记录，卷纲推进后继续更新。world_view.html_path 指向该统一页面。 |
-| world.json | 导出已核验的完整世界；与页面一并提供绝对路径，失败后由 advance 重建视图。 |
-| 卷纲范围 | 按 outline_ready 的 planning_mode/coverage 说明；默认 rolling 随写作接续，current/all 的范围见 [叙事推进](narrative.md#滚动卷纲)，关闭卷纲时为 world_ready。 |
+| book.html | 世界与约定机械校验通过后合并完整设定、已选方向，卷纲推进后继续更新。world_view.html_path 指向该统一页面。 |
+| world.json | 导出已采纳的完整世界；与页面一并提供绝对路径，失败后由 advance 重建视图。 |
+| 卷纲范围 | 按 outline_ready 的实际覆盖说明：默认 scope=all 一次交全部卷，rolling 进卷前交该卷；关闭卷纲时为 world_ready。见 [叙事推进](narrative.md#卷纲)。 |
 
 世界关联图只使用显式 links，历史时间线按模型记录顺序展示，不从描述推断关系或时期。
 
-## 后续规划
+## 卷纲与章纲从这里取什么
 
-书级规划读完整世界。章计划声明 world_refs=[领域:id]；跟踪项目交付当前人物、引用记录及直接关联；隐秘真相保留在可选 world_author_records，并用 disclosure_boundary 明确本章披露许可。原 world_model 完整保留，沿关联补读，不递归展开整个世界。未启用叙事跟踪时沿用完整关联交付。未选记录不代表语义无关，不截断记录或把秘密直接写成角色对白。
+书级规划读完整世界；世界模型是后续所有漂移字段的引用底账，**引用不存在的 key/entity 会在章纲提交时被拒绝**。
 
-世界到线路、卷纲和章计划的接口见 [叙事推进](narrative.md)；写作与审稿的判断依据见 [创作与写审](craft.md)；交付失败的恢复入口见 [运行](runtime.md)。
+| 下游字段 | 取自世界模型的哪里 |
+|---|---|
+| `volume_outline.resources[].key` | 世界的 economy/everyday 资源条目 id |
+| `volume_outline.places[].from/to`、`chapter_outline.places[]` | geography 的地点 id（位置跳变到未登记地点即拒绝） |
+| `volume_outline.characters[].entity`、`chapter_outline.characters[].entity` | characters 记录 id，以及既有状态里的人物 |
+| `volume_outline.knowledge[].who/topic`、`chapter_outline.knowledge[]` | characters 的人物 id 与 mysteries/factions 等提供的话题 |
+| `chapter_outline.world_refs` | `[领域:id]`，领域名取本页表头，id 必须在模型中存在 |
+| `chapter_outline.new_entities` | 首次登场的新人物/地点/物品内联档案；落地后成为新的既有状态，后续按 id 引用 |
+
+执笔阶段交付当前人物、引用记录及直接关联；隐秘真相保留在可选 world_author_records，并用 disclosure_boundary 明确本章披露许可。原 world_model 完整保留，沿关联补读，不递归展开整个世界。未选记录不代表语义无关，不截断记录或把秘密直接写成角色对白。
+
+世界到卷纲、章纲的接口与状态链见 [叙事推进](narrative.md)；执笔与自比的判断依据见 [创作与自比](craft.md)；交付失败的恢复入口见 [运行](runtime.md)。

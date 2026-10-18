@@ -1,14 +1,13 @@
 """Domain boundary checks run against plain values, with no project or SQLite setup."""
 import ast
-import copy
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import design_queries, entities, facts, planning, quality, result_templates, workflow
-from novel_ledger.contracts import AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, Error
+from novel_ledger import design_queries, entities, facts, planning, result_templates, workflow
+from novel_ledger.contracts import Error
 from novel_ledger.evidence import evidence
 from architecture_table import ADAPTERS, ALLOWED, CORE_EXTERNAL
 from support import contract
@@ -25,8 +24,6 @@ class DomainBoundaryTests(unittest.TestCase):
         second = {'id': 'choice', 'depends_on': ['arrival']}
         designs = {'book': {'nodes': [first]}, 'volume:1': {'nodes': [second]}}
         self.assertEqual(design_queries.node_map(designs), {'arrival': first, 'choice': second})
-        # The lifecycle compatibility query delegates to the same owner.
-        self.assertEqual(workflow.node_map({'designs': designs}), design_queries.node_map(designs))
         self.assertEqual(design_queries.node_map({}), {})
 
     def test_entity_identity_rules_need_only_an_entity_table(self):
@@ -48,17 +45,6 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertIs(facts.evidence, evidence)
         self.assertCode('evidence_scope', evidence, {'chapter': 2, 'quote': '门'}, source)
 
-    def test_review_validation_accepts_only_a_receipt_and_frozen_prose(self):
-        source = {3: '门已经锁上。'}
-        receipt = {'verdict': 'pass', 'checks_version': CHECKS_VERSION,
-                   'checks': [{'id': 'continuity', 'result': 'pass', 'reason': '门的状态一致。',
-                               'evidence': [{'chapter': 3, 'quote': source[3]}]}],
-                   'findings': []}
-        original = copy.deepcopy(receipt)
-        normalized = quality.checks(receipt, ['continuity'], source)
-        self.assertEqual(normalized['checks'][0]['evidence'][0]['start'], 0)
-        self.assertEqual(receipt, original)
-        self.assertFalse(hasattr(quality, 'template'))
 
     def test_lexical_queries_need_only_policy_versions(self):
         versions = [{'version': 1, 'source': '最初约定', 'policy': {'forbidden_terms': ['甲']}},
@@ -69,18 +55,6 @@ class DomainBoundaryTests(unittest.TestCase):
         material['forbidden_terms'].append('丙')
         self.assertEqual(versions[-1]['policy']['forbidden_terms'], ['乙'])
 
-    def test_plan_rules_can_run_without_the_fact_reducer_state_shape(self):
-        data = {'plans': [{'chapter': 1, 'goal': '查明来源', 'obstacle': '门被锁住',
-                           'choice': '留下等待', 'cost': '失去时间', 'change': '得到线索',
-                           'ending': '看见签字', 'node_ids': ['arrival'], 'participants': ['shen'],
-                           'new_entities': [{'id': 'other', 'name': '顾平', 'kind': 'person'}],
-                           'schedule': [{'basis': 'main_clock', 'day': 2, 'event': '等门开启'}]}]}
-        state = {'entities': {'shen': {'id': 'shen', 'name': '沈桐', 'kind': 'person'}}, 'clock': 1}
-        original = copy.deepcopy(state)
-        plans = planning.validate_plans(data, 1, 1, {'arrival'}, state, {})
-        self.assertEqual(plans[0]['participants'], ['shen'])
-        self.assertEqual(state, original)
-        self.assertNotIn('other', state['entities'])
 
     def test_initial_fact_consistency_is_enforced_by_lifecycle_composition(self):
         raw = contract()
@@ -89,27 +63,33 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertEqual(planning.validate_contract(raw)['initial_resources'][0]['holder'], 'missing')
         self.assertCode('resource', workflow.new_book, raw)
 
-    def test_task_result_shapes_are_built_outside_quality_judgments(self):
-        blank = result_templates.template('chapter_review', 3, {3: '正文'}, version=CHECKS_VERSION)
-        self.assertEqual(blank['facts']['checks_version'], CHECKS_VERSION)
-        self.assertEqual(blank['facts']['verdict'], '')
-        self.assertEqual(blank['reader']['findings'], [])
-        self.assertIn('reader_promise', result_templates.template('opening_contract', 0, {}))
+    def test_task_result_shapes_are_built_outside_any_judgment(self):
+        blank = result_templates.template('write', 3, payload={'chapter_outline': {}})
+        self.assertEqual([item['kind'] for item in blank['drift_check']['items']], ['clock'])
+        self.assertIn('self_check', blank)
+        self.assertIn('reader_promise', result_templates.template('opening_contract', 0))
+        volume = result_templates.template('volume_outline', 1, payload={'volume_ids': ['v1']})
+        self.assertEqual([row['id'] for row in volume['volumes']], ['v1'])
+        chapter = result_templates.template('chapter_outline', 1,
+                                            payload={'volume': 'v1', 'chapter_outline': {'first': 2, 'last': 3}})
+        self.assertEqual([row['chapter'] for row in chapter['chapters']], [2, 3])
 
     def test_declared_delivery_blocks_match_the_blank_templates(self):
         from novel_ledger import stages
         for stage, blocks in stages.BLOCKS.items():
             with self.subTest(stage=stage):
-                self.assertEqual(tuple(sorted(result_templates.template(stage, 1, {}))),
+                self.assertEqual(tuple(sorted(result_templates.template(stage, 1))),
                                  tuple(sorted(blocks)))
         for stage, extras in stages.CONDITIONAL_BLOCKS.items():
+            if stage in stages.DYNAMIC_BLOCKS:
+                continue                     # a dynamic shape is checked by the module that owns it
             with self.subTest(stage=stage, conditional=True):
-                result = set(result_templates.template(stage, 1, {}))
+                result = set(result_templates.template(stage, 1))
                 self.assertLessEqual(result, set(stages.BLOCKS.get(stage, ())) | set(extras))
         # A combined world dispatch adds exactly the contract block and nothing else; this is
         # the block a repair dispatch once omitted, leaving the fix with nowhere to live.
-        skeleton = result_templates.template('world_model', 1, {})
-        combined = result_templates.template('world_model', 1, {}, extra=('opening_contract',))
+        skeleton = result_templates.template('world_model', 1)
+        combined = result_templates.template('world_model', 1, extra=('opening_contract',))
         self.assertEqual(set(combined) - set(skeleton), {'contract'})
         # Completeness is the point: a stage with no declaration would be a stage whose
         # deliverable shape nobody agreed on.
@@ -191,66 +171,7 @@ class DomainBoundaryTests(unittest.TestCase):
         workflow.require_narrow_repair(previous, changed, [dict(findings[0], reason='整体不够好。',
                                                                evidence=[])])
 
-    def test_the_producer_brief_carries_the_rubric_the_reviewer_uses(self):
-        """Same criteria, one table: the producer can answer before submitting what the review asks.
 
-        The most expensive rework is an independent session plus the full material plus a repair round,
-        spent discovering something the brief could have asked for. This checks the two sides cannot
-        drift: every criterion the producer is judged by has a self-check line, and the brief renders
-        the criteria the review will actually use for that stage.
-        """
-        from novel_ledger import briefs, contracts
-        for producer, kinds in briefs.PRODUCER_CHECKS.items():
-            for kind in kinds:
-                for criterion in contracts.checks_for(contracts.CHECKS_VERSION, kind):
-                    with self.subTest(stage=producer, criterion=criterion):
-                        self.assertIn(criterion, briefs.SELF_CHECK_HINTS,
-                                      '核验清单里的判据要有生产者自检一行，否则简报会与判据漂移')
-        text = briefs.stage('write', {'checks_version': contracts.CHECKS_VERSION})
-        self.assertIn('## 提交前自检（独立审查者会逐项看这些）', text)
-        for criterion in contracts.checks_for(contracts.CHECKS_VERSION, 'reader'):
-            self.assertIn('- %s：' % criterion, text)
-        world_text = briefs.world_model(scale='微型档，1 卷共 17 章', sections=('rules', 'society'))
-        for criterion in contracts.checks_for(contracts.CHECKS_VERSION, 'world'):
-            self.assertIn('- %s：' % criterion, world_text)
-        # A stage the review judges without a producer counterpart renders nothing extra.
-        self.assertNotIn('提交前自检', briefs.stage('chapter_review', {'checks_version': contracts.CHECKS_VERSION}))
-
-    def test_the_finding_shape_is_stated_where_the_blank_template_cannot_show_it(self):
-        """findings[].evidence is one object while the same key in checks[] is a list.
-
-        The blank template can only offer an empty findings list, so the asymmetry has to be told
-        in the brief; four reviewers in one live run each spent a preflight round on it. This
-        derives the finding-bearing stages from the templates themselves, so a stage that gains
-        findings without the brief line fails here instead of in a cold worker's second attempt.
-        """
-        from novel_ledger import briefs, contracts, result_templates, stages
-
-        def carries_findings(node):
-            if isinstance(node, dict):
-                return 'findings' in node or any(carries_findings(value) for value in node.values())
-            if isinstance(node, list):
-                return any(carries_findings(value) for value in node)
-            return False
-
-        payload = {'volume_outline': {'scope': 'rolling', 'words': 500, 'tolerance': 50,
-                                      'world_hash': 'h', 'first': 1, 'last': 2}}
-        derived = set()
-        for stage in stages.STAGES:
-            try:
-                blank = result_templates.template(stage, 1, {}, payload=payload)
-            except Exception:                      # a dynamic shape is checked by its own owner
-                continue
-            if carries_findings(blank):
-                derived.add(stage)
-        self.assertEqual(derived, set(briefs.FINDING_STAGES))
-        for stage in sorted(briefs.FINDING_STAGES):
-            with self.subTest(stage=stage):
-                self.assertIn(briefs.FINDING_SHAPE,
-                              briefs.stage(stage, {'checks_version': contracts.CHECKS_VERSION}))
-        # A stage without findings does not pay for the line.
-        self.assertNotIn(briefs.FINDING_SHAPE,
-                         briefs.stage('book_plan', {'checks_version': contracts.CHECKS_VERSION}))
 
     def test_every_stage_declares_the_material_it_must_read(self):
         """The same completeness rule as deliverable blocks, for the other half of a dispatch.
@@ -270,7 +191,7 @@ class DomainBoundaryTests(unittest.TestCase):
                 self.assertEqual(len(names), len(set(names)), '同一份材料不要写两次')
                 self.assertTrue(all(isinstance(name, str) and name for name in names))
         self.assertEqual(context.undeclared_material('write', ['contract', 'world_model']), ['world_model'])
-        self.assertEqual(context.undeclared_material('write', ['contract', 'plan']), [])
+        self.assertEqual(context.undeclared_material('write', ['contract', 'chapter_outline']), [])
 
     def test_causal_frontier_is_iterative_and_bounded(self):
         from novel_ledger import design_queries as queries
@@ -286,20 +207,6 @@ class DomainBoundaryTests(unittest.TestCase):
         wide.update({'p%d' % i: {'id': 'p%d' % i, 'depends_on': []} for i in range(40)})
         self.assertEqual(len(queries.frontier(wide, ['seed'])), queries.NODE_LIMIT)
 
-    def test_completion_sources_include_registered_payoffs(self):
-        from novel_ledger import editorial
-        state = {'hooks': {}, 'developments': {'shen': [{'change': '愿意担责。'}]},
-                 'reader_knowledge': {'source': {'claim': '他知道了来源。'}}}
-        book = {'contract': {'reader_promise': '看到责任被查明。', 'ending': '他担下了责任。'},
-                'designs': {}, 'feedback': [], 'state': state,
-                'world': {'mysteries': [{'id': 'source', 'disclosure': '卷末揭示来源。'}]}}
-        rows = {row['id']: row for row in editorial.sources(book, 'book')}
-        self.assertIn('development:shen:0', rows)
-        self.assertIn('reader_knowledge:source', rows)
-        self.assertEqual(rows['reader_knowledge:source']['required'], False)
-        self.assertIn('mystery:source', rows)
-        self.assertEqual(rows['mystery:source']['required'], True)
-        self.assertEqual(editorial.sources(book, 'volume:v1'), [])
 
     def test_task_envelopes_reject_undeclared_fields(self):
         from novel_ledger import envelope
@@ -378,18 +285,15 @@ class DomainBoundaryTests(unittest.TestCase):
         """
         from novel_ledger import context
         self.assertEqual(context.projects_from('world_core'), 'world_model')
-        self.assertEqual(context.projects_from('frontier:volume:v1'), 'design:volume:v1')
-        self.assertEqual(context.projects_from('scope_profiles'), 'profiles')
         self.assertIsNone(context.projects_from('design:book'))
-        records = {'contract': 'h0', 'world_model': 'h1', 'world_core': 'h2', 'design:book': 'h3',
-                   'frontier:book': 'h3', 'profiles': 'h4', 'scope_profiles': 'h4'}
-        both = ['contract', 'world_model', 'world_core', 'design:book', 'frontier:book',
-                'profiles', 'scope_profiles']
+        records = {'contract': 'h0', 'world_model': 'h1', 'world_core': 'h2',
+                   'state': 'h3', 'complete_state': 'h3'}
+        both = ['contract', 'world_model', 'world_core', 'state', 'complete_state']
         self.assertEqual(context.thin_required(records, both),
-                         ['contract', 'world_model', 'design:book', 'profiles'])
+                         ['contract', 'world_model', 'state'])
         # Where no source is required the projection is exactly what the worker should read.
-        self.assertEqual(context.thin_required(records, ['world_core', 'frontier:book', 'scope_profiles']),
-                         ['world_core', 'frontier:book', 'scope_profiles'])
+        self.assertEqual(context.thin_required(records, ['world_core', 'complete_state']),
+                         ['world_core', 'complete_state'])
         self.assertEqual(context.thin_required({'world_model': 'h1', 'world_core': 'h2'},
                                                ['world_model', 'world_core']), ['world_model'])
 
@@ -435,66 +339,8 @@ class DomainBoundaryTests(unittest.TestCase):
             with self.subTest(literal=literal):
                 self.assertNotIn(literal, source, 'capability strings belong to contracts, not to a second copy')
 
-    def test_the_author_channel_is_declared_for_pre_prose_reviews_only(self):
-        from novel_ledger import briefs, stages
-        self.assertTrue(AUTHOR_CHANNEL_STAGES <= stages.STAGES,
-                        'author channel names a stage the engine does not dispatch')
-        for name in sorted(AUTHOR_CHANNEL_STAGES):
-            with self.subTest(stage=name):
-                stages.require_stage(name)
-                self.assertIn('decision={id,question,options}', briefs.stage(name, {}),
-                              'reviewers cannot use an option the brief never mentions')
-        # A chapter is already committed prose: its review must describe work a writer can do now.
-        self.assertFalse(AUTHOR_CHANNEL_STAGES & {'write', 'chapter_review', 'revision_review', 'repair', 'redesign'})
 
-    def test_author_level_findings_are_structured_and_bounded(self):
-        source = {3: '门已经锁上。'}
-        decision = {'id': 'death-detail', 'question': '铁门里的内容能不能被录音带出去？',
-                    'options': [{'label': '不能被带出', 'impact': '录音与转述都须改写。'},
-                                {'label': '可以被带出', 'impact': '禁令改写为另一条。'}]}
 
-        def receipt(severity, **extra):
-            finding = {'criterion': 'continuity', 'severity': severity, 'reason': '作者约定本身互相冲突。',
-                       'evidence': {'chapter': 3, 'quote': source[3]}, **extra}
-            return {'verdict': 'fix', 'checks_version': CHECKS_VERSION,
-                    'checks': [{'id': 'continuity', 'result': 'fix', 'reason': '冲突。',
-                                'evidence': [{'chapter': 3, 'quote': source[3]}]}], 'findings': [finding]}
-
-        # A chapter-level review has no author channel: that question is a writer's repair.
-        self.assertCode('author_decision', quality.checks, receipt('author', decision=decision), ['continuity'], source)
-        checked = quality.checks(receipt('author', decision=decision), ['continuity'], source, author_channel=True)
-        self.assertEqual(quality.author_decision(checked['findings'])['id'], 'death-detail')
-        self.assertEqual(quality.repairable(checked['findings']), [],
-                         'an author decision must never become a worker repair target')
-        # The question must be answerable, and only an author-level finding may carry it.
-        self.assertCode('author_decision', quality.checks, receipt('author'), ['continuity'], source, author_channel=True)
-        self.assertCode('author_decision', quality.checks, receipt('author', decision=dict(decision, options=decision['options'][:1])),
-                        ['continuity'], source, author_channel=True)
-        self.assertCode('author_decision', quality.checks,
-                        receipt('blocker', decision=decision, target_chapter=3, repair_scope='local'),
-                        ['continuity'], source, author_channel=True)
-        # `resume` refuses to bypass one pending question, so a receipt may hand up only one.
-        two = receipt('author', decision=decision)
-        two['findings'].append(dict(copy.deepcopy(two['findings'][0]), decision=dict(decision, id='voice-range')))
-        self.assertCode('author_decision', quality.checks, two, ['continuity'], source, author_channel=True)
-
-    def test_an_author_decision_pauses_the_book_instead_of_a_repair_round(self):
-        review = {'verdict': 'fix', 'findings': [{
-            'criterion': 'world_rules', 'severity': 'author', 'reason': '两条规则冲突。',
-            'evidence': {'chapter': 0, 'quote': '铁门内不留记录。'},
-            'decision': {'id': 'death-detail', 'question': '录音能不能带出铁门内的内容？',
-                         'options': [{'label': '不能', 'impact': '录音须改写。'}, {'label': '能', 'impact': '禁令改写。'}]}}]}
-        book = {'status': 'running'}
-        holder = {'attempts': 0}
-        self.assertTrue(workflow.hold_for_author(book, review, holder))
-        self.assertEqual(book['status'], 'paused')
-        self.assertEqual(book['pause_reason'], book['author_block']['question'])
-        self.assertEqual(book['author_block']['id'], 'death-detail')
-        self.assertEqual(len(book['author_block']['options']), 2)
-        self.assertEqual(holder['attempts'], 0, 'a premise no writer can change must not burn a repair attempt')
-        # One pending question at a time: the registered decision keeps priority.
-        self.assertFalse(workflow.hold_for_author(book, review, holder))
-        self.assertEqual(book['author_block']['id'], 'death-detail')
 
     def test_domain_modules_cannot_reintroduce_adapter_or_cross_layer_imports(self):
         # The boundary table is maintained once in architecture_table; this derives

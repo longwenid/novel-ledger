@@ -414,3 +414,43 @@
 - **返修范围守卫**：`workflow.require_narrow_repair` 机械判定"局部返修只能改被点名的部分"——findings 全为 local 且能认出目标时，未点名的记录/节点改动或删除即拒（`repair_scope` 列出漂移项）；chapter/volume 范围放行，认不出目标不猜测。这挡住实测中"返修变重写、已过 findings 又回来"的双倍代价。
 
 机制 3（结构化账目：把 6×3=18、17=6+11 这类数字关系写成引擎可求值的 `ledger`，可选但一旦给出就机械校验）与机制 4（把审查发现回流成机械判据）在设计文档中给出完整形状，需要协议字段，留作下一步。
+
+## 2026-10-18 v2 五步架构验收
+
+架构换代：设计层审查与章级独立审全部取消，`book_plan`/`volume_plan` 删除，改为**章纲状态链 + 执笔自比 + 引擎机械核账**（冻结接口见 `.team/spec-v2.md`）。本轮由独立验证位（V）执行，工具在 `validation/`，完整证据与归属清单见 `.team/verify-tools.md`、`.team/verify-adversarial.md`。以下为实测结论，三档标注：**已证伪／已验证／无法验证**。
+
+### 五步流程的机械验收（已验证）
+
+- **全链可行**：`validation/e2e_guided.py` 用脚本（非人工）跑 `opening_options`×9 → `world_model`（含约定）→ `volume_outline` → `chapter_outline` → `write`×50，t1 档 2 卷 50 章全部入库并停在 `target_reached`；`clock` 结算值 = 章纲声明值；无审查阶段派工、无未登记阶段。十个门中 `scale` 由引擎自执（`creation.SYSTEM_GATES`），其余各门方案按 `creation.value_fields` 机械生成。
+- **状态链挡得住人为漂移**：`validation/adversarial.py` 10/10。9 个反例逐条被拒并给出可读错误——第 2 章 `enter` 与上一章 `exit` 不符 → `design_drift/drift_chain`（expect 999 got 1）；`exit ≠ enter⊕增量` → `drift_chain`（expect 4242 got 1）；资源增量致负 → `drift_resource`（`资源不能为负：本章的消耗超过了账面`）；卷纲 `exit_state` 空 → `volume_shape`；节点 `window` 越出卷界 → `volume_node`；节点 id 与已批准卷重复 → `volume_node`（`节点 ID 已被其它卷登记`）；`drift_check` 漏项 → `drift_coverage`（`committed_chapter=null, next_stage=repair`）；`actual.from` 写错 → `drift_before`（`前态由引擎给出，不由执笔申报`）；`kept` 与 `planned` 不符 → `drift_kept`。自洽样例 4 章 2 卷 → `target_reached`，`design_drift=0`。
+- **材料有界**：write 派工在另一卷卷纲完整落盘前后 `required_bytes` 不变（8,998 → 8,998，growth=0，必读名单逐字相同）；创作记忆选中 3/N 条、必读字节在 N=20/100/500 时恒为 12,629；状态切片（`state` 记录）不随卷内节点数增长（20/100/500 章均 609 B），增长的是 `volume_outline` 记录本身（5.5 KB → 76 KB）——**这是设计使然，但 write 必读含整份卷纲，卷越长这份越厚**，作者应知道。
+- **工程图指标**：39 个模块、135 条依赖边、无环，核心及 CLI 10,309 行（`validation/measure.py`，本机时点）。
+
+### 已证伪的引擎缺陷（当轮全部修复，回归脚本保留为守卫）
+
+| 编号 | 现象 | 回归脚本（现均 exit 0） |
+|---|---|---|
+| BUG-0 | `drift._event_for` 读 `planned.get('advance_days')` 层级错，值在 `entry['planned']` → 任何时钟推进的章被 `drift_clock` 拒、返修耗尽后暂停 | `validation/repro_drift_clock.py` |
+| BUG-1 | `_reveal_of` 把「章纲词表→结算词表」正向映射用于读结算值 → 已结算 knowledge 回读恒 None，`state_mismatch`/`validate_chapter_outline` 双双失配，章纲链死锁 | `validation/repro_knowledge_readback.py` |
+| BUG-2 | t0/t1 的 `PIPELINE_SHAPES.merge_chapter_outline` 只被守卫测试读、`choose`/`apply` 不消费 | `validation/repro_merged_tier.py` |
+| BUG-3 | `context.build` 的 `work['prose']` 恒空 → `application._sources()` 恒 `{}` → `understanding.update` 引文校验永远失败，创作记忆通道不可达 | `validation/repro_understanding_channel.py` |
+| BUG-4 | 修订在途时 `context.build` 发 `revision_instruction`（及 `revision_impact`）而 `STAGE_MATERIAL['volume_outline']` 未声明 → 不变量「必读 ⊆ 声明」被打破 | 见 `.team/verify-adversarial.md` §6（修复后 `undeclared == []`） |
+| BUG-5 | drift 资源事件写成浮点形状（`"1.0"`/`"4.0"`）→ 账面从约定的 `"4"` 变 `"3.0"` | 见 `.team/verify-adversarial.md` §6（修复后事件 `"1"`/`"4"`、结算 `"3"`） |
+
+### 终验（21:11–21:15 冻结树）：§8 五条中四条已满足
+
+| # | 要求 | 判定 | 证据 |
+|---|---|---|---|
+| 1 | 全量 pytest 全绿 | **已满足** | `410 passed, 12 skipped, 821 subtests passed`，0 failed / 0 errors / 0 收集错误（164.34 s）。12 个 skip 全为宿主符号链接能力（`support.link_or_skip`）。收敛轨迹：20:44 `50 failed` → 20:56 `7 failed` → 终验 `0 failed`；中间 57 条失败按「用例未更新」口径由各归属人清掉，V 报的 BUG-4/BUG-5 亦已修复。tests-a 在同一树上独立自测同为 410 passed |
+| 2 | `pyflakes scripts validation tests` 0 发现 | **已满足** | 100 文件 **0 发现**（V 清了自引入的 6 处；tests 的悬空名与未用变量由 T4/materials 收尾） |
+| 3 | 脚本全链 + 三条拒绝断言 + 正确入账 | **已满足** | `validation/e2e_guided.py`（逐门开书 2 卷 50 章 → `target_reached`，3/3）、`validation/adversarial.py`（10/10，11 个拒绝类反例）、Lead 的 `validation/e2e_drift_acceptance.py`（E2E OK，独立实现） |
+| 4 | 悬空引用逐条判定 | **已满足** | scripts 仅 2 处合法注释、docs/SKILL 0 命中、tests 10 处中 8 处是「已删阶段不得出现」的负向断言，2 处为 stub 阶段名/旧注释（无害，归 T4）；validation 的 32 处为历史档案 |
+| 5 | 架构图与新模块表一致 | **部分满足** | `tests/architecture_table.py` 与磁盘 39 模块逐项一致、`drift` 依赖集与 spec §6 相同、无 `scopes`/`quality`；`docs/architecture.mmd` 已含 `WF --> DRIFT`；**`docs/architecture.svg` 仍未重新生成**（21:15 复查不含 drift），`test_architecture.py::test_svg_contains_exactly_the_documented_nodes_and_edges` 应仍红——**唯一遗留项，归 T3** |
+
+悬空引用终验明细：`scripts/**` 2 处合法注释（contracts.py:11、planning.py:5），README/protocol 各 1 处换代说明，`docs/**`/`SKILL.md` 0 命中；`tests/**` 10 处已逐条判定（见 `.team/verify-adversarial.md` §4）；本文件与 `quality-*.md` 属历史档案，其中的旧阶段名与已失效相对链接**有意保留**。
+
+### 工具口径变化
+
+`measure.py` 的 `review_trees`（`scopes.tree`）一节删除，改为 `dispatch` 节：按 `PIPELINE_SHAPES` × `volume_outline.scope` 机械计数五步派工（t2 档 25 章一卷示例：all 档 6 次派工前置、rolling 档 9 次；全书 total = 1 world + 卷纲 + 章纲 + 章数）。`reflux_probe.py` 的 `REVIEW_STAGES` 删除，改为「引擎核算意见 + 执笔自比偏离」两源聚合，v1 回执单列并标注仅历史项目。`duplication_probe.py` 的 v1 投影对删除，v2 只剩 `world_core ⊂ world_model`。
+
+本轮为工程行为验收：使用临时项目与明确标记的合成回执，未调用模型，不作为文学质量、真实长篇或计费用量结论。改动保留在工作区，未提交或推送。

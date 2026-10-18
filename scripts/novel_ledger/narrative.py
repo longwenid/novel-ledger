@@ -10,11 +10,42 @@ PACE_FIELDS = ('role', 'pressure_in', 'pressure_out', 'emotional_aftereffect', '
 PACE_ROLES = ('setup', 'pressure', 'turn', 'climax', 'aftermath', 'recovery', 'relationship', 'discovery')
 
 
+# The coordinate names a chapter outline's `enter`/`exit` rows use, mapped to the projection field
+# they read. A chapter speaks of `character` and `thread`; the state stores `character_current` and
+# `thread_progress`. Both spellings resolve to the same value.
+FIELDS = {'node': 'story_nodes', 'thread': 'thread_progress', 'character': 'character_current',
+          'characters': 'character_current'}
+STANCES = {'hinted': 'suspects', 'suspected': 'suspects', 'misled': 'believes',
+           'confirmed': 'knows', 'retracted': 'disproved'}
+# Reading a settled projection back needs the reverse direction: facts.settle stores the stance,
+# and a chapter outline speaks the reveal stage the reader is at.
+STANCE_REVEALS = {stance: reveal for reveal, stance in STANCES.items()}
+
+
 def registry(book):
+    """The book's node and thread registry.
+
+    v2 registers them per volume: `book['volumes_outline'][vid]` carries `nodes` and `threads`, and
+    a cross-volume line says `continues: true` — the first registration is the definition. A node
+    always leaves here with a `line`, because a story_node event activates the line it belongs to
+    and the closure guard reads `node['line']`; a volume row may name it explicitly, and a node that
+    does not defaults to its own kind (main/side/hidden).
+    """
     nodes, threads = {}, {}
-    for design in book['designs'].values():
-        nodes.update({n['id']: n for n in design['nodes']})
+    for design in (book.get('designs') or {}).values():
+        nodes.update({n['id']: n for n in design.get('nodes', [])})
         threads.update({t['id']: t for t in design.get('threads', [])})
+    for outline in (book.get('volumes_outline') or {}).values():
+        if not isinstance(outline, dict):
+            continue
+        for node in outline.get('nodes') or []:
+            if isinstance(node, dict) and text(node.get('id')):
+                nodes[node['id']] = {**copy.deepcopy(node),
+                                     'line': node.get('line') or node.get('thread') or node.get('kind') or 'main',
+                                     'depends_on': list(node.get('depends_on') or [])}
+        for thread in outline.get('threads') or []:
+            if isinstance(thread, dict) and text(thread.get('id')):
+                threads.setdefault(thread['id'], copy.deepcopy(thread))
     return nodes, threads
 
 
@@ -44,17 +75,40 @@ def progress(state, ident):
 
 def value(state, item):
     kind, key = item['kind'], item['key']
-    if kind == 'node':
-        return progress(state, key)
     if kind == 'clock':
         return state['clock']
-    if kind == 'character_current':
-        return state.get(kind, {}).get(key, {}).get('value')
+    if kind in FIELDS:
+        field = FIELDS[kind]
+        entry = state.get(field, {}).get(key)
+        if kind == 'node':
+            return (entry or {}).get('status')
+        if kind == 'thread':
+            return (entry or {}).get('status')
+        return (entry or {}).get('value')
+    if kind == 'knowledge':
+        entry = state.get('knowledge', {}).get(key)
+        if not isinstance(entry, dict):
+            return None
+        return entry.get('status') if entry.get('status') in REVEALS else STANCE_REVEALS.get(entry.get('stance'))
     return state.get(kind, {}).get(key)
 
 
+def same(kind, expect, got):
+    """Whether a declared coordinate value equals the projection, reading quantities as numbers.
+
+    `state['resources']` stores decimal strings while an outline declares `from: 0`; comparing those
+    as strings would report every resource precondition as unmet.
+    """
+    if kind in ('resources', 'clock'):
+        try:
+            return float(str(expect).strip()) == float(str(got).strip())
+        except (TypeError, ValueError):
+            return False
+    return expect == got
+
+
 def unmet(state, plan):
-    return [p for p in plan.get('preconditions', []) if value(state, p) != p['expected']]
+    return [p for p in plan.get('preconditions', []) if not same(p['kind'], p['expected'], value(state, p))]
 
 
 def validate_plan(plan, nodes, state):

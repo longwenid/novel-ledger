@@ -14,11 +14,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import ledger, workflow
+from novel_ledger import ledger
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, drive, response
+from support import drive, response, seeded_book
 
 
 class LedgerUnitTests(unittest.TestCase):
@@ -53,51 +53,49 @@ class LedgerUnitTests(unittest.TestCase):
 
 
 class LedgerFlowTests(unittest.TestCase):
+    """An outline may carry account blocks; the engine proves the arithmetic at submit.
+
+    v2 kept `ledger.check` on the two outline dispatches and dropped the design→plan cross-check with
+    the design stages that owned the earlier declaration: the chapter outline *is* the declaration
+    now, so there is no later artifact to disagree with it.
+    """
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.project = Path(self.temp.name) / 'book'
-        self.repo = SQLiteRepository.initialize(self.project, workflow.new_book(contract()))
+        self.repo = SQLiteRepository.initialize(self.project, seeded_book())
         self.app = Application(self.repo)
 
     def tearDown(self):
         self.repo.close()
         self.temp.cleanup()
 
-    def design_with_ledger(self):
-        drive(self.app, until='book_plan')
-        result = response(self.app)
-        result['data']['ledger'] = [{'key': '垫付总数', 'value': 6, 'sum_of': [2, 4]}]
-        self.app.submit(result)
-        return [{'key': '垫付总数', 'value': 6, 'sum_of': [2, 4]}]
-
-    def test_a_design_declares_arithmetic_and_a_plan_must_agree(self):
-        self.design_with_ledger()
-        # The design review, the volume plan and its review all pass on the way to the plans.
-        drive(self.app, until='plan')
-        result = response(self.app)
-        result['data']['plans'][0]['ledger'] = [{'key': '垫付总数', 'value': 6, 'equals': [6, 6]}]
-        self.app.submit(result)                      # same key, same value: accepted
-        drive(self.app, until='write')               # profiles accepted on the way
-
-    def test_a_disagreeing_plan_is_rejected_with_both_values(self):
-        self.design_with_ledger()
-        drive(self.app, until='plan')
-        result = response(self.app)
-        result['data']['plans'][0]['ledger'] = [{'key': '垫付总数', 'value': 5, 'sum_of': [2, 3]}]
-        with self.assertRaises(Error) as caught:
-            self.app.submit(result)
-        self.assertEqual(caught.exception.code, 'ledger')
-        self.assertEqual(caught.exception.details['already_on_record'], 6)
-
-    def test_bad_arithmetic_in_a_design_is_rejected_at_submit(self):
-        drive(self.app, until='book_plan')
+    def test_bad_arithmetic_in_a_volume_outline_is_rejected_at_submit(self):
+        handoff = self.app.advance()
+        self.assertEqual(handoff['task']['stage'], 'volume_outline')
         result = response(self.app)
         result['data']['ledger'] = [{'key': '垫付总数', 'value': 7, 'sum_of': [2, 4]}]
         with self.assertRaises(Error) as caught:
             self.app.submit(result)
-        self.assertEqual(caught.exception.details, {'declared': 7, 'computed': 6,
-                                                   'relation': 'sum_of', 'operands': [2, 4],
-                                                   'recover': '按算得的结果改 value，或修正操作数；观感描述不要写进账目行。'})
+        self.assertEqual(caught.exception.code, 'ledger')
+        self.assertEqual(caught.exception.details['computed'], 6)
+        self.assertIsNone(self.repo.load()['volumes_outline'].get('v1'))
+
+    def test_a_chapter_outline_with_balanced_arithmetic_is_accepted(self):
+        drive(self.app, until='chapter_outline')
+        result = response(self.app)
+        result['data']['ledger'] = [{'key': '垫付总数', 'value': 6, 'sum_of': [2, 4]}]
+        self.app.submit(result)
+        self.assertEqual(sorted(self.repo.load()['chapter_outlines']), ['v1'])
+
+    def test_bad_arithmetic_in_a_chapter_outline_is_rejected_at_submit(self):
+        drive(self.app, until='chapter_outline')
+        result = response(self.app)
+        result['data']['ledger'] = [{'key': '垫付总数', 'value': 6, 'product_of': [2, 4]}]
+        with self.assertRaises(Error) as caught:
+            self.app.submit(result)
+        self.assertEqual(caught.exception.code, 'ledger')
+        self.assertEqual(self.repo.load()['chapter_outlines'], {})
 
 
 if __name__ == '__main__':

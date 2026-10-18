@@ -1,43 +1,62 @@
-"""Character interpretation, scene execution and text patches. Pure values only."""
+"""Scene execution and text patches. Pure values only.
+
+v2 removed the profile stage: a first appearance is inlined in the chapter outline's `new_entities`,
+so the character-interpretation helpers that used to live here (and their growth_basis binding) are
+gone with the stage that dispatched them.
+"""
 from __future__ import annotations
 
 import copy
 from .contracts import digest, require, text
 
 
-def growth_basis(state, entity):
-    return digest({'growth': state['developments'].get(entity, []),
-                   'current': state.get('character_current', {}).get(entity)})
+def participants_of(plan, entities=None):
+    """Who is on stage in a row, from the row itself.
 
-
-def profile(value, state, previous=None):
-    require(value.get('tier') in ('major', 'supporting', 'walk_on'), 'profile', '人物 tier 为 major/supporting/walk_on。')
-    bio, voice = value.get('biography'), value.get('speech')
-    require(isinstance(bio, dict) and all(text(bio.get(k)) for k in ('public_role', 'contradiction', 'values')),
-            'profile', 'biography 需要 public_role/contradiction/values。')
-    require(isinstance(voice, dict) and all(text(voice.get(k)) for k in ('register', 'rhythm', 'stress_shift'))
-            and isinstance(voice.get('tactics'), list) and voice['tactics'] and all(text(t) for t in voice['tactics']),
-            'profile', 'speech 需要 register/rhythm/stress_shift 和非空 tactics 数组。')
-    modes = voice.get('relationship_modes', [])
-    require(isinstance(modes, list) and all(isinstance(m, dict) and text(m.get('entity')) and text(m.get('mode')) for m in modes),
-            'profile', 'relationship_modes 为 {entity,mode} 数组。')
-    require(not previous or text(value.get('change_reason')), 'profile', '成长后重核档案须给 change_reason。')
-    result = copy.deepcopy(value)
-    # The engine binds the interpretation to observed growth; this is not a fact event.
-    result['growth_basis'] = growth_basis(state, value['entity'])
-    return result
+    A v2 chapter outline declares its cast through `characters`/`knowledge`/`places` deltas and
+    `new_entities`, not through a plan-shaped `participants` list; a materialized plan row carries
+    that list already. Reading both here keeps the scene check usable on either shape.
+    """
+    named = plan.get('participants')
+    if isinstance(named, list) and named:
+        return list(named)
+    found = []
+    for row in plan.get('characters') or []:
+        if isinstance(row, dict) and text(row.get('entity')) and row['entity'] not in found:
+            found.append(row['entity'])
+    for row in plan.get('new_entities') or []:
+        if isinstance(row, dict) and text(row.get('id')) and row['id'] not in found:
+            found.append(row['id'])
+    for row in (plan.get('knowledge') or []) + (plan.get('places') or []):
+        if isinstance(row, dict):
+            ident = row.get('who') or row.get('entity')
+            if text(ident) and ident not in found:
+                found.append(ident)
+    if found:
+        return found
+    return list(entities or {})
 
 
 def scenes(plan, entities):
+    """Check the scenes a row declares, when it declares any.
+
+    v2 chapter outlines may carry scenes for the workbench, but they are optional: an empty array is
+    a row that did not break its chapter into scenes, not a row that forgot to. What is present is
+    checked exactly as before, and the cast is read from the row rather than demanded in advance.
+    """
     rows = plan.get('scenes')
-    require(isinstance(rows, list) and rows, 'scene', '章计划需非空 scenes。')
+    if not rows:
+        return
+    require(isinstance(rows, list) and all(isinstance(s, dict) for s in rows), 'scene', 'scenes 须为场景对象数组。')
+    participants = participants_of(plan, entities)
     for scene in rows:
         require(isinstance(scene, dict) and all(text(scene.get(k)) for k in ('label', 'intent', 'conflict', 'turn')),
                 'scene', '每场需要 label/intent/conflict/turn。')
         present, speakers = scene.get('present'), scene.get('speakers')
-        require(isinstance(present, list) and present and all(p in plan['participants'] for p in present)
+        require(isinstance(present, list) and present and all(p in participants for p in present)
                 and isinstance(speakers, list) and all(text(s) for s in speakers) and len(speakers) == len(set(speakers)) and set(speakers) <= set(present),
-                'scene', 'present 属于 participants；speakers 明示发言者，静默场景用空数组。')
+                'scene', 'present 须为本章出场人物；speakers 明示发言者，静默场景用空数组。',
+                {'participants': participants[:12], 'present': present})
         intents = scene.get('dialogue_intents')
         require(isinstance(intents, list) and len(intents) == len(speakers)
                 and all(isinstance(i, dict) and text(i.get('entity')) for i in intents)
@@ -47,7 +66,9 @@ def scenes(plan, entities):
                     and isinstance(intent.get('knowledge_topics'), list) and all(text(t) for t in intent['knowledge_topics']),
                     'dialogue', '对白意图需 seeks/withholds/pressure/tactic/knowledge_topics。')
     units = plan.get('expansion_units')
-    require(isinstance(units, list) and units and all(isinstance(u, dict) for u in units), 'development', 'expansion_units 须非空。')
+    if not units:
+        return
+    require(isinstance(units, list) and all(isinstance(u, dict) for u in units), 'development', 'expansion_units 须为对象数组。')
     ids = []
     for unit in units:
         require(all(text(unit.get(k)) for k in ('id', 'focus', 'development', 'expected_change'))

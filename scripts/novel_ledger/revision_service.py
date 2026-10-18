@@ -53,15 +53,11 @@ class RevisionService:
         for index, row in enumerate(remaining):
             prose = self.repo.read_document(row['prose'])
             plan = self.repo.read_document(row['plan'])
-            hold = book.get('alignment_hold')
-            if hold and hold['mode'] == 'future' and hold['chapter'] <= row['n']:
-                revision['reading_task'] = row['n']
-                revision['carry'] = remaining[index:]
-                book['state'] = state
-                return
             planned = book['plans'].get(str(row['n']))
             if planned != plan or actions.get(row['n']) == 'rewrite':
-                revision.pop('reading_task', None)
+                # The revision changed this chapter's outline, or dropped it entirely: the rest of
+                # the volume's chapter outlines are re-derived from the state the revision is
+                # actually in, which is what the old alignment stages used to arbitrate.
                 revision['carry'] = remaining[index:]
                 book['state'] = state
                 if revision.get('impact'):
@@ -70,16 +66,8 @@ class RevisionService:
                     if action is None:
                         action = {'chapter': row['n']}
                         plan_actions.append(action)
-                    action.update(action='rewrite', reason='独立改案改变或清理了本章计划，按新计划完整写审。')
-                if planned is None:
-                    revision['plan_task'] = row['n']
-                else:
-                    revision['carry'].pop(0)
-                    draft = {'chapter': row['n'], 'title': row['title'], 'prose': prose,
-                             'producer': 'historical', 'history': [], 'findings': []}
-                    workflow.route_repair(book, draft, [{'criterion': 'change', 'severity': 'quality',
-                        'target_chapter': row['n'], 'repair_scope': 'chapter',
-                        'reason': '独立改案已更新本章计划，保留新计划并重新完整写审。'}])
+                    action.update(action='rewrite', reason='前文修订改变了本章章纲，按新章纲完整写作。')
+                revision['outline_task'] = row['n']
                 return
             try:
                 story_memory.bind(copy.deepcopy(plan), accepted_plans,
@@ -96,21 +84,14 @@ class RevisionService:
                 raise Error('revision_carry', '修订影响了第 %d 章的事实，不能原样携带其后缀。' % row['n'],
                             {'chapter': row['n'], 'cause': exc.as_dict(),
                              'recover': '先重新分析实际依赖；审稿触发的扩大修订仍受自动回改边界约束，超范围先交付修复方案。'})
-            if actions.get(row['n']) == 'review' and revision.get('reading_approved') != row['n']:
-                revision['reading_task'] = row['n']
+            if actions.get(row['n']) == 'review':
+                # The revision's own analysis asked for this chapter to be re-read; with no
+                # reviewer dispatch left, its facts are still re-settled below and any divergence
+                # refuses the carry, so the safe behaviour is the carry itself.
                 revision['carry'] = remaining[index:]
-                book['state'] = state
-                return
-            revision.pop('reading_approved', None)
             state = next_state
             original_state, _ = facts.settle(original_state, self.repo.read_document(row['events']), prose, row['n'])
             carried = dict(row)
-            readings = [r for r in revision.get('reading_reviews', [])
-                        if r['chapter'] == row['n'] and r['receipt']['verdict'] == 'pass']
-            if readings:
-                old_review = self.repo.read_document(row['review'])
-                carried['review'] = self.repo.document({**old_review,
-                    'revision_readings': old_review.get('revision_readings', []) + readings})
             carried['events'] = self.repo.document(normalized)
             carried['state_hash'] = digest(state)
             carried['chain'] = facts.chain(previous, carried, contract_hash)
@@ -151,6 +132,12 @@ class RevisionService:
         head = self.repo.headers(book['branch'])[-1]['n']
         policy = editorial.revision_policy(book, head)
         violations = editorial.revision_violations(policy, impact)
+        requested = directive.get('through')
+        if type(requested) is int and impact['last'] > requested:
+            # An author who names an endpoint ("only up to chapter four") does not get a branch that
+            # quietly rewrites past it: the dependency analysis reaching further is a violation, and
+            # the whole plan is saved for authorization instead of being executed.
+            violations = violations + ['impact_beyond_request']
         if violations:
             plan = {**copy.deepcopy(directive), 'changes': changes, 'impact': impact,
                     'policy': policy, 'violations': violations, 'branch': book['branch'],
@@ -200,7 +187,6 @@ class RevisionService:
                                 'carry': [r for r in rows if r['n'] > end]}
         if impact:
             book['revision_run']['impact'] = impact
-        book.pop('scope_findings', None)
         draft = {'chapter': first, 'title': old['title'], 'prose': self.repo.read_document(old['prose']), 'producer': 'historical', 'history': [], 'findings': []}
         workflow.route_repair(book, draft, [{'criterion': 'change', 'severity': 'quality', 'target_chapter': first,
                                            'repair_scope': 'local' if impact and impact['mode'] != 'semantic' else 'chapter', 'reason': reason}])

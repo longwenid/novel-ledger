@@ -6,7 +6,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from .contracts import FIRST_READ, FORM_ARTIFACTS, GENRE_CATALOG, IDENTITY, RESULT, VERSION, digest, require, text
+from .contracts import FORM_ARTIFACTS, GENRE_CATALOG, IDENTITY, RESULT, VERSION, digest, require, text
 from .result_templates import template
 from .ports import PublicationReader
 from .publication import publication
@@ -147,21 +147,13 @@ def render_dispatch_card(envelope, identity):
         claim_lines = ['- 本任务已有租约（%s）：未过期沿用原会话；过期由主干重新认领，Worker 不执行 claim。' % state]
     suggested = identity['worker_env'].get('NOVEL_SESSION') or ('worker-%s-XXXX（自命名，XXXX 任选四位）' % stage)
     commands = envelope.get('commands') or {}
-    locked = envelope.get('delivery_phase') == 'first_read'
-    if locked:
-        steps = ['1. 读 `task.json` 与 `brief.md`（首读指示）；完整读 prose_files 里的每一章正文。',
-                 '2. 按 `first_read_path` 指向的 first-read.json 逐章填首读记录，执行 commands.first_read。',
-                 '3. 首读冻结后按返回的新 task_path 继续：仍用本会话完成解锁后的核验，不换人不重读首读。',
-                 '4. worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令。']
-        command_names = ('read', 'first_read')
-    else:
-        steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。',
-                 '2. 执行一次无参数 read（命令见下）把必读记录拿齐；确需某份再 read --record 名称。',
-                 '3. 复制 `result.template.json` 为 `result.json` 起稿，只改 data；'
-                 'schema/task_id/input_hash 不手写（input_version 报错会带 expected）。',
-                 '4. `preflight` 试算，按报错 details.expect 修正；不为确认格式读引擎源码。',
-                 '5. `submit` 提交；worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令，不改写 commands/guides。']
-        command_names = ('read', 'preflight', 'submit')
+    steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。',
+             '2. 执行一次无参数 read（命令见下）把必读记录拿齐；确需某份再 read --record 名称。',
+             '3. 复制 `result.template.json` 为 `result.json` 起稿，只改 data；'
+             'schema/task_id/input_hash 不手写（input_version 报错会带 expected）。',
+             '4. `preflight` 试算，按报错 details.expect 修正；不为确认格式读引擎源码。',
+             '5. `submit` 提交；worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令，不改写 commands/guides。']
+    command_names = ('read', 'preflight', 'submit')
     lines = ['# Worker 自举卡：%s' % stage,
              '',
              identity.get('task_line') or ('本任务：stage=%s。' % stage),
@@ -227,8 +219,6 @@ def task_line(work):
                    else 'chapters=%s-%s' % (work['first'], work['last']))
         parts.append(chapter)
     parts.append('required=' + ','.join(work.get('required') or ()) or 'required=(无)')
-    if work.get('blind'):
-        parts.append('blind=先首读封印')
     return '本任务：' + '；'.join(parts) + '。派工说明以此为准，不要按流程位置想象。'
 
 
@@ -252,13 +242,40 @@ def retire(base, *, workspace: LocalWorkspace):
         workspace.artifact_path(Path(base) / name).unlink(missing_ok=True)
 
 
+def baseline_projection(repo: PublicationReader, task, given=None):
+    """The true before-state of one dispatch, for a writer's self-comparison.
+
+    A `drift_check` row's `actual.from` is checked against the engine's own projection, not against
+    what the writer remembers, so the writer is handed the same numbers: the clock, resource
+    balances, where everyone stands, who knows what, the promises still open, and the live
+    candidate. Everything here is read from the scoped state this dispatch already froze — a caller
+    may pass `given` for the parts that live on the book rather than in the task (the candidate),
+    and the projection fills in the rest instead of trusting a hand-written summary.
+    """
+    state = repo.read_document(task['input']['records']['state'])
+    view = {'clock': state.get('clock'),
+            'resources': dict(sorted((state.get('resources') or {}).items())),
+            'placements': dict(sorted((state.get('placements') or {}).items())),
+            'knowledge': dict(sorted((state.get('knowledge') or {}).items())),
+            'open_hooks': [{'id': ident, 'due': hook.get('due'), 'text': hook.get('text', '')}
+                           for ident, hook in sorted((state.get('hooks') or {}).items())
+                           if hook.get('status') == 'open'],
+            'candidate': None,
+            'source': '本表是引擎投影的真实前态，只读参考：drift_check 的 actual.from 以它为准，不要自报前态。'}
+    if isinstance(given, dict):
+        # Caller-supplied values win where they exist (the live candidate is not frozen material),
+        # but they can never remove a projection field: a dispatcher that forgot one would otherwise
+        # silently shrink the baseline back to the shape this exists to replace.
+        view.update({key: value for key, value in given.items() if value is not None})
+    return view
+
+
 def materialize(repo: PublicationReader, task, entry, baseline=None, compact=False, *, workspace: LocalWorkspace):
     work = task['input']
     base = workspace.artifact_path('work/' + task['id'])
     def artifact(name):
         return workspace.artifact_path(base / name)
 
-    locked = work['blind'] and not task['first_read']
     prose_files = []
     for ref in work['prose']:
         path = artifact('chapter-' + str(ref['chapter']) + '.txt')
@@ -271,7 +288,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     # in the others — which is how a controller ends up reading a stage the worker never got.
     shared = {'task_id': task['id'], 'input_hash': task['input_hash'], 'stage': work['stage'],
               'chapter': work['chapter'], 'scope': work['scope'],
-              'delivery_phase': 'first_read' if locked else 'formal',
+              'delivery_phase': 'formal',
               'requires_new_worker': task['reviewer'] is None, 'review_session': task['reviewer']}
     envelope = {'schema': work['schema'], **shared, 'prose_files': prose_files,
                 'task_path': str(artifact('task.json')), 'result_path': str(artifact('result.json')),
@@ -284,8 +301,8 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
                 'claim': ({'session': lease['session'], 'expired': lease['until'] <= time.time()}
                           if lease else None),
                 # The ledger baseline is a read-only projection: dispatchers forward it instead of
-                # hand-summarizing balances, and workers use it to sanity-check precondition values.
-                'baseline': None if locked else baseline,
+                # hand-summarizing balances, and workers compare their prose against it.
+                'baseline': baseline_projection(repo, task, baseline),
                 'commands': {'submit': command + ['submit', '--file', str(artifact('result.json'))],
                              'preflight': command + ['preflight', '--file', str(artifact('result.json'))],
                              'read': command + ['read', '--task', task['id']],
@@ -294,16 +311,18 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         envelope['commands']['patch'] = command + ['patch', '--task', task['id']]
     reference_dir = Path(entry).parent.parent / 'references'
     # Guides are optional reference material per stage; the dispatch's own brief carries what the
-    # task needs, so whole documents are not shipped on every round.
+    # task needs, so whole documents are not shipped on every round. Only stages that actually have
+    # a brief appear here: a guide for a stage with no rules to explain is a document nobody reads.
     guides = {'opening_options': ('opening.md', 'hatch.md'), 'opening_contract': ('opening.md', 'world.md'),
-              'world_model': ('world.md',), 'world_review': ('world.md',), 'volume_plan': ('hatch.md',)}
+              'world_model': ('world.md',), 'volume_outline': ('hatch.md',),
+              'chapter_outline': ('hatch.md',)}
     if work.get('capabilities', {}).get('editorial'):
         guides[work['stage']] = (*guides.get(work['stage'], ()), 'editorial.md')
     if work.get('capabilities', {}).get('understanding'):
         guides[work['stage']] = (*guides.get(work['stage'], ()), 'workbench.md')
     also = tuple((work['payload'] or {}).get('also', ()))
     names = list(guides.get(work['stage'], ()))
-    if work['stage'] not in ('opening_options', 'world_model', 'world_review', 'opening_contract'):
+    if work['stage'] not in ('opening_options', 'world_model', 'opening_contract'):
         names.extend(n for n in ('protocol.md', 'craft.md') if n not in names)
     for extra_stage in also:
         names.extend(name for name in guides.get(extra_stage, ()) if name not in names)
@@ -322,7 +341,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
                 # worker a task it is not (a revision-scope review announced as the book's final
                 # review); reading this line prevents that, and costs one sentence per dispatch.
                 'task_line': task_line(work),
-                'note': '本文件是派工身份的可核对副本，不授予权限：read/recall/patch/first-read 仍只对'
+                'note': '本文件是派工身份的可核对副本，不授予权限：read/recall/patch 仍只对'
                         '宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放；NOVEL_SESSION 为空表示'
                         '本次由新会话自行命名。'}
     validate_identity(identity)
@@ -330,8 +349,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     json_write(identity_file, identity)
     envelope['identity_path'] = str(identity_file)
     # The brief rides inside input.json as one long JSON string, which console tools truncate or
-    # garble; the markdown twin is what readers actually open. Both branches above settled the
-    # text (the locked branch writes its own one-line brief into the envelope).
+    # garble; the markdown twin is what readers actually open.
     brief_text = envelope.get('brief') or work.get('brief')
     if text(brief_text):
         brief_file = artifact('brief.md')
@@ -375,34 +393,21 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     envelope['note'] = ('commands 用当前安装的真实路径生成：' + command[0] + ' + ' + str(entry) +
                         '。若技能目录已移动导致路径不存在，回主控再执行一次 advance 刷新任务视图，'
                         '不要手改命令，也不要凭印象判定路径失效（宿主可用目录联接映射同一份安装）。')
-    if locked:
-        # Only first-read instructions are visible until sealing, never the planned outcomes.
-        envelope['brief'] = '只读全部 prose_files，记录每章首读 desire/obstacle/change/read_on_reason 后执行 first_read。解锁后沿新 task_path 完成核验；不提前读设计、状态或自评。'
-        first_path = artifact('first-read.json')
-        if not first_path.exists():
-            json_write(first_path, {'task_id': task['id'], 'input_hash': task['input_hash'], 'session': '',
-                                   'data': {'reads': [dict(chapter=r['chapter'], **{k: '' for k in FIRST_READ}) for r in work['prose']]}})
-        envelope['first_read_path'] = str(first_path)
-        envelope['commands']['first_read'] = command + ['first-read', '--file', str(first_path)]
-        # A blind task hands out no formal material; any earlier render is retired here.
-        retire(base, workspace=workspace)
-    else:
-        # The view carries the task's own material; record hashes live in task.json alone, so the
-        # same map is not delivered twice.
-        view = {'task_id': task['id'], 'input_hash': task['input_hash'],
-                **{key: value for key, value in work.items() if key != 'records'},
-                'first_read': task['first_read'], 'first_read_hash': task['first_read_hash']}
-        json_write(artifact('input.json'), view)
-        template_path = artifact('result.template.json')
-        # The form belongs to the Worker once minted: rebuilding a view must never blank a
-        # half-filled form. A form minted for another task is stale and is replaced.
-        if not form_is_current(template_path, task):
-            result = {'schema': RESULT, 'task_id': task['id'], 'input_hash': task['input_hash'],
-                      'session': task['reviewer'] or '',
-                      'data': template(work['stage'], work['chapter'], {r['chapter']: '' for r in work['prose']},
-                                       work['obligations'], also, work.get('checks_version', 1), work['payload'], work.get('narrative_tracking', False))}
-            json_write(template_path, result)
-        envelope.update(input_path=str(artifact('input.json')), template_path=str(template_path), records=work['records'], required=work['required'])
+    # The view carries the task's own material; record hashes live in task.json alone, so the
+    # same map is not delivered twice.
+    view = {'task_id': task['id'], 'input_hash': task['input_hash'],
+            **{key: value for key, value in work.items() if key != 'records'}}
+    json_write(artifact('input.json'), view)
+    template_path = artifact('result.template.json')
+    # The form belongs to the Worker once minted: rebuilding a view must never blank a
+    # half-filled form. A form minted for another task is stale and is replaced.
+    if not form_is_current(template_path, task):
+        result = {'schema': RESULT, 'task_id': task['id'], 'input_hash': task['input_hash'],
+                  'session': task['reviewer'] or '',
+                  'data': template(work['stage'], work['chapter'], also, work['payload'],
+                                   work.get('narrative_tracking', False))}
+        json_write(template_path, result)
+    envelope.update(input_path=str(artifact('input.json')), template_path=str(template_path), records=work['records'], required=work['required'])
     # Two facts a controller cannot otherwise see: how many times this dispatch view has been
     # rendered (a second render for one task is a double dispatch, and used to be invisible), and
     # what it costs to read. Both are read off the artifacts themselves, so the read-only
@@ -474,10 +479,14 @@ def deliver_completion(repo: PublicationReader, render=None, *, workspace: Local
 def export_world(repo: PublicationReader, render, *, workspace: LocalWorkspace):
     book = repo.load()
     model = book.get('world')
-    require(model is not None and book.get('world_review') is not None, 'world_view', '世界模型尚未通过独立核验。')
+    require(model is not None, 'world_view', '世界模型尚未生成，无法导出世界观。',
+            {'recover': '先完成 world_model 派工并提交世界模型。'})
     json_path = workspace.artifact_path(workspace.project / 'world.json')
     html_path = workspace.artifact_path(workspace.project / 'book.html')
-    json_write(json_path, {'selection_hash': model['selection_hash'], 'model_hash': digest(model),
-                          'choices': book['creation']['selections'], 'world': model, 'review': book['world_review']})
+    # A book imported from a hand-written contract has no opening record, so its world carries no
+    # selection hash; the export must still work for it (only the hash is absent, not the world).
+    json_write(json_path, {'selection_hash': model.get('selection_hash'),
+                           'model_hash': digest(model),
+                           'choices': (book.get('creation') or {}).get('selections', []), 'world': model})
     atomic_write(html_path, render(repo))
     return {'html_path': str(html_path), 'json_path': str(json_path), 'model_hash': digest(model)}

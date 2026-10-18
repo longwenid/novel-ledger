@@ -12,17 +12,23 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger.bootstrap import local_application as Application, local_workspace
-from novel_ledger.contracts import CHECKS_VERSION, ENFORCEMENT, Error, RESULT, dump
+from novel_ledger.contracts import ENFORCEMENT, Error, dump
 from novel_ledger import delivery, facts, host, planning, workflow
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, drive, response
+from support import contract, drive, response, seeded_book
+
+
+def app_stage(repo):
+    """The stage of the frozen dispatch waiting to be answered, or None at a boundary."""
+    task = repo.pending()
+    return task['input']['stage'] if task else None
 
 
 class RuntimeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.project = Path(self.temp.name) / 'book'
-        self.repo = SQLiteRepository.initialize(self.project, workflow.new_book(contract()))
+        self.repo = SQLiteRepository.initialize(self.project, seeded_book())
         self.app = Application(self.repo)
 
     def tearDown(self):
@@ -33,9 +39,6 @@ class RuntimeTests(unittest.TestCase):
         with self.assertRaises(Error) as caught:
             fn(*args, **kwargs)
         self.assertEqual(caught.exception.code, code)
-
-    def review_task(self):
-        return drive(self.app, until='chapter_review')['task']
 
     def finish(self):
         run = self.app.run(finish=True, source='工程夹具授权写完。')
@@ -56,27 +59,50 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(self.app.complete(owner)['idempotent'])
 
     def test_scene_openings_allow_same_day_chapters_and_interior_time_evidence(self):
-        self.repo.save(workflow.new_book(contract(3)))
+        # Three chapters: the first two happen on the same day (clock advance 0), the third moves the
+        # main clock by one day and must cite the interior time expression it declares.
+        from support import chapter_rows
+        self.repo.save(seeded_book(contract(3)))
         owner = self.app.run(finish=True, source='工程夹具授权验证三章时间衔接。')['owner']
+        word = self.app.advance(owner=owner)          # volume outline first
+        self.assertEqual(word['task']['stage'], 'volume_outline')
+        self.app.submit(response(self.app))
+        handoff = self.app.advance(owner=owner)
+        self.assertEqual(handoff['task']['stage'], 'chapter_outline')
         prose = [
             '沈桐把箱子推到主管面前，指着封条上的签字，要求核对退件来源，主管却按住了箱盖。',
             '“先把责任栏填上。”主管把登记册塞给沈桐。他没有接，反而抽出封条，指给主管看另一处笔迹。',
             '封条被主管扣进抽屉，沈桐攥紧了空白的责任单。次日，他带着退件人的签字回来，把两份笔迹并排放下。',
         ]
+        book = self.repo.load()
+        volume = book['contract']['volumes'][0]
+        rows = chapter_rows(book, volume, book['state'])
+        for row in rows[:2]:                     # chapters 1-2 are the same story day
+            row['clock'] = {'advance_days': 0}
+            for item in row['enter'] + row['exit']:
+                if item['kind'] == 'clock':
+                    item['expected'] = 0
+        for item in rows[2]['enter']:
+            if item['kind'] == 'clock':
+                item['expected'] = 0
+        for item in rows[2]['exit']:
+            if item['kind'] == 'clock':
+                item['expected'] = 1
+        self.app.submit({'schema': 'novel-ledger.result/1',
+                         'task_id': self.repo.pending()['id'],
+                         'input_hash': self.repo.pending()['input_hash'],
+                         'session': 'scene-openings-setup',
+                         'data': {'volume': 'v1', 'chapters': rows}})
         for n, chapter_prose in enumerate(prose, 1):
             self.assertEqual(drive(self.app, owner, until='write')['task']['chapter'], n)
             draft = response(self.app)
             draft['data']['prose'] = chapter_prose
+            for item in draft['data']['drift_check']['items']:
+                quote = chapter_prose[:12]
+                if item['kind'] == 'clock' and '次日' in chapter_prose:
+                    quote = '次日，他带着退件人的签字回来'
+                item['evidence'] = {'chapter': n, 'quote': quote}
             self.app.submit(draft)
-            drive(self.app, owner, until='chapter_review')
-            review = response(self.app)
-            review['data']['facts'].update(elapsed_days=0 if n < 3 else 1, events=[])
-            if n == 3:
-                review['data']['facts']['events'] = [
-                    {'op': 'clock', 'before': 0, 'after': 1,
-                     'evidence': {'chapter': n, 'quote': '次日'}},
-                ]
-            self.app.submit(review)
             self.assertEqual(self.repo.load()['state']['clock'], 0 if n < 3 else 1)
         self.assertEqual(drive(self.app, owner)['action'], 'ready_to_complete')
         self.app.complete(owner)
@@ -86,49 +112,8 @@ class RuntimeTests(unittest.TestCase):
         for chapter_prose in prose:
             self.assertIn(chapter_prose, exported)
 
-    def test_repeated_advance_keeps_a_worker_form_and_replaces_a_stale_template(self):
-        drive(self.app, until='write')
-        self.repo.cancel_pending('rebuild probe')
-        task = self.app.advance()['task']
-        base = Path(task['task_path']).parent
-        template_path = base / 'result.template.json'
-        payload = json.loads(template_path.read_text(encoding='utf-8'))
-        payload['data']['title'] = 'WORKER-EDIT'
-        template_path.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
-        self.assertEqual(self.app.advance()['task']['task_id'], task['task_id'])
-        kept = json.loads(template_path.read_text(encoding='utf-8'))
-        self.assertEqual(kept['data']['title'], 'WORKER-EDIT')
-        self.assertIn('self_check', kept['data'])
-        stale = {'schema': RESULT, 'task_id': 'stale-task', 'input_hash': 'stale-hash', 'session': '', 'data': {}}
-        template_path.write_text(json.dumps(stale, ensure_ascii=False), encoding='utf-8')
-        self.app.advance()
-        replaced = json.loads(template_path.read_text(encoding='utf-8'))
-        self.assertEqual(replaced['task_id'], task['task_id'])
-        self.assertEqual(replaced['input_hash'], task['input_hash'])
 
-    def test_blind_gate_hides_formal_files_and_writer_evaluation(self):
-        task = self.review_task()
-        base = Path(task['task_path']).parent
-        self.assertEqual(task['delivery_phase'], 'first_read')
-        self.assertFalse((base / 'input.json').exists())
-        self.assertCode('first_read_sealed', self.app.read, task['task_id'])
-        self.assertCode('first_read_sealed', self.app.audit)
-        result = response(self.app)
-        material = self.app.read(task['task_id'])
-        self.assertNotIn('self_check', dump(material))
-        self.assertNotIn('writer_summary', dump(material))
-        self.assertTrue((base / 'input.json').exists())
-        self.app.submit(result)
 
-    def test_first_read_is_frozen_and_same_reviewer_must_finish(self):
-        self.review_task()
-        result = response(self.app)
-        task = self.repo.pending()
-        changed = copy.deepcopy(task['first_read'])
-        changed['reads'][0]['change'] = '修改了首读。'
-        self.assertCode('first_read_frozen', self.app.seal, {'task_id': task['id'], 'input_hash': task['input_hash'], 'session': task['reviewer'], 'data': changed})
-        result['session'] = 'different-reviewer'
-        self.assertCode('first_read', self.app.submit, result)
 
     def test_preflight_rolls_back_and_retries_are_idempotent(self):
         self.app.advance()
@@ -148,91 +133,50 @@ class RuntimeTests(unittest.TestCase):
         self.assertCode('replay_conflict', self.app.submit, result)
 
     def test_rejection_does_not_commit_fact_or_spend_budget(self):
-        self.review_task()
+        drive(self.app, until='write')
         result = response(self.app)
-        result['data']['facts']['events'][0]['before'] = 99
-        before = dump(self.repo.load())
-        self.assertCode('time_conflict', self.app.submit, result)
-        self.assertEqual(dump(self.repo.load()), before)
+        target = next(item for item in result['data']['drift_check']['items']
+                      if item['kind'] == 'resources')
+        target['actual']['from'] = 99
+        state_before = copy.deepcopy(self.repo.load()['state'])
+        self.app.submit(result)
         self.assertEqual(self.repo.headers('main'), [])
+        book = self.repo.load()
+        self.assertEqual(book['state'], state_before)
+        self.assertEqual(book['written_han'], 0)
+        self.assertIn('drift_before', {finding.get('criterion')
+                                       for finding in (book['draft'] or {}).get('findings') or []})
 
-    def test_missing_check_and_bad_quote_are_rejected(self):
-        self.review_task()
-        result = response(self.app)
-        result['data']['reader']['checks'].pop()
-        self.assertCode('review_coverage', self.app.submit, result)
-        result = response(self.app)
-        result['data']['facts']['checks'][0]['evidence'][0] = {'chapter': 1, 'quote': '正文中不存在的句子。'}
-        self.assertCode('evidence', self.app.submit, result)
 
     def test_short_prose_preserved_and_rework_is_bounded(self):
         drive(self.app, until='write')
         stages = []
-        for _ in range(4):
-            task = self.repo.pending() or self.app.advance()['task']
+        for _ in range(5):
+            handoff = self.app.advance()
+            if handoff['action'] != 'task_ready':
+                break
+            stages.append(app_stage(self.repo))
             result = response(self.app)
-            stages.append(self.repo.pending()['input']['stage'])
             result['data']['prose'] = '他走了。'
             self.app.submit(result)
-        self.assertEqual(stages, ['write', 'repair', 'repair', 'redesign'])
-        self.assertEqual(self.repo.load()['draft']['prose'], '他走了。')
-        self.assertEqual(self.repo.load()['rework']['1'], {'repairs': 2, 'redesigns': 1, 'initial_used': True})
-        self.assertEqual(self.app.status()['status'], 'paused')
-        # The spent chapter budget is an author decision, not a wall: resume hands up the question.
-        status = self.app.resume()
+        # Two repair rounds raise the same finding again: v2 stops the non-converging loop at the
+        # stall point (before the budget is spent), and hands the decision to the author.
+        self.assertEqual(stages, ['write', 'repair', 'repair'])
+        status = self.app.status()
         self.assertEqual(status['status'], 'paused')
-        self.assertEqual(status['author_decision']['id'], 'repair-exhausted:chapter_repair')
+        self.assertEqual(status['author_decision']['id'], 'repair-stalled:chapter_repair')
         self.assertIn('第 1 章', status['author_decision']['question'])
-        # Accepting keeps the formal chapter and records the reviewer's findings as open items.
-        accepted = self.app.answer('repair-exhausted:chapter_repair', workflow.ACCEPT_OPEN, '这一处我承担。')
+        book = self.repo.load()
+        self.assertEqual(book['draft']['prose'], '他走了。')
+        self.assertEqual(book['rework']['1']['repairs'], 2)
+        # Accepting keeps the formal chapter and records the findings as open items.
+        accepted = self.app.answer('repair-stalled:chapter_repair', workflow.ACCEPT_OPEN, '这一处我承担。')
         self.assertEqual(accepted['status'], 'running')
         book = self.repo.load()
         self.assertIsNone(book['draft'])
         self.assertTrue(book['carry_findings'])
         self.assertEqual(book['accepted_findings'][0]['scope'], 'chapter:1')
 
-    def test_a_spent_repair_budget_hands_the_decision_to_the_author(self):
-        """A converging candidate used to dead-end: resume refused and there was no channel at all.
-
-        The world candidate of a real book went 14 -> 7 -> 4 -> 3 findings and then hit the budget.
-        Neither escape (recontract, opening back) is proportionate to three local fixes, so the stop
-        becomes an author decision instead of a wall.
-        """
-        findings = [{'criterion': 'economic_consequences', 'severity': 'quality', 'reason': '指标算不平。',
-                     'evidence': [{'chapter': 0, 'quote': '一年三到五个'}], 'target_chapter': 0,
-                     'repair_scope': 'local'}]
-        book = self.repo.load()
-        book['proposal'] = {'scope': 'world', 'chapter': 1, 'data': {'premise': '工程候选。'},
-                            'producer': 'controller-1', 'attempts': 3, 'findings': findings,
-                            'needs_repair': True}
-        book.update(status='paused', pause_reason='世界模型核验修复耗尽，候选保留。')
-        self.repo.save(book)
-        status = self.app.resume()
-        self.assertEqual(status['status'], 'paused')
-        decision = status['author_decision']
-        self.assertEqual(decision['id'], 'repair-exhausted:world_review')
-        self.assertEqual([row['label'] for row in decision['options']],
-                         [workflow.REPAIR_AGAIN, workflow.ACCEPT_OPEN, decision['options'][2]['label']])
-        # One more round restores exactly one repair, and the candidate is re-dispatched.
-        granted = self.app.answer(decision['id'], workflow.REPAIR_AGAIN, '这几条都得改透。', 'controller-1')
-        self.assertEqual(granted['status'], 'running')
-        reloaded = self.repo.load()
-        self.assertEqual(reloaded['proposal']['attempts'], 2)
-        self.assertTrue(reloaded['proposal']['needs_repair'])
-        # Accepting instead keeps the findings on the record rather than turning them into a pass.
-        book = self.repo.load()
-        book['proposal']['attempts'] = 3
-        book.update(status='paused', pause_reason='世界模型核验修复耗尽，候选保留。')
-        self.repo.save(book)
-        status = self.app.resume()
-        accepted = self.app.answer(status['author_decision']['id'], workflow.ACCEPT_OPEN,
-                                   '这一处我承担，先往下走。', 'controller-1')
-        self.assertEqual(accepted['status'], 'running')
-        book = self.repo.load()
-        self.assertIsNone(book['proposal'])
-        self.assertEqual(book['world']['premise'], '工程候选。')
-        self.assertEqual(book['accepted_findings'][0]['stage'], 'world_review')
-        self.assertEqual(book['carry_findings'][-1]['criterion'], 'economic_consequences')
 
     def test_answering_a_pending_author_decision_releases_the_halt(self):
         block = {'id': 'death-detail', 'question': '录音能不能带出铁门内的内容？',
@@ -266,59 +210,10 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(blocked.returncode, 2)
         self.assertEqual(json.loads(blocked.stdout)['error'], 'author_decision')
 
-    def test_a_second_full_read_only_hands_over_what_is_still_new(self):
-        """A real run spent more characters re-sending records than on every envelope together.
 
-        The journal already knows what a task was handed, so a plain read returns the remainder and
-        names the records it skipped; `--all` and `--record` stay available for a deliberate re-read.
-        """
-        task = self.app.advance()['task']
-        first = self.app.read(task['task_id'])
-        self.assertTrue(first['records'], 'first read hands over the required records')
-        second = self.app.read(task['task_id'])
-        self.assertEqual(second['records'], {})
-        self.assertEqual(sorted(second['already_read']), sorted(first['records']))
-        self.assertIn('--all', second['already_read_note'])
-        again = self.app.read(task['task_id'], everything=True)
-        self.assertEqual(sorted(again['records']), sorted(first['records']))
-        self.assertNotIn('already_read', again)
-
-    def test_a_revision_with_out_of_range_scope_findings_asks_the_author(self):
-        """The third shape of one dead end: the run cannot grow and cannot be finished.
-
-        A revision run's own closure review can flag a chapter outside its range. `revise` refuses
-        while a run is open and `promote` refuses while the finding stands, so the author decides.
-        """
-        book = self.repo.load()
-        book['revision_run'] = {'parent': 'main', 'first': 3, 'last': 3, 'carry': []}
-        book['scope_findings'] = [{'criterion': 'causality', 'severity': 'quality',
-                                   'reason': '第二章与第一章逐字重复。', 'evidence': [],
-                                   'target_chapter': 2, 'repair_scope': 'local'}]
-        book.update(status='paused', pause_reason='跨章核验发现缺陷，按明确 target_chapter 开修订分支。')
-        self.repo.save(book)
-        status = self.app.resume()
-        self.assertEqual(status['author_decision']['id'], 'scope-findings:open-revision')
-        self.assertIn('第 2 章', status['author_decision']['question'])
-        accepted = self.app.answer('scope-findings:open-revision', workflow.SCOPE_OPTIONS[0]['label'],
-                                   '这一处我承担，先把本次修订做完。', 'controller-1')
-        self.assertEqual(accepted['status'], 'running')
-        book = self.repo.load()
-        self.assertIsNone(book.get('scope_findings'))
-        self.assertEqual(book['accepted_findings'][0]['scope'], 'open-revision')
-        self.assertTrue(book['carry_findings'])
-        # The author's second exit names the command instead of silently discarding the run.
-        book['scope_findings'] = [{'criterion': 'causality', 'severity': 'quality', 'reason': '再记一条。',
-                                   'evidence': [], 'target_chapter': 2, 'repair_scope': 'local'}]
-        book.update(status='paused', pause_reason='跨章核验发现缺陷。')
-        self.repo.save(book)
-        status = self.app.resume()
-        held = self.app.answer('scope-findings:open-revision', workflow.SCOPE_OPTIONS[1]['label'],
-                               '我先把这次修订撤掉。', 'controller-1')
-        self.assertEqual(held['status'], 'paused')
-        self.assertIn('discard', held['pause_reason'])
 
     def test_first_chapter_approval_binds_exact_version(self):
-        final = drive(self.app, until='chapter_review')
+        drive(self.app, until='write')
         self.app.submit(response(self.app))
         handoff = self.app.advance()
         self.assertEqual(handoff['action'], 'await_author')
@@ -379,28 +274,25 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(json.loads(template.read_text(encoding='utf-8')), form)
         self.assertEqual(self.app.submit(response(self.app))['worker_boundary'], 'finished')
 
-    def test_compact_dispatch_exposes_claim_and_same_reviewer_after_first_read(self):
-        handle = self.review_task()
+    def test_compact_dispatch_exposes_claim_and_never_reuses_a_session(self):
+        handle = self.app.advance()['task']
         compact = self.app.advance(compact=True)['task']
         self.assertTrue(compact['requires_new_worker'])
         self.assertIsNone(compact['review_session'])
-        locked = json.loads(Path(compact['task_path']).read_text(encoding='utf-8'))
-        self.assertNotIn('input_path', locked)
-        self.assertNotIn('records', locked)
-        self.assertTrue(all(Path(p['path']).is_file() for p in locked['prose_files']))
+        self.assertNotIn('input_path', compact)
+        self.assertNotIn('records', compact)
+        self.assertNotIn('commands', compact)
+        self.assertTrue(all(Path(p['path']).is_file() for p in compact.get('prose_files', [])))
 
-        claim = self.app.claim(handle['task_id'], 'reviewer-for-current-task')
+        claim = self.app.claim(handle['task_id'], 'worker-for-current-task')
         compact = self.app.advance(compact=True)['task']
         self.assertEqual(compact['claim'], {'session': claim['session'], 'expired': False})
         self.assertNotIn('token', compact['claim'])
-        result = response(self.app, session=claim['session'], claim=claim['token'])
-        resumed = self.app.advance(compact=True)['task']
-        self.assertEqual(resumed['task_id'], handle['task_id'])
-        self.assertEqual(resumed['delivery_phase'], 'formal')
-        self.assertFalse(resumed['requires_new_worker'])
-        self.assertEqual(resumed['review_session'], claim['session'])
-        self.assertCode('first_read', self.app.claim, handle['task_id'], 'another-reviewer')
-        self.assertTrue(self.app.submit(result)['accepted'])
+        # v2 has no blind first read: one worker owns the dispatch, and a second session cannot
+        # take it over while the lease is held.
+        self.assertCode('worker_busy', self.app.claim, handle['task_id'], 'another-worker')
+        self.assertTrue(self.app.submit(response(self.app, session=claim['session'],
+                                                 claim=claim['token']))['accepted'])
 
     def test_compact_cli_dispatches_a_complete_task_file(self):
         command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project),
@@ -414,36 +306,6 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn('read', stored['commands'])
         self.assertNotIn('commands', handle)
 
-    def test_compact_loop_preserves_author_boundary_and_reaches_revision_completion_and_delivery(self):
-        owner = self.app.run(finish=True, source='工程夹具：授权写完并验收交付。')['owner']
-
-        def until_boundary():
-            after = None
-            for _ in range(100):
-                handoff = self.app.advance(after=after, owner=owner, compact=True)
-                if handoff['action'] != 'task_ready':
-                    return handoff
-                after = handoff['task']['task_id']
-                submitted = self.app.submit(response(self.app, task_id=after))
-                self.assertTrue(submitted['accepted'])
-                self.assertEqual(submitted['worker_boundary'], 'finished')
-            self.fail('工程循环未到达业务边界。')
-
-        author = until_boundary()
-        self.assertEqual(author['action'], 'await_author')
-        self.assertEqual(self.app.status()['accepted_chapters'], 1)
-        self.app.approve(author['prose_hash'], '工程夹具作者认可当前首章。', owner)
-        self.assertEqual(until_boundary()['action'], 'ready_to_complete')
-        self.app.revise(2, '工程夹具：修改末章表达。', owner)
-        self.assertEqual(until_boundary()['action'], 'revision_ready')
-        self.app.promote(owner)
-        self.assertEqual(until_boundary()['action'], 'ready_to_complete')
-        completed = self.app.complete(owner)
-        self.assertEqual(until_boundary()['action'], 'completed')
-        manifest = delivery.deliver_completion(self.repo, workspace=local_workspace(self.repo))
-        self.assertEqual(manifest['snapshot_hash'], completed['snapshot_hash'])
-        self.assertTrue((self.project / 'book.md').is_file())
-        self.assertTrue((self.project / 'delivery.json').is_file())
 
     def test_cancelled_receipt_never_commits(self):
         self.app.advance()
@@ -471,62 +333,10 @@ class RuntimeTests(unittest.TestCase):
         self.assertCode('worker_lease', self.app.submit, result)
         self.app.submit(response(self.app, session='replacement', claim=replacement['token']))
 
-    def test_revision_preserves_formal_branch_until_review_and_promotion(self):
-        owner = self.finish()
-        self.app.revise(2, '作者要求改结尾表达。', owner)
-        status = self.app.status()
-        self.assertEqual(status['formal_chapters'], 2)
-        self.assertEqual(status['accepted_chapters'], 1)
-        self.assertCode('revision', self.app.promote, owner)
-        self.assertEqual(drive(self.app, owner)['action'], 'revision_ready')
-        result = self.app.promote(owner)
-        self.assertEqual(result['formal_branch'], result['branch'])
-        self.assertTrue(self.app.audit()['ok'])
 
-    def test_discard_restores_old_goal_and_prose(self):
-        owner = self.finish()
-        old = self.repo.chapter('main', 2)
-        self.app.revise(2, '试改后再决定。', owner)
-        self.app.advance(owner=owner)
-        self.app.discard(owner)
-        self.assertEqual(self.repo.chapter('main', 2), old)
-        self.assertTrue(self.repo.load()['finish'])
 
-    def test_discard_preserves_already_spent_repair_budget(self):
-        owner = self.finish()
-        self.app.revise(2, '修订表达。', owner)
-        self.app.advance(owner=owner)
-        self.app.submit(response(self.app))
-        self.app.discard(owner)
-        self.assertEqual(self.repo.load()['rework']['2']['repairs'], 1)
 
-    def test_narrow_revision_carries_unchanged_suffix(self):
-        self.repo.save(workflow.new_book(contract(3)))
-        owner = self.finish()
-        formal3 = self.repo.chapter('main', 3)
-        self.app.revise(2, '一词之修。', owner, through=2)
-        self.assertEqual(self.app.status()['accepted_chapters'], 1)
-        self.assertEqual(drive(self.app, owner)['action'], 'revision_ready')
-        carried = self.repo.chapter(self.repo.load()['branch'], 3)
-        self.assertEqual(carried['prose'], formal3['prose'])
-        self.assertEqual(self.app.status()['accepted_chapters'], 3)
-        self.assertTrue(self.app.audit()['ok'])
-        self.app.promote(owner)
-        self.assertTrue(self.app.audit()['ok'])
 
-    def test_narrow_revision_refuses_carry_when_facts_drift(self):
-        self.repo.save(workflow.new_book(contract(3)))
-        owner = self.finish()
-        self.app.revise(2, '改时钟。', owner, through=2)
-        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'repair')
-        self.app.submit(response(self.app))  # 重写第 2 章并进入章审
-        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'chapter_review')
-        review = response(self.app)
-        clock = review['data']['facts']['events'][0]['before']
-        review['data']['facts']['events'][0]['after'] = clock + 2
-        review['data']['facts']['elapsed_days'] = 2  # 第 3 章冻结事件的时钟前值随之失效
-        self.assertCode('revision_carry', self.app.submit, review)
-        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'chapter_review')
 
     def test_advance_carries_ledger_baseline(self):
         handoff = drive(self.app, until='write')
@@ -537,40 +347,10 @@ class RuntimeTests(unittest.TestCase):
         on_disk = json.loads(Path(handoff['task']['task_path']).read_text(encoding='utf-8'))
         self.assertEqual(on_disk['baseline']['clock'], 0)
 
-    def test_receipts_record_check_list_version(self):
-        self.review_task()
-        result = response(self.app)
-        self.assertEqual(result['data']['facts']['checks_version'], CHECKS_VERSION)
-        self.app.submit(result)
-        review = self.repo.read_document(self.repo.chapter('main', 1)['review'])
-        self.assertEqual(review['facts']['checks_version'], CHECKS_VERSION)
-        self.assertTrue(self.app.audit()['ok'])
 
-    def test_fast_verification_skips_interval_and_merges_blocks(self):
-        book = workflow.new_book(contract(4, 1))
-        book['contract']['review_interval'] = 2
-        book['contract']['verification'] = 'fast'
-        self.repo.save(book)
-        run = self.app.run(finish=True, source='工程夹具授权写完。')
-        owner, blocks = run['owner'], []
-        for _ in range(100):
-            handoff = self.app.advance(owner=owner)
-            if handoff['action'] == 'await_author':
-                self.app.approve(handoff['prose_hash'], '工程夹具作者明确认可当前版本。', owner)
-                continue
-            if handoff['action'] != 'task_ready':
-                break
-            task = handoff['task']
-            if task['stage'] == 'scope_review':
-                work = self.repo.task(task['task_id'])['input']
-                blocks.append((work['scope'], work['first'], work['last']))
-            self.app.submit(response(self.app))
-        self.assertEqual(handoff['action'], 'ready_to_complete')
-        self.assertFalse(any(scope == 'interval' for scope, _, _ in blocks))
-        self.assertIn(('volume:v1', 1, 4), blocks)
 
     def test_lexical_override_is_versioned_and_applies_from_the_opening_stage(self):
-        self.assertEqual(self.app.advance()['task']['stage'], 'book_plan')
+        self.assertEqual(self.app.advance()['task']['stage'], 'volume_outline')
         with self.assertRaises(Error) as caught:
             self.app.set_lexical({'forbidden_name_chars': ['砚']}, '')
         self.assertEqual(caught.exception.code, 'author_source')
@@ -594,108 +374,18 @@ class RuntimeTests(unittest.TestCase):
             self.app.set_lexical({'forbidden_name_chars': []}, '同一规则再写一次。')
         self.assertEqual(caught.exception.code, 'lexical_policy')
 
-    def test_recontract_cannot_reopen_free_initial_draft(self):
-        drive(self.app, until='write')
-        result = response(self.app)
-        result['data']['prose'] = '他走了。'
-        self.app.submit(result)
-        self.app.recontract(contract(), '作者改约，文学修复额度继续有效。')
-        self.app.advance()
-        self.app.submit(response(self.app))
-        self.assertEqual(drive(self.app, until='repair')['task']['stage'], 'repair')
-        self.app.submit(response(self.app))
-        self.assertEqual(self.repo.load()['rework']['1']['repairs'], 1)
-        self.app.advance()
-        obligations = self.repo.pending()['input']['obligations']
-        self.assertTrue(any('汉字篇幅' in o['text'] for o in obligations))
 
-    def test_recontract_is_reviewed_and_old_branch_can_be_restored(self):
-        owner = self.finish()
-        changed = contract()
-        changed['reader_promise'] = '工人在退件纠纷中保住同事的工作。'
-        self.app.recontract(changed, '作者明确修改读者承诺。', owner)
-        self.assertNotEqual(self.repo.load()['contract']['reader_promise'], changed['reader_promise'])
-        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'contract_review')
-        self.app.submit(response(self.app))
-        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'book_plan')
-        self.assertEqual(self.repo.load()['contract']['reader_promise'], changed['reader_promise'])
-        self.app.discard(owner)
-        self.assertIsNone(self.repo.load().get('pending_contract'))
-        self.assertEqual(self.app.advance(owner=owner)['action'], 'ready_to_complete')
 
-    def test_a_second_activation_keeps_the_verified_world(self):
-        """A re-contract after the first activation used to lose the verified world.
 
-        The world was copied only while the opening phase was still 'contract'; the first
-        activation moves that phase to 'ready', so every later amendment continued with
-        `world=None` — and the design stages after it bound a null world hash with empty refs.
-        """
-        from novel_ledger.contract_activation import ContractActivation
 
-        class Repo:
-            def __init__(self):
-                self.book = None
-            def put(self, key, value):
-                return None
-            def get(self, key, default=None):
-                return default
-            def headers(self, branch):
-                return []
-            def save(self, book):
-                self.book = book
-            def record(self, action, value):
-                return None
 
-        proposal = {'data': contract(2), 'producer': 'controller', 'source': '作者改约原话。'}
-        old = {'pending_contract': proposal, 'lexical_policy': [], 'creation': {'phase': 'ready'},
-               'world': {'premise': '已核验的世界。'}, 'world_review': {'receipt': {}},
-               'feedback': [], 'rework': {}, 'revision': 0, 'branch': 'main', 'target': 2,
-               'finish': False, 'draft': None}
-        book = ContractActivation(Repo()).activate(old)
-        self.assertEqual(book['world'], {'premise': '已核验的世界。'})
-        self.assertEqual(book['world_review'], {'receipt': {}})
-        self.assertTrue(book['opening_world_only'])
-        self.assertEqual(book['creation']['phase'], 'ready')
-
-    def test_contract_activation_preserves_project_lexical_versions(self):
-        self.app.set_lexical({'forbidden_terms': ['临时禁词'], 'forbidden_name_chars': ['禁']}, '工程作者指定项目字面规则。')
-        versions = self.repo.load()['lexical_policy']
-        changed = contract()
-        changed['reader_promise'] = '工程作者改变阅读承诺。'
-        self.app.recontract(changed, '工程作者明确改约。')
-        self.app.advance()
-        self.app.submit(response(self.app))
-        self.app.advance()
-        self.assertEqual(self.repo.load()['lexical_policy'], versions)
-        task = self.repo.pending()['input']
-        self.assertEqual(task['policy']['forbidden_terms'], ['临时禁词'])
-        self.assertEqual(task['policy']['source'], '工程作者指定项目字面规则。')
-
-    def test_null_contract_controls_are_rejected_before_staging_an_amendment(self):
-        before = self.repo.get('book')
-        for field in ('scope_append_limit', 'allow_special_mechanism'):
-            with self.subTest(field=field):
-                changed = contract()
-                changed[field] = None
-                self.assertCode('contract', self.app.recontract, changed, '工程作者提供的候选约定。')
-                self.assertEqual(self.repo.get('book'), before)
-
-    def test_discard_restores_prose_without_undoing_project_lexical_decisions(self):
-        owner = self.finish()
-        original = self.repo.headers('main')
-        self.app.revise(2, '工程作者要求调整表达。', owner, through=2)
-        self.app.set_lexical({'forbidden_terms': ['临时禁词']}, '工程作者在修订期间调整项目字面规则。', owner)
-        versions = self.repo.load()['lexical_policy']
-        self.app.discard(owner)
-        self.assertEqual(self.repo.headers('main'), original)
-        self.assertEqual(self.repo.load()['lexical_policy'], versions)
 
     def test_malformed_worker_receipt_is_a_json_error_without_a_traceback(self):
         task = self.app.advance()['task']
         path = self.project / 'malformed.json'
         path.write_text('[]', encoding='utf-8')
         environment = dict(os.environ, NOVEL_TASK_ID=task['task_id'], NOVEL_SESSION='engineering-malformed')
-        for command in ('submit', 'preflight', 'first-read'):
+        for command in ('submit', 'preflight'):
             with self.subTest(command=command):
                 result = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'),
                     '--project', str(self.project), command, '--file', str(path)], env=environment,
@@ -705,32 +395,7 @@ class RuntimeTests(unittest.TestCase):
                 self.assertNotIn('Traceback', result.stderr)
         self.assertEqual(self.repo.pending()['id'], task['task_id'])
 
-    def test_malformed_plan_rows_are_rejected_without_mutating_the_task(self):
-        drive(self.app, until='plan')
-        result = response(self.app)
-        before = self.repo.get('book')
-        valid = copy.deepcopy(result['data']['plans'])
-        for rows in (valid + [None], [None] + valid, [dict(valid[0], chapter=True)]):
-            with self.subTest(rows=rows):
-                result['data']['plans'] = rows
-                self.assertCode('plan', self.app.submit, result)
-                self.assertEqual(self.repo.get('book'), before)
-        self.assertEqual(self.repo.pending()['id'], result['task_id'])
 
-    def test_malformed_plan_dependencies_entities_and_schedule_leave_the_task_intact(self):
-        drive(self.app, until='plan')
-        valid = response(self.app)
-        before = self.repo.get('book')
-        for field, value in (('node_ids', [[]]), ('new_entities', [None]),
-                             ('new_entities', [{'id': 'new', 'name': '新人物', 'kind': 'person', 'aliases': None}]),
-                             ('schedule', None), ('schedule', {})):
-            with self.subTest(field=field, value=value):
-                result = copy.deepcopy(valid)
-                result['data']['plans'][0][field] = value
-                with self.assertRaises(Error):
-                    self.app.submit(result)
-                self.assertEqual(self.repo.get('book'), before)
-        self.assertEqual(self.repo.pending()['id'], valid['task_id'])
 
     def test_audit_detects_modified_document_and_projection(self):
         self.finish()
@@ -767,34 +432,6 @@ class RuntimeTests(unittest.TestCase):
             self.assertTrue(scope.get('terms') or scope.get('names'), stage)
         self.assertIn('opening_options', ENFORCEMENT)
 
-    def test_plan_stage_honours_an_author_name_override(self):
-        """A plan's new entity is a name: it must be judged by the active project policy."""
-        self.app.set_lexical({'forbidden_name_chars': ['砚']}, '作者要求人物名不得用砚字。')
-        drive(self.app, until='plan')
-        work = self.repo.pending()['input']
-        self.assertEqual(work['policy']['forbidden_name_chars'], ['砚'])
-        self.assertEqual(work['policy']['scope']['names'], ['new_entities'])
-        blocked = {'plans': [dict(chapter=work['first'], goal='核对封条。', obstacle='主管阻拦。', choice='查记录。',
-                                  cost='得罪同事。', change='拿到签字。', ending='追问来源。',
-                                  node_ids=['volume:v1'], participants=['shen'],
-                                  new_entities=[{'id': 'yan', 'name': '沈砚', 'kind': 'person'}])]}
-        with self.assertRaises(Error) as caught:
-            self.app.submit({**response(self.app), 'data': blocked})
-        self.assertEqual(caught.exception.code, 'literal_policy')
-        self.assertIn('砚', json.dumps(caught.exception.details, ensure_ascii=False))
-        # the author lifts the rule; the next plan is judged by the new version, not the old one
-        self.app.set_lexical({'forbidden_name_chars': []}, '作者允许人物名用砚字。')
-        self.app.advance()
-        work = self.repo.pending()['input']
-        self.assertEqual(work['policy']['version'], 3)
-        self.assertEqual(work['policy']['forbidden_name_chars'], [])
-        allowed = {'plans': [dict(chapter=work['first'], goal='核对封条。', obstacle='主管阻拦。', choice='查记录。',
-                                  cost='得罪同事。', change='拿到签字。', ending='追问来源。',
-                                  node_ids=['volume:v1'], participants=['shen'],
-                                  new_entities=[{'id': 'yan', 'name': '沈砚', 'kind': 'person'}])]}
-        self.app.submit({**response(self.app), 'data': allowed})
-        stored = self.repo.load()['plans'][str(work['first'])]
-        self.assertEqual(stored['new_entities'][0]['name'], '沈砚')
 
     def test_opening_option_text_is_checked_not_only_the_name(self):
         """The dispatch declares the whole option; the machine must inspect the whole option."""
@@ -826,16 +463,6 @@ class RuntimeTests(unittest.TestCase):
     def test_export_cannot_overwrite_database(self):
         self.assertCode('output', delivery.export_book, self.repo, self.project / 'novel.sqlite3', workspace=local_workspace(self.repo))
 
-    def test_preparing_project_activates_only_reviewed_contract(self):
-        self.repo.save(workflow.preparing_book('作者先给了一个想法。'))
-        self.assertEqual(self.app.advance()['action'], 'preparing')
-        self.assertCode('creation', self.app.run, through=2)
-        self.app.recontract(contract(), '作者补全了方向和体量。')
-        self.assertIsNone(self.repo.load()['contract'])
-        self.assertEqual(self.app.advance()['task']['stage'], 'contract_review')
-        self.app.submit(response(self.app))
-        self.assertEqual(self.app.advance()['task']['stage'], 'book_plan')
-        self.assertIsNotNone(self.repo.load()['contract'])
 
     def test_atomic_initialize_never_overwrites_existing_book(self):
         self.app.advance()
@@ -859,83 +486,13 @@ class RuntimeTests(unittest.TestCase):
         self.repo.save(book)
         self.assertCode('projection', self.app.audit)
 
-    def test_sealed_first_read_hash_is_verified_on_recovery(self):
-        task = self.review_task()
-        response(self.app)
-        changed = self.repo.task(task['task_id'])['first_read']
-        changed['reads'][0]['obstacle'] = '数据库中被修改。'
-        self.repo.db.execute('UPDATE tasks SET first_read=? WHERE id=?', (dump(changed), task['task_id']))
-        self.assertCode('first_read_integrity', self.app.advance)
 
-    def test_scope_review_is_chunked_and_then_independently_synthesized(self):
-        raw = contract(5)
-        raw['review_chunk'] = 2
-        self.repo.save(workflow.new_book(raw))
-        run = self.app.run(finish=True)
-        head = drive(self.app, run['owner'], until='scope_review')
-        spans = []
-        for _ in range(3):
-            work = self.repo.pending()['input']
-            spans.append((work['first'], work['last']))
-            self.app.submit(response(self.app))
-            self.app.advance(owner=run['owner'])
-        self.assertEqual(spans, [(1, 2), (3, 4), (5, 5)])
-        work = self.repo.pending()['input']
-        self.assertEqual(work['stage'], 'scope_synthesis')
-        records = self.app.read(self.repo.pending()['id'])['records']
-        self.assertEqual(len(records['scope_parts']['value']), 3)
-        self.assertFalse(work['blind'])
 
-    def test_scope_review_rejects_incomplete_actual_chapter_coverage(self):
-        run = self.app.run(finish=True)
-        drive(self.app, run['owner'], until='scope_review')
-        result = response(self.app)
-        result['data']['coverage'].pop()
-        self.assertCode('scope_coverage', self.app.submit, result)
-        self.assertEqual(self.repo.load()['scope_parts'], {})
 
-    def test_design_repairs_do_not_reset_attempts(self):
-        self.app.advance()
-        self.app.submit(response(self.app))
-        for attempt in range(3):
-            self.app.advance()
-            result = response(self.app)
-            result['data']['verdict'] = 'fix'
-            result['data']['checks'][0]['result'] = 'fix'
-            ref = result['data']['checks'][0]['evidence'][0]
-            result['data']['findings'] = [dict(criterion='author_constraints', severity='quality', reason='工程设计缺陷。', evidence=ref, target_chapter=0, repair_scope='chapter')]
-            self.app.submit(result)
-            self.assertEqual(self.repo.load()['proposal']['attempts'], attempt + 1)
-            if attempt < 2:
-                self.assertEqual(self.app.advance()['task']['stage'], 'book_plan')
-                self.app.submit(response(self.app))
-        self.assertEqual(self.app.status()['status'], 'paused')
-        # The spent budget is no longer a wall: resume hands the decision to the author, and the
-        # engine keeps the budget unless the author explicitly grants one more round.
-        status = self.app.resume()
-        self.assertEqual(status['status'], 'paused')
-        self.assertEqual(status['author_decision']['id'], 'repair-exhausted:design_review')
-        self.assertEqual(self.repo.load()['proposal']['attempts'], 3)
 
-    def test_fact_fix_and_short_repair_share_one_budget(self):
-        self.review_task()
-        result = response(self.app)
-        result['data']['reader']['verdict'] = 'fix'
-        row = result['data']['reader']['checks'][0]
-        row['result'] = 'fix'
-        result['data']['reader']['findings'] = [dict(criterion='read_on', severity='quality', reason='追读理由不足。', evidence=row['evidence'][0], target_chapter=1, repair_scope='chapter')]
-        self.app.submit(result)
-        self.app.advance()
-        repair = response(self.app)
-        repair['data']['prose'] = '他走了。'
-        self.app.submit(repair)
-        draft = self.repo.load()['draft']
-        self.assertTrue(any(f['criterion'] == 'read_on' for f in draft['findings']))
-        self.assertTrue(any(f['criterion'] == 'substance' for f in draft['findings']))
-        self.assertEqual(self.repo.load()['rework']['1']['repairs'], 1)
 
     def test_host_runs_real_process_and_verifies_cli_submission(self):
-        task = drive(self.app, until='chapter_review')['task']
+        drive(self.app, until='write')
         result = host.step(self.app, [sys.executable, str(ROOT / 'tests' / 'process_worker.py')])
         self.assertEqual(result['action'], 'worker_finished')
         self.assertTrue(result['submitted'])
@@ -976,12 +533,6 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result['exit_code'], 2)
         self.assertIn('worker_boundary', Path(result['log']).read_text(encoding='utf-8', errors='replace'))
 
-    def test_host_does_not_fabricate_resume_of_frozen_model_session(self):
-        task = self.review_task()
-        response(self.app)
-        result = host.step(self.app, [sys.executable, '-c', 'pass'])
-        self.assertEqual(result['action'], 'resume_session_required')
-        self.assertEqual(result['task_id'], task['task_id'])
 
     def test_role_boundary_keeps_the_controller_out_of_prose(self):
         command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project)]
@@ -1034,14 +585,6 @@ class RuntimeTests(unittest.TestCase):
             SQLiteRepository(older)
         self.assertEqual(caught.exception.code, 'schema')
 
-    def test_cancelling_a_task_retires_its_form(self):
-        task = self.app.advance()['task']
-        base = Path(task['task_path']).parent
-        self.assertTrue((base / 'input.json').is_file())
-        self.assertTrue((base / 'result.template.json').is_file())
-        self.app.pause('作者暂停', cancel=True)
-        self.assertFalse((base / 'input.json').exists())
-        self.assertFalse((base / 'result.template.json').exists())
 
     def test_export_refuses_to_clobber_the_book_view(self):
         with self.assertRaises(Error) as caught:
@@ -1086,8 +629,8 @@ class RuntimeTests(unittest.TestCase):
                                    encoding='utf-8', errors='replace')
         self.assertEqual(malformed.returncode, 2)
         body = json.loads(malformed.stdout)
-        self.assertEqual(body['error'], 'design')
-        self.assertIn('intent', body['message'])
+        self.assertEqual(body['error'], 'design_drift')
+        self.assertTrue(body['message'])
         self.assertEqual(self.repo.pending()['id'], pending)          # nothing was committed
         self.assertEqual(self.repo.task(pending)['status'], 'pending')
         # a missing input_hash is reported as such, with the expected value

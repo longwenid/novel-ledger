@@ -17,8 +17,6 @@ class ContractActivation:
         self.repo.put(store_keys.branch_book(old['branch']), self.repo.get(store_keys.AMENDMENT_BASE, old))
         book = workflow.new_book(proposal['data'], proposal['source'])
         book['lexical_policy'] = copy.deepcopy(old['lexical_policy'])
-        book['contract_review'] = {'producer': proposal['producer'],
-                                   'reviewer': old.get('pending_contract_reviewer', proposal['producer'])}
         if old.get('creation'):
             # An answered opening stays answered: the closed choices are what the new contract is
             # an amendment of, so they travel with it whatever phase they were in.
@@ -31,7 +29,6 @@ class ContractActivation:
         # stages after it bound `world_hash: null` with empty `world_refs`.
         if old.get('world'):
             book['world'] = copy.deepcopy(old['world'])
-            book['world_review'] = copy.deepcopy(old.get('world_review') or {})
             book['opening_world_only'] = True
         book['feedback'] = old['feedback'] + [proposal['source']]
         if old.get('repair_cases'):
@@ -43,7 +40,7 @@ class ContractActivation:
             book['author_block'] = copy.deepcopy(old['author_block'])
         if old.get('remedy_exhausted'):
             book['remedy_exhausted'] = copy.deepcopy(old['remedy_exhausted'])
-        book['carry_findings'] = copy.deepcopy(old.get('carry_findings', [])) + copy.deepcopy(old.get('scope_findings', []))
+        book['carry_findings'] = copy.deepcopy(old.get('carry_findings', []))
         if old['draft']:
             book['carry_findings'].extend(copy.deepcopy(old['draft'].get('findings', [])))
             book['prior_candidate'] = {k: old['draft'][k] for k in ('chapter', 'title', 'prose')}

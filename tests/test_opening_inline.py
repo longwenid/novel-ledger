@@ -33,8 +33,8 @@ GATE_RECEIPT = {'genre': {'genre': '都市异能', 'reader_promise': '看他从�
 def gate_result(app, session):
     task = app.repo.pending()
     work = task['input']
-    data = template(work['stage'], work['chapter'], {}, work['obligations'], version=1,
-                    payload=work['payload'], tracking=False)
+    data = template(work['stage'], work['chapter'], payload=work['payload'],
+                    tracking=work.get('narrative_tracking', False))
     data.update(gate=work['payload']['gate']['id'], options=rows_for(work['payload']['gate']['id']))
     return {'schema': 'novel-ledger.result/1', 'task_id': task['id'], 'input_hash': task['input_hash'],
             'session': session, 'data': data}

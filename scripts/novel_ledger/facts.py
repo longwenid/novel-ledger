@@ -20,6 +20,17 @@ def amount(value):
     return number
 
 
+def spell(number):
+    """The canonical spelling of a quantity: an integral balance carries no decimal point.
+
+    Every comparison still goes through `amount`, so nothing about conservation, the negative check
+    or the precision bound relaxes here. What this fixes is the shape the author reads back: an
+    author who seeded four units and spent one must see `3`, and a caller that built its flow event
+    from float arithmetic must not be able to write `3.0` into the ledger.
+    """
+    return str(int(number)) if number == number.to_integral_value() else str(number)
+
+
 def resource_key(holder, asset, unit):
     return dump([holder, asset, unit])
 
@@ -34,7 +45,6 @@ def seed(contract):
     state['clock'] = 0
     if contract.get('narrative_tracking'):
         state.update({k: {} for k in ('story_nodes', 'thread_progress', 'reader_knowledge', 'character_current')})
-        state['pace_history'] = []
     for item in contract.get('entities', []):
         entity(state, item)
     for item in contract.get('initial_facts', []):
@@ -46,7 +56,7 @@ def seed(contract):
         require(item.get('holder') in state['entities'] and text(item.get('asset')) and text(item.get('unit')), 'resource', '资源归属、资产或单位缺失。')
         key = resource_key(item['holder'], item['asset'], item['unit'])
         require(key not in state['resources'], 'resource', '初始资源重复。')
-        state['resources'][key] = str(amount(item.get('quantity')))
+        state['resources'][key] = spell(amount(item.get('quantity')))
     for item in contract.get('places', []):
         require(isinstance(item, dict) and text(item.get('id')) and text(item.get('name')), 'place', '地点需要 id/name。')
         require(item['id'] not in state['places'], 'place', '地点 ID 重复。')
@@ -102,10 +112,6 @@ def settle(before, events, prose, chapter):
                 for criterion in rows:
                     criterion['evidence'] = evidence(criterion.get('evidence'), {chapter: prose})
             narrative.settle_event(state, event, chapter)
-        elif op == 'pace':
-            require('pace_history' in state and all(text(event.get(k)) for k in narrative.PACE_FIELDS)
-                    and event['role'] in narrative.PACE_ROLES, 'pacing', '节奏事实须有完整的场景作用和情绪承接。')
-            state['pace_history'] = (state['pace_history'] + [{**event, 'chapter': chapter}])[-6:]
         elif op == 'entity':
             entity(state, event.get('entity'))
         elif op == 'alias':
@@ -155,7 +161,7 @@ def settle(before, events, prose, chapter):
                     ctx.prec = 512
                     new = old + sign * quantity
                 require(new >= 0, 'insufficient_resource', '资源不足。')
-                state['resources'][key] = str(amount(str(new)))
+                state['resources'][key] = spell(amount(str(new)))
         elif op == 'clock':
             thread = event.get('thread')
             require(thread is None or text(thread), 'clock', '支线时间 ID 须非空。')
@@ -228,7 +234,7 @@ def settle(before, events, prose, chapter):
             raise Error('event_op', '未知事件类型：' + str(op),
                         {'valid_ops': ['entity', 'alias', 'state', 'relation', 'knowledge', 'resource', 'clock',
                                        'hook', 'place', 'move', 'historical_assertion', 'character_development',
-                                       'story_node', 'story_thread', 'reader_knowledge', 'character_current', 'pace', *spatial.OPS]})
+                                       'story_node', 'story_thread', 'reader_knowledge', 'character_current', *spatial.OPS]})
         normalized.append(event)
     overdue = [k for k, h in state['hooks'].items() if h['status'] == 'open' and h['due'] <= chapter]
     require(not overdue, 'hook_due', '承诺已到期，须在正文兑现或有据延期。', {'hooks': overdue, 'recover': '补齐承诺处理的正文与事件；不得直接删承诺。'})

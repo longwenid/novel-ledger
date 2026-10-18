@@ -5,6 +5,10 @@ stopped rewrites, but nothing noticed that the fixes were not landing. The engin
 many times the very same finding comes back after a repair that was told to fix it; at two, the
 loop stops with the spent-budget options while budget still remains, and a granted round resets
 the counter.
+
+The findings in v2 are raised by the engine itself at submission (drift reconciliation, lint, word
+budget) instead of arriving in a reviewer's receipt, so the recurring finding here is a mechanical
+one: the same stray Latin word filed again by the same producer.
 """
 import sys
 import tempfile
@@ -32,47 +36,30 @@ class RepairConvergenceTests(unittest.TestCase):
         self.repo.close()
         self.temp.cleanup()
 
-    def review_with_recurring_finding(self):
-        """A chapter review that fails the same reader check for the same stated reason."""
+    def draft_with_a_stray_word(self):
+        """The same mechanical defect, filed by the same producer: a Latin run in Chinese prose."""
         result = response(self.app)
-        n = self.repo.pending()['input']['chapter']
-        prose = next(iter(self.app._sources(self.repo.pending()['input']).values()))
-        reader = result['data']['reader']
-        reader['verdict'] = 'fix'
-        for row in reader['checks']:
-            if row['id'] == 'repetition':
-                row['result'] = 'fix'
-                row['reason'] = '同一段动作组在本章重复出现，未按上轮意见改写。'
-        reader['findings'] = [{'criterion': 'repetition', 'severity': 'quality',
-                               'reason': '同一段动作组在本章重复出现，未按上轮意见改写。',
-                               'target_chapter': n, 'repair_scope': 'local',
-                               'evidence': {'chapter': n, 'quote': prose[:20]}}]
+        result['data']['prose'] = result['data']['prose'].replace('要求先核对', '要求 check 核对')
         return result
-
-    def rounds(self, count):
-        for _ in range(count):
-            drive(self.app, until='chapter_review')
-            self.app.submit(self.review_with_recurring_finding())
-            handoff = self.app.advance()
-            self.assertEqual(handoff['action'], 'task_ready')
-            self.app.submit(response(self.app))
 
     def test_the_same_finding_twice_unresolved_stalls_into_an_author_decision(self):
         drive(self.app, until='write')
-        self.app.submit(response(self.app))
-        self.rounds(2)
-        # Two repair rounds in, the same finding is back: still budgeted, but the loop is not
-        # converging, so the third identical round is not dispatched.
+        self.app.submit(self.draft_with_a_stray_word())
         book = self.repo.load()
-        self.assertEqual((book['status'], book['draft']['stage']), ('running', 'chapter_review'))
+        self.assertEqual(book['draft']['stage'], 'repair')
+        self.assertIn('language', [row['criterion'] for row in book['draft']['findings']])
+        for _round in range(2):
+            handoff = self.app.advance()
+            self.assertEqual(handoff['task']['stage'], 'repair')
+            self.app.submit(self.draft_with_a_stray_word())
+        # Two repair rounds in, the same finding is back verbatim: still budgeted (the redesign
+        # round remains), but the loop is not converging, so a third identical round is not
+        # dispatched — the question goes to the author instead.
+        book = self.repo.load()
+        self.assertEqual((book['status'], book['draft']['stage']), ('paused', 'stalled'))
         self.assertEqual(book['rework']['1']['repairs'], 2)
-        drive(self.app, until='chapter_review')
-        self.app.submit(self.review_with_recurring_finding())
-        book = self.repo.load()
-        self.assertEqual(book['status'], 'paused')
         self.assertEqual(book['author_block']['id'], 'repair-stalled:chapter_repair')
         self.assertIn('连续 2 轮', book['author_block']['question'])
-        self.assertEqual(book['draft']['stage'], 'stalled')
         # The stall hands its decision up directly, so resume refuses to bypass it; the pending
         # question is already visible in status.
         self.assertEqual(self.app.status()['author_decision']['id'], 'repair-stalled:chapter_repair')
@@ -81,23 +68,23 @@ class RepairConvergenceTests(unittest.TestCase):
 
     def test_a_granted_round_resets_the_counter_and_the_chapter_can_still_finish(self):
         drive(self.app, until='write')
-        self.app.submit(response(self.app))
-        self.rounds(2)
-        drive(self.app, until='chapter_review')
-        self.app.submit(self.review_with_recurring_finding())
+        self.app.submit(self.draft_with_a_stray_word())
+        for _round in range(2):
+            self.app.advance()
+            self.app.submit(self.draft_with_a_stray_word())
         granted = self.app.answer('repair-stalled:chapter_repair', workflow.REPAIR_AGAIN,
                                   '这一轮真的改，改完再验。')
         self.assertEqual(granted['status'], 'running')
         book = self.repo.load()
         self.assertEqual(book['draft']['stage'], 'repair')
         self.assertNotIn('recurrence', book['draft'])
-        # The author saw movement: the repaired chapter now passes its review and commits.
+        # The author saw movement: the repaired chapter is clean this time and commits.
         handoff = self.app.advance()
         self.assertEqual(handoff['task']['stage'], 'repair')
         self.app.submit(response(self.app))
-        drive(self.app, until='chapter_review')
-        self.app.submit(response(self.app))
         self.assertEqual(self.repo.headers('main')[-1]['n'], 1)
+        self.assertIsNone(self.repo.load()['draft'])
+        self.assertTrue(self.app.audit()['ok'])
 
 
 if __name__ == '__main__':

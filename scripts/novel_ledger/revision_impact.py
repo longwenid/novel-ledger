@@ -39,7 +39,7 @@ def writes(events):
             result.add(('entities', event['entity']['id']))
         elif op == 'place':
             result.add(('places', event['place']['id']))
-        elif op != 'pace':
+        else:
             # An unmodelled event may affect arbitrary later inputs. Never infer independence.
             return None
     return result

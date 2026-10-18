@@ -1,11 +1,20 @@
-"""Pure editorial decisions: alignment holds, root remedies and scope closure."""
+"""Pure editorial decisions: revision bounds, root remedies and the contract's book view.
+
+v2 removed every editorial path that existed to arbitrate a review receipt — alignment holds,
+scope closure and remedy review all consumed an independent reader's findings, and there is no
+independent reader any more. What is left is mechanical: the contract as the book sees it, the
+bound a revision must stay inside, the hash that freezes a design context, and the root-case
+bookkeeping an author-granted remedy round is recorded in.
+"""
 from __future__ import annotations
 
 import copy
-from .contracts import AUTHOR_SEVERITY, digest, require, text
+from .contracts import digest, require, text
 
-CLOSURE_CHECKS = ('scope_question', 'dramatized_process', 'character_choice', 'cost', 'aftermath', 'handoff')
 REVISION_BOUNDS = 'revision-bounds/1'
+# A revision that reaches further back than the caller's contract allows is an author decision, not
+# an engine one; the default matches the contract's own legacy window when a project declares none.
+REVISION_LIMIT_DEFAULT = 3
 
 
 def enabled(book):
@@ -23,13 +32,17 @@ def effective_contract(book):
 
 
 def revision_policy(book, head):
-    limit = book['contract']['planning_window']
-    return {'schema': REVISION_BOUNDS, 'head': head, 'limit': limit, 'earliest': max(1, head - limit + 1),
-            'closed_volumes': [{'id': v['id'],
-                                'first': book['scope_closures']['volume:' + v['id']].get('first', v['first']),
-                                'last': book['scope_closures']['volume:' + v['id']].get('last', v['end'])}
-                               for v in effective_contract(book)['volumes']
-                               if 'volume:' + v['id'] in book.get('scope_closures', {})]}
+    """The window a revision may reach back over, and the volumes it is already past.
+
+    A volume counts as closed once every chapter of it is written: the old closure receipt that
+    used to say so is gone with the review stage, and the fact it recorded is the chapter count.
+    """
+    contract = effective_contract(book)
+    limit = book['contract'].get('planning_window') or REVISION_LIMIT_DEFAULT
+    return {'schema': REVISION_BOUNDS, 'head': head, 'limit': limit,
+            'earliest': max(1, head - limit + 1),
+            'closed_volumes': [{'id': v['id'], 'first': v['first'], 'last': v['end']}
+                               for v in contract['volumes'] if v['end'] <= head]}
 
 
 def revision_violations(policy, impact):
@@ -45,44 +58,18 @@ def revision_violations(policy, impact):
 
 
 def context_hash(book):
-    return digest({k: book.get(k) for k in ('contract', 'designs', 'profiles', 'style_anchor', 'scope_ends')})
+    """The design context a frozen revision directive is bound to.
 
-
-def sources(book, scope):
-    rows = [{'id': 'contract:reader_promise', 'text': book['contract']['reader_promise'], 'required': True},
-            {'id': 'contract:ending', 'text': book['contract']['ending'], 'required': True}]
-    # The theme is a payoff like the promise and the ending, so 完本验收 checks it too. A contract
-    # imported before opening/2 never declared one, and then there is simply no such source.
-    if text(book['contract'].get('theme')):
-        rows.append({'id': 'contract:theme', 'text': book['contract']['theme'], 'required': True})
-    for field in ('world_rules', 'red_lines', 'style_traits', 'relationships', 'arcs'):
-        rows.extend({'id': 'contract:' + field + ':' + str(i), 'text': value, 'required': True}
-                    for i, value in enumerate(book['contract'].get(field, [])))
-    rows.extend({'id': 'author_feedback:' + str(i), 'text': value, 'required': True} for i, value in enumerate(book['feedback']))
-    for design in book['designs'].values():
-        for node in design['nodes']:
-            rows.append({'id': 'node:' + node['id'], 'text': node['outcome'], 'required': node['required']})
-        for line in design.get('threads', []):
-            rows.append({'id': 'thread:' + line['id'], 'text': line['ending_condition'], 'required': line['required']})
-    rows.extend({'id': 'hook:' + k, 'text': h['text'], 'required': True} for k, h in book['state']['hooks'].items())
-    # Registered payoffs beyond the contract: a person's recorded turning points, what the
-    # reader has already been told, and the world's declared disclosures. Enumerating them is
-    # the point; only the world's explicit disclosure promise is a hard gate, the rest may be
-    # closed as permitted_open with evidence.
-    for entity, records in sorted((book['state'].get('developments') or {}).items()):
-        for index, record in enumerate(records):
-            rows.append({'id': 'development:' + entity + ':' + str(index), 'text': record['change'],
-                         'required': False})
-    for topic in sorted((book['state'].get('reader_knowledge') or {})):
-        rows.append({'id': 'reader_knowledge:' + topic, 'text': topic, 'required': False})
-    for record in (book.get('world') or {}).get('mysteries', []):
-        rows.append({'id': 'mystery:' + record['id'], 'text': record['disclosure'], 'required': True})
-    rows.extend({'id': 'case:' + k, 'text': c['goal'], 'required': True} for k, c in book.get('repair_cases', {}).items())
-    # IDs are stable requirements, never a count inferred from chapter length.
-    return list({r['id']: r for r in rows}.values()) if scope == 'book' else []
+    v2's design record is the volume outlines, the chapter outlines derived from them, and the rows
+    materialized for settlement; a directive that names a hash of anything else would not notice the
+    design moving under it.
+    """
+    return digest({k: book.get(k) for k in ('contract', 'volumes_outline', 'chapter_outlines',
+                                           'style_anchor', 'scope_ends')})
 
 
 def root_case(book, data, scope, evidence, chapter):
+    """Record one author-scoped remedy round against a stable root, and return its case id."""
     value = data.get('repair_case')
     require(isinstance(value, dict) and all(text(value.get(k)) for k in ('root_ref', 'goal', 'verification_condition')),
             'repair_case', '修复需 repair_case={root_ref,goal,verification_condition,evidence}，root_ref 使用稳定问题来源。')
@@ -108,156 +95,3 @@ def root_case(book, data, scope, evidence, chapter):
                            'evidence': ref, 'chapter': chapter, 'status': 'pending'})
     case['status'] = 'open'
     return key
-
-
-def remedy_review(book, data, scope, evidence):
-    active = {k: c for k, c in book.get('repair_cases', {}).items() if c['status'] != 'resolved'
-              and (c['scope'] == scope or scope == 'revision' and k in (book.get('revision_run') or {}).get('case_ids', []))}
-    if not active:
-        return
-    rows = data.get('remedy_review')
-    require(isinstance(rows, list) and len(rows) == len(active) and all(isinstance(r, dict) and text(r.get('case_id')) for r in rows)
-            and {r.get('case_id') for r in rows} == set(active), 'remedy_review', '逐项验收当前范围所有根问题。')
-    for row in rows:
-        case = active[row['case_id']]
-        require(row.get('round_id') == case['rounds'][-1]['id'] and row.get('result') in ('pass', 'fix') and text(row.get('reason')),
-                'remedy_review', '绑定最后一轮 round_id 并给出实际验收依据。')
-        row['evidence'] = evidence(row.get('evidence'))
-        require(row['result'] == ('pass' if data['verdict'] == 'pass' else 'fix'), 'remedy_review', '根问题验收与本范围结论须一致。')
-        case['rounds'][-1]['review'] = copy.deepcopy(row)
-        case['rounds'][-1]['status'] = row['result']
-        if row['result'] == 'pass':
-            case['status'] = 'resolved'
-
-
-def closure(book, task, data, evidence):
-    scope = task['scope']
-    value = data.get('closure')
-    payload = task['payload']['closure']
-    require(isinstance(value, dict) and value.get('context_hash') == payload['context_hash'], 'closure', '关闭回执须绑定冻结 context_hash。')
-    decision = value.get('decision')
-    require(decision in ('accept_close', 'continue_scope', 'revise_range', 'needs_author'), 'closure', '关闭 decision 不合法。')
-    checks = value.get('checks')
-    require(isinstance(checks, list) and len(checks) == len(CLOSURE_CHECKS) and all(isinstance(r, dict) and text(r.get('id')) for r in checks)
-            and {r.get('id') for r in checks} == set(CLOSURE_CHECKS), 'closure', '关闭六项检查须完整覆盖。')
-    for row in checks:
-        require(row.get('result') in ('pass', 'missing', 'defect', 'author') and text(row.get('reason'))
-                and isinstance(row.get('evidence'), list) and row['evidence'], 'closure', '关闭检查需结论、理由与正文证据。')
-        row['evidence'] = [evidence(r) for r in row['evidence']]
-    require((decision == 'accept_close') == (data['verdict'] == 'pass'), 'closure', '只有 accept_close 可与 pass 一起提交。')
-    if decision == 'accept_close':
-        require(all(r['result'] == 'pass' for r in checks), 'closure', '关闭前六项职责全部成立。')
-        if scope == 'book':
-            rows = value.get('completion_coverage')
-            wanted = {r['id']: r for r in payload['sources']}
-            require(isinstance(rows, list) and len(rows) == len(wanted) and all(isinstance(r, dict) and text(r.get('id')) for r in rows)
-                    and {r.get('id') for r in rows} == set(wanted), 'completion_coverage', '终审逐项覆盖独立枚举的全部来源。')
-            for row in rows:
-                require(text(row.get('reason')) and row.get('result') in ('fulfilled', 'permitted_open')
-                        and (row['result'] == 'fulfilled' or not wanted[row['id']]['required']), 'completion_coverage', '核心职责不得以开放结局排除。')
-                require(isinstance(row.get('evidence'), list) and row['evidence'], 'completion_coverage', '每项来源须正文证据。')
-                row['evidence'] = [evidence(r) for r in row['evidence']]
-            require(value.get('prose_hashes') == payload['prose_hashes'] and value.get('source_coverage_checked') is True
-                    and value.get('cross_chunk_checked') is True, 'completion_coverage', '终审需确认准确正文版本及跨块查漏。')
-        book.setdefault('scope_closures', {})[scope] = {'review_key': task['payload']['review_key'], 'context_hash': payload['context_hash'],
-                                                      'first': task['first'], 'last': task['last'],
-                                                      'value': copy.deepcopy(value)}
-        return
-    require(any(r['result'] != 'pass' for r in checks), 'closure', '非关闭决定需明确未解决职责。')
-    if decision == 'needs_author':
-        require(text(value.get('question')) and isinstance(value.get('options'), list) and len(value['options']) >= 2
-                and all(isinstance(o, dict) and text(o.get('label')) and text(o.get('impact')) for o in value['options']),
-                'closure', '作者裁决需具体 question 及至少两个 label/impact 选项。')
-        book['author_block'] = copy.deepcopy(value)
-        book.update(status='paused', pause_reason=value['question'])
-        return
-    exhausted = [k for k, c in book.get('repair_cases', {}).items() if c['scope'] == scope and c['status'] != 'resolved'
-                 and len(c['rounds']) >= 2 and c['rounds'][-1]['status'] == 'fix']
-    if exhausted:
-        book['remedy_exhausted'] = exhausted
-        book.update(status='paused', pause_reason='根问题最后一轮仍未通过，已保存验收；需作者针对原目标裁决。')
-        return
-    case_id = root_case(book, value, scope, evidence, task['last'])
-    if decision == 'revise_range':
-        span = value.get('range')
-        require(isinstance(span, list) and len(span) == 2 and all(type(n) is int for n in span)
-                and task['first'] <= span[0] <= span[1] <= task['last'], 'closure', '修订 range=[起点,终点] 须在已核验范围内。')
-        bounded = payload.get('revision_policy', {}).get('schema') == REVISION_BOUNDS
-        if bounded:
-            targets = [f['target_chapter'] for f in data['findings'] if f['severity'] not in ('note', AUTHOR_SEVERITY)]
-            require(targets and span[0] == min(targets) and span[1] >= max(targets),
-                    'revision_range', '修订须从明确缺陷的最早章开始，并覆盖本轮全部实质缺陷。')
-            require(isinstance(value.get('changes'), dict), 'revision_impact', '历史修订须声明 changes，区分 expression、reading 与 semantic。')
-        book['revision_directive'] = {'first': span[0], 'through': span[1] if bounded else task['last'],
-                                      'reason': value['repair_case']['goal'], 'case_ids': [case_id],
-                                      'changes': copy.deepcopy(value['changes']) if bounded else {'mode': 'semantic', 'changes': []}}
-        if bounded:
-            book['revision_directive']['policy'] = copy.deepcopy(payload['revision_policy'])
-        book.update(status='paused', pause_reason='关闭核验要求修订已写缺陷。')
-        return
-    require(value.get('existing_content_valid') is True and not any(r['result'] in ('defect', 'author') for r in checks)
-            and all(text(value.get(k)) for k in ('missing_function', 'completion_path', 'length_basis')), 'closure', '补写只处理未展开职责，不能掩盖已写缺陷。')
-    contract = effective_contract(book)
-    target = contract['volumes'][-1] if scope == 'book' else next((v for v in contract['volumes'] if 'volume:' + v['id'] == scope), None)
-    require(target is not None and target['end'] == task['last'] and not book.get('revision_run'), 'closure', '只能在当前卷真实尾部补写；历史卷或修订中走 revise。')
-    through = value.get('append_through')
-    require(type(through) is int and target['end'] < through <= target['end'] + contract['scope_append_limit'], 'closure', '补写终点须有界，遵守 scope_append_limit。')
-    require(book['finish'] or book['target'] >= through, 'target', '补写不能超出作者授权章节范围。')
-    delta = through - target['end']
-    # 补写的章数上限由 scope_append_limit 与作者目标共同限定（见上），总字数是章数与章幅的
-    # 派生结果，不再另设一道基于旧章数的上限；否则一次合法的追加会被陈旧的总量挡下。
-    book['scope_ends'] = {v['id']: v['end'] + (delta if v['end'] >= target['end'] else 0) for v in contract['volumes']}
-    if book['finish']:
-        book['target'] += delta
-    # The original contract/hash stays immutable; only a bounded scope decision changes layout.
-    book['plans'] = {n: p for n, p in book['plans'].items() if int(n) <= task['last']}
-    book['alignment_hold'] = {'mode': 'future', 'chapter': task['last'] + 1, 'reason': value['completion_path'], 'case_ids': [case_id]}
-
-
-def alignment(data, plan, events, evidence, state=None):
-    value = copy.deepcopy(data.get('alignment'))
-    require(isinstance(value, dict) and value.get('action') in ('follow_plan', 'adapt_future', 'align_design', 'repair_prose')
-            and text(value.get('reason')), 'alignment', 'alignment 需 action/reason/realizations。')
-    rows = value.get('realizations')
-    require(isinstance(rows, list) and len(rows) == len(plan['node_ids']) and all(isinstance(r, dict) and text(r.get('node')) for r in rows)
-            and {r.get('node') for r in rows} == set(plan['node_ids']), 'alignment', 'realizations 恰好核验本章每个节点，未实现也明示。')
-    actual = {}
-    for row in rows:
-        require(row.get('after') in ('seeded', 'advanced', 'resolved', 'not_realized') and text(row.get('reason')), 'alignment', '实际实现 after/reason 不合法。')
-        row['evidence'] = evidence(row.get('evidence'))
-        definition = plan['node_contracts'][row['node']]
-        criteria = {c['id']: c for c in definition.get('criteria', [])}
-        if criteria:
-            fulfilled = row.get('fulfilled_criteria')
-            require(isinstance(fulfilled, list) and all(isinstance(c, dict) and text(c.get('id')) and c['id'] in criteria and text(c.get('actual_effect')) for c in fulfilled)
-                    and len({c['id'] for c in fulfilled}) == len(fulfilled), 'alignment', '逐项声明 fulfilled_criteria={id,actual_effect,evidence}。')
-            for criterion in fulfilled:
-                criterion['evidence'] = evidence(criterion.get('evidence'))
-            prior = row.get('prior_criteria', [])
-            established = (state or {}).get('story_nodes', {}).get(row['node'], {}).get('criteria', {})
-            require(isinstance(prior, list) and all(text(k) and k in criteria and k in established for k in prior)
-                    and len(prior) == len(set(prior)), 'alignment', 'prior_criteria 只能引用正式前态已核验的本节点判据。')
-            require(row['after'] != 'resolved' or {k for k, c in criteria.items() if c.get('required', True)} <= {c['id'] for c in fulfilled} | set(prior),
-                    'alignment', '必要效果判据没有正文证据，不能声明节点兑现。')
-        if row['after'] != 'not_realized':
-            actual[row['node']] = row['after']
-    require(isinstance(events, list) and all(isinstance(e, dict) and (e.get('op') != 'story_node' or text(e.get('node'))) for e in events),
-            'alignment', '事实事件须为对象，节点 ID 须为非空字符串。')
-    provided = {e.get('node'): e.get('after') for e in events if e.get('op') == 'story_node'}
-    require(len(provided) == sum(e.get('op') == 'story_node' for e in events) and provided == actual,
-            'alignment', '实际实现须与独立事实事件一致。')
-    judgments = {r['node']: r for r in rows}
-    require(all('criteria' not in e or e['criteria'] == judgments[e['node']].get('fulfilled_criteria', [])
-                for e in events if e['op'] == 'story_node'), 'alignment', '节点事件判据须与独立实现回执一致。')
-    if value['action'] == 'follow_plan':
-        require(actual == {a['node']: a['after'] for a in plan['node_actions']}, 'alignment', '偏离原计划时用 adapt_future 或 align_design。')
-    return copy.deepcopy(value)
-
-
-def closure_template(payload):
-    return {'context_hash': payload['context_hash'], 'decision': '',
-            'checks': [{'id': k, 'result': '', 'reason': '', 'evidence': []} for k in CLOSURE_CHECKS],
-            **({'range': [], 'changes': {'mode': '', 'changes': [], 'scenes': [], 'reading_changes': []}}
-               if payload.get('revision_policy', {}).get('schema') == REVISION_BOUNDS else {}),
-            **({'completion_coverage': [{'id': r['id'], 'result': '', 'reason': '', 'evidence': []} for r in payload['sources']],
-                'prose_hashes': payload['prose_hashes'], 'source_coverage_checked': False, 'cross_chunk_checked': False} if payload['sources'] else {})}

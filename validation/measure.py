@@ -1,24 +1,62 @@
-"""Engineering-only dependency and frozen-record measurements; no model calls."""
+"""Engineering-only dependency and frozen-record measurements; no model calls.
+
+The five-step pipeline (v2) has four dispatch classes before prose — `world_model`,
+`volume_outline`, `chapter_outline`, `write` — and no review stage at all. This tool measures what
+each class costs in transported characters, what the module graph looks like, and whether the
+material a dispatch reads stays bounded as the book grows. It says nothing about literary quality,
+provider tokens or billed money, and it never calls a model.
+
+    python validation/measure.py
+    python validation/measure.py --only graph,dispatch,material
+    python validation/measure.py --out validation/metrics.json
+
+A section that cannot run (an engine mid-migration, a fixture the tree has not caught up with yet)
+is reported as `status: failed` with its traceback instead of aborting the other sections; the exit
+code stays non-zero so a failure is never silent. The only outside dependency is `tests/support.py`
+(the shared v2 fixtures); the history/tracking fixtures are kept local so a test module that is
+itself mid-rewrite cannot stop the measurement.
+"""
 import argparse
 import ast
 import json
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import dump
+from novel_ledger.contracts import PIPELINE_SHAPES, SCALE_TIERS, Job, digest, dump
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book
-from novel_ledger import context, design_queries, facts, scopes, story_memory
-from novel_ledger.contracts import Job
-from support import contract, drive, node
-from test_history import append_history
-from test_narrative import tracked_contract
+from novel_ledger import context, facts
+from support import (chapter_outline_fixture, contract, drive, response, seeded_book,
+                     volume_outline_fixture)
+
+
+def tracked_contract(chapters):
+    """A contract with narrative tracking on; kept local so this tool never imports test modules."""
+    raw = contract(chapters)
+    raw.update(narrative_tracking=True, review_chunk=2, review_interval=3, planning_window=3)
+    return raw
+
+
+def append_history(repo, first, last, prose_han=0, entity='shen'):
+    """Source records only, deliberately not reviewed chapters; the v1 fixture, kept local."""
+    previous = repo.chapter('main', first - 1)['chain'] if first > 1 else 'genesis'
+    for n in range(first, last + 1):
+        prose = '工程第%d章：沈桐查出来源。' % n + '测' * prose_han
+        events = [{'op': 'knowledge', 'entity': entity, 'topic': 'source',
+                   'evidence': {'chapter': n, 'start': 0, 'quote': '工程第%d章' % n}}]
+        row = {'n': n, 'title': '工程夹具', 'prose': repo.document(prose), 'events': repo.document(events),
+               'plan': repo.document({}), 'review': repo.document({}), 'state_hash': digest({'fixture': n}),
+               'summary': '工程夹具：核查来源。', 'han': len(prose)}
+        row['chain'] = facts.chain(previous, row, digest(repo.load()['contract']))
+        repo.add_chapter('main', row)
+        previous = row['chain']
 
 
 def graph_metrics(root, package):
@@ -64,153 +102,175 @@ def graph_metrics(root, package):
             'cycles_including_deferred_imports': groups, 'dependency_edges': sum(len(v) for v in graph.values())}
 
 
-def context_metrics(size):
+def dispatch_ledger():
+    """How many dispatches the frozen stage graph spends for a book of each tier.
+
+    This replaces the v1 review-tree measurement: `scopes.tree` is gone, and with it every dispatch
+    whose only job was to have a second agent judge the first. What is left is arithmetic the
+    contract itself declares — the opening gates (mainline, no dispatch per spec §1), one
+    `world_model`, one `volume_outline` per batch, one `chapter_outline` per volume, one `write` per
+    chapter — plus the one per-tier shape switch, `merge_chapter_outline`.
+    """
+    rows = []
+    gates = {'opening_options': 0, 'note': '十门由主干自执，不计子 agent 派工（spec §1/§7）。'}
+    for tier in SCALE_TIERS:
+        shape = PIPELINE_SHAPES.get(tier['id'], {})
+        merged = bool(shape.get('merge_chapter_outline'))
+        chapters, volumes = tier['chapters'], tier['volume_count']
+        for scope in ('all', 'rolling'):
+            volume_dispatches = 1 if scope == 'all' else volumes
+            chapter_dispatches = 0 if merged else volumes
+            rows.append({'tier': tier['id'], 'chapters': chapters, 'volumes': volumes,
+                         'volume_scope': scope, 'merge_chapter_outline': merged,
+                         'world_model': 1, 'volume_outline': volume_dispatches,
+                         'chapter_outline': chapter_dispatches, 'write': chapters,
+                         'before_prose': 1 + volume_dispatches + chapter_dispatches,
+                         'total': 1 + volume_dispatches + chapter_dispatches + chapters})
+    return {'gates': gates, 'by_tier': rows,
+            'boundary': '依 PIPELINE_SHAPES 与 contract.volume_outline.scope 的机械计数；不含返修/重设计额度。'}
+
+
+def _built_bytes(repo, book, job):
+    """The same measurement for a dispatch assembled on demand (no task frozen yet)."""
+    work = context.build(repo, book, job)
+    required = {name: repo.read_document(work['records'][name]) for name in work['required']}
+    return {'required_names': list(work['required']), 'required_records': len(work['required']),
+            'declared_records': len(work['records']),
+            'required_bytes': len(dump(required).encode('utf-8')),
+            'envelope_bytes': len(dump(work).encode('utf-8'))}
+
+
+def _install_outlines(app, book, raw):
+    """Put step three/four receipts on the book without dispatching.
+
+    These sections measure transport, not settlement: with the drift validator still landing, the
+    only way to reach a `chapter_outline`/`write` envelope is to install the frozen v2 fixtures the
+    way `workflow.apply` installs an accepted receipt. Shape comes from the shared fixtures, so the
+    measurement cannot drift from what the engine hands out.
+    """
+    repo = app.repo
+    volume_ids = [row['id'] for row in raw['volumes']]
+    rows = volume_outline_fixture(app, {'stage': 'volume_outline', 'chapter': 1,
+                                        'payload': {'volume_ids': volume_ids}})['volumes']
+    book['volumes_outline'] = {row['id']: row for row in rows}
+    repo.save(book)
+    first = raw['volumes'][0]['id']
+    chapters = chapter_outline_fixture(app, {'stage': 'chapter_outline', 'chapter': 1,
+                                             'payload': {'volume': first}})['chapters']
+    book['chapter_outlines'] = {first: chapters}
+    book['plans'] = {str(row['chapter']): row for row in chapters}
+    repo.save(book)
+    return book
+
+
+def material_metrics():
+    """Per-class dispatch material, and whether future outlines inflate a live dispatch."""
+    report = {'boundary': '字符量来自冻结信封与必读记录；不能换算成 token 或费用。'
+                          '本表走 seeded 路径（无 creation），因此不含 opening_basis/opening_choices 三项；'
+                          'world_model 一类要等逐门开书夹具可用于 drive() 才能量（见 blocked）。'}
     with tempfile.TemporaryDirectory() as temporary:
-        repo = SQLiteRepository.initialize(Path(temporary) / 'book', new_book(contract()))
+        repo = SQLiteRepository.initialize(Path(temporary) / 'seeded',
+                                           seeded_book(contract(chapters=4, volumes=2)))
         try:
             app = Application(repo)
-            drive(app, until='write')
-            repo.cancel_pending('engineering context benchmark')
             book = repo.load()
-            book['designs']['book']['nodes'].extend(node('future-' + str(i)) for i in range(size))
+            # Step four and five, measured through the same builder the engine uses.
+            book = _install_outlines(app, book, book['contract'])
+            report['volume_outline'] = _built_bytes(
+                repo, book, Job('volume_outline', 1, 'volumes', payload={'volume_ids': ['v1', 'v2']}))
+            report['chapter_outline'] = _built_bytes(
+                repo, book, Job('chapter_outline', 1, 'volume:v1', 1, 2, payload={'volume': 'v1'}))
+            before = _built_bytes(repo, book, Job('write', 1))
+            # Every *other* volume's outline is now on the book, fully designed and unread by this
+            # chapter. A dispatch that grew with them would be charging a writer for the whole book.
+            other = volume_outline_fixture(app, {'stage': 'volume_outline', 'chapter': 1,
+                                                 'payload': {'volume_ids': ['v2']}})['volumes']
+            book['volumes_outline'].update({row['id']: row for row in other})
             repo.save(book)
-            task = app.advance()['task']
-            work = repo.task(task['task_id'])['input']
-            required = {n: repo.read_document(work['records'][n]) for n in work['required']}
-            full = repo.read_document(work['records']['design:book'])
-            assert len(full['nodes']) == size + 1
-            assert len(required['story']) == 2
-            return {'unreferenced_future_nodes': size, 'required_record_bytes': len(dump(required).encode('utf-8')),
-                    'full_book_design_bytes': len(dump(full).encode('utf-8')), 'complete_optional_source_preserved': True}
+            after = _built_bytes(repo, book, Job('write', 1))
+            report['write'] = {'without_future_volume': before, 'with_future_volume': after,
+                               'growth_bytes': after['required_bytes'] - before['required_bytes'],
+                               'bounded_selection': before['required_names'] == after['required_names']}
         finally:
             repo.close()
+    report['world_model'] = {'status': 'blocked',
+                             'reason': 'support.drive() 无法回答 opening_options 派工：'
+                                       'response() 交回 gate="" options=[] 的空骨架，creation.offer 拒绝。'
+                                       '逐门开书夹具在 tests/test_opening_v2.py 内，不在本工具写域。'}
+    return report
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--out', type=Path)
-    args = parser.parse_args()
-    report = {'scope': 'engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings',
-              'novel_ledger': graph_metrics(ROOT, 'novel_ledger'), 'context': [context_metrics(n) for n in (10, 100, 1000)],
-              'dependent_chain_context': [chain_context_metrics(n, tracking)
-                                          for tracking in (True, False) for n in (10, 100, 1000)],
-              'tracked_causal_context': [tracked_context_metrics(n) for n in (20, 100, 500)],
-              'editorial_causal_context': [tracked_context_metrics(n, enhanced=True) for n in (20, 100, 500)],
-              'creative_memory_context': [creative_memory_metrics(n) for n in (20, 100, 500)],
-              'review_trees': [review_metrics(n) for n in (20, 100, 500)],
-              'history_transport': [history_metrics(n) for n in (20, 100, 500)]}
-    if args.out:
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    print(json.dumps(report, ensure_ascii=False))
+def tracked_state_metrics(size):
+    """Where a tracked write dispatch's material comes from as the volume's node list grows.
 
-
-def chain_context_metrics(size, tracking):
-    """Measure required material along a dependent node chain.
-
-    The older fixture used dependency-free nodes, so it could not observe the
-    difference between one-hop selection and a transitive closure. This fixture
-    points the current chapter plan at the tail of a real chain instead.
+    Two different bounds are measured separately because they move independently: the settled-state
+    slice is filtered to the nodes this chapter declares and to nothing else, while the volume row
+    (the arc the chapter has to land on) carries one node declaration per chapter in the volume.
     """
     with tempfile.TemporaryDirectory() as temporary:
-        repo = SQLiteRepository.initialize(Path(temporary) / 'book', new_book(contract()))
+        repo = SQLiteRepository.initialize(Path(temporary) / 'tracked',
+                                           seeded_book(tracked_contract(chapters=size)))
         try:
             app = Application(repo)
-            drive(app, until='write')
-            repo.cancel_pending('engineering dependent chain benchmark')
             book = repo.load()
-            book['contract']['narrative_tracking'] = tracking
-            nodes = [{**node('chain-' + str(i), () if i == 0 else ['chain-' + str(i - 1)]),
-                      'required': False, 'window': [1, 2]} for i in range(size)]
-            book['designs']['book']['nodes'] = nodes
-            plan = book['plans']['1']
-            plan.update(node_ids=[nodes[-1]['id']],
-                        node_actions=[{'node': nodes[-1]['id'], 'after': 'seeded'}],
-                        node_contracts={nodes[-1]['id']: nodes[-1]},
-                        disclosures=[], preconditions=[])
-            repo.save(book)
-            work = repo.task(app.advance()['task']['task_id'])['input']
-            values = {n: repo.read_document(work['records'][n]) for n in work['required']}
-            # Bounded selection is the contract, not an observation: an unbounded walk both
-            # grew with chain length and aborted dispatch on a long chain.
-            assert len(values['story']) <= design_queries.NODE_LIMIT + 1, len(values['story'])
-            return {'tracking': tracking, 'dependent_nodes': size,
-                    'required_story_nodes': len(values['story']),
-                    'required_record_bytes': len(dump(values).encode('utf-8')),
-                    'complete_design_nodes': len(repo.read_document(work['records']['design:book'])['nodes'])}
-        finally:
-            repo.close()
-
-
-def tracked_context_metrics(size, enhanced=False):
-    with tempfile.TemporaryDirectory() as temporary:
-        repo = SQLiteRepository.initialize(Path(temporary) / 'book', new_book(contract()))
-        try:
-            app = Application(repo)
-            drive(app, until='write')
-            repo.cancel_pending('engineering tracked context benchmark')
-            book = repo.load()
-            book['contract']['narrative_tracking'] = True
-            if enhanced:
-                from test_editorial import plan_extras
-                book['contract']['editorial_features'] = True
-                plan_extras(book['plans']['1'])
-                # Freeze material directly: this benchmark measures transport, not profile refresh.
-            book['state'] = facts.seed(book['contract'])
-            nodes = [{**node('causal-' + str(i), () if i == 0 else ['causal-' + str(i-1)]),
-                      'required': False, 'window': [1,2]} for i in range(size)]
-            book['designs']['book']['nodes'] = nodes
-            book['plans']['1'].update(node_ids=[nodes[-1]['id']], node_actions=[{'node': nodes[-1]['id'], 'after': 'seeded'}],
-                                      node_contracts={nodes[-1]['id']: nodes[-1]}, disclosures=[], preconditions=[])
-            if enhanced:
-                story_memory.bind(book['plans']['1'], book['plans'], 2)
-            repo.save(book)
-            work = context.build(repo, book, Job('write', 1)) if enhanced else repo.task(app.advance()['task']['task_id'])['input']
-            values = {n: repo.read_document(work['records'][n]) for n in work['required']}
-            assert len(values['story']) == 2
-            return {'causal_nodes': size, 'required_story_nodes': len(values['story']),
-                    'required_record_bytes': len(dump(values).encode('utf-8')),
-                    'complete_design_nodes': len(repo.read_document(work['records']['design:book'])['nodes'])}
+            book = _install_outlines(app, book, book['contract'])
+            work = context.build(repo, book, Job('write', 1))
+            state = repo.read_document(work['records']['state'])
+            volume_row_bytes = len(dump(repo.read_document(work['records']['volume_outline'])).encode('utf-8'))
+            assert 'story_nodes' in state, sorted(state)
+            declared = {row['node'] for row in (book['plans']['1'].get('plot') or {}).get('nodes') or []}
+            return {'volume_chapters': size,
+                    'registered_nodes': sum(len(row.get('nodes') or [])
+                                            for row in (book.get('volumes_outline') or {}).values()),
+                    'nodes_declared_by_this_chapter': sorted(declared),
+                    'settled_story_nodes_in_slice': len(state['story_nodes']),
+                    'state_record_bytes': len(dump(state).encode('utf-8')),
+                    'volume_outline_bytes': volume_row_bytes,
+                    'required_bytes': len(dump({name: repo.read_document(work['records'][name])
+                                                for name in work['required']}).encode('utf-8'))}
         finally:
             repo.close()
 
 
 def creative_memory_metrics(size):
-    from support import response
+    """Interpretation selection at a draft dispatch: 3 of N kept, every version preserved.
+
+    Understanding is filed with a draft receipt (spec §5) and its evidence must quote *frozen*
+    prose, so the first chapter — whose dispatch has nothing frozen behind it — cannot carry any:
+    the interpretations are filed with chapter two's receipt, citing chapter one, and the draft
+    that then carries `creative_memory` is chapter three's.
+    """
     with tempfile.TemporaryDirectory() as temporary:
-        repo = SQLiteRepository.initialize(Path(temporary) / 'book', new_book(contract()))
+        repo = SQLiteRepository.initialize(Path(temporary) / 'book', seeded_book(contract(chapters=3)))
         try:
             app = Application(repo)
-            owner = app.run(through=2, source='工程材料度量。')['owner']
-            drive(app, owner, until='chapter_review')
+            owner = app.run(through=3, source='工程材料度量。')['owner']
+            drive(app, owner, until='write')                    # chapter one: no frozen source yet
+            app.submit(response(app))
+            drive(app, owner, until='write')                    # chapter two: cite chapter one
             result = response(app)
             result['data']['understanding'] = [dict(
                 id='interpretation-' + str(n), kind='character', claim='工程解释样本。', status='tentative',
                 subjects=['shen'] if n < 3 else [], topics=[] if n < 3 else ['remote-' + str(n)],
                 reason='仅验证材料筛选，不代表文学判断。', evidence=[{'chapter': 1, 'quote': '次日'}], counterevidence=[])
                 for n in range(size)]
-            app.submit(result)
-            drive(app, owner, until='write')
+            outcome = app.submit(result)
+            handoff = drive(app, owner, until='write')          # chapter three carries the material
+            if len(repo.headers('main')) < 2:
+                raise AssertionError('前两章未能入库，understanding 无处落盘：submit=%s，advance 停在 %s'
+                                     % (json.dumps(outcome, ensure_ascii=False)[:200], handoff.get('action')))
             work = repo.pending()['input']
+            assert 'creative_memory' in work['records'], sorted(work['records'])
             selected = repo.read_document(work['records']['creative_memory'])['interpretations']
             complete = repo.read_document(work['records']['complete_understanding'])
             assert len(selected) == 3 and len(complete['versions']) == size
-            assert all(r['evidence'][0]['quote'] == '次日' for r in selected.values())
-            values = {n: repo.read_document(work['records'][n]) for n in work['required']}
+            assert all(row['evidence'][0]['quote'] == '次日' for row in selected.values())
+            values = {name: repo.read_document(work['records'][name]) for name in work['required']}
             return {'interpretations': size, 'selected_interpretations': len(selected),
                     'required_record_bytes': len(dump(values).encode('utf-8')),
                     'complete_optional_source_preserved': True}
         finally:
             repo.close()
-
-
-def review_metrics(chapters):
-    parts = scopes.tree([{'n': n, 'chain': str(n)} for n in range(1, chapters+1)], 1, chapters, 3, 3)
-    parents = [p for p in parts if p['level']]
-    return {'chapters': chapters, 'tree_depth': parts[-1]['level'],
-            'max_children_per_synthesis': max(len(p['children']) for p in parents),
-            'max_boundary_chapters_per_synthesis': max(2 * len(p['children']) for p in parents),
-            'root_span': [parts[-1]['first'], parts[-1]['last']]}
 
 
 def history_metrics(chapters):
@@ -266,5 +326,42 @@ def history_metrics(chapters):
             repo.close()
 
 
+SECTIONS = {
+    'graph': lambda: graph_metrics(ROOT, 'novel_ledger'),
+    'dispatch': dispatch_ledger,
+    'material': material_metrics,
+    'tracked': lambda: [tracked_state_metrics(n) for n in (20, 100, 500)],
+    'memory': lambda: [creative_memory_metrics(n) for n in (20, 100, 500)],
+    'history': lambda: [history_metrics(n) for n in (20, 100, 500)],
+}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='工程材料与依赖度量（不调用模型）。')
+    parser.add_argument('--out', type=Path)
+    parser.add_argument('--only', help='逗号分隔的节名：' + ','.join(SECTIONS))
+    args = parser.parse_args(argv)
+    wanted = [name.strip() for name in args.only.split(',')] if args.only else list(SECTIONS)
+    unknown = [name for name in wanted if name not in SECTIONS]
+    if unknown:
+        parser.error('未知的节：' + ','.join(unknown))
+    report = {'scope': 'engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings',
+              'pipeline': 'five steps: opening gates / world_model / volume_outline / chapter_outline / write'}
+    failed = []
+    for name in wanted:
+        try:
+            report[name] = {'status': 'ok', 'value': SECTIONS[name]()}
+        except BaseException as exc:                    # noqa: BLE001 - a section report, not a handler
+            failed.append(name)
+            report[name] = {'status': 'failed', 'error': type(exc).__name__ + ': ' + str(exc),
+                            'traceback': traceback.format_exc().splitlines()[-6:]}
+            print('节 %s 失败：%s: %s' % (name, type(exc).__name__, exc), file=sys.stderr)
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    print(json.dumps(report, ensure_ascii=False))
+    return 1 if failed else 0
+
+
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

@@ -1,4 +1,5 @@
 flowchart TD
+    %% svg 待重新生成：本图新增 drift 节点，docs/architecture.svg 仍是旧版，见 docs/README.md 更新流程
     CLI[命令入口 novel.py] --> BOOT[组合根 bootstrap]
     BOOT --> APP[应用编排 application]
     BOOT --> CTX[冻结编译 context]
@@ -18,6 +19,8 @@ flowchart TD
     CTX --> BRIEF[任务说明 briefs]
     BRIEF --> DOMAIN
     WF --> DOMAIN
+    WF --> DRIFT[漂移核算 drift]
+    DRIFT --> DOMAIN
     VIEW --> PORT
     VIEW --> DEL[任务与导出 delivery]
     VIEW --> PAGE[全书页面 bookpage]

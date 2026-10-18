@@ -30,33 +30,37 @@ ALLOWED = {
     'evidence': {'contracts'},
     'facts': {'contracts', 'entities', 'evidence', 'narrative', 'spatial'},
     'narrative': {'contracts'},
-    'planning': {'contracts', 'entities', 'narrative', 'craft', 'story_memory'},
-    'quality': {'contracts', 'evidence'},
-    'result_templates': {'contracts', 'world', 'scopes', 'editorial', 'narrative', 'stages'},
+    'planning': {'contracts', 'entities', 'narrative', 'craft', 'story_memory', 'drift'},
+    # drift owns the design-time state chain and the submission-time reconciliation: the chapter
+    # outline's declared deltas, the simulation that walks them, and the comparison the writer
+    # files against them. It reads the same tables the checks do (world sections, nodes, spatial
+    # rules, the ledger), which is what lets a whole volume be checked before a word is written.
+    'drift': {'contracts', 'entities', 'narrative', 'spatial', 'ledger', 'world', 'evidence'},
+    'result_templates': {'contracts', 'world', 'editorial', 'narrative', 'stages', 'drift'},
     'revision_impact': {'contracts', 'story_memory'},
-    'scopes': {'contracts'},
     'spatial': {'contracts'},
     'story_memory': {'contracts'},
     'understanding': {'contracts'},
     'world': {'contracts'},
     # briefs renders what a stage must produce, so it reads the same declarations the checks do:
-    # the stage registry and the world section table. Keeping the requirement and its check on one
-    # declaration is the point — a brief asking for a small world while the validator demanded ten
-    # domains is what a real micro project paid four repair rounds for.
-    'briefs': {'contracts', 'creation', 'stages', 'world'},
-    'workflow': {'contracts', 'creation', 'facts', 'narrative', 'planning', 'quality',
-                 'scopes', 'world', 'craft', 'editorial', 'understanding',
+    # the stage registry, the world section table and the drift field table. Keeping the
+    # requirement and its check on one declaration is the point — a brief asking for a small world
+    # while the validator demanded ten domains is what a real micro project paid four repair
+    # rounds for.
+    'briefs': {'contracts', 'creation', 'stages', 'world', 'drift'},
+    'workflow': {'contracts', 'creation', 'drift', 'facts', 'narrative', 'planning',
+                 'world', 'craft', 'editorial', 'understanding',
                  'design_queries', 'evidence', 'lint', 'ledger'},
     # book_state declares the four-partition field ownership and the invariants between those fields,
     # so the application reads it to check the state it owns (the same way it reads store_keys for the
     # key space). book_state stays a pure declaration module: it imports nothing but contracts.
     'application': {'contracts', 'ports', 'store_keys', 'book_state', 'creation', 'facts', 'narrative', 'planning',
-                    'quality', 'workflow', 'world', 'craft', 'editorial',
+                    'workflow', 'world', 'craft', 'editorial',
                     'story_memory', 'understanding', 'revision_service', 'contract_activation', 'lint'},
     'revision_service': {'contracts', 'ports', 'store_keys', 'editorial', 'facts', 'narrative', 'revision_impact',
                          'story_memory', 'understanding', 'workflow'},
     'contract_activation': {'contracts', 'ports', 'store_keys', 'workflow'},
-    'context': {'contracts', 'ports', 'envelope', 'briefs', 'creation', 'narrative', 'scopes',
+    'context': {'contracts', 'ports', 'envelope', 'briefs', 'creation', 'narrative', 'drift',
                 'world', 'editorial', 'story_memory', 'understanding', 'planning',
                 'design_queries'},
     'publication': {'ports'},
@@ -96,10 +100,9 @@ CORE_EXTERNAL = {
     'facts': {'__future__', 'copy', 'decimal'},
     'narrative': {'__future__', 'copy'},
     'planning': {'__future__', 'copy', 'math'},
-    'quality': {'__future__', 'copy'},
+    'drift': {'__future__', 'copy'},
     'result_templates': {'__future__'},
     'revision_impact': {'__future__'},
-    'scopes': {'__future__'},
     'spatial': {'__future__', 'copy'},
     'story_memory': {'__future__', 'copy'},
     'understanding': {'__future__', 'copy'},

@@ -1,10 +1,15 @@
 """Zero-input choices and rich world flow, using synthetic engineering receipts.
 
 These exercise opening/2, the gate set in force before the male-channel redesign: 10 gates, one
-question each, the structural length gate answered by the engine, and independent verification. The
-project is pinned to opening_version=2 on purpose — a project opened under an older protocol keeps
-its own gate set — so this module stays the regression cover for every project already in flight.
-opening/1 is covered by `test_opening_legacy.py`, and the current default by `test_opening.py`.
+question each, the structural length gate answered by the engine. The project is pinned to
+opening_version=2 on purpose — a project opened under an older protocol keeps its own gate set — so
+this module stays the regression cover for every project already in flight. opening/1 is covered by
+`test_opening_legacy.py`, and the current default by `test_opening.py`.
+
+What follows the gates is the v2 pipeline: one `world_model` receipt that also carries the contract
+it implies, then `volume_outline` (merged with `chapter_outline` on the tiers that declare
+`merge_chapter_outline`), then the author's writing authorization. Nothing waits for a reviewer, so
+there is no review receipt shape to fake here beyond the two outline declarations themselves.
 """
 import copy
 import json
@@ -20,9 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import creation, planning, world, workflow
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import (CHECK_SETS, CHECKS_VERSION, CONTRACT_ALIGNMENT, EDITORIAL_VERSION,
-                                    POV_CHECKS_VERSION, RESULT, SCALE_TIERS, SCALE_WINDOW, alignment_for, digest, dump, han_count)
-from novel_ledger.result_templates import template
+from novel_ledger.contracts import (CONTRACT_ALIGNMENT, RESULT, SCALE_TIERS, SCALE_WINDOW,
+                                    alignment_for, dump, han_count)
 from novel_ledger.sqlite_store import SQLiteRepository
 import support
 from support import contract, drive, response
@@ -133,18 +137,6 @@ def combined(app, world=None):
     return {**model_data, 'contract': contract_data(app, model_data)}
 
 
-def review_data(app):
-    task = app.repo.pending()
-    work = task['input']
-    sources = app._sources(work)
-    data = template(work['stage'], work['chapter'], sources)
-    ref = {'chapter': 0, 'quote': next(iter(sources.values()))}
-    data['verdict'] = 'pass'
-    for row in data['checks']:
-        row.update(result='pass', reason='仅工程协议样本。', evidence=[ref])
-    return data
-
-
 def writable_response(app, task_id=None, session=None, claim=None):
     """The engineering draft is a stub. A tier's chapter_min is a real length, so pad it to fit the
     contract it is judged against — the point under test is the handoff, not the stub's length."""
@@ -216,6 +208,11 @@ class OpeningTests(unittest.TestCase):
             self.choose_board(board, scale_tier if board['gate']['id'] == 'scale' else None)
 
     def world_ready(self, outline=None, scale_tier=None):
+        """Close the gates, hand in the world plus its contract, and return the next boundary.
+
+        v2 has no review stages: the receipt is checked mechanically, the contract it carries is
+        activated inside the same `advance`, and the next dispatch is the volume outline.
+        """
         self.select_gates(scale_tier=scale_tier)
         task = self.app.advance()['task']
         self.assertEqual(task['stage'], 'world_model')
@@ -227,47 +224,25 @@ class OpeningTests(unittest.TestCase):
         elif outline is not None:
             data['contract']['volume_outline'] = outline
         self.app.submit(receipt(self.app, data))
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
-        self.app.submit(receipt(self.app, review_data(self.app)))
-        handoff = self.app.advance()
-        if handoff.get('action') == 'task_ready' and handoff['task']['stage'] == 'contract_review':
-            # Longer tiers review the contract on its own; t0/t1 activate it on the engine's
-            # alignment check and the judgment rides the design review instead.
-            self.app.submit(receipt(self.app, review_data(self.app)))
+        return self.app.advance()
+
+    def to_outline_ready(self, outline=None, scale_tier=None):
+        """Drive to the boundary where the outlines are handed over and no prose exists yet."""
+        handoff = self.world_ready(outline=outline, scale_tier=scale_tier)
+        while handoff['action'] == 'task_ready' and handoff['task']['stage'] in ('volume_outline', 'chapter_outline'):
+            support.check_dispatch(self.repo.pending()['input'])
+            self.app.submit(response(self.app))
             handoff = self.app.advance()
+        self.assertEqual(handoff['action'], 'outline_ready')
         return handoff
 
-    def test_an_author_level_finding_waits_for_the_author_and_then_redrafts(self):
-        """A premise conflict is the author's to settle, not a repair round for a writer."""
-        self.select_gates()
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
-        self.app.submit(receipt(self.app, combined(self.app)))
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
-        work = self.repo.pending()['input']
-        source = next(iter(self.app._sources(work).values()))
-        data = review_data(self.app)
-        row = data['checks'][0]
-        row.update(result='fix', reason='禁令与录音事实互相冲突。')
-        data['verdict'] = 'fix'
-        data['findings'] = [{'criterion': row['id'], 'severity': 'author',
-                             'reason': '两条世界规则冲突，任何改写都无法同时满足。',
-                             'evidence': {'chapter': 0, 'quote': source},
-                             'decision': {'id': 'rule-conflict', 'question': '铁门内的内容能不能被录音带出？',
-                                          'options': [{'label': '不能被带出', 'impact': '录音须改写。'},
-                                                      {'label': '可以被带出', 'impact': '禁令改写为另一条。'}]}}]
-        self.app.submit(receipt(self.app, data))
-        book = self.repo.load()
-        self.assertEqual(book['status'], 'paused')
-        self.assertEqual(book['author_block']['id'], 'rule-conflict')
-        self.assertEqual(book['proposal']['attempts'], 0, 'the author\'s premise is not a writer\'s failure')
-        self.assertTrue(book['proposal']['needs_repair'], 'the candidate must be re-drafted, not re-reviewed')
-        # Nothing is dispatched while the question is pending: the halt is real.
-        self.assertEqual(self.app.advance()['action'], 'paused')
-        self.app.answer('rule-conflict', '不能被带出', '铁门内不留记录，录音也不能例外。')
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
-        self.assertIn('不能被带出', ' '.join(self.repo.load()['feedback']))
+    def test_the_combined_receipt_is_checked_mechanically_and_the_contract_activates(self):
+        """No reviewer stands between the world draft and the contract it implies.
 
-    def test_opening_contract_template_carries_every_alignment_field(self):
+        The old flow paid a world review, then a separate contract review on the longer tiers, and
+        only then reached the outline. v2 validates the one receipt mechanically, activates the
+        contract inside the same `advance`, and dispatches the volume outline next.
+        """
         self.select_gates()
         task = self.app.advance()['task']
         self.assertEqual(task['stage'], 'world_model')
@@ -277,23 +252,23 @@ class OpeningTests(unittest.TestCase):
         self.assertIn('contract', blanks)
         blank = blanks['contract']
         self.assertEqual(len(blank), len(planning.skeleton()))
-        self.app.submit(receipt(self.app, combined(self.app)))
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
-        self.app.submit(receipt(self.app, review_data(self.app)))
-        task = self.app.advance()['task']
-        self.assertEqual(task['stage'], 'contract_review')
-        full = contract_data(self.app)
+        full = contract_data(self.app, model(self.app))
         # Fields the alignment checks read are compared key by key, so the template must carry them.
         self.assertEqual(sorted(set(full) & set(CONTRACT_ALIGNMENT) - set(blank)), [])
+        self.app.submit(receipt(self.app, combined(self.app)))
+        handoff = self.app.advance()
+        self.assertEqual(handoff['task']['stage'], 'volume_outline')
+        book = self.repo.load()
+        self.assertIsNotNone(book['contract'])
+        self.assertEqual(book['creation']['phase'], 'ready')
+        self.assertIsNone(book.get('proposal'), 'v2 books no world or contract candidate to review')
+        # The template is filled the way the engine's own alignment check reads it: an object filled
+        # from the published blank passes both validators with no author field invented.
         filled = {**blank, **copy.deepcopy(full)}
-        filled.update(planning_window=6, review_interval=10, review_chunk=3, review_fanout=3)   # structural, not author decisions
-        # The same alignment the contract branch runs, on an object filled from the published template.
+        filled.update(planning_window=6)   # structural, not an author decision
         planning.validate_contract(filled)
         creation.validate_contract(planning.validate_contract(filled), self.repo.load()['creation'],
                                    self.repo.load()['world'])
-        # The independent review of the drafted contract decides whether it activates.
-        self.app.submit(receipt(self.app, review_data(self.app)))
-        self.assertEqual(self.app.advance()['action'], 'world_ready')
 
     def test_brief_replaces_whole_guides_and_trims_unused_records(self):
         task = self.app.advance()['task']
@@ -448,18 +423,19 @@ class OpeningTests(unittest.TestCase):
         self.app = Application(self.repo)
         self.assertEqual(self.app.advance()['board'], board)
 
-    def test_complete_choices_create_rich_reviewed_world_without_starting_prose(self):
+    def test_complete_choices_create_the_world_and_stop_before_prose(self):
         final = self.world_ready()
-        self.assertEqual(final['action'], 'world_ready')
+        # The world arrives with the volume-outline dispatch: activation renders the view, and v2
+        # dispatches the next step instead of parking on a `world_ready` boundary.
+        self.assertEqual(final['task']['stage'], 'volume_outline')
+        self.assertTrue(Path(final['world_view']['html_path']).is_file())
         book = self.repo.load()
         self.assertEqual(set(world.SECTIONS), set(book['world']) - {'selection_hash', 'premise', 'story_capacity'})
         self.assertEqual(book['creation']['phase'], 'ready')
         self.assertEqual(len(book['creation']['selections']), 10)
         self.assertEqual(self.repo.headers('main'), [])
-        self.assertIsNone(self.repo.pending())
-        self.assertEqual(self.app.advance()['action'], 'world_ready')
+        self.assertIsNone(book.get('world_review'))
         view = final['world_view']
-        self.assertTrue(Path(view['html_path']).is_file())
         self.assertEqual(Path(view['html_path']), (self.project / 'book.html').resolve())
         self.assertFalse((self.project / 'world.html').exists())
         page = Path(view['html_path']).read_text(encoding='utf-8')
@@ -468,7 +444,6 @@ class OpeningTests(unittest.TestCase):
             for row in book['world'][section]:
                 for field in fields:
                     self.assertIn(row[field], page)
-        self.assertIn('世界独立核验 · 通过', page)
         self.assertIn('读正文', page)
         self.assertIn('世界关联图', page)
         self.assertIn('历史时间线', page)
@@ -477,132 +452,114 @@ class OpeningTests(unittest.TestCase):
         self.assertEqual(len(artifact['choices']), 10)
         self.assertTrue(self.app.audit()['ok'])
 
-    def test_reviewed_world_automatically_leads_to_full_volume_outline_without_prose(self):
-        policy = {'scope': 'current', 'words': 500, 'tolerance': 50}
-        handoff = self.world_ready(outline=policy, scale_tier='t1')
-        self.assertEqual(handoff['task']['stage'], 'book_plan')
-        self.assertTrue(Path(handoff['world_view']['html_path']).is_file())
+    def test_world_and_outlines_deliver_without_prose_and_the_writer_compares_against_them(self):
+        """The v2 handover: volume outline, chapter outline, then a draft judged against that row."""
+        policy = {'scope': 'all', 'words': 500, 'tolerance': 50}
+        handoff = self.world_ready(outline=policy, scale_tier='t0')
+        self.assertEqual(handoff['task']['stage'], 'volume_outline')
         first_volume = self.repo.load()['contract']['volumes'][0]
-        head = drive(self.app, until='volume_plan')
+        # The merged tier answers both outline artifacts in one receipt; the blank form is one row
+        # per volume plus each volume's chapters, all empty.
+        blank = json.loads(Path(handoff['task']['template_path']).read_text(encoding='utf-8'))['data']
+        self.assertEqual([row['id'] for row in blank['volumes']], [first_volume['id']])
+        self.assertEqual(sorted(blank['chapters']), [first_volume['id']])
         task = self.repo.pending()
-        self.assertEqual(head['task']['chapter'], 1)
-        material = self.app.read(task['id'])
         self.assertIn('world_model', task['input']['required'])
-        self.assertEqual(task['input']['payload']['volume_outline']['last'], first_volume['end'])
-        self.assertIn('world_model', material['records'])
-        template_path = Path(head['task']['template_path'])
-        blank = json.loads(template_path.read_text(encoding='utf-8'))['data']
-        self.assertNotIn('chapters', blank)
-        self.assertEqual(len(blank['brainstorm']), 2)
-        self.assertEqual(blank['world_hash'], digest(self.repo.load()['world']))
-        batch = drive(self.app, until='volume_outline')['task']
-        blank = json.loads(Path(batch['template_path']).read_text(encoding='utf-8'))['data']
-        window = self.repo.load()['contract']['planning_window']
-        self.assertEqual([c['chapter'] for c in blank['chapters']], list(range(1, min(6, window) + 1)))
+        self.assertEqual(task['input']['payload']['volume_outline']['volume_ids'], [first_volume['id']])
         before = copy.deepcopy(self.repo.load()['state'])
-        design = response(self.app)
-        self.app.submit(design)
-        review_task = self.app.advance()['task']
-        self.assertEqual(review_task['stage'], 'outline_review')
-        self.assertIn('world_model', self.repo.pending()['input']['required'])
-        self.assertEqual(self.repo.load()['designs']['volume:v1'].get('chapters', []), [])
-        review = response(self.app)
-        review['session'] = design['session']
-        self.assertCode('session_reuse', self.app.submit, review)
         self.app.submit(response(self.app))
-        ready = drive(self.app)
+        ready = self.app.advance()
         self.assertEqual(ready['action'], 'outline_ready')
-        self.assertEqual(ready['volumes'], ['v1'])
+        self.assertEqual(ready['volumes'], [first_volume['id']])
+        self.assertEqual(ready['planning_mode'], 'all')
+        self.assertEqual(ready['coverage'],
+                         [{'volume': first_volume['id'], 'first': first_volume['first'], 'last': first_volume['end']}])
+        book = self.repo.load()
+        self.assertEqual([c['chapter'] for c in book['chapter_outlines'][first_volume['id']]],
+                         list(range(first_volume['first'], first_volume['end'] + 1)))
+        self.assertEqual(book['volumes_outline'][first_volume['id']]['exit_state'],
+                         support.VOLUME_EXIT)
         self.assertEqual(self.repo.headers('main'), [])
         self.assertIsNone(self.repo.pending())
-        self.assertEqual(self.repo.load()['state'], before)
-        chapters = self.repo.load()['designs']['volume:v1']['chapters']
-        self.assertEqual([c['chapter'] for c in chapters], list(range(1, first_volume['end'] + 1)))
-        self.assertTrue(all(han_count(c['synopsis']) == 500 for c in chapters))
+        self.assertEqual(book['state'], before, 'outlines declare deltas; they do not settle them')
         page = Path(ready['world_view']['html_path']).read_text(encoding='utf-8')
-        self.assertIn('逐章卷纲', page)
-        self.assertIn('卷纲脑暴与选案', page)
-        self.assertIn(chapters[1]['synopsis'], page)
+        self.assertIn('卷纲与章纲', page)
+        self.assertIn(support.VOLUME_CLIMAX, page)
+        # The one writing dispatch carries this chapter's row, and the outline is the contract.
         run = self.app.run(through=1, source='试写一章。')
-        drive(self.app, run['owner'], until='plan')
-        planner = self.repo.pending()['input']
-        selected = self.repo.read_document(planner['records']['volume_outline_window'])
-        self.assertEqual([c['chapter'] for c in selected], [1])
         write = drive(self.app, run['owner'], until='write')
         self.assertEqual(write['task']['stage'], 'write')
         writer = self.repo.pending()['input']
-        self.assertEqual(self.repo.read_document(writer['records']['chapter_outline']), chapters[0])
+        self.assertEqual(writer['payload']['chapter_outline'],
+                         self.repo.load()['plans']['1'])
+        self.assertIn('chapter_outline', writer['required'])
+        self.assertIn('volume_outline', writer['required'])
 
     def test_volume_outline_rejections_are_atomic_and_preserve_the_frozen_task(self):
-        self.world_ready(outline={'scope': 'current', 'words': 500, 'tolerance': 50}, scale_tier='t1')
-        drive(self.app, until='volume_plan')
-        brainstorm = response(self.app)
-        brainstorm['data']['brainstorm'][1]['premise'] = brainstorm['data']['brainstorm'][0]['premise']
-        self.assertCode('outline_brainstorm', self.app.submit, brainstorm)
-        drive(self.app, until='volume_outline')
+        # One short volume keeps the word target the fixture can actually hit; the volume count, not
+        # the tier's chapter band, is what these rejections exercise.
+        handoff = self.world_ready(outline={'scope': 'all', 'words': 500, 'tolerance': 50}, scale_tier='t0')
+        self.assertEqual(handoff['task']['stage'], 'volume_outline')
         valid = response(self.app)
         before = dump(self.repo.load())
         task_id = self.repo.pending()['id']
         variants = []
-        short = copy.deepcopy(valid); short['data']['chapters'][0]['synopsis'] = '甲' * 449
-        variants.append(('outline_length', short))
-        long = copy.deepcopy(valid); long['data']['chapters'][0]['synopsis'] = '甲' * 551
-        variants.append(('outline_length', long))
-        missing = copy.deepcopy(valid); missing['data']['chapters'].pop()
-        variants.append(('outline_coverage', missing))
-        wrong_world = copy.deepcopy(valid); wrong_world['data']['world_hash'] = 'other'
-        variants.append(('outline_world', wrong_world))
-        wrong_ref = copy.deepcopy(valid); wrong_ref['data']['chapters'][0]['world_refs'] = ['rules:missing']
-        variants.append(('outline_world', wrong_ref))
-        wrong_node = copy.deepcopy(valid); wrong_node['data']['chapters'][0]['node_ids'] = ['missing']
-        variants.append(('outline_nodes', wrong_node))
-        for code, candidate in variants:
-            with self.subTest(code=code):
+        short = copy.deepcopy(valid)
+        short['data']['volumes'][0]['arc'] = '甲'
+        variants.append(('design_drift', short, 'the volume is far below its word target'))
+        missing = copy.deepcopy(valid)
+        missing['data']['volumes'] = []
+        variants.append(('volume_outline', missing, 'a batch that answers no volume at all'))
+        wrong_id = copy.deepcopy(valid)
+        wrong_id['data']['volumes'][0]['id'] = 'v99'
+        variants.append(('volume_outline', wrong_id, 'a volume outside the frozen batch'))
+        for code, candidate, why in variants:
+            with self.subTest(code=code, why=why):
                 self.assertCode(code, self.app.submit, candidate)
                 self.assertEqual(dump(self.repo.load()), before)
                 self.assertEqual(self.repo.pending()['id'], task_id)
-        for length in (450, 550):
-            edge = copy.deepcopy(valid)
-            edge['data']['chapters'][0]['synopsis'] = '甲' * length
-            self.app.submit(edge, preview=True)
-            self.assertEqual(dump(self.repo.load()), before)
-        self.app.submit(valid)
+        # `preview` runs the same checks without committing, so a rejected draft leaves nothing behind.
+        self.assertCode('design_drift', self.app.submit, copy.deepcopy(short), True)
+        self.assertEqual(dump(self.repo.load()), before)
+        self.app.submit(response(self.app))
 
     def test_explicit_all_guided_opening_delivers_all_volume_outlines_before_prose(self):
-        handoff = self.world_ready(outline={'scope': 'all', 'words': 500, 'tolerance': 50}, scale_tier='t1')
-        self.assertEqual(handoff['task']['stage'], 'book_plan')
-        ready = drive(self.app)
-        self.assertEqual(ready['action'], 'outline_ready')
+        ready = self.to_outline_ready(outline={'scope': 'all', 'words': 500, 'tolerance': 50}, scale_tier='t0')
         book = self.repo.load()
         volumes = book['contract']['volumes']
         self.assertEqual(ready['volumes'], [volume['id'] for volume in volumes])
         self.assertEqual(book['contract']['volume_outline'], {'scope': 'all', 'words': 500, 'tolerance': 50})
         for volume in volumes:
-            chapters = book['designs']['volume:' + volume['id']]['chapters']
-            self.assertEqual([c['chapter'] for c in chapters], list(range(volume['first'], volume['end'] + 1)))
+            row = book['volumes_outline'][volume['id']]
+            self.assertEqual(row['id'], volume['id'])
+            self.assertTrue(row['exit_state'])
+            self.assertTrue(row['nodes'] and row['threads'])
         self.assertEqual(self.repo.headers('main'), [])
         self.assertIsNone(self.repo.pending())
         self.assertTrue(self.app.audit()['ok'])
 
     def test_default_opening_delivers_only_near_term_outline_without_prose(self):
-        self.world_ready(outline='default', scale_tier='t1')
-        ready = drive(self.app)
+        ready = self.to_outline_ready(outline='default', scale_tier='t0')
         self.assertEqual(ready['action'], 'outline_ready')
-        self.assertEqual(ready['planning_mode'], 'rolling')
-        self.assertEqual(ready['coverage'], [{'volume': 'v1', 'first': 1, 'last': 6}])
+        # A contract that does not declare volume_outline keeps the engine's own default policy.
+        self.assertEqual(ready['planning_mode'], 'all')
         book = self.repo.load()
-        self.assertNotIn('volume:v2', book['designs'])
-        self.assertEqual(len(book['designs']['volume:v1']['chapters']), 6)
+        volume = book['contract']['volumes'][0]
+        self.assertEqual(ready['coverage'], [{'volume': volume['id'], 'first': volume['first'], 'last': volume['end']}])
+        self.assertEqual(len(book['chapter_outlines'][volume['id']]), volume['end'] - volume['first'] + 1)
         self.assertEqual(self.repo.headers('main'), [])
         self.assertIsNone(self.repo.pending())
 
-    def test_world_design_and_review_do_not_generate_canonical_events(self):
+    def test_world_and_outlines_do_not_generate_canonical_events(self):
+        """Design declarations are validated and stored; they never settle into the fact ledger."""
         self.select_gates()
         self.app.advance()
-        before = self.repo.load()['state']
         self.app.submit(receipt(self.app, combined(self.app)))
+        handoff = self.app.advance()
+        self.assertEqual(handoff['task']['stage'], 'volume_outline')
+        before = copy.deepcopy(self.repo.load()['state'])      # the contract's seeded state
+        self.app.submit(response(self.app))
         self.app.advance()
-        self.app.submit(receipt(self.app, review_data(self.app)))
         self.assertEqual(self.repo.load()['state'], before)
         self.assertEqual(self.repo.headers('main'), [])
 
@@ -670,10 +627,7 @@ class OpeningTests(unittest.TestCase):
         self.choose_board(self.board())
         self.app.advance()
         self.app.submit(receipt(self.app, combined(self.app)))
-        for _ in range(2):
-            self.app.advance()
-            self.app.submit(receipt(self.app, review_data(self.app)))
-        self.app.advance()
+        self.app.advance()                     # the contract is active; the outline is next
         self.assertEqual(self.repo.load()['contract']['pov'], VALUES['pov']['pov'])
 
     def test_contract_alignment_rejects_cross_gate_fields_in_closed_choices(self):
@@ -720,28 +674,37 @@ class OpeningTests(unittest.TestCase):
                 creation.validate_contract(planning.validate_contract(draft), state, model_data)
 
     def test_explicit_run_after_world_delivery_enters_existing_writing_flow(self):
-        self.world_ready()
+        handoff = self.world_ready()
+        self.assertEqual(handoff['task']['stage'], 'volume_outline')   # the outlines come first
         run = self.app.run(through=1, source='作者要求试写一章。')
-        self.assertEqual(self.app.advance(owner=run['owner'])['task']['stage'], 'book_plan')
         with patch.object(support, 'response', writable_response):
             self.assertEqual(drive(self.app, run['owner'])['action'], 'target_reached')
         self.assertEqual(self.app.status()['accepted_chapters'], 1)
         self.assertTrue(self.app.audit()['ok'])
 
-    def test_world_delivery_error_does_not_roll_back_activated_contract(self):
-        self.world_ready()
+    def test_world_view_failure_does_not_roll_back_activated_contract(self):
+        # Block the export path before the world receipt lands, so the activation advance is the one
+        # that fails to render the view.
+        self.select_gates()
+        self.app.advance()
         blocker = self.project / 'book.html'
-        blocker.unlink()
+        if blocker.exists():
+            blocker.unlink()
         blocker.mkdir()
-        final = self.app.advance()
-        self.assertEqual(final['action'], 'world_ready')
-        self.assertIn('world_view_error', final)
+        self.app.submit(receipt(self.app, combined(self.app)))
+        handled = self.app.advance()
+        self.assertEqual(handled['task']['stage'], 'volume_outline')
+        self.assertIn('world_view_error', handled)
         self.assertEqual(self.repo.load()['creation']['phase'], 'ready')
         self.assertIsNotNone(self.repo.load()['contract'])
+        # The failure is transient: once the path is usable the outline handover renders the view
+        # again, so a book is never stranded by an export that could not be written.
         blocker.rmdir()
-        recovered = self.app.advance()
-        self.assertTrue(Path(recovered['world_view']['html_path']).is_file())
-        self.assertNotIn('world_view_error', recovered)
+        self.app.submit(response(self.app))
+        ready = self.app.advance()
+        self.assertEqual(ready['action'], 'outline_ready')
+        self.assertTrue(Path(ready['world_view']['html_path']).is_file())
+        self.assertNotIn('world_view_error', ready)
 
     def test_duplicate_options_and_inconsistent_mechanism_scope_are_rejected(self):
         self.app.advance()
@@ -767,9 +730,11 @@ class OpeningTests(unittest.TestCase):
         self.assertEqual(early.returncode, 0, early.stdout)
         self.assertTrue(json.loads(early.stdout)['staged'])
         self.assertIsNone(self.repo.load()['creation'])
-        self.assertEqual(self.app.advance()['task']['stage'], 'contract_review')
-        self.app.submit(receipt(self.app, review_data(self.app)))
-        self.assertEqual(self.app.advance()['task']['stage'], 'book_plan')
+        # v2 activates an imported contract on the engine's alignment check instead of dispatching a
+        # contract review; the first dispatch of the book is the volume outline.
+        task = self.app.advance()['task']
+        self.assertEqual(task['stage'], 'volume_outline')
+        self.assertIsNotNone(self.repo.load()['contract'])
 
     def test_importing_a_contract_after_a_gate_is_shown_is_refused(self):
         command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project)]
@@ -881,7 +846,6 @@ class StructuralGateTests(unittest.TestCase):
 
     def test_every_tier_is_writable_under_the_contract_rules(self):
         """No tier may be offered unless a contract inside it passes the same rules the engine enforces."""
-        state = creation.begin('工程夹具：逐档验证可写完性。', version=2)
         for tier in SCALE_TIERS:
             with self.subTest(tier=tier['id']):
                 choices = {'scale': {k: copy.deepcopy(tier[k]) for k in
@@ -1031,27 +995,6 @@ class OpeningDecisionTests(unittest.TestCase):
         self.assertEqual(creation.selected(accepted)['title'], VALUES['title'])
         self.assertCode('intake', creation.intake, accepted,
                         {'title': {'title': '改书名。'}}, '冲突')
-
-    def test_view_checklist_exists_and_is_not_retroactive(self):
-        from novel_ledger import context
-        from novel_ledger.contracts import Job
-
-        self.assertIn('pov_consistency', CHECK_SETS[POV_CHECKS_VERSION]['reader'])
-        for version in (CHECKS_VERSION, EDITORIAL_VERSION):
-            self.assertNotIn('pov_consistency', CHECK_SETS[version]['reader'])
-        self.assertEqual(template('chapter_review', 1, {1: '正文'}, version=POV_CHECKS_VERSION)['reader']['checks'][-1]['id'],
-                         'pov_consistency')
-        # which list a project is judged by follows the contract, not the engine version
-        for declared, expected in ((True, POV_CHECKS_VERSION), (False, EDITORIAL_VERSION)):
-            raw = contract()
-            raw.update(editorial_features=True, narrative_tracking=True)
-            if declared:
-                raw['pov'] = '第三人称限知。'
-            book = workflow.new_book(raw)
-            task = context.build(self.repo, book, Job('book_plan', 1, scope='book'))
-            self.assertEqual(task['checks_version'], expected, declared)
-        bare = workflow.new_book(contract())          # no editorial capability, no view
-        self.assertEqual(context.build(self.repo, bare, Job('book_plan', 1, scope='book'))['checks_version'], CHECKS_VERSION)
 
 
 if __name__ == '__main__':

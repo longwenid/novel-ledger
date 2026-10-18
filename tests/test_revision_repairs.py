@@ -1,4 +1,11 @@
-"""Applied revision actions and future-design changes remain authoritative."""
+"""Applied revision actions stay bounded: the author's endpoint decides how far the fork reaches.
+
+v2 removed the alignment stages that used to arbitrate what a revision was allowed to change, so the
+bound is enforced where the branch is created: `revise` analyzes the requested range, records the
+impact on the revision run, and the carried suffix re-settles against the new state or refuses. A
+range the window does not cover is not started at all — it becomes the author's authorization
+decision (covered in test_revision_bounds.py).
+"""
 import sys
 import tempfile
 import unittest
@@ -7,11 +14,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from novel_ledger import narrative, revision_impact, story_memory, workflow
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import Error
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, drive, response
-from test_narrative import tracked_contract
-from test_editorial import drive as drive_enhanced, enhanced_response
+from support import contract, drive, response, seeded_book, tracked_contract
 
 
 class RevisionRepairTests(unittest.TestCase):
@@ -52,134 +56,65 @@ class RevisionRepairTests(unittest.TestCase):
         self.assertEqual(revision_impact.analyze(rows, 2, changes)['last'], 2)
         self.assertEqual(revision_impact.analyze(rows, 2, changes, through=3)['last'], 4)
 
-    def test_explicit_endpoint_rejects_new_dependencies_before_forking(self):
-        with tempfile.TemporaryDirectory() as temp:
-            repo = SQLiteRepository.initialize(Path(temp) / 'book', workflow.new_book(contract(4)))
-            try:
-                app = Application(repo)
-                owner = app.run(through=4, source='工程回归：四章。')['owner']
-                for _ in range(100):
-                    handoff = app.advance(owner=owner)
-                    if handoff['action'] == 'await_author':
-                        app.approve(handoff['prose_hash'], '工程夹具认可。', owner)
-                        continue
-                    if handoff['action'] != 'task_ready':
-                        break
-                    receipt = response(app)
-                    work = repo.pending()['input']
-                    if work['stage'] == 'plan':
-                        for plan in receipt['data']['plans']:
-                            reads = [{'kind': 'knowledge', 'key': 'shen:source'}] if plan['chapter'] == 4 else []
-                            plan.update(dependency_coverage='complete',
-                                        scenes=[{'label': '核对退件。', 'reads': reads, 'depends_on': []}])
-                    elif work['stage'] == 'chapter_review' and work['chapter'] == 3:
-                        receipt['data']['facts']['events'].append({'op': 'knowledge', 'entity': 'shen',
-                            'topic': 'source', 'before': None, 'claim': '看到了封条签字。',
-                            'source': '亲眼核对。', 'stance': 'knows', 'evidence': {'chapter': 3, 'quote': '封条上的签字'}})
-                    app.submit(receipt)
-                self.assertEqual(handoff['action'], 'target_reached')
-                changes = {'mode': 'semantic', 'changes': [{'kind': 'facts', 'key': 'shen:secret'}]}
-                self.assertEqual(app.revision_impact(2, changes)['last'], 2)
-                before = repo.load()
-                with self.assertRaises(Error) as caught:
-                    app.revise(2, '明确修改到第三章。', owner, through=3, changes=changes)
-                self.assertEqual(caught.exception.code, 'revision_impact')
-                self.assertEqual(caught.exception.details['required_through'], 4)
-                self.assertEqual(repo.load(), before)
-                self.assertTrue(app.audit()['ok'])
-            finally:
-                repo.close()
-
-    def test_explicit_endpoint_updates_applied_actions_and_preserves_analysis_endpoint(self):
-        with tempfile.TemporaryDirectory() as temp:
-            repo = SQLiteRepository.initialize(Path(temp) / 'book', workflow.new_book(contract(4)))
-            try:
-                app = Application(repo)
-                owner = app.run(through=4, source='工程回归：四章。')['owner']
-                drive(app, owner)
-                changes = {'mode': 'reading', 'reading_changes': [{'kind': 'character', 'key': 'shen'}]}
-                app.revise(2, '明确修改到第三章。', owner, through=3, changes=changes)
-                impact = repo.load()['revision_run']['impact']
-                self.assertEqual((impact['analyzed_last'], impact['last']), (2, 3))
-                self.assertEqual(impact['rewrite_chapters'], [2, 3])
-                self.assertEqual([a['action'] for a in impact['chapter_actions']], ['local', 'rewrite', 'review'])
-                app.advance(owner=owner)
-                app.submit(response(app))
-                app.advance(owner=owner)
-                app.submit(response(app))
-                task = app.advance(owner=owner)['task']
-                self.assertEqual((task['chapter'], task['stage']), (3, 'repair'))
-                self.assertEqual(drive(app, owner)['action'], 'revision_ready')
-                self.assertTrue(app.audit()['ok'])
-            finally:
-                repo.close()
-
-    def future_alignment(self, temp, changes):
-        raw = tracked_contract(4)
-        raw['editorial_features'] = True
-        repo = SQLiteRepository.initialize(Path(temp) / 'book', workflow.new_book(raw))
+    def book(self, chapters=5):
+        """Five chapters of a two-volume book: volume one closed, volume two still open."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        repo = SQLiteRepository.initialize(Path(temp.name) / 'book', seeded_book(contract(6, 2)))
+        self.addCleanup(repo.close)
         app = Application(repo)
-        owner = app.run(through=4, source='工程回归：四章。')['owner']
-        drive_enhanced(app, owner)
-        app.revise(2, '调整阅读作用并保留后续改案。', owner, through=2, changes=changes)
-        app.advance(owner=owner)
-        app.submit(enhanced_response(app))
-        app.advance(owner=owner)
-        review = enhanced_response(app)
-        review['data']['alignment']['action'] = 'adapt_future'
-        app.submit(review)
-        # Carry must stop even before the new plan is proposed.
-        self.assertEqual([r['n'] for r in repo.headers(repo.load()['branch'])], [1, 2])
-        self.assertEqual(app.advance(owner=owner)['task']['stage'], 'alignment_plan')
-        proposal = enhanced_response(app)
-        proposal['data']['plan']['goal'] = '已核验的新后续目标。'
-        app.submit(proposal)
-        app.advance(owner=owner)
-        app.submit(enhanced_response(app))
+        owner = app.run(through=chapters, source='工程回归：写到第五章。')['owner']
+        self.assertEqual(drive(app, owner)['action'], 'target_reached')
         return repo, app, owner
 
-    def test_approved_future_plan_is_kept_and_changed_chapter_gets_full_review(self):
-        with tempfile.TemporaryDirectory() as temp:
-            changes = {'mode': 'reading', 'reading_changes': [{'kind': 'character', 'key': 'shen'}]}
-            repo, app, owner = self.future_alignment(temp, changes)
-            try:
-                task = app.advance(owner=owner)['task']
-                self.assertEqual((task['chapter'], task['stage']), (3, 'repair'))
-                work = repo.pending()['input']
-                plan = repo.read_document(work['records']['scene_context'])['plan']
-                self.assertEqual(plan['goal'], '已核验的新后续目标。')
-                self.assertEqual(repo.load()['plans']['3']['goal'], plan['goal'])
-                app.submit(enhanced_response(app))
-                self.assertEqual(app.advance(owner=owner)['task']['stage'], 'chapter_review')
-                app.submit(enhanced_response(app))
-                # Alignment cleared the rest of the future window: it must be planned again.
-                self.assertEqual(app.advance(owner=owner)['task']['stage'], 'plan')
-                old_review = repo.chapter(repo.load()['revision_run']['parent'], 4)['review']
-                app.submit(enhanced_response(app))
-                # Recreating the original plan cannot revive its old passed review.
-                self.assertEqual(app.advance(owner=owner)['task']['stage'], 'repair')
-                self.assertEqual(drive_enhanced(app, owner)['action'], 'revision_ready')
-                accepted = repo.read_document(repo.chapter(repo.load()['branch'], 3)['plan'])
-                self.assertEqual(accepted['goal'], '已核验的新后续目标。')
-                self.assertEqual(repo.load()['plans']['3']['goal'], accepted['goal'])
-                self.assertNotEqual(repo.chapter(repo.load()['branch'], 4)['review'], old_review)
-                self.assertTrue(app.audit()['ok'])
-                app.promote(owner)
-                self.assertTrue(app.audit()['ok'])
-            finally:
-                repo.close()
+    def test_a_narrow_endpoint_beyond_the_analysis_waits_for_the_author(self):
+        """An endpoint smaller than the analyzed impact is a policy violation, not a silent widening.
 
-    def test_manual_narrow_revision_also_waits_for_future_alignment(self):
-        with tempfile.TemporaryDirectory() as temp:
-            repo, app, owner = self.future_alignment(temp, None)
-            try:
-                self.assertEqual(app.advance(owner=owner)['task']['stage'], 'repair')
-                self.assertEqual(drive_enhanced(app, owner)['action'], 'revision_ready')
-                accepted = repo.read_document(repo.chapter(repo.load()['branch'], 3)['plan'])
-                self.assertEqual(accepted['goal'], '已核验的新后续目标。')
-                self.assertTrue(app.audit()['ok'])
-            finally:
-                repo.close()
+        The engine saves the complete plan (hash, range, impact, context) and pauses; the branch is
+        only created when the author authorizes that exact plan with their own words.
+        """
+        repo, app, owner = self.book()
+        before = [r['n'] for r in repo.headers('main')]
+        changes = {'mode': 'semantic', 'changes': [{'kind': 'knowledge', 'key': 'shen:source'}]}
+        app.revise(4, '只改到第四章。', owner, through=4, changes=changes)
+        book = repo.load()
+        plan = book['revision_directive']
+        self.assertTrue(plan['blocked'])
+        self.assertIn('impact_beyond_request', plan['violations'])
+        self.assertEqual(plan['impact']['last'], 5)
+        self.assertIsNone(book['revision_run'])
+        self.assertEqual([r['n'] for r in repo.headers('main')], before)
+        app.revise(4, '采纳。', owner, proposal_hash=plan['plan_hash'],
+                   source='工程作者明确授权把这一改动做到第五章。')
+        self.assertEqual(repo.load()['revision_run']['first'], 4)
+        self.assertEqual(repo.load()['revision_run']['last'], 5)
+
+    def test_a_wider_endpoint_widens_the_applied_actions(self):
+        repo, app, owner = self.book()
+        changes = {'mode': 'reading', 'reading_changes': [{'kind': 'character', 'key': 'shen'}]}
+        self.assertEqual(app.revision_impact(4, changes)['last'], 4)
+        app.revise(4, '明确修改到第五章。', owner, through=5, changes=changes)
+        impact = repo.load()['revision_run']['impact']
+        self.assertEqual((impact['analyzed_last'], impact['last']), (5, 5))
+        self.assertEqual(impact['rewrite_chapters'], [4, 5])
+        self.assertEqual(impact['chapter_actions'][0]['action'], 'local')
+
+    def test_the_revision_rewrites_its_range_and_leaves_the_parent_intact(self):
+        repo, app, owner = self.book()
+        parent = {n: repo.chapter('main', n)['prose'] for n in (1, 2, 3, 4, 5)}
+        changes = {'mode': 'reading', 'reading_changes': [{'kind': 'character', 'key': 'shen'}]}
+        app.revise(4, '明确修改到第五章。', owner, through=5, changes=changes)
+        for _chapter in (4, 5):
+            task = app.advance(owner=owner)['task']
+            self.assertEqual(task['stage'], 'repair')
+            app.submit(response(app))
+        branch = repo.load()['branch']
+        self.assertEqual([r['n'] for r in repo.headers(branch)], [1, 2, 3, 4, 5])
+        self.assertEqual([r['n'] for r in repo.headers('main')], [1, 2, 3, 4, 5])
+        for n in (1, 2, 3):
+            self.assertEqual(repo.chapter(branch, n)['prose'], parent[n])
+        self.assertTrue(app.audit()['ok'])
+        self.assertEqual(drive(app, owner)['action'], 'target_reached')
 
 
 if __name__ == '__main__':

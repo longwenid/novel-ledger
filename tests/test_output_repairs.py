@@ -66,7 +66,7 @@ class OutputRepairTests(unittest.TestCase):
 
     def test_legacy_completion_metadata_keeps_frozen_content_and_understanding(self):
         owner = self.app.run(finish=True, source='工程夹具：完成四章。')['owner']
-        drive(self.app, owner, until='chapter_review')
+        drive(self.app, owner, until='write')
         candidate = response(self.app)
         candidate['data']['understanding'] = [{
             'id': 'responsibility', 'kind': 'theme', 'claim': '承担责任仍是一种待检验的理解。',
@@ -96,34 +96,6 @@ class OutputRepairTests(unittest.TestCase):
         self.assertIn('承担责任仍是一种待检验的理解。', page)
         self.assertNotIn(live['contract']['title'], page)
         self.assertEqual(self.repo.read_document(live['completion_snapshot']), snapshot)
-
-    def test_reading_revision_renders_independent_review_and_frozen_sources(self):
-        owner = self.app.run(through=4, source='工程夹具：四章。')['owner']
-        drive(self.app, owner)
-        self.app.revise(2, '调整人物动机的表达。', owner,
-                        changes={'mode': 'reading', 'reading_changes': [{'kind': 'character', 'key': 'shen'}]})
-        drive(self.app, owner, until='revision_review')
-        candidate = response(self.app)
-        reason = '新增独立重读判断 <script>不能执行</script>'
-        candidate['data']['reader']['checks'][0]['reason'] = reason
-        candidate['data']['reader']['findings'] = [{
-            'criterion': candidate['data']['reader']['checks'][0]['id'], 'severity': 'note',
-            'reason': '新阅读语境下的建议，不构成返修。', 'evidence': {'chapter': 3, 'quote': '次日'}}]
-        self.app.submit(candidate)
-        row = self.repo.chapter(self.repo.load()['branch'], 3)
-        reading = self.repo.read_document(row['review'])['revision_readings'][0]
-        page = bookpage.render(self.repo)
-        self.assertIn('修订独立重读 · 第1次 · 通过', page)
-        self.assertIn('新增独立重读判断 &lt;script&gt;不能执行&lt;/script&gt;', page)
-        self.assertNotIn(reason, page)
-        self.assertIn('新阅读语境下的建议，不构成返修。', page)
-        self.assertIn('正文版本：' + reading['prose_hash'], page)
-        self.assertIn('审稿会话：' + reading['reviewer'], page)
-        self.assertIn('冻结首读', page)
-        self.assertIn(reading['first_read']['reads'][0]['read_on_reason'], page)
-        self.assertIn('原文依据 · 第3章', page)
-        self.assertTrue(self.app.audit()['ok'])
-
 
 class EvaluationRepairTests(unittest.TestCase):
     def setUp(self):

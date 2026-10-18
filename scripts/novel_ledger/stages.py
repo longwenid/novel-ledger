@@ -5,11 +5,16 @@ from .contracts import require
 
 # Every stage a task can be frozen under. A stage missing here is not dispatched;
 # briefs and deliverable templates refuse it instead of degrading to an empty shape.
+#
+# The five-step pipeline (v2): the ten opening gates decide, one dispatch writes the world and
+# the contract, one writes every volume's ~1000-character outline, one writes a volume's chapter
+# outlines (resource/place/knowledge/plot deltas), and each chapter is drafted against its own
+# outline with the engine reconciling the writer's self-comparison. There is no reviewer stage:
+# the checks that used to be a second agent's receipt are now mechanical (drift.reconcile), so
+# the count of dispatches before the first word is a constant instead of a function of reviews.
 STAGES = frozenset({
-    'alignment_plan', 'alignment_review', 'book_plan', 'chapter_review', 'contract_review',
-    'design_review', 'opening_contract', 'opening_options', 'outline_review', 'plan',
-    'profiles', 'redesign', 'repair', 'revision_review', 'scope_review', 'scope_synthesis',
-    'volume_outline', 'volume_plan', 'world_model', 'world_review', 'write',
+    'chapter_outline', 'opening_contract', 'opening_options', 'redesign', 'repair',
+    'volume_outline', 'world_model', 'write',
 })
 # Draft marker recorded when the repair budget is spent; never dispatched as a task.
 DRAFT_EXHAUSTED = 'exhausted'
@@ -33,35 +38,27 @@ def require_rule(name, rule):
 # silently change shape: a repair dispatch once handed out a world skeleton with no contract
 # block, and the missing block then had nowhere official to live. A new stage must either
 # declare its blocks or be listed as dynamic, or the guard test fails.
-REVIEW_BLOCKS = ('verdict', 'checks_version', 'checks', 'findings', 'obligations')
-DESIGN_BLOCKS = ('intent', 'ending_conditions', 'nodes')
+#
+# `drift_check` is the fifth step made structural: the writer compares its own prose against the
+# chapter outline item by item, and the engine reconciles that comparison against the projected
+# state. It replaces the reviewer's receipt, so the write shape carries it at the top level.
+DRIFT_BLOCKS = ('drift_check',)
 BLOCKS = {
     'opening_options': ('gate', 'options'),
-    'chapter_review': ('facts', 'reader'),
-    'contract_review': REVIEW_BLOCKS,
-    'design_review': REVIEW_BLOCKS,
-    'outline_review': REVIEW_BLOCKS,
-    'alignment_review': REVIEW_BLOCKS,
-    'world_review': REVIEW_BLOCKS,
-    'scope_review': REVIEW_BLOCKS + ('coverage',),
-    'scope_synthesis': REVIEW_BLOCKS + ('coverage',),
-    'revision_review': ('reader',),
-    'write': ('title', 'prose', 'summary', 'self_check'),
-    'repair': ('title', 'prose', 'summary', 'self_check'),
-    'redesign': ('title', 'prose', 'summary', 'self_check'),
-    'profiles': ('profiles',),
-    'alignment_plan': ('reason', 'plan', 'designs'),
-    'plan': ('plans',),
-    'book_plan': DESIGN_BLOCKS,
+    'write': ('title', 'prose', 'summary') + DRIFT_BLOCKS + ('self_check',),
+    'repair': ('title', 'prose', 'summary') + DRIFT_BLOCKS + ('self_check',),
+    'redesign': ('title', 'prose', 'summary') + DRIFT_BLOCKS + ('self_check',),
+    'volume_outline': ('volumes',),
+    'chapter_outline': ('volume', 'chapters'),
 }
 # Blocks added only when the dispatch's payload asks for them; nothing else may appear.
 CONDITIONAL_BLOCKS = {
-    'chapter_review': ('understanding', 'alignment'),
-    'revision_review': ('understanding',),
-    'scope_review': ('understanding', 'handoff', 'closure', 'remedy_review'),
-    'scope_synthesis': ('understanding', 'handoff', 'closure', 'remedy_review'),
-    'book_plan': ('threads',),
+    'world_model': ('contract',),
+    # The smallest tiers answer a volume and its chapter outlines in one cold session: the chapter
+    # half is a few hundred characters of deltas for volumes the same receipt just designed, and
+    # splitting it buys latency rather than review (there is no review to split it from).
+    'volume_outline': ('chapters',),
 }
 # Shapes assembled from dynamic declarations (world sections, contract fields, outline policy):
 # they are checked by the modules that own those tables, not by block equality here.
-DYNAMIC_BLOCKS = ('world_model', 'opening_contract', 'volume_outline', 'volume_plan')
+DYNAMIC_BLOCKS = ('world_model', 'opening_contract')

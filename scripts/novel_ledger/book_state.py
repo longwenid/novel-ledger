@@ -5,20 +5,20 @@ import copy
 from .contracts import require
 
 BOOK_SCHEMA = 'novel-ledger.book/1'
+# v2 removed the design-review and plan stages, so their containers are gone with them: the volume
+# outlines, the chapter outlines and the rows materialized from them are the whole design record,
+# and `design_drift` is the ledger of departures the writer declared and the engine registered.
 PART_FIELDS = {
-    'settings': ('contract', 'contract_source', 'lexical_policy', 'contract_review'),
+    'settings': ('contract', 'contract_source', 'lexical_policy'),
     'canon': ('state', 'written_han'),
-    'intent': ('creation', 'world', 'world_review', 'designs', 'plans', 'profiles',
-               'profile_history', 'style_anchor', 'scope_ends', 'understanding'),
+    'intent': ('creation', 'world', 'volumes_outline', 'chapter_outlines', 'plans',
+               'style_anchor', 'scope_ends', 'understanding'),
     'execution': ('branch', 'revision', 'status', 'target', 'finish', 'pilot', 'draft',
-                  'proposal', 'scope_parts', 'reviews', 'rework', 'revision_run', 'feedback',
-                  'decisions', 'last_task', 'pause_reason', 'pending_contract',
-                  'pending_contract_reviewer', 'contract_draft', 'controller_owner',
-                  'opening_world_only', 'run_authorized', 'alignment_hold',
-                  'alignment_proposal', 'alignment_history', 'author_block',
-                  'author_decision_history', 'carry_findings', 'accepted_findings', 'prior_candidate',
-                  'repair_cases', 'remedy_exhausted', 'revision_directive',
-                  'scope_findings', 'scope_closures', 'completed_at', 'completion_snapshot')}
+                  'rework', 'revision_run', 'feedback', 'decisions', 'last_task', 'pause_reason',
+                  'pending_contract', 'controller_owner', 'opening_world_only', 'run_authorized',
+                  'author_block', 'author_decision_history', 'carry_findings', 'accepted_findings',
+                  'prior_candidate', 'repair_cases', 'remedy_exhausted', 'revision_directive',
+                  'design_drift', 'completed_at', 'completion_snapshot')}
 
 
 def split(book):
@@ -41,6 +41,9 @@ def assemble(parts):
 
 STATUSES = ('preparing', 'running', 'paused', 'completed')
 FINDING_BATCH_FIELDS = ('stage', 'scope', 'findings')
+# A design-drift row is what the engine registered when the prose did not follow the outline: it
+# carries the coordinate, what was planned, what actually happened, and the writer's reason.
+DRIFT_FIELDS = ('chapter', 'kind', 'key', 'reason')
 
 
 def check_state(book):
@@ -64,4 +67,19 @@ def check_state(book):
     draft = book.get('draft')
     require(draft is None or (isinstance(draft, dict) and type(draft.get('chapter')) is int and draft['chapter'] >= 1),
             'book_state', '候选稿必须指向一个章号。')
+    # A registered departure without a reason would be a silent rewrite of the outline: the writer
+    # declares it in `drift_check`, and the reason is what makes it reviewable later.
+    for row in book.get('design_drift') or []:
+        require(isinstance(row, dict) and all(key in row for key in DRIFT_FIELDS)
+                and isinstance(row['reason'], str) and row['reason'].strip(), 'book_state',
+                '与章纲不符的登记项必须说明章号、坐标与理由。',
+                {'row': sorted(row) if isinstance(row, dict) else None})
+    for volume_id, outline in (book.get('volumes_outline') or {}).items():
+        require(isinstance(outline, dict) and outline.get('id') == volume_id
+                and isinstance(outline.get('nodes'), list) and isinstance(outline.get('threads'), list),
+                'book_state', '卷纲登记须按卷 ID 保存完整行。', {'volume': volume_id})
+    for volume_id, rows in (book.get('chapter_outlines') or {}).items():
+        require(isinstance(rows, list)
+                and all(isinstance(row, dict) and type(row.get('chapter')) is int for row in rows),
+                'book_state', '章纲登记须按卷保存章行数组。', {'volume': volume_id})
     return book

@@ -237,10 +237,8 @@ class SQLiteRepository:
         self.db.execute('INSERT INTO tasks(id,status,input,input_hash) VALUES (?,\'pending\',?,?)', (ident, dump(work), digest(work)))
         return self.task(ident)
 
-    def seal(self, task_id, session, first_read):
-        self.db.execute('UPDATE tasks SET first_read=?, first_read_hash=?, reviewer=? WHERE id=?',
-                        (dump(first_read), digest(first_read), session, task_id))
-
+    # The `seal` write path is gone with the blind first read; the columns stay declared because a
+    # project written under v1 still carries them and must keep loading.
     def finish_task(self, task_id, result):
         self.db.execute("UPDATE tasks SET status='done',result=?,result_hash=? WHERE id=?", (dump(result), digest(result), task_id))
 

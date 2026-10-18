@@ -4,7 +4,7 @@
 
 ## 适用范围与决定权
 
-作者决定方向，系统负责给出具体选项、保存来源和核验一致性。已有要求先整理保存，只询问真实缺口。门序与字段是协议要求，故事方案的优劣依据具体推进差异判断，写审原则见 [创作与写审](craft.md)。
+作者决定方向，系统负责给出具体选项、保存来源和核验一致性。已有要求先整理保存，只询问真实缺口。门序与字段是协议要求，故事方案的优劣依据具体推进差异判断，创作原则见 [创作与自比](craft.md)。
 
 ## 入口选择
 
@@ -14,8 +14,8 @@
 |---|---|---|
 | 新项目，无完整约定 | `init` | 进入逐门选择，已有部分要求再用 intake 保存。 |
 | 新项目，已有完整约定 | `init --contract 约定.json --source 原话` | 采用已有约定，默认推进试章目标。 |
-| 已 init，尚未派过门任务 | `opening --file 约定.json --source 原话` | 导入完整约定，清除逐门选择并进入核验。 |
-| 已派过门任务或已有约定 | `recontract --file 约定.json --source 原话` | 保留旧记录，经独立核验后激活新约定，见 [暂停与修改](runtime.md#暂停与修改)。 |
+| 已 init，尚未派过门任务 | `opening --file 约定.json --source 原话` | 导入完整约定，清除逐门选择；约定经机械校验激活后进入卷纲。 |
+| 已派过门任务或已有约定 | `recontract --file 约定.json --source 原话` | 保留旧记录，新约定经机械校验后激活，见 [暂停与修改](runtime.md#暂停与修改)。 |
 | 未展示当前方案且无 pending，已有部分完整门要求 | `intake --file 要求.json --source 原话` | 按门 ID 保存已定值，后续跳过这些门；不替缺口补造决定。 |
 | 已有项目续写或恢复 | `status`，再 `advance --compact` | 接回当前任务；执行身份与授权见 [运行](runtime.md)。 |
 
@@ -31,14 +31,14 @@
 
 ### 门任务由主干自执（默认，不再每门派子 agent）
 
-开书门没有独立性要求：无正文、无首读封印、无审写分离，而实测每派一个冷子 agent 要 0.4M～1M input token、等 2～5 分钟，信封只有 3.6K 字符——代价买不到任何东西。因此门任务（`opening_options`，声明在 `contracts.CONTROLLER_STAGES`）默认由主干在同一会话内执行：
+开书门没有独立性要求：无正文、无审写分离，而实测每派一个冷子 agent 要 0.4M～1M input token、等 2～5 分钟，信封只有 3.6K 字符——代价买不到任何东西。因此门任务（`opening_options`，声明在 `contracts.CONTROLLER_STAGES`）默认由主干在同一会话内执行：
 
 1. `advance --compact` 取任务与 `task_path`；
 2. 读任务目录的 `brief.md`（简报全文，`input.json` 里那份是同一内容的 JSON 原文，不必解析）；需要必读记录时直接 `read --task 任务ID`（该阶段对主控放行 read/recall，正文与审读阶段不在此列）。同一会话连跑多门时可豁免：上一门的 `read` 返回 `records_hash` 与本门相同、且简报未新增必读记录，跳过本次 read；
 3. 从 `result.template.json` 复制起稿 `result.json`，只填 data（信封三字段不手写，`input_version` 报错会带 expected）；`check` 试算后 `submit`（回执 `session` 填主干自己的会话身份即可，门任务不绑定会话）；
 4. 展示板面等作者选择（板面与提问的转发纪律见上）；「换一组」就 `regroup` 后重复——同一会话连续换组即是复用，作者在环防止锚定。
 
-世界门完成后（`world_model` 及之后的一切）恢复派独立 Worker：那些阶段有真实的独立性与首读要求。宿主确实无法内联时才退回逐门派工，并如实说明。
+世界门完成后（`world_model` 及之后的一切）恢复派子 agent：世界、卷纲、章纲和正文是实际工作量所在，主干只保留目标、任务身份与治理动作。宿主确实无法内联时才退回逐门派工，并如实说明。
 
 ### 第一门的全类目
 
@@ -66,7 +66,7 @@ AI 起名高度趋同（潇洒姓×玄乎单字是重灾区，同一个玄乎字
 | 6 | `relationships` 核心关系与情感线 | 创意门 | 助力与背叛风险在哪、感情线多重 | relationships（至少一条） |
 | 7 | `world` 世界前提、机制与禁区 | 创意门 | 世界怎么持续供料、有无特殊机制及其代价、绝不写什么 | world_premise、mechanism{mode,principle,cost,limits}、red_lines、allow_special_mechanism |
 | 8 | `opposition` 主要对抗与冲突梯度 | 创意门 | 第一卷谁挡着、怎么逐卷抬高、终局面对谁 | opposition/story_engine |
-| 9 | `payoff` 爽点兑现与终局 | 创意门 | 读者一路拿到什么、怎么兑现、最后兑现成什么 | plan{ways,cadence,hooks}（约定字段 `payoff_plan`）、ending、theme |
+| 9 | `payoff` 爽点兑现与终局 | 创意门 | 读者一路拿到什么、怎么兑现、最后兑现成什么 | 爽点方案（约定字段 `payoff_plan`，含 ways/cadence/hooks）、ending、theme |
 | 10 | `title` 书名 | 创意门 | 叫什么 | title |
 
 人称与视角在人物、世界与对抗之前定下来，所以 `voice` 排在最前：后续各门的 scene 都用该方案的人称写。题材门的画面发生在人称选择前，只作体验预览，不替作者锁定人称。世界规则约束后续对抗的加码方式，关系门同时提供助力和背叛风险，书名承接已选题材与核心优势。
@@ -120,10 +120,11 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 | 创意门 | **默认主干自执**（同一会话读 task.json、brief.md 与 required，生成方案并 submit，不派子 agent）；宿主无法内联时才派新空历史 Worker。 | 主干自执无交接等待；派工路径由主干等待结束再 --after 核实提交，委派只给任务路径和当前角色。 |
 | 结构门 | 引擎即时返回档位板，主干展示。 | await_choice，无任务或 Worker；方案回执按 opening_system 拒绝。 |
 | 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 系统不代选；换组和返回保留记录。 |
-| 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务同时包含 world_model 与 opening_contract，回执为世界字段加 contract；以任务 stages、payload.also 和模板为准。 |
-| 独立核验 | 依次派 world_review、contract_review。**t0/t1 契约随设计核验**：世界通过后引擎用同一套对齐校验（含与已核验世界的 world_rules 逐字一致）直接激活合并派工起草的约定，判断并入其后的 design_review（author_constraints 项对照生效约定）；返修动过世界导致对齐不过时自动回退独立契约核验。t2+ 与单独下发的 opening_contract 仍走独立 contract_review。 | 世界通过后才核验其约定；旧任务独立下发 opening_contract 时仍按原任务执行。 |
-| 骨架与卷纲 | 按已核验约定设计并核验骨架、卷方向和逐章说明。**微型档（t0）默认合并派工**：骨架与整卷逐章卷纲同一个回执交付、同一次 design_review 核验，不再分批派 volume_outline；其余档位见 [叙事推进](narrative.md#滚动卷纲)。 | 策略、批次与实际覆盖见 [叙事推进](narrative.md#滚动卷纲)。 |
-| 交付 | outline_ready 按 planning_mode/coverage 交付；关闭卷纲时为 world_ready。 | world_view.html_path 指向统一 book.html，另交 world.json 的绝对路径；视图失败可 advance 重建。 |
+| 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务同时包含 world_model 与 opening_contract（payload.also），回执为世界字段加 contract；以任务 stages、payload.also 和模板为准。 |
+| 机械校验与激活 | 世界与约定**不再有独立核验阶段**：提交时由引擎校验字段、links 引用、选择一致性与约定对齐（含与所选世界的 world_rules 逐字一致），通过即在同一事务激活约定；失败按 `repair` 预算有界返修。 | 校验只证明字段、引用和声明一致，不证明世界承载或因果成立；判断留给卷纲与章纲的状态链，以及作者抽读。 |
+| 卷纲 | 约定生效后按 `advance` 派 `volume_outline`：默认 `scope=all`，一次交全部卷、每卷约 1000 汉字；`scope=rolling` 时进入该卷前交该卷。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。 | 形状、校验与覆盖见 [叙事推进](narrative.md#卷纲)。 |
+| 章纲 | 每卷进入前派一次 `chapter_outline`：该卷每章极简章纲（资源/位置/知情/时钟/人物/情节增量与 enter/exit），提交时按卷内状态链逐章模拟。 | 漂移字段与核算见 [叙事推进](narrative.md#章纲)。 |
+| 交付 | outline_ready 按实际卷纲覆盖交付；关闭卷纲时为 world_ready。 | world_view.html_path 指向统一 book.html，另交 world.json 的绝对路径；视图失败可 advance 重建。 |
 
 已有明确正文授权时，开书交付后按原话调用 run；没有授权时在 outline_ready/world_ready 停止，不把选完设定等同于写完整本。
 
@@ -150,6 +151,6 @@ board 哈希由主控从展示响应恢复，用户不需知道。选择绑定�
 
 ## 约定
 
-默认 opening_contract 随 world_model 起草，读取闭合选择和同轮候选世界；世界先通过 world_review，候选约定再进入独立 contract_review。单独下发的 opening_contract 读取其冻结的已核验世界。逐门 value 的字段保留（主角门存为 protagonist_setup，关系门映射到 relationships，机制允许范围由世界门给出）。选定承诺、基调、视角、体量、世界前提、主角、关系、推进、终局、母题、书名和文风不得改变；卷职责、名称和初始化细节由系统推导并独立核验。对齐字段从同一字段声明派生，不通过合并整份 value 覆盖其他门。
+默认 opening_contract 随 world_model 起草，读取闭合选择和同轮候选世界；候选世界与候选约定由引擎按同一套机械校验在提交时判定（字段、links 引用、与各门选择逐字一致），通过即原子激活，**没有独立核验阶段**。单独下发的 opening_contract 读取其冻结的已核验世界。逐门 value 的字段保留（主角门存为 protagonist_setup，关系门映射到 relationships，机制允许范围由世界门给出）。选定承诺、基调、视角、体量、世界前提、主角、关系、推进、终局、母题、书名和文风不得改变；卷职责、名称和初始化细节由系统推导，并在卷纲提交时与 `contract.volumes` 一一比对。对齐字段从同一字段声明派生，不通过合并整份 value 覆盖其他门。
 
-约定还须保留所选禁区（red_lines 是逐门所选禁区的超集），并在 entities 中保留所选主角，kind 为 person，id 与 name 与 protagonist_setup 一致，否则核验报 opening_alignment。result.template.json 由约定字段表派生，含全部对齐字段（含 title 与空 entities 骨架）；结构校验拒绝未知字段，因此模板不接受的字段不要提交。`tone`/`theme`/`pov` 自 opening/2 起由作者选定：模板里有这三个字段，逐门开书必须逐字保留；自备约定（`init --contract`）可以不带它们，此时项目按不带视角清单的版本核验，不会被追溯要求。书名自 opening/2 起也由作者在最后一门选定，约定工人不再代拟。
+约定还须保留所选禁区（red_lines 是逐门所选禁区的超集），并在 entities 中保留所选主角，kind 为 person，id 与 name 与 protagonist_setup 一致，否则核验报 opening_alignment。result.template.json 由约定字段表派生，含全部对齐字段（含 title 与空 entities 骨架）；结构校验拒绝未知字段，因此模板不接受的字段不要提交。`tone`/`theme`/`pov` 自 opening/2 起由作者选定：模板里有这三个字段，逐门开书必须逐字保留；自备约定（`init --contract`）可以不带它们，不追溯要求补选。书名自 opening/2 起也由作者在最后一门选定，约定工人不再代拟。

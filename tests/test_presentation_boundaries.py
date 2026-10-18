@@ -22,9 +22,10 @@ class MemoryReader:
     """No project path, connection, lifecycle operations, or storage-specific names."""
     def __init__(self):
         self.book = {'branch': 'main', 'status': 'running', 'contract': None,
-                     'state': {}, 'written_han': 0, 'designs': {}, 'plans': {},
-                     'profiles': {}, 'reviews': {}}
-        self.documents = {'prose': '夜班的灯亮着，沈桐再次核对箱子上的签字。'}
+                     'state': {}, 'written_han': 0, 'plans': {},
+                     'volumes_outline': {}, 'chapter_outlines': {}, 'design_drift': []}
+        self.documents = {'prose': '夜班的灯亮着，沈桐再次核对箱子上的签字。',
+                          'state': {'clock': 0, 'resources': {}, 'placements': {}, 'knowledge': {}, 'hooks': {}}}
         self.rows = []
 
     def load(self):
@@ -51,12 +52,11 @@ class PresentationBoundaryTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def task(self, blind=False):
+    def task(self):
         return {'id': 'opaque-task', 'input_hash': 'frozen-input', 'reviewer': None,
-                'first_read': None, 'first_read_hash': None,
                 'input': {'schema': 1, 'stage': 'write', 'chapter': 1, 'scope': 'chapter',
-                          'blind': blind, 'prose': [{'chapter': 1, 'hash': 'prose'}],
-                          'records': {}, 'required': [], 'payload': {}, 'obligations': []}}
+                          'prose': [{'chapter': 1, 'hash': 'prose'}],
+                          'records': {'state': 'state'}, 'required': [], 'payload': {}, 'obligations': []}}
 
     def test_view_and_task_files_need_only_reader_and_workspace(self):
         rendered = bookpage.render(self.repo)
@@ -76,20 +76,28 @@ class PresentationBoundaryTests(unittest.TestCase):
         self.presentation.task(self.task())
         self.assertEqual(json.loads(form.read_text(encoding='utf-8'))['data']['title'], 'Worker 已填写')
 
-    def test_blind_task_keeps_frozen_first_read_and_retires_formal_files(self):
+    def test_every_dispatch_is_formal_and_shows_the_baseline_it_reconciles_against(self):
+        """v2 has no blind first read: the drift_check is compared with the projected before-state.
+
+        The retired protocol materialized a separate first-read file and hid the baseline until the
+        reviewer had filed one. With the reviewer gone, the baseline is what the writer's
+        `actual.from` is checked against, so it must be in the same envelope the writer reads.
+        """
         formal = self.presentation.task(self.task())
+        self.assertEqual(formal['delivery_phase'], 'formal')
+        self.assertEqual(formal['baseline']['clock'], 0)
+        self.assertIn('source', formal['baseline'])
+        self.assertIn('input_path', formal)
+        self.assertTrue(formal['requires_new_worker'])
+        self.assertNotIn('first_read_path', formal)
+        self.assertNotIn('blind', formal)
+        identity = json.loads(Path(formal['identity_path']).read_text(encoding='utf-8'))
+        self.assertEqual(identity['delivery_phase'], 'formal')
+        self.assertNotIn('first_read', json.dumps(identity, ensure_ascii=False))
+        # The worker's half-filled form is never blanked by a later render of the same task.
         Path(formal['result_path']).write_text('Worker 已填写', encoding='utf-8')
-        view = self.presentation.task(self.task(blind=True), baseline={'secret': 'hidden'})
-        self.assertIsNone(view['baseline'])
-        self.assertNotIn('input_path', view)
-        self.assertFalse(Path(formal['template_path']).exists())
+        self.presentation.task(self.task())
         self.assertEqual(Path(formal['result_path']).read_text(encoding='utf-8'), 'Worker 已填写')
-        first_path = Path(view['first_read_path'])
-        first = json.loads(first_path.read_text(encoding='utf-8'))
-        first['session'] = 'reader-frozen'
-        first_path.write_text(json.dumps(first), encoding='utf-8')
-        self.presentation.task(self.task(blind=True))
-        self.assertEqual(json.loads(first_path.read_text(encoding='utf-8'))['session'], 'reader-frozen')
 
     def test_revision_file_contains_the_complete_frozen_plan(self):
         plan = {'plan_hash': 'abc123', 'blocked': True, 'changes': [{'kind': 'canon', 'key': 'rule'}],
@@ -123,7 +131,7 @@ class PresentationBoundaryTests(unittest.TestCase):
     def test_world_files_need_only_reader_and_workspace(self):
         model = {'selection_hash': 'frozen-selection', 'premise': '夜班仓库的退件纠纷。',
                  'story_capacity': '调查责任怎样沿经手关系传递。'}
-        self.repo.book.update(world=model, world_review={'verdict': 'pass'}, creation={'selections': []})
+        self.repo.book.update(world=model, creation={'selections': [{'gate': 'genre'}]})
         self.workspace.project.mkdir()
         external = self.root / 'external-world.txt'
         external.write_text('external world content', encoding='utf-8')
@@ -136,7 +144,8 @@ class PresentationBoundaryTests(unittest.TestCase):
         self.assertIn(model['premise'], Path(result['html_path']).read_text(encoding='utf-8'))
         data = json.loads(Path(result['json_path']).read_text(encoding='utf-8'))
         self.assertEqual(data['world'], model)
-        self.assertEqual(data['review'], {'verdict': 'pass'})
+        self.assertEqual(data['choices'], [{'gate': 'genre'}])
+        self.assertEqual(data['model_hash'], result['model_hash'])
 
     def test_publication_keeps_completed_content_frozen_without_storage_adapter(self):
         frozen = copy.deepcopy(self.repo.book)

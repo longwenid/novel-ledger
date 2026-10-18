@@ -11,23 +11,7 @@ from novel_ledger import context, facts, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error, Job, digest, dump
 from novel_ledger.sqlite_store import SQLiteRepository
-from test_narrative import tracked_contract
-from test_narrative import drive_tracked, tracked_response
-
-
-def append_history(repo, first, last, prose_han=0, entity='shen'):
-    """Populate source records only; these are deliberately not reviewed novel chapters."""
-    previous = repo.chapter('main', first - 1)['chain'] if first > 1 else 'genesis'
-    for n in range(first, last + 1):
-        prose = '工程第%d章：沈桐查出来源。' % n + '测' * prose_han
-        events = [{'op': 'knowledge', 'entity': entity, 'topic': 'source',
-                   'evidence': {'chapter': n, 'start': 0, 'quote': '工程第%d章' % n}}]
-        row = {'n': n, 'title': '工程夹具', 'prose': repo.document(prose), 'events': repo.document(events),
-               'plan': repo.document({}), 'review': repo.document({}), 'state_hash': digest({'fixture': n}),
-               'summary': '工程夹具：核查来源。', 'han': len(prose)}
-        row['chain'] = facts.chain(previous, row, digest(repo.load()['contract']))
-        repo.add_chapter('main', row)
-        previous = row['chain']
+from support import append_history, tracked_contract
 
 
 class HistoryTests(unittest.TestCase):
@@ -44,10 +28,8 @@ class HistoryTests(unittest.TestCase):
         with self.repo.transaction():
             append_history(self.repo, 1, count)
 
-    def task(self, blind=False):
-        work = context.build(self.repo, self.repo.load(), Job('write', 1))
-        work['blind'] = blind
-        return self.repo.add_task(work)
+    def task(self):
+        return self.repo.add_task(context.build(self.repo, self.repo.load(), Job('write', 1)))
 
     def assertCode(self, code, fn, *args, **kwargs):
         with self.assertRaises(Error) as caught:
@@ -167,12 +149,18 @@ class HistoryTests(unittest.TestCase):
         self.assertCode('recall', self.app.recall, task['id'], chapter=4)
         self.assertEqual(self.app.recall(task['id'], kind='node', key='missing')['matches'], [])
 
-    def test_first_read_blocks_new_and_legacy_supplemental_reads(self):
+    def test_supplemental_reads_are_open_from_the_start_without_a_first_read_seal(self):
+        """v2 has no blind first read, so recall and the index are readable on the first dispatch.
+
+        The retired protocol sealed every supplemental read until a frozen first read was filed; the
+        seal went with the reviewer stages, and what is left is that a frozen task may only read its
+        own frozen sources.
+        """
         self.populate(2)
-        task = self.task(blind=True)
-        self.assertCode('first_read_sealed', self.app.recall, task['id'], chapter=1)
-        self.assertCode('first_read_sealed', self.app.read, task['id'], record='historical_index')
-        self.assertCode('first_read_sealed', self.app.recall, task['id'], kind='entity', key='shen')
+        task = self.task()
+        self.assertEqual(self.app.recall(task['id'], chapter=1)['chapter'], 1)
+        self.assertIn('historical_index', self.app.read(task['id'], 'historical_index')['records'])
+        self.assertEqual([r['chapter'] for r in self.app.recall(task['id'], kind='entity', key='shen')['matches']], [2, 1])
 
     def test_old_frozen_catalog_and_event_index_remain_readable(self):
         self.populate(3)
@@ -208,21 +196,6 @@ class HistoryTests(unittest.TestCase):
         before = self.repo.usage()['supplemental_read_chars']
         self.assertCode('recall', self.app.recall, task['id'], chapter=3)
         self.assertEqual(self.repo.usage()['supplemental_read_chars'], before)
-
-    def test_hook_links_are_frozen_into_new_events_and_survive_audit(self):
-        self.repo.save(workflow.new_book(tracked_contract()))
-        drive_tracked(self.app, until='chapter_review')
-        result = tracked_response(self.app)
-        result['data']['facts']['events'].append({
-            'op': 'hook', 'id': 'remote', 'before': None, 'status': 'open', 'due': 100,
-            'text': '来源仍待查', 'subjects': ['shen'], 'topics': ['source'],
-            'evidence': {'chapter': 1, 'quote': '要求先核对退件人的名字再开箱'}})
-        self.app.submit(result)
-        hook = self.repo.load()['state']['hooks']['remote']
-        self.assertEqual(hook['subjects'], ['shen'])
-        events = self.repo.read_document(self.repo.chapter('main', 1)['events'])
-        self.assertEqual(next(e for e in events if e['op'] == 'hook')['hook_links_version'], 1)
-        self.assertTrue(self.app.audit()['ok'])
 
     def test_hook_topic_metadata_is_searchable_without_forcing_reader_knowledge(self):
         self.populate(1)

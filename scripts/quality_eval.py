@@ -11,10 +11,27 @@ import uuid
 from pathlib import Path
 from novel_ledger.contracts import Error, digest, dump, require, text as nonblank
 from novel_ledger.delivery import json_write as write_json
-from novel_ledger.quality import first_read
 
 CRITERIA=('knowledge','motivation','cost','causality','progress','payoff','language','pacing')
+# The frozen first read is this tool's own protocol now: v2 removed the reviewer stages, so the
+# validator lives here instead of in a review-receipt module. It still exists because a blind
+# offline evaluation is the one independent judgment left once reviewers are gone.
+FIRST_READ=('desire','obstacle','change','read_on_reason')
 ROOT=Path(__file__).resolve().parents[1]
+
+
+def first_read(data, sources):
+    """A frozen first read must cover every chapter with four concrete impressions each."""
+    require(isinstance(data, dict) and isinstance(data.get('reads'), list), 'first_read',
+            '首读需要 reads 数组。', {'expect': {'reads': [{'chapter': 'int', **{k: 'str' for k in FIRST_READ}}]}})
+    reads = data['reads']
+    require(len(reads) == len(sources)
+            and all(isinstance(row, dict) and type(row.get('chapter')) is int and row['chapter'] in sources for row in reads)
+            and {row['chapter'] for row in reads} == set(sources), 'first_read', '首读须完整覆盖全部冻结正文。',
+            {'expect_chapters': sorted(sources)})
+    for row in reads:
+        require(all(nonblank(row.get(k)) for k in FIRST_READ), 'first_read', '每章首读四项均须为具体非空体验。')
+    return data
 
 
 def load(path):return json.loads(Path(path).read_text(encoding='utf-8'))

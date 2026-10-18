@@ -3,6 +3,10 @@
 Documents are content addressed and rewritten on every commit, so an ever growing
 partition leaves one unreachable copy behind per save. This measures that garbage
 and the reclamation that removes it, using source records only.
+
+The chapter rows and the contract come from `support`, the shared fixture module: they were
+previously imported from two other test modules, so rewriting either one broke this file's
+collection before a single assertion ran.
 """
 import os
 import sys
@@ -11,11 +15,10 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / 'scripts')]
+sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book
-from test_history import append_history
-from test_narrative import tracked_contract
+from support import append_history, tracked_contract
 
 
 def db_bytes(repo):

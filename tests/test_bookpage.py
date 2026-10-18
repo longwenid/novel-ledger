@@ -44,7 +44,7 @@ class BookPageTests(unittest.TestCase):
     def test_render_covers_every_surface_and_is_self_contained(self):
         page = self.written()
         for marker in ('<!DOCTYPE html>', '看设定', '读正文', '概览', '创作约定', '夜班退件', '世界与选择',
-                       '设计与因果节点', '章计划', '人物档案', '事实账本', '章审记录', '账本核验',
+                       '卷纲与章纲', '章纲结算行', '事实账本', '漂移挂账', '账本核验',
                        '作品账本', 'ch-index', 'view-read', 'view-settings'):
             self.assertIn(marker, page, marker)
         # the committed prose must be readable, and single quotes in JS must not escape the script
@@ -69,8 +69,8 @@ class BookPageTests(unittest.TestCase):
         page = bookpage.render(self.repo)
         self.assertIn('创作约定', page)
         self.assertIn('尚无已提交章节', page)
-        self.assertIn('尚无设计', page)
-        self.assertIn('尚无章计划', page)
+        self.assertIn('尚无卷纲与章纲', page)
+        self.assertIn('尚无章纲结算行', page)
 
     def test_contract_page_omits_fields_a_contract_never_carried(self):
         """A contract written before a field existed must not render as a decision left blank."""
@@ -173,7 +173,7 @@ class BookPageTests(unittest.TestCase):
         }
         self.repo.save(book)
         page = bookpage.render(self.repo)
-        for title in ('写作进度', '分卷进度', '章节篇幅', '因果节点图', '章节推进'):
+        for title in ('写作进度', '分卷进度', '章节篇幅', '资源分布 · 车费'):
             self.assertIn(title, page)
         self.assertIn('0 元', page)
         self.assertIn('123.4500 件', page)

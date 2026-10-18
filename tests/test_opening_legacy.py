@@ -16,9 +16,8 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import creation, planning, world, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import OPENING_VERSION, RESULT, digest
-from novel_ledger.result_templates import template
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract
+from support import contract, drive
 
 
 VALUES = {
@@ -102,18 +101,6 @@ def combined(app, world=None):
     return {**model_data, 'contract': contract_data(app, model_data)}
 
 
-def review_data(app):
-    task = app.repo.pending()
-    work = task['input']
-    sources = app._sources(work)
-    data = template(work['stage'], work['chapter'], sources)
-    ref = {'chapter': 0, 'quote': next(iter(sources.values()))}
-    data['verdict'] = 'pass'
-    for row in data['checks']:
-        row.update(result='pass', reason='仅工程协议样本。', evidence=[ref])
-    return data
-
-
 class LegacyOpeningTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -145,15 +132,21 @@ class LegacyOpeningTests(unittest.TestCase):
             self.app.opening_choice(board['options'][0]['id'], board['hash'], '选它。')
 
     def world_ready(self):
+        """Answer the legacy gates, then let the five-step pipeline reach its design boundary.
+
+        v2 has no reviewer stages: the combined world receipt carries its contract and advance
+        activates it directly. The legacy half stays hand-built here — the contract under test must
+        come from the version-1 gates, not from a shared fixture — while the volume and chapter
+        outlines that follow are answered by the shared fixture. What the author is handed next is
+        the design boundary (`outline_ready`): outlines are the deliverable, no prose yet.
+        """
         self.select_gates()
         task = self.app.advance()['task']
         self.assertEqual(task['stage'], 'world_model')
         self.app.submit(receipt(self.app, combined(self.app)))
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
-        self.app.submit(receipt(self.app, review_data(self.app)))
-        self.assertEqual(self.app.advance()['task']['stage'], 'contract_review')
-        self.app.submit(receipt(self.app, review_data(self.app)))
-        return self.app.advance()
+        handoff = drive(self.app)
+        self.assertEqual(handoff['action'], 'outline_ready')
+        return handoff
 
     def test_the_legacy_gate_order_is_still_eight_gates_in_the_original_sequence(self):
         state = self.repo.load()['creation']
@@ -172,9 +165,9 @@ class LegacyOpeningTests(unittest.TestCase):
         self.assertEqual(result['next'], 'world_model')
         self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
 
-    def test_world_ready_end_to_end_under_the_legacy_alignment(self):
+    def test_outline_ready_end_to_end_under_the_legacy_gates(self):
         final = self.world_ready()
-        self.assertEqual(final['action'], 'world_ready')
+        self.assertEqual(final['action'], 'outline_ready')
         book = self.repo.load()
         self.assertEqual(len(book['creation']['selections']), 8)
         self.assertEqual(book['creation']['phase'], 'ready')
@@ -221,7 +214,7 @@ class LegacyOpeningTests(unittest.TestCase):
     def test_legacy_contract_survives_recontract_validation(self):
         """A project opened before tone/theme/pov existed must still validate its own contract."""
         final = self.world_ready()
-        self.assertEqual(final['action'], 'world_ready')
+        self.assertEqual(final['action'], 'outline_ready')
         state = self.repo.load()['creation']
         checked = planning.validate_contract(copy.deepcopy(self.repo.load()['contract']))
         creation.validate_contract(checked, state, self.repo.load()['world'])

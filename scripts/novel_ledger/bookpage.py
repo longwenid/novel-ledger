@@ -1,10 +1,14 @@
 """Derived single-file book view: one static HTML page over the whole project.
 
 Two modes share one file: 看设定 renders every canon-level surface as cards (contract,
-opening choices, world model, designs, rolling plans, profiles, ledger state, review
-records, audit), 读正文 is a reader for the committed prose. Structured cards come first
-and raw JSON is kept only as a collapsed fallback. No server, no external assets, no
-writes to the project: the database stays the single source of truth.
+opening choices, world model, volume outlines, chapter outlines, the drift ledger, ledger state,
+audit), 读正文 is a reader for the committed prose. Structured cards come first and raw JSON is
+kept only as a collapsed fallback. No server, no external assets, no writes to the project: the
+database stays the single source of truth.
+
+v2 has no review records to show: the design surfaces are the volume outline, the chapter outlines
+with their drift fields and enter/exit chain, and the deviations the engine booked while reconciling
+a writer's `drift_check`.
 """
 from __future__ import annotations
 
@@ -35,7 +39,8 @@ FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '
                 'planning_window': '规划窗口', 'review_interval': '复审间隔',
                 'review_chunk': '复审块大小', 'initial_facts': '初始事实', 'places': '初始地点',
                 'placements': '初始站位', 'arcs': '人物弧', 'editorial_features': '编辑能力',
-                'scope_append_limit': '单轮补写章数上限', 'volume_outline': '逐章卷纲要求', 'anchors': '稳定设定', 'links': '空间连接'}
+                'scope_append_limit': '单轮补写章数上限', 'volume_outline': '卷纲要求',
+                'chapter_outline': '章纲要求', 'anchors': '稳定设定', 'links': '空间连接'}
 # Option values that are engine bookkeeping rather than an author-facing decision: the structural gate's
 # tier id and its arithmetic window are already stated in the option's own sentence.
 OPENING_VALUE_HIDDEN = ('tier', 'chapter_window')
@@ -55,29 +60,28 @@ SUB_LABELS.update(environment='环境', resources='资源', access='通行条件
                   scarcity='稀缺', institution='制度', norm='习惯', enforcement='执行方式', practice='日常行为',
                   constraint='约束', story_use='故事作用', role='身份与作用', truth='隐秘内容', disclosure='披露安排',
                   causal_role='因果作用', cost='代价', failure_condition='失效条件')
-NODE_LABELS = {'id': '节点', 'line': '线索', 'cause': '起因', 'choice': '选择', 'cost': '代价',
-               'outcome': '结果', 'disclosure': '披露安排', 'depends_on': '依赖'}
-PLAN_LABELS = {'goal': '目标', 'obstacle': '阻碍', 'choice': '选择', 'cost': '代价', 'change': '变化',
-               'ending': '章末', 'node_ids': '设计节点', 'participants': '参与人', 'world_refs': '世界引用',
-               'obligations': '承接义务', 'schedule': '硬日程', 'new_entities': '新人物', 'scenes': '场景安排', 'expansion_units': '展开依据'}
+# v2 design surfaces: the volume outline's own fields, the chapter outline's drift fields, and the
+# sentence-shaped fields that carry the state chain.
+SUB_LABELS.update(arc='卷内弧线', turns='卷内转折', climax='卷末高潮', exit_state='卷末必须达到的状态',
+                  synopsis='本章推进', beat='情节变化', outcome='结果', after='之后', node='节点', thread='线路',
+                  enter='入场状态', exit='出场状态', expected='期望值', from_='起点', to='终点', reason='理由',
+                  continues='跨卷延续', window='窗口区间', ending_condition='兑现条件', required='必需',
+                  who='知情者', topic='话题', entity='实体', choice='选择', stance='立场',
+                  desire='欲望', relationship_focus='关系焦点', kind='类型', key='键', planned='计划',
+                  actual='实际', status='比对结果', evidence='正文依据', quote='原文片段',
+                  disclosures='读者认知推进', world_refs='世界引用', new_entities='新登场',
+                  hook_refs='承接承诺', reader_refs='读者关联', history_refs='历史关联', events='事件')
+SUB_LABELS['from'] = '起点'
+DRIFT_LABELS = {'kind': '类型', 'key': '坐标', 'planned': '章纲计划', 'actual': '正文实际',
+                'status': '比对结果', 'reason': '说明', 'evidence': '正文依据'}
+DRIFT_STATUS_LABELS = {'kept': '已兑现', 'deviated': '有偏差', 'skipped': '未发生',
+                       'clean': '无偏差', 'open': '未处理'}
 HOOK_LABELS = {'open': '待兑现', 'paid': '已兑现', 'closed': '已关闭'}
 STANCE_LABELS = {'knows': '确知', 'believes': '相信', 'suspects': '怀疑', 'disproved': '已推翻'}
-CHECK_LABELS = {'coverage': '覆盖', 'continuity': '连续性', 'resources': '资源', 'knowledge': '知情',
-                'time': '时间', 'world_rules': '世界规则', 'space': '空间', 'read_on': '追读',
-                'character': '人物', 'change': '变化', 'emotion_cost': '情绪代价', 'language': '语言',
-                'repetition': '重复', 'substance': '有效展开', 'causality': '因果', 'character_arcs': '人物弧线',
-                'payoffs': '兑现', 'pacing': '节奏'}
-CHECK_LABELS.update(character_consistency='人物依据', stable_facts='稳定事实', dialogue_identity='对白辨识度',
-                    voice_match='文风连续性', voice_evolution='声线成长', revision_intent='修订目标', narrative='叙事实现',
-                    disclosure='披露边界', bridges='跨段承接', threads='线路职责')
-CHECK_LABELS.update(choice_alignment='选择一致性', rule_consistency='规则一致性', spatial_connections='空间连接',
-                    historical_causes='历史因果', faction_interests='势力利益', economic_consequences='经济后果',
-                    social_pressure='社会压力', character_boundaries='人物边界', story_capacity='长篇承载')
-VERDICT_LABELS = {'pass': '通过', 'fix': '待修'}
 STATUS_LABELS = {'preparing': '开书准备', 'running': '进行中', 'paused': '已暂停', 'completed': '已完本'}
-SECTIONS = (('overview', '概览'), ('contract', '创作约定'), ('world', '世界与选择'), ('design', '设计与节点'),
-            ('plans', '章计划'), ('profiles', '人物档案'), ('understanding', '作品理解'), ('ledger', '事实账本'), ('reviews', '章审记录'),
-            ('audit', '账本核验'))
+SECTIONS = (('overview', '概览'), ('contract', '创作约定'), ('world', '世界与选择'),
+            ('outline', '卷纲与章纲'), ('plans', '章纲结算行'), ('understanding', '作品理解'),
+            ('ledger', '事实账本'), ('drift', '漂移挂账'), ('audit', '账本核验'))
 
 
 
@@ -219,15 +223,22 @@ def _overview(book, contract, rows, state, open_hooks, report, written):
     if contract:
         band = contract['word_range']
         pieces.append(_bars('写作进度', [('目标下限', written, band[0], format(written, ',') + ' / ' + format(band[0], ','))],
-                            '字数达到下限后，仍需完成终局与独立核验。'))
+                            '字数达到下限后，仍需完成卷末闭合与全书终局。'))
         pieces.append(_bars('分卷进度', [(v['id'], sum(v['first'] <= row['n'] <= v['end'] for row in rows), v['end']-v['first']+1,
                                          str(sum(v['first'] <= row['n'] <= v['end'] for row in rows)) + ' / ' + str(v['end']-v['first']+1) + ' 章')
                                         for v in contract['volumes']]))
-        if contract.get('volume_outline'):
-            pieces.append(_bars('卷纲设计进度', [(v['id'], len(book.get('designs', {}).get('volume:' + v['id'], {}).get('chapters', [])),
-                                                v['end']-v['first']+1,
-                                                str(len(book.get('designs', {}).get('volume:' + v['id'], {}).get('chapters', []))) + ' / ' + str(v['end']-v['first']+1) + ' 章')
-                                               for v in contract['volumes']], '只统计已通过独立核验的逐章卷纲。'))
+        if contract.get('volume_outline') or contract.get('chapter_outline'):
+            # The design progress bar counts chapter outline rows, not reviews: v2 has no review
+            # gate, so what can be missing is the row itself.
+            outlines = book.get('chapter_outlines') or {}
+            pieces.append(_bars('章纲进度', [(v['id'], len([r for r in outlines.get(v['id'], [])
+                                                           if v['first'] <= r.get('chapter', 0) <= v['end']]),
+                                            v['end']-v['first']+1,
+                                            str(len([r for r in outlines.get(v['id'], [])
+                                                     if v['first'] <= r.get('chapter', 0) <= v['end']]))
+                                            + ' / ' + str(v['end']-v['first']+1) + ' 章')
+                                           for v in contract['volumes']],
+                              '统计已交付的章纲行；卷纲本身见「卷纲与章纲」区。'))
         if rows:
             maximum = max(row['han'] for row in rows) or 1
             pieces.append('<figure class="chart"><figcaption>章节篇幅</figcaption><div class="sub">柱高表示实际汉字数，点击阅读对应章节。</div><div class="chapter-bars">'
@@ -294,7 +305,7 @@ def _world(book):
                           + '</div>')
     model = book.get('world')
     if not model:
-        pieces.append('<p class="note">世界模型尚未经独立核验通过。</p>')
+        pieces.append('<p class="note">世界模型尚未生成。')
         return ''.join(pieces)
     pieces.append('<h3>世界模型</h3><div class="card"><table class="t">'
                   '<tr><th>前提</th><td>' + _esc(model['premise']) + '</td></tr>'
@@ -326,87 +337,144 @@ def _world(book):
                 '<tr><th>' + _esc(SUB_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
                 for k, v in record.items() if k not in ('id', 'links')) + '</table>'
                 + ('<p class="note">关联：' + ''.join('<a class="pill" href="#' + _anchor('world', ref) + '">' + _esc(ref) + '</a>' for ref in links) + '</p>' if links else '') + '</div>')
-    review = book.get('world_review')
-    if review:
-        receipt = review.get('receipt', review)
-        pieces.append('<details><summary>世界独立核验 · ' + _esc(VERDICT_LABELS.get(receipt.get('verdict'), receipt.get('verdict', ''))) + '</summary>')
-        for check in receipt.get('checks', []):
-            pieces.append('<p><span class="pill ' + ('ok' if check['result'] == 'pass' else 'bad') + '">' + _esc(VERDICT_LABELS.get(check['result'], check['result']))
-                          + '</span>' + _esc(CHECK_LABELS.get(check['id'], check['id'])) + ' · ' + _esc(check['reason']) + '</p>')
-        pieces.append(_raw(review) + '</details>')
     return ''.join(pieces)
 
 
-def _designs(book):
-    pieces = ['<h2 id="design">设计与因果节点</h2>']
-    designs = book.get('designs') or {}
-    if not designs:
-        return ''.join(pieces) + _empty('设计')
-    nodes = [dict(id=n['id'], label=n.get('outcome') or n.get('cause') or n['id'], group=n['id'] + ' · ' + n.get('line', ''),
-                  target=_anchor('design', n['id']), detail=n['id'] + ' · ' + n.get('cause', '') + ' → ' + n.get('outcome', ''))
-             for d in designs.values() for n in d.get('nodes', [])]
-    edges = [(dep, n['id'], '因果前置', True) for d in designs.values() for n in d.get('nodes', []) for dep in n.get('depends_on', [])]
-    pieces.append(_graph('因果节点图', nodes, edges, '箭头从因果前置指向后续节点。设计安排与正文实际实现分别展示。'))
-    for scope, design in designs.items():
-        pieces.append('<h3>' + _esc('全书' if scope == 'book' else scope) + '</h3><div class="card"><table class="t">'
-                      '<tr><th>意图</th><td>' + _esc(design.get('intent', '')) + '</td></tr>'
-                      '<tr><th>终局条件</th><td>' + _esc(design.get('ending_conditions', '')) + '</td></tr></table></div>')
-        if design.get('brainstorm'):
-            pieces.append('<details><summary>卷纲脑暴与选案</summary><table class="t">')
-            for option in design['brainstorm']:
-                pieces.append('<tr><th>' + _esc(option['id']) + (' · 已选' if option['id'] == design['selected'] else '')
-                              + '</th><td>' + _esc(option['premise']) + '<p class="note">取舍：' + _esc(option['tradeoff'])
-                              + '</p></td></tr>')
-            pieces.append('</table><p>选案理由：' + _esc(design['selection_reason']) + '</p></details>')
-        if design.get('chapters'):
-            pieces.append('<h3>逐章卷纲 · ' + _esc(scope) + '</h3><ol class="timeline">')
-            for entry in design['chapters']:
-                pieces.append('<li><details id="' + _anchor('outline', entry['chapter']) + '"><summary>第' + str(entry['chapter'])
-                              + '章 · ' + str(han_count(entry['synopsis'])) + ' 字 · ' + _esc(_short(entry['synopsis'], 32))
-                              + '</summary><p style="white-space:pre-wrap">' + _esc(entry['synopsis']) + '</p><p class="note">世界依据：'
-                              + ''.join('<a class="pill" href="#' + _anchor('world', ref) + '">' + _esc(ref) + '</a>' for ref in entry['world_refs'])
-                              + '</p><p class="note">因果节点：' + _pills(entry['node_ids']) + '</p></details></li>')
-            pieces.append('</ol>')
-        for node in design.get('nodes', []):
-            pieces.append('<details class="node-detail" id="' + _anchor('design', node['id']) + '"><summary><span class="pill">' + _esc(node.get('id', '')) + '</span>'
-                          + _esc(node.get('line', '')) + ' · ' + _esc(_short(node.get('cause', ''))) + '</summary><table class="t">'
-                          + ''.join('<tr><th>' + _esc(NODE_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
-                                    for k, v in node.items() if k not in ('id', 'line')) + '</table></details>')
+def _delta_block(title, rows, empty_note):
+    """One drift group of a chapter row. An empty array is a declaration, so it is shown as one."""
+    if not rows:
+        return '<p class="note">' + _esc(title) + '：' + _esc(empty_note) + '</p>'
+    return ('<p class="note">' + _esc(title) + '</p><ul class="tight">'
+            + ''.join('<li>' + _display(row) + '</li>' for row in rows) + '</ul>')
+
+
+def _chain(rows):
+    """The enter/exit state chain, one pill per coordinate."""
+    if not rows:
+        return '<span class="note">（空）</span>'
+    return ''.join('<span class="pill">' + _esc('%s:%s=%s' % (row.get('kind', ''), row.get('key', ''),
+                                                      _short(row.get('expected'), 24)))
+                   + '</span>' for row in rows)
+
+
+def _chapter_card(row):
+    number = row.get('chapter', '?')
+    plot = row.get('plot') or {}
+    pieces = ['<li><details id="' + _anchor('outline', number) + '"><summary>第' + str(number)
+              + '章 · ' + str(han_count(row.get('synopsis', ''))) + ' 字 · '
+              + _esc(_short(row.get('synopsis', ''), 32)) + '</summary>',
+              '<p class="note">情节变化：' + _esc(plot.get('beat', '')) + '</p>',
+              '<p style="white-space:pre-wrap">' + _esc(row.get('synopsis', '')) + '</p>',
+              _delta_block('节点推进（plot.nodes）', plot.get('nodes'), '本章不推进已登记节点。'),
+              _delta_block('线路状态（plot.threads）', plot.get('threads'), '本章线路状态不变。')]
+    for field, title, note in (('resources', '资源增量', '本章无资源变化。'),
+                               ('places', '位置增量', '本章无位置变化。'),
+                               ('knowledge', '知情增量', '本章无知情变化。'),
+                               ('characters', '人物增量', '本章无人物变化。')):
+        pieces.append(_delta_block(title, row.get(field), note))
+    clock = row.get('clock') or {}
+    pieces.append('<p class="note">时钟：本章推进 ' + _esc(clock.get('advance_days', '—')) + ' 天</p>')
+    pieces.append('<table class="t"><tr><th>入场状态 enter</th><td>' + _chain(row.get('enter')) + '</td></tr>'
+                  '<tr><th>出场状态 exit</th><td>' + _chain(row.get('exit')) + '</td></tr>'
+                  '<tr><th>读者认知推进</th><td>' + _display(row.get('disclosures') or []) + '</td></tr>'
+                  '<tr><th>世界引用</th><td>' + ''.join('<a class="pill" href="#' + _anchor('world', ref)
+                                                        + '">' + _esc(ref) + '</a>' for ref in row.get('world_refs') or [])
+                  + '</td></tr>'
+                  '<tr><th>新登场</th><td>' + _display(row.get('new_entities') or []) + '</td></tr>'
+                  '<tr><th>承接资料</th><td>' + _display({'hook_refs': row.get('hook_refs') or [],
+                                                          'reader_refs': row.get('reader_refs') or [],
+                                                          'history_refs': row.get('history_refs') or []}) + '</td></tr>'
+                  '</table>')
+    pieces.append(_raw(row) + '</details></li>')
+    return ''.join(pieces)
+
+
+def _outlines(book):
+    """The design surface v2 actually has: volume outlines plus their chapter outlines.
+
+    No review records and no brainstorm/selection: what a volume owes is its arc, its node and
+    thread register, its resource/place/knowledge trends and the state its end must reach; what a
+    chapter owes is its synopsis, its four delta groups, and the enter/exit chain the state
+    simulation replays.
+    """
+    pieces = ['<h2 id="outline">卷纲与章纲</h2><div class="sub">设计期声明：卷纲每卷约千字，'
+              '章纲逐章声明增量与 enter/exit 链；这两份声明就是执笔自比与引擎核算的依据</div>']
+    volumes = book.get('volumes_outline') or {}
+    outlines = book.get('chapter_outlines') or {}
+    if not volumes and not outlines:
+        return ''.join(pieces) + _empty('卷纲与章纲')
+    for vid, row in volumes.items():
+        pieces.append('<h3>卷纲 · ' + _esc(vid) + '</h3><div class="card"><table class="t">'
+                      '<tr><th>卷职责</th><td>' + _esc(row.get('purpose', '')) + '</td></tr>'
+                      '<tr><th>卷内弧线</th><td style="white-space:pre-wrap">' + _esc(row.get('arc', '')) + '</td></tr>'
+                      '<tr><th>卷末高潮</th><td>' + _esc(row.get('climax', '')) + '</td></tr>'
+                      '<tr><th>卷末必须达到的状态</th><td style="white-space:pre-wrap">' + _esc(row.get('exit_state', '')) + '</td></tr>'
+                      '<tr><th>时钟</th><td>本卷推进 ' + _esc((row.get('clock') or {}).get('advance_days', '—')) + ' 天</td></tr>'
+                      '</table></div>')
+        if row.get('turns'):
+            pieces.append(_timeline('卷内转折', [(str(turn.get('at', '')), turn.get('turn', ''), '', '')
+                                                for turn in row['turns']]))
+        for field, title in (('nodes', '本卷节点'), ('threads', '本卷线路')):
+            rows = row.get(field) or []
+            pieces.append('<h4>' + _esc(title) + ' <span class="pill dim">' + str(len(rows)) + ' 条</span></h4>')
+            if rows:
+                pieces.append('<ul class="tight">' + ''.join(
+                    '<li>' + _display({k: v for k, v in item.items() if k != 'id'})
+                    + '　<span class="pill">' + _esc(item.get('id', '')) + '</span></li>' for item in rows) + '</ul>')
+            else:
+                pieces.append('<p class="note">本卷不新建。</p>')
+        for field, title in (('resources', '资源大势'), ('places', '人物位置走向'),
+                             ('knowledge', '知情走向'), ('characters', '人物弧走向')):
+            pieces.append(_delta_block(title, row.get(field), '本卷无此类变化。'))
+    for vid, rows in outlines.items():
+        ordered = sorted(rows, key=lambda item: item.get('chapter', 0))
+        pieces.append('<h3>章纲 · ' + _esc(vid) + ' <span class="pill dim">' + str(len(ordered)) + ' 章</span></h3>')
+        pieces.append(_timeline('章纲推进', [('第' + str(r.get('chapter', '?')) + '章',
+                                             _short(r.get('synopsis', ''), 40),
+                                             (r.get('plot') or {}).get('beat', ''),
+                                             '推进天数：' + str((r.get('clock') or {}).get('advance_days', '—')))
+                                            for r in ordered]))
+        pieces.append('<ol class="timeline">' + ''.join(_chapter_card(r) for r in ordered) + '</ol>')
     return ''.join(pieces)
 
 
 def _plans(book, contract):
-    pieces = ['<h2 id="plans">章计划</h2>']
+    """The materialized settlement rows the engine reconciles a draft against."""
+    pieces = ['<h2 id="plans">章纲结算行</h2><div class="sub">由章纲物化、写入时作为结算契约的行；'
+              '执笔的 drift_check 就是逐条与它对账</div>']
     plans = book.get('plans') or {}
     if not plans:
-        return ''.join(pieces) + _empty('章计划')
+        return ''.join(pieces) + _empty('章纲结算行')
     numbers = sorted(int(n) for n in plans)
-    pieces.append('<p class="note">已冻结 ' + str(len(numbers)) + ' 章计划：第 ' + str(numbers[0]) + ' ~ '
-                  + str(numbers[-1]) + ' 章（滚动窗口，未写部分可重规划）</p>')
-    pieces.append(_timeline('章节推进', [('第' + str(n) + '章', plans[str(n)].get('goal', ''),
-                                        plans[str(n)].get('change', ''), '章末：' + plans[str(n)].get('ending', '')) for n in numbers]))
+    pieces.append('<p class="note">已物化 ' + str(len(numbers)) + ' 章：第 ' + str(numbers[0]) + ' ~ '
+                  + str(numbers[-1]) + ' 章</p>')
     for number in numbers:
         plan = plans[str(number)]
         volume = volume_for(contract, number) if contract else None
         head = '<span class="pill">第' + str(number) + '章</span>'
         if volume:
             head += '<span class="pill dim">' + _esc(volume['id']) + '</span>'
-        pieces.append('<details><summary>' + head + _esc(_short(plan.get('goal', ''))) + '</summary><table class="t">'
-                      + ''.join('<tr><th>' + _esc(PLAN_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
+        pieces.append('<details><summary>' + head + _esc(_short(plan.get('synopsis', ''), 32)) + '</summary><table class="t">'
+                      + ''.join('<tr><th>' + _esc(SUB_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
                                 for k, v in plan.items() if k != 'chapter') + '</table></details>')
     return ''.join(pieces)
 
 
-def _profiles(book):
-    pieces = ['<h2 id="profiles">人物档案</h2>']
-    profiles = book.get('profiles') or {}
-    if not profiles:
-        return ''.join(pieces) + _empty('人物档案')
-    for profile in profiles.values():
-        pieces.append('<div class="card"><b>' + _esc(profile.get('entity', '')) + '</b><table class="t">' + ''.join(
-            '<tr><th>' + _esc(SUB_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
-            for k, v in profile.items() if k not in ('entity', 'growth_basis')) + '</table></div>')
-    return ''.join(pieces)
+def _design_drift(book):
+    """Deviations the engine booked while reconciling a writer's drift_check."""
+    pieces = ['<h2 id="drift">漂移挂账</h2><div class="sub">执笔自比与引擎核算记下的偏差：'
+              '本章照常入库，但后章章纲重排必须吸收它们</div>']
+    rows = book.get('design_drift') or []
+    if not rows:
+        return ''.join(pieces) + _empty('漂移记录')
+    for row in rows:
+        status = row.get('status') if isinstance(row, dict) else None
+        pieces.append('<div class="card"><b>' + _esc(str(row.get('kind', '')) + ' · ' + str(row.get('key', '')))
+                      + '</b><span class="pill ' + ('ok' if status == 'kept' else 'bad') + '">'
+                      + _esc(DRIFT_STATUS_LABELS.get(status, status or '')) + '</span><table class="t">'
+                      + ''.join('<tr><th>' + _esc(DRIFT_LABELS.get(k, SUB_LABELS.get(k, k))) + '</th><td>' + _display(v) + '</td></tr>'
+                                for k, v in row.items() if k not in ('kind', 'key', 'status')) + '</table></div>')
+    return ''.join(pieces) + _raw(rows)
 
 
 def _understanding(book):
@@ -521,67 +589,6 @@ def _ledger(state):
     return ''.join(pieces) + _raw({'clock': state.get('clock'), 'clock_threads': state.get('clock_threads')})
 
 
-def _reviews(rows, repo):
-    pieces = ['<h2 id="reviews">章审记录</h2><div class="sub">事实与阅读两类独立核验；审稿者与执笔者不同人</div>']
-    if not rows:
-        return ''.join(pieces) + _empty('章审记录')
-    for row in rows:
-        review = repo.read_document(row['review'])
-        facts = review.get('facts') or {}
-        reader = review.get('reader') or {}
-        pieces.append('<details><summary><span class="pill">第' + str(row['n']) + '章</span>'
-                      + '<span class="pill ' + ('ok' if facts.get('verdict') == 'pass' else 'bad') + '">事实 '
-                      + _esc(VERDICT_LABELS.get(facts.get('verdict'), facts.get('verdict') or '')) + '</span>'
-                      + '<span class="pill ' + ('ok' if reader.get('verdict') == 'pass' else 'bad') + '">阅读 '
-                      + _esc(VERDICT_LABELS.get(reader.get('verdict'), reader.get('verdict') or '')) + '</span></summary>'
-                      '<table class="t"><tr><th>事实摘要</th><td>' + _esc(facts.get('summary', '')) + '</td></tr>'
-                      '<tr><th>时间推进</th><td>' + _esc(facts.get('elapsed_days', '')) + ' 天</td></tr>'
-                      '<tr><th>结算事件</th><td>' + str(len(facts.get('events') or [])) + ' 条</td></tr></table>')
-        for label, receipt in (('事实', facts), ('阅读', reader)):
-            for check in receipt.get('checks') or []:
-                pieces.append('<p class="note">' + label + ' · ' + _esc(CHECK_LABELS.get(check.get('id'), check.get('id', '')))
-                              + '：<span class="pill ' + ('ok' if check.get('result') == 'pass' else 'bad') + '">'
-                              + _esc(VERDICT_LABELS.get(check.get('result'), check.get('result') or '')) + '</span>'
-                              + _esc(check.get('reason', '')) + '</p>')
-            for finding in receipt.get('findings') or []:
-                pieces.append('<p class="note">发现（' + _esc(finding.get('severity', '')) + '）：'
-                              + _esc(finding.get('reason', '')) + '</p>')
-        for index, reading in enumerate(review.get('revision_readings', []), 1):
-            pieces.append(_revision_reading(reading, index))
-        pieces.append('</details>')
-    return ''.join(pieces)
-
-
-def _review_evidence(refs):
-    return ''.join('<p class="note">原文依据 · 第' + _esc(ref.get('chapter', ''))
-                   + '章</p><blockquote>' + _esc(ref.get('quote', '')) + '</blockquote>' for ref in refs)
-
-
-def _revision_reading(reading, index):
-    receipt = reading['receipt']
-    pieces = ['<details><summary>修订独立重读 · 第' + str(index) + '次 · '
-              + _esc(VERDICT_LABELS.get(receipt.get('verdict'), receipt.get('verdict', ''))) + '</summary>',
-              '<p class="note" style="overflow-wrap:anywhere">正文版本：' + _esc(reading['prose_hash'])
-              + '<br>审稿会话：' + _esc(reading['reviewer']) + '<br>核验清单版本：'
-              + _esc(receipt.get('checks_version', 1)) + '</p>', '<h3>冻结首读</h3>']
-    labels = {'desire': '期待', 'obstacle': '阻碍', 'change': '变化', 'read_on_reason': '追读理由'}
-    for first in reading['first_read']['reads']:
-        pieces.append('<div class="card"><b>第' + _esc(first['chapter']) + '章</b><table class="t">'
-                      + ''.join('<tr><th>' + label + '</th><td>' + _esc(first[key]) + '</td></tr>'
-                                for key, label in labels.items()) + '</table></div>')
-    for check in receipt.get('checks', []):
-        pieces.append('<p><b>' + _esc(CHECK_LABELS.get(check['id'], check['id'])) + '</b> · '
-                      + _esc(VERDICT_LABELS.get(check['result'], check['result'])) + ' · '
-                      + _esc(check['reason']) + '</p>' + _review_evidence(check.get('evidence', [])))
-    for finding in receipt.get('findings', []):
-        evidence = finding.get('evidence', [])
-        pieces.append('<p>发现（' + _esc(finding.get('severity', '')) + '）：'
-                      + _esc(finding['reason']) + '</p>'
-                      + _review_evidence(evidence if isinstance(evidence, list) else [evidence]))
-    pieces.append(_raw(reading) + '</details>')
-    return ''.join(pieces)
-
-
 def _audit(book, report):
     pieces = ['<h2 id="audit">账本核验</h2><div class="sub">promote 与 complete 会复查同一组条件</div>'
               '<div class="card"><table class="t">'
@@ -683,8 +690,8 @@ def render(repo: PublicationReader):
     settings = ''.join((
         _overview(book, contract, rows, state, open_hooks, report, written),
         _contract(contract) if contract else '<h2 id="contract">创作约定</h2>' + _empty('生效约定'),
-        _world(book), _designs(book), _plans(book, contract), _profiles(book), _understanding(book),
-        _ledger(state), _reviews(rows, repo), _audit(book, report)))
+        _world(book), _outlines(book), _plans(book, contract), _understanding(book),
+        _ledger(state), _design_drift(book), _audit(book, report)))
     templates = Path(__file__).with_name('templates')
     shell = Template((templates / 'book.html').read_text(encoding='utf-8'))
     return shell.substitute(

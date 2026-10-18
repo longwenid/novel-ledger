@@ -1,13 +1,19 @@
-"""Author constraints, rolling plans and profiles. All functions are pure."""
+"""Author constraints, the live contract, and the outline entry points. All functions are pure.
+
+v2 removed the plan/profile stages: the contract still declares the author's decisions, but the
+design that used to be validated here (book plan, volume plan, rolling chapter plans, character
+profiles) is now a volume outline plus a chain of chapter outlines. Those carry the drift
+declarations, so the mechanical checking lives in `drift` and this module owns the policy each
+batch is dispatched under and delegates the validation.
+"""
 from __future__ import annotations
 
 import copy
 import math
 from . import contracts
 from .contracts import (CONTRACT_FIELDS, DEFAULT_NAME_CHARS, DEFAULT_TERMS,
-                        POLICY_FIELDS, contract_errors, contract_skeleton, digest, han_count, require, text)
-from .entities import register as register_entity
-from . import narrative, craft
+                        POLICY_FIELDS, contract_errors, contract_skeleton, digest, require, text)
+from . import craft, drift, story_memory
 
 
 def resolve_policy(policy):
@@ -59,20 +65,29 @@ def enforce(policy, stage, data):
     """Enforce the rules declared for this stage, and nothing else.
 
     contracts.ENFORCEMENT is the single declaration of coverage: the same table drives this loop
-    and the `policy` block handed to the worker, so declared and enforced scope cannot drift.
+    and the `policy` block handed to the worker, so declared and enforced scope cannot drift. A
+    stage the table does not list is a stage with nothing to enforce, which is how the deleted
+    review stages stay deleted without a branch here.
     """
     scope = contracts.ENFORCEMENT.get(stage)
     if not scope:
         return
     resolved = resolve_policy(policy)
+    terms_scope = scope.get('terms', ())
+    names_scope = scope.get('names', ())
     hits = {}
     for path, value in _walk(data):
-        field = path.rsplit('.', 1)[-1] if path else ''
-        if field in scope.get('terms', ()) or path.split('.')[0] in scope.get('terms', ()):
+        segments = path.split('.') if path else []
+        field = segments[-1] if segments else ''
+        # A declared field matches either the leaf itself (`characters.name`) or any segment of the
+        # path: a chapter's inline `new_entities` rows carry their names one level down, and a
+        # top-level comparison there would have let an author's name ban be bypassed by moving the
+        # character into the chapter that introduces it.
+        if field in terms_scope or segments[:1] and segments[0] in terms_scope:
             found = [w for w in resolved['forbidden_terms'] if w in value]
             if found:
                 hits.setdefault('forbidden_terms', []).append({'field': path, 'found': found})
-        if field in scope.get('names', ()):
+        if field in names_scope or any(part in names_scope for part in segments):
             found = [w for w in resolved['forbidden_name_chars'] if w in value]
             if found:
                 hits.setdefault('forbidden_name_chars', []).append({'field': path, 'found': found})
@@ -122,11 +137,15 @@ def check_contract_names(contract, policy):
             check_text(name, policy, names=True)
 
 
-def validate_plan_names(plan, policy):
-    """New entities declared by a chapter plan are names too, so the project policy applies."""
-    for item in plan.get('new_entities', []):
-        for name in [item.get('name', '')] + list(item.get('aliases', [])):
-            check_text(name, policy, names=True)
+def _map_policy(contract, key, scopes):
+    """The shape check for a `{scope,words,tolerance}` policy field, present or not."""
+    policy = contract.get(key)
+    if policy is None:
+        return
+    require(not policy or set(policy) == {'scope', 'words', 'tolerance'} and policy.get('scope') in scopes
+            and type(policy.get('words')) is int and policy['words'] > 0
+            and type(policy.get('tolerance')) is int and 0 <= policy['tolerance'] < policy['words'],
+            key, key + ' 为 {} 或 {scope:' + '|'.join(scopes) + ',words:正整数,tolerance:非负整数且小于 words}。')
 
 
 def validate_contract(raw):
@@ -142,20 +161,25 @@ def validate_contract(raw):
     require(not complaints, 'contract', '约定结构不成立：' + '；'.join(complaints[:6]))
     contract.setdefault('chapter_aim', min(contract['chapter_max'], max(contract['chapter_min'], 3500)))
     require(all(type(contract[k]) is int and contract[k] > 0
-                for k in ('chapter_min', 'chapter_max', 'chapter_aim', 'planning_window', 'review_interval', 'review_chunk')),
-            'contract', '篇幅、窗口和复审间隔须为正整数。')
+                for k in ('chapter_min', 'chapter_max', 'chapter_aim', 'review_interval', 'review_chunk')),
+            'contract', '篇幅与复审间隔须为正整数。')
+    # `planning_window` is a legacy field: v2 never plans a window, but a project that already
+    # declares one keeps loading (and the revision bound still reads it).
+    require('planning_window' not in contract or contract['planning_window'] is None
+            or type(contract['planning_window']) is int and contract['planning_window'] > 0,
+            'contract', 'planning_window 为 legacy 字段，若保留须为正整数。')
     require(contract.get('verification') in ('full', 'fast'), 'contract',
-            'verification 须为 full（默认全档：固定间隔块审+分块范围审）或 fast（快速档：跳过固定间隔块审，基础项目范围审合并为不超过 12 章的大块；章审与事实核验不降档）。')
+            'verification 须为 full（默认全档）或 fast（快速档）。')
     require(contract['chapter_min'] <= contract['chapter_aim'] <= contract['chapter_max'], 'contract', '章目标须在上下限之间。')
     require(type(contract['narrative_tracking']) is bool and type(contract['review_fanout']) is int and 2 <= contract['review_fanout'] <= 8,
             'contract', 'narrative_tracking 须为布尔值；review_fanout 须为 2～8，限制单次综合材料。')
     require(type(contract['editorial_features']) is bool and (not contract['editorial_features'] or contract['narrative_tracking']),
             'contract', 'editorial_features 需要 narrative_tracking；基础模式可明确设 false。')
-    policy = contract['volume_outline']
-    require(not policy or set(policy) == {'scope', 'words', 'tolerance'} and policy.get('scope') in ('rolling', 'current', 'all')
-            and type(policy.get('words')) is int and policy['words'] > 0
-            and type(policy.get('tolerance')) is int and 0 <= policy['tolerance'] < policy['words'],
-            'volume_outline', 'volume_outline 为 {} 或 {scope:rolling|current|all,words:正整数,tolerance:非负整数且小于 words}。')
+    # v2's two outline policies: the volume outline (whole book or one volume at a time) and the
+    # chapter outline (one volume at a time, or ahead for every volume). `current` is the v1
+    # spelling of rolling and is still loadable.
+    _map_policy(contract, 'volume_outline', ('all', 'rolling', 'current'))
+    _map_policy(contract, 'chapter_outline', ('volume', 'all'))
     volumes = contract['volumes']
     seen, last = set(), 0
     for volume in volumes:
@@ -170,13 +194,11 @@ def validate_contract(raw):
         last = volume['end']
     # The total band is a projection of the two things the author actually decides: how many
     # chapters the book has, and the per-chapter range the size class proves writable. Deriving it
-    # here replaces the arithmetic that checked a hand-entered band against the count — arithmetic
-    # that could still be internally inconsistent, and did not survive a new size class.
+    # here replaces the arithmetic that checked a hand-entered band against the count.
     contract['word_range'] = [last * contract['chapter_min'], last * contract['chapter_max']]
     for key in ('world_rules', 'red_lines', 'arcs'):
         require(isinstance(contract[key], list) and all(text(v) for v in contract[key]), 'contract', key + ' 须为字符串数组。')
     return contract
-
 
 
 def volume_for(contract, chapter):
@@ -184,6 +206,7 @@ def volume_for(contract, chapter):
 
 
 def outline_policy(contract, volume, model=None):
+    """The volume-outline policy bound to one volume of the live contract."""
     policy = contract.get('volume_outline') or {}
     if not policy:
         return None
@@ -191,152 +214,35 @@ def outline_policy(contract, volume, model=None):
             'world_hash': digest(model) if model else None}
 
 
-def outline_refs(row, model):
-    known_world = {section + ':' + item['id'] for section, rows in (model or {}).items()
-                   if isinstance(rows, list) for item in rows if isinstance(item, dict) and 'id' in item}
-    values = row.get('world_refs')
-    require(isinstance(values, list) and (values or not model) and all(text(r) and r in known_world for r in values)
-            and len(values) == len(set(values)), 'outline_world', '脑暴方案和每章卷纲须引用有效 world_refs；已有世界模型时不能为空。')
+def chapter_policy(contract, volume, model=None):
+    """The chapter-outline policy bound to one volume, with the same window vocabulary."""
+    policy = contract.get('chapter_outline') or {}
+    if not policy:
+        return None
+    return {**copy.deepcopy(policy), 'volume': volume['id'], 'first': volume['first'],
+            'last': volume['end'], 'world_hash': digest(model) if model else None}
 
 
-def validate_outline(data, policy, model, known_nodes):
-    """Coverage and provenance are mechanical; a separate reviewer judges concise causality."""
-    require(data.get('world_hash') == policy['world_hash'], 'outline_world', '卷纲须绑定本任务的准确世界模型版本。')
-    options = data.get('brainstorm')
-    require(isinstance(options, list) and 2 <= len(options) <= 3 and all(isinstance(o, dict)
-            and all(text(o.get(k)) for k in ('id', 'premise', 'tradeoff')) for o in options),
-            'outline_brainstorm', '卷纲先给 2～3 个不同推进方式的脑暴方案：id/premise/tradeoff/world_refs。')
-    require(len({o['id'] for o in options}) == len(options) and len({o['premise'].strip() for o in options}) == len(options)
-            and data.get('selected') in {o['id'] for o in options} and text(data.get('selection_reason')),
-            'outline_brainstorm', '脑暴方案 ID 和推进说明不能重复；selected 引用选用方案并给 selection_reason。')
-    for option in options:
-        outline_refs(option, model)
-    if policy.get('brainstorm_only'):
-        require(not data.get('chapters'), 'outline_coverage', '先交卷内脑暴与节点；逐章说明由后续有界批次生成。')
-    else:
-        validate_chapter_outlines(data, policy, model, known_nodes)
+def validate_volume_outline(data, contract, world, selected=None, existing=None, missing_ids=None,
+                            state=None):
+    """Delegate the volume outline's mechanical checks to `drift` (single implementation)."""
+    return drift.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state)
 
 
-def validate_chapter_outlines(data, policy, model, known_nodes):
-    require(isinstance(data, dict) and data.get('world_hash') == policy['world_hash'], 'outline_world', '逐章卷纲须绑定本任务的准确世界模型版本。')
-    chapters = data.get('chapters')
-    require(isinstance(chapters, list) and all(isinstance(c, dict) and type(c.get('chapter')) is int for c in chapters)
-            and [c['chapter'] for c in chapters] == list(range(policy['first'], policy['last'] + 1)),
-            'outline_coverage', '逐章卷纲须按顺序完整覆盖当前冻结批次；后续范围由卷纲策略决定。',
-            {'first': policy['first'], 'last': policy['last'], 'recover': '补齐本批次的每章情节推进说明。'})
-    for chapter in chapters:
-        prose = chapter.get('synopsis')
-        require(text(prose), 'outline_length', '每章卷纲须提供 synopsis 情节推进说明。')
-        length = han_count(prose)
-        require(policy['words'] - policy['tolerance'] <= length <= policy['words'] + policy['tolerance'],
-                'outline_length', '逐章卷纲篇幅不在目标范围内。',
-                {'chapter': chapter['chapter'], 'actual': length, 'aim': policy['words'],
-                 'minimum': policy['words'] - policy['tolerance'], 'maximum': policy['words'] + policy['tolerance'],
-                 'recover': '用具体因果、选择、代价与变化补足或压缩，不重复设定、口号或正文描写凑字。'})
-        outline_refs(chapter, model)
-        ids = chapter.get('node_ids')
-        require(isinstance(ids, list) and ids and all(text(n) and n in known_nodes for n in ids)
-                and len(ids) == len(set(ids)), 'outline_nodes', '逐章卷纲须引用有效且不重复的设计 node_ids。')
+def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0):
+    """Delegate the chapter outline's chain checks, then freeze the scenes it declares.
 
-
-def validate_design(data, known=(), tracking=False, known_threads=(), outline=None, model=None):
-    require(isinstance(data, dict) and text(data.get('intent')) and text(data.get('ending_conditions')),
-            'design', '设计需要 intent 和终局/卷末成立条件 ending_conditions。')
-    nodes = data.get('nodes')
-    require(isinstance(nodes, list) and nodes, 'design', '设计需要完整因果节点。')
-    identifiers = []
-    for node in nodes:
-        require(isinstance(node, dict) and all(text(node.get(k)) for k in ('id', 'line', 'cause', 'choice', 'cost', 'outcome', 'disclosure')),
-                'design', '节点需要 id/line/cause/choice/cost/outcome/disclosure。')
-        require(isinstance(node.get('depends_on'), list) and all(text(n) for n in node['depends_on']), 'design', 'depends_on 须为节点 ID 数组。')
-        identifiers.append(node['id'])
-        effects, criteria = node.get('effects', []), node.get('criteria', [])
-        require(isinstance(effects, list) and all(isinstance(e, dict) and text(e.get('id')) and text(e.get('text')) for e in effects)
-                and len({e['id'] for e in effects}) == len(effects), 'design', 'effects 为唯一 id/text 数组。')
-        require(isinstance(criteria, list) and all(isinstance(c, dict) and text(c.get('id')) and text(c.get('text'))
-                and type(c.get('required', True)) is bool and isinstance(c.get('effects'), list)
-                and c['effects'] and all(text(e) and e in {i['id'] for i in effects} for e in c['effects']) for c in criteria)
-                and len({c['id'] for c in criteria}) == len(criteria), 'design', 'criteria 为 id/text/required/effects，引用真实作用 ID。')
-    require(len(identifiers) == len(set(identifiers)) and not set(identifiers).intersection(known), 'design', '新节点 ID 不能重复或覆盖既有节点。')
-    all_ids = set(identifiers) | set(known)
-    graph = {n['id']: n['depends_on'] for n in nodes}
-    visiting, done = set(), set()
-    def visit(ident):
-        require(ident not in visiting, 'design_cycle', '设计因果有环。')
-        if ident in done or ident not in graph:
-            return
-        visiting.add(ident)
-        for dependency in graph[ident]:
-            require(dependency in all_ids, 'design_reference', '设计引用了不存在的节点。')
-            visit(dependency)
-        visiting.remove(ident)
-        done.add(ident)
-    for ident in identifiers:
-        visit(ident)
-    if tracking:
-        narrative.validate_threads(data, nodes, known_threads)
-    if outline:
-        validate_outline(data, outline, model, all_ids)
-    return copy.deepcopy(data)
-
-
-def validate_plans(data, first, last, known_nodes, state, contract, world=None, policy=None, known_plans=None, identity_version=1, reading_version=None):
-    plans = copy.deepcopy(data.get('plans')) if isinstance(data, dict) else None
-    require(isinstance(plans, list) and all(isinstance(p, dict) and type(p.get('chapter')) is int for p in plans)
-            and [p['chapter'] for p in plans] == list(range(first, last + 1)),
-            'plan', '章计划须恰好覆盖本次窗口，按章号排列。')
-    temporary = copy.deepcopy(state)
-    previous = {n: p for n, p in (known_plans or {}).items() if not first <= p['chapter'] <= last}
-    for plan in plans:
-        require(all(text(plan.get(k)) for k in ('goal', 'obstacle', 'choice', 'cost', 'change', 'ending')), 'plan', '章计划需要目标、阻碍、选择、代价、变化和结尾。')
-        require(not all(plan.get(k) == plan['goal'] for k in ('obstacle', 'choice', 'cost', 'change', 'ending')),
-                'plan', '六项不能是同一段文字的复制：目标/阻碍/选择/代价/变化/结尾各自回答不同问题。',
-                {'recover': '模板从已核验 synopsis 起稿时六个字段是同一段占位——逐项改写成各自的角色，'
-                            'synopsis 只说明发生了什么，不替代各项判断。'})
-        require(isinstance(plan.get('node_ids'), list) and plan['node_ids'] and all(text(n) and n in known_nodes for n in plan['node_ids']), 'plan', '章计划须引用有效设计节点。')
-        participants = plan.get('participants')
-        require(isinstance(participants, list) and participants and all(text(p) for p in participants)
-                and len(participants) == len(set(participants)), 'plan', 'participants 须为非空、不重复实体 ID。')
-        require(isinstance(plan.get('new_entities', []), list), 'plan', 'new_entities 须为实体数组。')
-        for item in plan.get('new_entities', []):
-            register_entity(temporary['entities'], item)
-        validate_plan_names(plan, policy if policy is not None else resolve_policy({}))
-        require(all(p in temporary['entities'] for p in participants), 'plan', '参与人须为既有实体或本窗口声明的候选实体。')
-        if world:
-            refs = plan.get('world_refs')
-            known = {section + ':' + row['id'] for section, rows in world.items() if isinstance(rows, list) for row in rows if isinstance(row, dict) and 'id' in row}
-            require(isinstance(refs, list) and all(text(ref) and ref in known for ref in refs), 'world_reference', '有世界模型的章计划须声明 world_refs，可为空但不能引用不存在的记录。')
-        require(isinstance(plan.get('obligations', []), list), 'plan', 'obligations 须为数组。')
-        ids = []
-        for obligation in plan.get('obligations', []):
-            require(isinstance(obligation, dict) and text(obligation.get('id')) and text(obligation.get('text'))
-                    and obligation.get('category') in ('facts', 'reader'), 'obligation', '义务需要 id/text/category。')
-            ids.append(obligation['id'])
-        require(len(ids) == len(set(ids)), 'obligation', '义务 ID 重复。')
-        require(isinstance(plan.get('schedule', []), list), 'schedule', 'schedule 须为日程对象数组。')
-        for schedule in plan.get('schedule', []):
-            require(isinstance(schedule, dict) and schedule.get('basis') == 'main_clock'
-                    and type(schedule.get('day')) is int and schedule['day'] >= state['clock']
-                    and text(schedule.get('event')), 'schedule', '日程须声明主线坐标、有效天数和事件。')
-        if contract.get('narrative_tracking'):
-            narrative.validate_plan(plan, known_nodes, temporary)
-        if contract.get('editorial_features'):
-            craft.scenes(plan, temporary['entities'])
-        from . import story_memory
-        story_memory.bind(plan, previous, identity_version, reading_version)
-        previous[str(plan['chapter'])] = plan
-    return copy.deepcopy(plans)
-
-
-def validate_profiles(data, required, state=None, previous=None, enhanced=False):
-    profiles = data.get('profiles') if isinstance(data, dict) else None
-    require(isinstance(profiles, list) and all(isinstance(p, dict) and text(p.get('entity')) for p in profiles)
-            and {p['entity'] for p in profiles} == set(required)
-            and len(profiles) == len(required), 'profile', '人物档案须恰好覆盖请求的实体。')
-    for profile in profiles:
-        require(all(text(profile.get(k)) for k in ('entity', 'desire', 'fear', 'limit', 'voice', 'knowledge_boundary')),
-                'profile', '人物档案需要欲望、顾虑、底线、声线和知情边界。')
-    if enhanced:
-        profiles = [craft.profile(p, state, (previous or {}).get(p['entity'])) for p in profiles]
-    return copy.deepcopy(profiles)
-
+    `drift` owns the state chain; this entry point adds the one piece that needs the scene protocol
+    (identity and reading dependencies), which is why it lives beside the policy rather than in the
+    pure drift core. Rows without scenes are bound too: the binding is what records that the row
+    declared no dependency, which a revision later reads as "conservatively expand".
+    """
+    rows = drift.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0)
+    entities = copy.deepcopy((state0 or {}).get('entities') or {})
+    previous = {}
+    for row in rows:
+        if row.get('scenes'):
+            craft.scenes(row, entities)
+        story_memory.bind(row, previous, identity_version=2, reading_version=1)
+        previous[str(row['chapter'])] = row
+    return rows

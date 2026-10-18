@@ -1,40 +1,126 @@
-"""Blank worker results. Presentation shapes do not participate in domain decisions."""
+"""Blank worker results. Presentation shapes do not participate in domain decisions.
+
+Every skeleton starts from empty values with the complete field set of its stage, so a worker never
+has to read engine source to learn a shape. The one place a blank form carries data is the writer's
+`drift_check`: the chapter outline already declared which deltas this chapter must produce, and
+pre-filling one empty item per planned delta is what turns "self-check" from a free paragraph into a
+line-by-line comparison the engine can reconcile.
+"""
 from __future__ import annotations
 
-from .contracts import CHECKS_VERSION, checks_for, contract_skeleton
+from .contracts import contract_skeleton, require, text
 from .world import SECTIONS
 from . import stages
-from . import scopes, editorial
 
 
-def template(stage, chapter, sources, obligations=(), extra=(), version=CHECKS_VERSION, payload=None, tracking=False):
+def _drift_item(kind, key, planned, chapter=''):
+    """One planned delta as a blank self-comparison row: only the plan side is pre-filled.
+
+    `actual` starts as null rather than an empty object: the writer either fills it with what the
+    prose actually did, or leaves it null and marks the row skipped. The engine projects the true
+    before-value itself, so the writer never has to guess it.
+    """
+    return {'kind': kind, 'key': key, 'planned': planned, 'actual': None,
+            'status': '', 'reason': '', 'evidence': {'chapter': chapter, 'quote': ''}}
+
+
+def _knowledge_key(entry):
+    """A knowledge delta's identity is who learns what, so both halves name the item."""
+    parts = [entry.get('who'), entry.get('topic')]
+    return ':'.join(part for part in parts if text(part))
+
+
+def drift_items(row):
+    """The chapter outline's planned deltas, one blank comparison row each.
+
+    The list mirrors the coverage coordinates the reconciliation derives from the same row — same
+    kinds, same keys, same order, same skip rules (a malformed entry that names no coordinate is not
+    a coordinate) and the clock row is always present because the engine always expects it. A form
+    that listed one row fewer than the engine expects would make a diligent writer fail coverage for
+    a row nobody handed them.
+    """
+    row = row or {}
+    plot = row.get('plot') if isinstance(row.get('plot'), dict) else {}
+    chapter = row.get('chapter', '')
+    items = []
+    for node in plot.get('nodes') or []:
+        if isinstance(node, dict) and text(node.get('node')):
+            items.append(_drift_item('node', node['node'], {'after': node.get('after')}, chapter))
+    for thread in plot.get('threads') or []:
+        if isinstance(thread, dict) and text(thread.get('thread')):
+            items.append(_drift_item('thread', thread['thread'], {'after': thread.get('after')}, chapter))
+    for entry in row.get('resources') or []:
+        if isinstance(entry, dict) and text(entry.get('key')):
+            items.append(_drift_item('resources', entry['key'],
+                                     {'from': entry.get('from'), 'to': entry.get('to')}, chapter))
+    for entry in row.get('places') or []:
+        if isinstance(entry, dict) and text(entry.get('entity')):
+            items.append(_drift_item('places', entry['entity'],
+                                     {'from': entry.get('from'), 'to': entry.get('to')}, chapter))
+    for entry in row.get('knowledge') or []:
+        if isinstance(entry, dict) and text(entry.get('who')) and text(entry.get('topic')):
+            items.append(_drift_item('knowledge', _knowledge_key(entry),
+                                     {'from': entry.get('from'), 'to': entry.get('to')}, chapter))
+    for entry in row.get('characters') or []:
+        if isinstance(entry, dict) and text(entry.get('entity')):
+            items.append(_drift_item('characters', entry['entity'],
+                                     {'from': entry.get('from'), 'to': entry.get('to')}, chapter))
+    clock = row.get('clock') if isinstance(row.get('clock'), dict) else {}
+    items.append(_drift_item('clock', 'clock', {'advance_days': clock.get('advance_days') or 0}, chapter))
+    return items
+
+
+def volume_row(ident):
+    """One volume of a blank volume outline: every §3 field present, all values empty."""
+    return {'id': ident, 'purpose': '', 'arc': '', 'turns': [{'at': '', 'turn': ''}], 'climax': '',
+            'nodes': [], 'threads': [], 'resources': [], 'places': [], 'characters': [],
+            'knowledge': [], 'clock': {'advance_days': 0}, 'exit_state': ''}
+
+
+def chapter_row(number, volume=None):
+    """One blank chapter outline row: the required fields plus the four declared delta arrays.
+
+    The arrays are empty rather than absent on purpose: an empty array is the declaration "nothing
+    of this kind changes in this chapter", which is a claim the state chain can check, while a
+    missing field is nothing to check at all.
+    """
+    row = {'chapter': number, 'synopsis': '',
+           'plot': {'beat': '', 'nodes': [], 'threads': []},
+           'resources': [], 'places': [], 'knowledge': [], 'characters': [],
+           'clock': {'advance_days': 0},
+           'enter': [], 'exit': [],
+           'disclosures': [], 'world_refs': [], 'new_entities': [],
+           'hook_refs': [], 'reader_refs': [], 'history_refs': [],
+           'scenes': [], 'pacing': {},
+           # Optional workbench protocol: the template states the keys so a writer who declares a
+           # full reading dependency knows the names, and 'partial' keeps the conservative default
+           # for everyone who does not. Empty here means "nothing declared", not "nothing depends".
+           'dependency_coverage': 'partial', 'reading_coverage': 'partial',
+           'reading_refs': [], 'understanding_refs': []}
+    return row
+
+
+def _policy(payload, key):
+    """The batch policy of an outline dispatch, from either place the engine carries it.
+
+    `payload[key]` is the policy map the compiler writes; the top-level keys are accepted too so a
+    hand-built dispatch (or a test) mints the same form instead of an empty one.
+    """
+    policy = payload.get(key)
+    return policy if isinstance(policy, dict) else {}
+
+
+def _volume_span(payload, ident):
+    """One volume's first/last chapter, read off the merged dispatch's chapter policy."""
+    row = next((v for v in _policy(payload, 'chapter_outline').get('volumes') or []
+                if v.get('id') == ident), None)
+    return (row or {}).get('first', 1) or 1, (row or {}).get('last', 0) or 0
+
+
+def template(stage, chapter, extra=(), payload=None, tracking=False):
     """The blank result for a stage. `extra` carries stages a combined dispatch also answers."""
     stages.require_stage(stage)
-    def review(ids, obs=(), challenges=()):
-        return {'verdict': '', 'checks_version': version,
-                'checks': [dict(id=ident, result='', reason='', evidence=[],
-                **({'challenge': {'risk': '', 'disposition': '', 'reason': '', 'evidence': {}}} if ident in challenges else {})) for ident in ids],
-                'findings': [], 'obligations': [{'id': o['id'], 'result': '', 'reason': '', 'evidence': []} for o in obs]}
-    if stage == 'chapter_review':
-        facts = review(checks_for(version, 'fact'), [o for o in obligations if o['category'] == 'facts'], ('time',))
-        facts.update(events=[], summary='', elapsed_days=None)
-        reader = review(checks_for(version, 'reader'), [o for o in obligations if o['category'] == 'reader'], ('language',))
-        if tracking:
-            from .narrative import PACE_FIELDS
-            reader['pacing'] = {**{k: '' for k in PACE_FIELDS}, 'evidence': {}}
-        return {'facts': facts, 'reader': reader,
-                **({'understanding': []} if (payload or {}).get('understanding') else {}),
-                **({'alignment': {'action': '', 'reason': '', 'realizations': [{'node': n, 'after': '', 'reason': '', 'evidence': {},
-                     **({'fulfilled_criteria': [{'id': c['id'], 'actual_effect': '', 'evidence': {}} for c in payload['node_criteria'][n]], 'prior_criteria': []}
-                        if (payload or {}).get('node_criteria', {}).get(n) else {})}
-                     for n in (payload or {}).get('node_ids', [])]}} if (payload or {}).get('editorial') else {})}
-    if stage in ('design_review', 'outline_review', 'contract_review', 'alignment_review'):
-        result = review(checks_for(version, 'design'))
-        if (payload or {}).get('author_question_hash'):
-            result['blocked_resolution'] = {'question_hash': payload['author_question_hash'], 'result': '', 'reason': ''}
-        return result
-    if stage == 'world_review':
-        return review(checks_for(version, 'world'))
+    payload = payload or {}
     if stage == 'opening_options':
         return {'gate': '', 'options': []}
     if stage == 'world_model':
@@ -47,62 +133,34 @@ def template(stage, chapter, sources, obligations=(), extra=(), version=CHECKS_V
         return skeleton
     if stage == 'opening_contract':
         return contract_skeleton()
-    if stage in ('scope_review', 'scope_synthesis'):
-        result = review(checks_for(version, 'long'))
-        if (payload or {}).get('understanding'):
-            result['understanding'] = []
-        children = (payload or {}).get('children', [])
-        result['coverage'] = [{'part_id': ident, 'reason': '', 'evidence': {}} for ident in children] if children else [{'chapter': n, 'reason': '', 'evidence': {}} for n in sources]
-        if (payload or {}).get('review_tree'):
-            result['handoff'] = {**{k: '' for k in scopes.HANDOFF_FIELDS}, 'evidence': []}
-        if (payload or {}).get('closure'):
-            result['closure'] = editorial.closure_template(payload['closure'])
-        if (payload or {}).get('remedies'):
-            result['remedy_review'] = [{**{k: r[k] for k in ('case_id', 'round_id')}, 'result': '', 'reason': '', 'evidence': {}}
-                                       for r in payload['remedies']]
-        return result
-    if stage == 'revision_review':
-        return {'reader': review(checks_for(version, 'reader'),
-                                [o for o in obligations if o['category'] == 'reader'], ('language',)),
-                **({'understanding': []} if (payload or {}).get('understanding') else {})}
-    if stage in ('write', 'repair', 'redesign'):
-        return {'title': '', 'prose': '', 'summary': '', 'self_check': ''}
-    if stage == 'profiles':
-        return {'profiles': []}
-    if stage == 'alignment_plan':
-        return {'reason': '', 'plan': {}, 'designs': []}
-    if stage == 'plan':
-        seed = (payload or {}).get('outline_seed')
-        if seed:
-            # The reviewed outline already chose each chapter's nodes and world references; the
-            # six narrative fields start from the synopsis for the worker to rewrite into their
-            # own roles. Submitting the copies verbatim is rejected by the plan validator.
-            return {'plans': [dict(chapter=row['chapter'],
-                                   goal=row['synopsis'], obstacle=row['synopsis'],
-                                   choice=row['synopsis'], cost=row['synopsis'],
-                                   change=row['synopsis'], ending=row['synopsis'],
-                                   node_ids=list(row['node_ids']), world_refs=list(row['world_refs']),
-                                   participants=[])
-                              for row in seed]}
-        return {'plans': []}
-    if stage == 'volume_plan' and (payload or {}).get('volume_outline'):
-        policy = payload['volume_outline']
-        return {'intent': '', 'ending_conditions': '', 'nodes': [], **({'threads': []} if tracking else {}),
-                'world_hash': policy['world_hash'],
-                'brainstorm': [{'id': 'A', 'premise': '', 'tradeoff': '', 'world_refs': []},
-                               {'id': 'B', 'premise': '', 'tradeoff': '', 'world_refs': []}],
-                'selected': '', 'selection_reason': ''}
     if stage == 'volume_outline':
-        policy = payload['volume_outline']
-        return {'world_hash': policy['world_hash'],
-                'chapters': [{'chapter': n, 'synopsis': '', 'world_refs': [], 'node_ids': []}
-                             for n in range(policy['first'], policy['last'] + 1)]}
-    if stage == 'book_plan' and 'volume_outline' in (extra or ()):
-        # The merged single-volume dispatch: the skeleton plus the volume's chapter outlines
-        # ride in one receipt, the way the world dispatch carries its contract.
-        policy = payload['volume_outline']
-        return {'intent': '', 'ending_conditions': '', 'nodes': [], **({'threads': []} if tracking else {}),
-                'world_hash': policy['world_hash'],
-                'chapters': [{'chapter': n, 'synopsis': '', 'world_refs': [], 'node_ids': []}
-                             for n in range(policy['first'], policy['last'] + 1)]}
-    return {'intent': '', 'ending_conditions': '', 'nodes': [], **({'threads': []} if tracking else {})}
+        # The missing volumes the batch answers are named by the dispatch; the skeleton is one
+        # complete row per volume so a receipt cannot answer half a volume and leave the rest to
+        # be inferred. On the tiers that merge, the same receipt also carries each volume's chapter
+        # outlines, keyed by volume id.
+        policy = _policy(payload, 'volume_outline')
+        ids = payload.get('volume_ids') or policy.get('volume_ids') or []
+        skeleton = {'volumes': [volume_row(ident) for ident in ids]}
+        if 'chapter_outline' in (payload.get('also') or ()):
+            skeleton['chapters'] = {}
+            for ident in ids:
+                first, last = _volume_span(payload, ident)
+                skeleton['chapters'][ident] = [chapter_row(number) for number in range(first, last + 1)]
+        return skeleton
+    if stage == 'chapter_outline':
+        policy = _policy(payload, 'chapter_outline')
+        first = policy.get('first', payload.get('first', 0)) or 0
+        last = policy.get('last', payload.get('last', -1))
+        volume = policy.get('volume') or payload.get('volume') or ''
+        return {'volume': volume,
+                'chapters': [chapter_row(number) for number in range(first, (last if isinstance(last, int) else -1) + 1)]}
+    if stage in ('write', 'repair', 'redesign'):
+        # The planned deltas of this chapter, one blank row each. `actual` starts empty because the
+        # engine already knows the true before-state: a writer that reported its own `from` would be
+        # checked against the projection anyway, so guessing it is pure waste.
+        row = payload.get('chapter_outline') or {}
+        return {'title': '', 'prose': '', 'summary': '',
+                'drift_check': {'items': drift_items(row), 'unplanned': [], 'verdict': ''},
+                'self_check': ''}
+    require(False, 'stage_template', '阶段已登记但没有结果骨架，属引擎缺陷。',
+            {'stage': stage, 'known': sorted(stages.STAGES)})

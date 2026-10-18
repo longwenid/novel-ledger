@@ -80,10 +80,14 @@ class LintFlowTests(unittest.TestCase):
         return {row['n']: self.repo.read_document(row['prose']) for row in self.repo.headers('main')}
 
     def first_chapter_is_committed(self):
+        """Commit chapter one, let the author approve the pilot, and authorize chapter two.
+
+        v2 has no delivery-review step: the write receipt is reconciled against the chapter outline
+        and settles on the spot, so "committed" is the writer's own submission coming back with a
+        chapter number.
+        """
         drive(self.app, until='write')
-        self.app.submit(response(self.app))
-        drive(self.app, until='chapter_review')
-        self.app.submit(response(self.app))
+        self.assertEqual(self.app.submit(response(self.app))['committed_chapter'], 1)
         handoff = self.app.advance()
         self.assertEqual(handoff['action'], 'await_author')
         self.app.approve(handoff['prose_hash'], '工程夹具认可第一章。')
@@ -111,7 +115,8 @@ class LintFlowTests(unittest.TestCase):
         repaired = response(self.app)
         self.assertNotIn(first[:30], repaired['data']['prose'])
         outcome = self.app.submit(repaired)
-        self.assertEqual(outcome['next_stage'], 'chapter_review')
+        self.assertEqual(outcome['committed_chapter'], 2)
+        self.assertEqual([row['n'] for row in self.repo.headers('main')], [1, 2])
 
     def test_foreign_residue_routes_the_writer_back_before_any_review(self):
         owner = self.first_chapter_is_committed()
@@ -123,6 +128,7 @@ class LintFlowTests(unittest.TestCase):
         findings = self.repo.load()['draft']['findings']
         self.assertIn('language', [row['criterion'] for row in findings])
         self.assertTrue(any(row.get('matches') == ['check'] for row in findings))
+        self.assertEqual(self.repo.headers('main')[-1]['n'], 1)      # the defect never committed
 
 
 if __name__ == '__main__':

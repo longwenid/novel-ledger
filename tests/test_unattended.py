@@ -60,7 +60,7 @@ def ready(task_id, stage='write', chapter=1):
 
 class WatchUnitTests(unittest.TestCase):
     def test_one_step_waits_for_the_task_then_hands_back_the_next_dispatch(self):
-        app = FakeWatchApp([ready('a'), ready('b', 'chapter_review')])
+        app = FakeWatchApp([ready('a'), ready('b', 'write')])
         result = unattended.watch(app, 'owner-1', steps=1, poll=1, idle_limit=1000,
                                   sleep=app.sleeper, now=app.clock)
         self.assertEqual(result['action'], 'task_ready')
@@ -111,7 +111,7 @@ class WatchIntegrationTests(unittest.TestCase):
         run = app.run(through=1, source='工程夹具授权。')
         owner = run['owner']
         app.advance(owner=owner)
-        app.submit(response(app))          # book_plan is done before watch starts
+        app.submit(response(app))          # the chapter outline is done before watch starts
         repo.close()
         runtime = open_local_runtime(str(self.project))
         try:

@@ -21,8 +21,8 @@ class ValidationRunnerTests(unittest.TestCase):
                 self.assertEqual(len(ids), len(set(ids)))
                 groups[group] = set(ids)
         self.assertTrue(groups['fast'] < groups['full'])
-        for boundary in ('test_architecture.', 'test_application_ports.', 'test_cli_boundary.',
-                         'test_revision_bounds.', 'test_frozen_reading.'):
+        for boundary in ('test_architecture.', 'test_domain_boundaries.', 'test_application_ports.',
+                         'test_cli_boundary.', 'test_revision_bounds.'):
             self.assertTrue(any(name.startswith(boundary) for name in groups['fast']), boundary)
 
     def test_invalid_group_fails_instead_of_silently_skipping_tests(self):

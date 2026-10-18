@@ -1,11 +1,24 @@
-"""Read-only: which review findings keep coming back, and which of them the engine could judge.
+"""Read-only: which drift findings keep coming back, and which of them the engine already judges.
 
-rework.md 机制 4（发现回流成判据）的输入。每一份历史回执都留在 tasks.result 里；把其中全部
-findings 按（阶段 × 检查项）聚合，标出跨任务重复出现的同一条（相同内容摘要出现多于一次），
-并注明哪些类别已由引擎机械判定（repetition/language 的机械子项、substance 篇幅、ledger 账目）。
-重复出现且未机械化的条目，就是下一批 check 项的候选——把审查经验变成引擎能力，靠的是这份账。
+v1 asked this of review receipts ("rework.md 机制 4：发现回流成判据"): every finding a reviewer filed
+was kept in `tasks.result` and aggregated by 阶段 × 检查项. v2 has no reviewer, so the sources are
+different — and the question is the same one:
 
-用法：python validation/reflux_probe.py /path/to/project
+* **引擎核算意见** — what the engine refused a draft for (`book['draft']['findings']`, written by
+  `drift.reconcile` / `lint` / the word band), and the deviations it did book
+  (`design_drift`, `carry_findings`, `accepted_findings`).
+* **执笔自比** — the writer's own `drift_check` rows under `tasks.result` with
+  `status ∈ deviated|skipped`, plus every `unplanned` row: a coordinate the chapter outline did not
+  declare. A row that keeps being filed as deviated is the same signal a repeated review finding
+  was: the criterion is not mechanical yet, or the outline is being written ahead of the prose.
+
+Either way the money question is unchanged: a finding that appears twice, in the same shape, is a
+candidate for the engine to compute once instead of a writer having to notice it every chapter.
+
+Legacy databases still hold v1 review receipts; they are counted in their own section and labelled
+`v1`, never mixed into the v2 numbers.
+
+    用法：python validation/reflux_probe.py /path/to/project
 """
 import hashlib
 import json
@@ -18,65 +31,176 @@ project = Path(sys.argv[1])
 db = sqlite3.connect('file:' + (project / 'novel.sqlite3').as_posix() + '?mode=ro', uri=True)
 db.row_factory = sqlite3.Row
 
+# The v1 review stages, kept only so an old project still reports: nothing in v2 writes these.
+LEGACY_REVIEW_STAGES = ('chapter_review', 'scope_review', 'scope_synthesis', 'revision_review',
+                        'design_review', 'world_review', 'outline_review', 'contract_review',
+                        'alignment_review')
+
+# What the engine already settles mechanically, per drift coordinate. A repeated finding in one of
+# these kinds means the *engine* let it through, not that the criterion is missing from the table.
 MECHANICAL = {
-    'repetition': '已机械化：跨章逐字重复（lint.cross_chapter_duplicates）',
-    'language': '已机械化：西文残留与引号体例（lint.latin_findings/style_findings）',
-    'substance': '已机械化：章幅区间（band）',
+    'resources': '引擎已机械判：facts.settle 前值与守恒（insufficient_resource）',
+    'places': '引擎已机械判：spatial 锚点/拓扑/路径与最短耗时',
+    'knowledge': '引擎已机械判：facts.settle knowledge.before + narrative 读者知情越权',
+    'characters': '引擎已机械判：character_current.before 与 choice/cost/change 非空',
+    'clock': '引擎已机械判：clock 单调 + 章纲 advance_days + elapsed_days',
+    'node': '引擎已机械判：story_nodes 前态、依赖、重复推进与提前 resolved',
+    'thread': '引擎已机械判：thread_progress 前态与线路依赖',
+    'substance': '引擎已机械判：章幅区间（word_budget）',
+    'repetition': '引擎已机械判：跨章逐字重复（lint.cross_chapter_duplicates）',
+    'language': '引擎已机械判：西文残留与引号体例（lint.latin_findings/style_findings）',
+    'drift': '引擎已机械判：drift.reconcile 覆盖/前态/kept 一致',
 }
 
-REVIEW_STAGES = ('chapter_review', 'scope_review', 'scope_synthesis', 'revision_review',
-                 'design_review', 'world_review', 'outline_review', 'contract_review',
-                 'alignment_review')
+
+def digest(value):
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True)
+                          .encode('utf-8')).hexdigest()
 
 
-def findings_of(stage, data):
-    """Receipts keep findings in different shapes; read them all, never inventing any."""
-    if not isinstance(data, dict):
-        return
-    groups = []
-    for key in ('facts', 'reader'):
-        if isinstance(data.get(key), dict):
-            groups.append(data[key].get('findings'))
-    groups.append(data.get('findings'))
-    for findings in groups:
-        for finding in findings or []:
-            if isinstance(finding, dict) and finding.get('severity') not in (None, 'note'):
-                yield finding
+def book_document():
+    """The whole book, assembled from the four declared parts without importing the engine."""
+    root = db.execute("SELECT value FROM kv WHERE key='book'").fetchone()
+    if root is None:
+        return {}
+    parts = json.loads(root['value']).get('parts') or {}
+    book = {}
+    for ident in parts.values():
+        row = db.execute('SELECT value FROM documents WHERE hash=?', (ident,)).fetchone()
+        if row is not None:
+            value = json.loads(row['value'])
+            if isinstance(value, dict):
+                book.update(value)
+    return book
 
 
-rows = defaultdict(lambda: {'count': 0, 'digests': set(), 'again': 0, 'reasons': []})
-for task in db.execute('SELECT input, result FROM tasks WHERE status=\'done\'').fetchall():
-    work = json.loads(task['input'])
-    stage = work.get('stage')
-    if stage not in REVIEW_STAGES or not task['result']:
-        continue
-    result = json.loads(task['result'])
-    for finding in findings_of(stage, result.get('data')):
-        key = (stage, finding.get('criterion'))
-        row = rows[key]
-        row['count'] += 1
-        ident = hashlib.sha256(json.dumps(finding, ensure_ascii=False, sort_keys=True)
-                               .encode('utf-8')).hexdigest()
-        if ident in row['digests']:
-            row['again'] += 1
-        row['digests'].add(ident)
-        if len(row['reasons']) < 2:
-            row['reasons'].append(str(finding.get('reason'))[:90])
+def engine_findings(book):
+    """Mechanical findings and booked deviations, as (source, criterion, kind, finding) rows."""
+    rows = []
+    for finding in (book.get('draft') or {}).get('findings') or []:
+        if isinstance(finding, dict):
+            rows.append(('draft.findings', str(finding.get('criterion') or '?'),
+                         str(finding.get('kind') or '-'), finding))
+    for finding in book.get('design_drift') or []:
+        if isinstance(finding, dict):
+            rows.append(('design_drift', str(finding.get('kind') or '?'),
+                         str(finding.get('kind') or '-'), finding))
+    for batch in book.get('accepted_findings') or []:
+        for finding in (batch or {}).get('findings') or []:
+            if isinstance(finding, dict):
+                rows.append(('accepted_findings', str(finding.get('criterion') or '?'),
+                             str(finding.get('kind') or '-'), finding))
+    for finding in book.get('carry_findings') or []:
+        if isinstance(finding, dict):
+            rows.append(('carry_findings', str(finding.get('criterion') or '?'),
+                         str(finding.get('kind') or '-'), finding))
+    return rows
 
-total = sum(row['count'] for row in rows.values())
-print('审稿 findings 共 %d 条（%d 个 阶段×检查项 组合；重复 = 同一内容跨回执出现超过一次）'
-      % (total, len(rows)))
-print('%-34s %5s %5s  %s' % ('阶段×检查项', '次数', '重复', '机械判定 / 样例理由'))
-for (stage, criterion), row in sorted(rows.items(), key=lambda kv: -kv[1]['count']):
-    print('%-34s %5d %5d  %s %s' % ('%s×%s' % (stage, criterion), row['count'], row['again'],
-                                    MECHANICAL.get(criterion, ''), row['reasons'][0] if row['reasons'] else ''))
-candidates = sorted(((row['again'], stage, criterion, row['count'])
-                     for (stage, criterion), row in rows.items()
-                     if row['again'] and criterion not in MECHANICAL), reverse=True)
+
+def drift_rows():
+    """The writer's own comparisons: deviated/skipped rows and unplanned changes, per task."""
+    rows = []
+    for task in db.execute("SELECT id, input, result FROM tasks WHERE status='done' AND result IS NOT NULL").fetchall():
+        work = json.loads(task['input'])
+        stage = work.get('stage')
+        if stage not in ('write', 'repair', 'redesign'):
+            continue
+        result = json.loads(task['result'])
+        data = result.get('data') if isinstance(result, dict) else None
+        check = (data or {}).get('drift_check') if isinstance(data, dict) else None
+        if not isinstance(check, dict):
+            continue
+        for item in check.get('items') or []:
+            if not isinstance(item, dict) or item.get('status') not in ('deviated', 'skipped'):
+                continue
+            rows.append((stage, str(item.get('kind') or '?'), item.get('status'),
+                         {'chapter': work.get('chapter'), 'key': item.get('key'),
+                          'planned': item.get('planned'), 'actual': item.get('actual'),
+                          'reason': item.get('reason')}))
+        for item in check.get('unplanned') or []:
+            if isinstance(item, dict):
+                rows.append((stage, str(item.get('kind') or '?'), 'unplanned',
+                             {'chapter': work.get('chapter'), 'key': item.get('key'),
+                              'change': item.get('change'), 'reason': item.get('reason')}))
+    return rows
+
+
+def legacy_rows():
+    """v1 review receipts, so an old project still reports where its findings came from."""
+    rows = []
+    for task in db.execute("SELECT input, result FROM tasks WHERE status='done' AND result IS NOT NULL").fetchall():
+        work = json.loads(task['input'])
+        stage = work.get('stage')
+        if stage not in LEGACY_REVIEW_STAGES:
+            continue
+        result = json.loads(task['result'])
+        data = result.get('data') if isinstance(result, dict) else None
+        groups = []
+        if isinstance(data, dict):
+            for key in ('facts', 'reader'):
+                if isinstance(data.get(key), dict):
+                    groups.append(data[key].get('findings'))
+            groups.append(data.get('findings'))
+        for findings in groups:
+            for finding in findings or []:
+                if isinstance(finding, dict) and finding.get('severity') not in (None, 'note'):
+                    rows.append((stage, str(finding.get('criterion') or '?'), 'v1', finding))
+    return rows
+
+
+def aggregate(rows, key_of):
+    table = defaultdict(lambda: {'count': 0, 'digests': set(), 'again': 0, 'sample': None})
+    for row in rows:
+        key = key_of(row)
+        entry = table[key]
+        entry['count'] += 1
+        ident = digest(row[-1])
+        if ident in entry['digests']:
+            entry['again'] += 1
+        entry['digests'].add(ident)
+        if entry['sample'] is None:
+            entry['sample'] = row[-1]
+    return table
+
+
+def report(title, rows, key_of, mechanical_by):
+    print('=== %s：%d 条 ===' % (title, len(rows)))
+    if not rows:
+        print('（无）')
+        return []
+    table = aggregate(rows, key_of)
+    print('%-38s %5s %5s  %s' % ('组合', '次数', '重复', '机械判定 / 样例'))
+    for key, entry in sorted(table.items(), key=lambda kv: -kv[1]['count']):
+        print('%-38s %5d %5d  %s %s' % ('×'.join(str(part) for part in key), entry['count'],
+                                        entry['again'], mechanical_by(key),
+                                        str(entry['sample'].get('reason') or entry['sample'].get('change') or '')[:70]))
+    return sorted(((entry['again'], key, entry['count']) for key, entry in table.items() if entry['again']),
+                  reverse=True)
+
+
+book = book_document()
+engine = engine_findings(book)
+writer = drift_rows()
+legacy = legacy_rows()
+print('项目：%s' % project.resolve())
+print('引擎核算意见 %d 条；执笔自比偏离 %d 条；v1 审稿 findings %d 条' % (len(engine), len(writer), len(legacy)))
+print()
+
+candidates = report('引擎核算与已入账偏差', engine,
+                    lambda row: (row[0], row[1], row[2]), lambda key: MECHANICAL.get(key[2], ''))
+candidates += report('执笔自比：deviated / skipped / unplanned', writer,
+                     lambda row: (row[0], row[1], row[2]),
+                     lambda key: MECHANICAL.get(key[1], '') if key[2] != 'unplanned' else '计划外变化：需在下一章章纲里补登记')
+if legacy:
+    print()
+    candidates += report('v1 审稿 findings（仅历史项目，v2 不再产生）', legacy,
+                         lambda row: (row[0], row[1]), lambda key: MECHANICAL.get(key[1], ''))
+
+print()
 if candidates:
-    print('\n机械化候选（重复出现且尚无机械判定，按重复次数排序）：')
-    for again, stage, criterion, count in candidates:
-        print('  %s×%s：重复 %d 次 / 共 %d 次' % (stage, criterion, again, count))
-    print('这些是下一批 check 项的候选：同一条判断第二次出现时，先让引擎算一遍。')
+    print('回流候选（同一条内容出现多于一次；次数 = 重复次数）：')
+    for again, key, count in candidates:
+        print('  %s：重复 %d 次 / 共 %d 次' % ('×'.join(str(part) for part in key), again, count))
+    print('同一条判断重复出现，说明它还不是机械判据：先让引擎算一遍，再谈交给写手自比。')
 else:
-    print('\n没有重复出现且未机械化的发现。')
+    print('没有重复出现的条目。')

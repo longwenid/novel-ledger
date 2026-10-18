@@ -10,12 +10,12 @@ from pathlib import Path
 from novel_ledger.contracts import CONTROLLER_STAGES, Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
-PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'first-read', 'claim', 'run', 'renew', 'approve',
+PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
           'pause', 'resume', 'answer', 'revise', 'revision-impact', 'workbench', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
-WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'first-read'}
-# Prose, frozen records and the first read belong to a dispatched task; the controller role never executes them.
-WORKER_ONLY = {'read', 'recall', 'patch', 'first-read'}
+WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check'}
+# Prose and frozen records belong to a dispatched task; the controller role never executes them.
+WORKER_ONLY = {'read', 'recall', 'patch'}
 
 
 def load(path):
@@ -65,7 +65,7 @@ def parser():
         if command == 'init':
             sub.add_argument('--contract')
             sub.add_argument('--source', default='')
-        if command in ('submit', 'preflight', 'first-read', 'recontract', 'opening', 'lexical', 'intake'):
+        if command in ('submit', 'preflight', 'recontract', 'opening', 'lexical', 'intake'):
             sub.add_argument('--file', required=True)
         if command == 'check':
             sub.add_argument('--file')
@@ -252,13 +252,13 @@ def dispatch(args, open_runtime=open_local_runtime):
             return app.patch(args.task, args.old, args.new, args.start)
         if command == 'deliver':
             return runtime.deliver()
-        if command in ('submit', 'preflight', 'first-read'):
+        if command in ('submit', 'preflight'):
             result = load(args.file)
             require(isinstance(result, dict), 'schema', '回执须为 JSON 对象。')
             if os.environ.get('NOVEL_TASK_ID'):
                 require(result.get('task_id') == os.environ['NOVEL_TASK_ID'] and result.get('session') == os.environ.get('NOVEL_SESSION'),
                         'worker_boundary', '回执不能改投其他任务或会话。')
-            return app.seal(result) if command == 'first-read' else app.submit(result, command == 'preflight')
+            return app.submit(result, command == 'preflight')
         if command == 'check':
             # Same validation as submit, but the receipt may omit task identity and may be piped in:
             # a worker learns which field is wrong without reading the engine's source.

@@ -1,400 +1,318 @@
-"""Synthetic behavior tests for tracked stories; never claims of literary quality."""
+"""Step five on a tracked book: the writer's self-comparison replaces the reviewer's receipt.
+
+`drift.reconcile` is the whole check: the writer files one item per planned increment, the engine
+projects the true before-value itself, `kept` must land on the plan, and a declared deviation is
+booked into `book['design_drift']` instead of being argued about by a second agent. What used to
+be a chapter review dispatch is now arithmetic inside `workflow.apply`.
+"""
 import copy
-import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
 
-from support import contract, node, response
-from novel_ledger import context, facts, narrative, planning, scopes, workflow
+from novel_ledger import drift, narrative
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import Error, Job, dump
+from novel_ledger.contracts import Error
 from novel_ledger.sqlite_store import SQLiteRepository
+from support import chapter_rows, contract, drive, response, seeded_book, volume_rows
 
 
 def tracked_contract(chapters=6):
-    raw = contract(chapters)
-    raw.update(narrative_tracking=True, review_chunk=2, review_interval=3, planning_window=3)
+    raw = contract(chapters=chapters, volumes=1)
+    raw.update(narrative_tracking=True)
     return raw
 
 
-def story_node(ident, chapter, line='main', dependencies=(), required=True):
-    return {**node(ident, dependencies), 'line': line, 'required': required, 'window': [chapter, chapter]}
+class TrackingChainTests(unittest.TestCase):
+    """A tracked book's node/thread chain is validated before the prose, not after."""
 
+    def setUp(self):
+        self.book = seeded_book(tracked_contract(4))
+        self.contract = self.book['contract']
+        self.world = self.book['world']
+        self.volume = self.contract['volumes'][0]
+        self.volume_row = drift.validate_volume_outline(
+            {'volumes': volume_rows(self.book, ['v1'])}, self.contract, self.world,
+            {}, {}, ['v1'], self.book['state'])['v1']
+        self.rows = chapter_rows(self.book, self.volume, self.book['state'])
 
-def pace(role='pressure'):
-    return {'role': role, 'pressure_in': '来源不明，工人担心承担责任。', 'pressure_out': '有了核对方向但关系更紧张。',
-            'emotional_aftereffect': '先处理被怀疑后的犹豫，再决定下一步。', 'recovery_purpose': '缓和争执，确认谁愿意合作。'}
+    def submit(self, rows, state0=None):
+        return drift.validate_chapter_outline(
+            {'volume': 'v1', 'chapters': rows}, self.contract['chapter_outline'], self.volume,
+            self.volume_row, self.world,
+            self.book['state'] if state0 is None else state0)
 
+    def assertRejected(self, criterion, rows):
+        with self.assertRaises(Error) as caught:
+            self.submit(rows)
+        self.assertEqual(caught.exception.code, 'design_drift')
+        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+        self.assertIn(criterion, criteria, str(caught.exception.details['findings'])[:400])
 
-def tracked_response(app):
-    result = response(app)
-    work = app.repo.pending()['input']
-    stage, n = work['stage'], work['chapter']
-    book = app.repo.load()
-    total = book['contract']['volumes'][-1]['end']
-    if stage == 'book_plan':
-        kinds = ('main', 'side', 'hidden') if total >= 3 else ('main',)
-        result['data'] = {'intent': '核查退件并面对人情代价。', 'ending_conditions': '各线证据和后果交代完整。',
-            'threads': [{'id': k, 'kind': k, 'purpose': '核对证据与利益。', 'ending_condition': '处理该线造成的后果。', 'required': True} for k in kinds],
-            'nodes': [story_node('n'+str(k), k, kinds[(k-1) % len(kinds)], () if k==1 else ('n'+str(k-1),)) for k in range(1, total+1)]}
-    elif stage == 'volume_plan':
-        result['data'].update(intent='展开本卷行动与余波。', ending_conditions='证据成立且关系变化。', threads=[],
-                              nodes=[{**story_node(work['scope'], n, required=False), 'window': [n, total]}])
-    elif stage == 'plan':
-        for plan in result['data']['plans']:
-            k = plan['chapter']
-            plan.update(node_ids=['n'+str(k)], node_actions=[{'node': 'n'+str(k), 'after': 'resolved'}],
-                        preconditions=[], pacing=pace(('pressure', 'aftermath', 'recovery')[(k-1)%3]),
-                        disclosures=[{'topic': 'source', 'after': 'hinted' if k < total else 'confirmed'}] if k in (3,total) else [])
-    elif stage == 'chapter_review':
-        plan = book['plans'][str(n)]
-        ref = {'chapter': n, 'quote': '要求先核对退件人的名字再开箱'}
-        events = result['data']['facts']['events']
-        events += [{'op': 'story_node', 'node': a['node'], 'before': narrative.progress(book['state'], a['node']),
-                    'after': a['after'], 'outcome': '核对来源并作出行动选择。', 'evidence': ref} for a in plan['node_actions']]
-        for d in plan['disclosures']:
-            events.append({'op': 'reader_knowledge', 'topic': d['topic'], 'before': book['state']['reader_knowledge'].get(d['topic'], {}).get('status'),
-                           'after': d['after'], 'claim': '读者看到了来源核对的证据。', 'evidence': ref})
+    def test_the_node_registry_is_read_off_the_volume_outlines(self):
+        book = copy.deepcopy(self.book)
+        book['volumes_outline'] = {'v1': self.volume_row}
         nodes, threads = narrative.registry(book)
-        for ident in threads:
-            last = max(v['window'][1] for v in nodes.values() if v['line']==ident and v['required'])
-            if n == last:
-                events.append({'op': 'story_thread', 'thread': ident, 'before': 'active', 'after': 'resolved', 'reason': '该线的必要证据和后果已完成。', 'evidence': ref})
-        result['data']['reader']['pacing'] = {**pace(plan['pacing']['role']), 'evidence': ref}
-    elif stage in ('scope_review', 'scope_synthesis') and work['payload'].get('review_tree'):
-        sources = app._sources(work)
-        result['data']['handoff'] = {**{k: '工程夹具：本范围核对证据、后果和衔接，未发现需要后续处理的问题。' for k in scopes.HANDOFF_FIELDS},
-                                   'evidence': [{'chapter': work['first'], 'quote': '次日'}]}
-        if work['payload']['children']:
-            reports = scopes.reports(book)
-            result['data']['coverage'] = [{'part_id': ident, 'reason': '工程夹具：检查子范围与下一范围的因果承接。',
-                'evidence': {'chapter': reports[ident]['first'], 'quote': '次日'}} for ident in work['payload']['children']]
-    return result
+        self.assertEqual(sorted(nodes), ['n1', 'n2', 'n3', 'n4'])
+        self.assertEqual(sorted(threads), ['line-v1'])
+        self.assertEqual(nodes['n1']['line'], 'main')
+
+    def test_a_tracked_chain_resolves_every_node_and_closes_the_line(self):
+        rows = self.submit(self.rows)
+        state, findings = drift.simulate(rows, self.book['state'], self.world, self.volume,
+                                         self.volume_row)
+        self.assertEqual(findings, [])
+        self.assertEqual(state['story_nodes'][rows[0]['plot']['nodes'][0]['node']]['status'], 'resolved')
+        self.assertEqual(state['thread_progress']['line-v1']['status'], 'resolved')
+
+    def test_a_node_cannot_be_advanced_before_its_dependency(self):
+        volume = copy.deepcopy(self.volume_row)
+        volume['nodes'][1]['depends_on'] = ['n1']
+        broken = copy.deepcopy(self.rows)
+        broken[0]['plot']['nodes'] = copy.deepcopy(broken[1]['plot']['nodes'])
+        with self.assertRaises(Error) as caught:
+            drift.validate_chapter_outline(
+                {'volume': 'v1', 'chapters': broken}, self.contract['chapter_outline'],
+                self.volume, volume, self.world, self.book['state'])
+        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+        self.assertIn('drift_node', criteria)
+
+    def test_a_resolved_line_cannot_be_reused(self):
+        rows = chapter_rows(self.book, self.volume, self.book['state'])
+        # Chapter 1 closes the line; chapter 2 tries to reopen it. Both rows stay self-consistent as
+        # declarations, so what fails is the simulation's own guard, not the exit arithmetic.
+        rows[0]['plot']['threads'] = [{'thread': 'line-v1', 'after': 'resolved',
+                                       'reason': '本卷核对提前收束。'}]
+        rows[0]['enter'].append({'kind': 'thread', 'key': 'line-v1', 'expected': None})
+        rows[0]['exit'].append({'kind': 'thread', 'key': 'line-v1', 'expected': 'resolved'})
+        rows[1]['plot']['threads'] = [{'thread': 'line-v1', 'after': 'active',
+                                       'reason': '工程样本：试图重开已收束的线路。'}]
+        rows[1]['enter'].append({'kind': 'thread', 'key': 'line-v1', 'expected': 'resolved'})
+        rows[1]['exit'].append({'kind': 'thread', 'key': 'line-v1', 'expected': 'resolved'})
+        self.assertRejected('drift_thread', rows)
+
+    def test_a_character_delta_needs_a_choice_and_a_cost(self):
+        broken = copy.deepcopy(self.rows)
+        broken[0]['characters'][0].pop('cost')
+        self.assertRejected('drift_shape', broken)
+
+    def test_closure_refuses_unresolved_required_work(self):
+        book = copy.deepcopy(self.book)
+        book['volumes_outline'] = {'v1': self.volume_row}
+        book['state'] = dict(book['state'], story_nodes={'n1': {'status': 'resolved'}},
+                             thread_progress={})
+        with self.assertRaises(Error) as caught:
+            narrative.closure(book)
+        self.assertEqual(caught.exception.code, 'story_closure')
 
 
-def drive_tracked(app, owner=None, until=None):
-    for _ in range(300):
-        handoff = app.advance(owner=owner)
-        if handoff['action']=='await_author':
-            app.approve(handoff['prose_hash'], '工程夹具认可当前首章。', owner)
-        elif handoff['action']!='task_ready':
-            return handoff
-        elif until and handoff['task']['stage']==until:
-            return handoff
-        else:
-            app.submit(tracked_response(app))
-    raise AssertionError('跟踪工程流未停止')
+class DriftCheckReconciliationTests(unittest.TestCase):
+    """What the writer files, and what the engine refuses to settle."""
 
-
-class NarrativeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.repo = SQLiteRepository.initialize(Path(self.temp.name)/'book', workflow.new_book(tracked_contract()))
+        self.repo = SQLiteRepository.initialize(Path(self.temp.name) / 'book',
+                                                seeded_book(tracked_contract(6)))
+        self.app = Application(self.repo)
+        self.owner = self.app.run(through=6, source='工程夹具授权写完六章。')['owner']
+        drive(self.app, self.owner, until='write')
+
+    def tearDown(self):
+        self.repo.close()
+        self.temp.cleanup()
+
+    def receipt(self):
+        return response(self.app)
+
+    def submit(self, result):
+        handoff = self.app.submit(result)
+        return handoff
+
+    def advance(self):
+        return self.app.advance(owner=self.owner)
+
+    def findings(self):
+        draft = self.repo.load().get('draft') or {}
+        return draft.get('findings') or []
+
+    def criteria(self):
+        return {finding.get('criterion') for finding in self.findings()}
+
+    def test_the_fixture_receipt_commits_and_settles_the_planned_events(self):
+        result = self.submit(self.receipt())
+        self.assertEqual(result['committed_chapter'], 1)
+        book = self.repo.load()
+        self.assertEqual(book['state']['clock'], 1)
+        self.assertEqual(book['state']['story_nodes']['n1']['status'], 'resolved')
+        self.assertEqual(float(book['state']['resources']['["shen","车费","元"]']), 3)
+        # `facts.settle` stores the knowledge projection as a stance, not as the reveal stage the
+        # outline speaks: `hinted` is the reader-facing name for "suspects".
+        self.assertEqual(book['state']['knowledge']['shen:source']['stance'], 'suspects')
+
+    def test_a_missing_item_is_a_coverage_drift(self):
+        result = self.receipt()
+        result['data']['drift_check']['items'].pop(0)
+        self.submit(result)
+        self.assertIn('drift_coverage', self.criteria())
+        self.assertEqual(self.repo.load()['draft']['stage'], 'repair')
+
+    def test_an_extra_item_is_also_a_coverage_drift(self):
+        result = self.receipt()
+        result['data']['drift_check']['items'].append({
+            'kind': 'resources', 'key': '["shen","不存在","元"]',
+            'planned': {'from': 0, 'to': 1}, 'actual': {'from': 0, 'to': 1},
+            'status': 'kept', 'reason': '工程样本。',
+            'evidence': {'chapter': 1, 'quote': '次日'}})
+        self.submit(result)
+        self.assertIn('drift_coverage', self.criteria())
+
+    def test_a_self_reported_before_that_contradicts_the_projection_is_refused(self):
+        result = self.receipt()
+        target = next(item for item in result['data']['drift_check']['items']
+                      if item['kind'] == 'resources')
+        target['actual']['from'] = 99
+        self.submit(result)
+        self.assertIn('drift_before', self.criteria())
+
+    def test_kept_must_land_on_the_planned_value(self):
+        result = self.receipt()
+        target = next(item for item in result['data']['drift_check']['items']
+                      if item['kind'] == 'resources')
+        target['actual']['to'] = 88
+        self.submit(result)
+        self.assertIn('drift_kept', self.criteria())
+
+    def test_evidence_must_be_a_verbatim_fragment_of_the_prose(self):
+        result = self.receipt()
+        result['data']['drift_check']['items'][0]['evidence']['quote'] = '这句话不在正文里。'
+        with self.assertRaises(Error) as caught:
+            self.app.submit(result)
+        self.assertEqual(caught.exception.code, 'evidence')
+
+    def test_a_declared_deviation_is_booked_into_design_drift(self):
+        result = self.receipt()
+        target = next(item for item in result['data']['drift_check']['items']
+                      if item['kind'] == 'resources')
+        target.update(status='deviated', actual={'from': 4, 'to': 5},
+                      reason='正文里他多领了一趟车费。')
+        result['data']['drift_check']['verdict'] = 'deviated'
+        outcome = self.submit(result)
+        self.assertEqual(outcome['committed_chapter'], 1)
+        book = self.repo.load()
+        self.assertEqual(book['state']['resources'], {'["shen","车费","元"]': '5'})
+        self.assertEqual(len(book['design_drift']), 1)
+        self.assertEqual(book['design_drift'][0]['kind'], 'resources')
+        self.assertIn('多领了', book['design_drift'][0]['reason'])
+
+    def test_a_deviated_item_without_a_reason_is_refused(self):
+        result = self.receipt()
+        target = next(item for item in result['data']['drift_check']['items']
+                      if item['kind'] == 'resources')
+        target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='')
+        result['data']['drift_check']['verdict'] = 'deviated'
+        self.submit(result)
+        self.assertIn('drift_reason', self.criteria())
+
+    def test_a_clean_verdict_with_deviations_is_a_contradiction(self):
+        result = self.receipt()
+        target = next(item for item in result['data']['drift_check']['items']
+                      if item['kind'] == 'resources')
+        target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='正文里多领了一趟车费。')
+        self.submit(result)
+        self.assertIn('drift_verdict', self.criteria())
+
+    def test_the_engine_replans_the_rest_of_the_volume_after_a_booking(self):
+        result = self.receipt()
+        target = next(item for item in result['data']['drift_check']['items']
+                      if item['kind'] == 'resources')
+        target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='正文里他多领了一趟车费。')
+        result['data']['drift_check']['verdict'] = 'deviated'
+        self.submit(result)
+        handoff = self.advance()
+        if handoff['action'] == 'await_author':
+            self.app.approve(handoff['prose_hash'], '工程夹具认可首章版本。', self.owner)
+            handoff = self.advance()
+        self.assertEqual(handoff['task']['stage'], 'chapter_outline')
+        work = self.repo.pending()['input']
+        self.assertTrue(work['payload'].get('repair'))
+        self.assertTrue(work['payload'].get('drift'))
+        self.assertEqual(work['payload']['from_chapter'], 2)
+
+    def test_the_writer_cannot_self_report_events(self):
+        result = self.receipt()
+        result['data']['events'] = [{'op': 'clock', 'before': 0, 'after': 1,
+                                     'evidence': {'chapter': 1, 'quote': '次日'}}]
+        with self.assertRaises(Error) as caught:
+            self.app.submit(result)
+        self.assertEqual(caught.exception.code, 'writer_events')
+
+
+class CompletionTests(unittest.TestCase):
+    """A tracked book completes only when the chain it declared is fully settled."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.repo = SQLiteRepository.initialize(Path(self.temp.name) / 'book',
+                                                seeded_book(tracked_contract(6)))
         self.app = Application(self.repo)
 
     def tearDown(self):
         self.repo.close()
         self.temp.cleanup()
 
-    def assertCode(self, code, fn, *args):
-        with self.assertRaises(Error) as caught:
-            fn(*args)
-        self.assertEqual(caught.exception.code, code)
-
-    def test_new_projects_default_to_tracking_but_legacy_seed_is_unchanged(self):
-        raw = contract()
-        del raw['narrative_tracking']
-        self.assertIn('story_nodes', workflow.new_book(raw)['state'])
-        self.assertNotIn('story_nodes', facts.seed(contract()))
-
-    def test_three_lines_complete_and_replay_with_evidence(self):
-        owner = self.app.run(finish=True)['owner']
-        self.assertEqual(drive_tracked(self.app, owner)['action'], 'ready_to_complete')
+    def test_a_full_tracked_book_completes_with_its_chain_closed(self):
+        owner = self.app.run(finish=True, source='工程夹具授权完本。')['owner']
+        handoff = drive(self.app, owner)
+        self.assertEqual(handoff['action'], 'ready_to_complete')
         self.assertTrue(self.app.complete(owner)['completed'])
-        state = self.repo.load()['state']
-        self.assertEqual({t['status'] for t in state['thread_progress'].values()}, {'resolved'})
-        self.assertEqual(state['reader_knowledge']['source']['status'], 'confirmed')
-        self.assertEqual([p['role'] for p in state['pace_history']], ['pressure','aftermath','recovery']*2)
-        self.assertTrue(self.app.audit()['ok'])
-
-    def test_payoff_plan_cannot_skip_unrealized_dependency(self):
-        drive_tracked(self.app, until='plan')
-        result = tracked_response(self.app)
-        first = result['data']['plans'][0]
-        first.update(node_ids=['n2'], node_actions=[{'node':'n2','after':'resolved'}])
-        self.repo.load()
-        # Put the payoff inside the same window to isolate the missing causal prerequisite.
-        b = self.repo.load(); b['designs']['book']['nodes'][1]['window']=[1,2]; self.repo.save(b)
-        self.assertCode('story_dependency', self.app.submit, result)
-        self.assertEqual(self.repo.load()['state']['story_nodes'], {})
-
-    def test_missing_node_event_rolls_back_entire_chapter(self):
-        drive_tracked(self.app, until='chapter_review')
-        result = tracked_response(self.app)
-        result['data']['facts']['events'] = [e for e in result['data']['facts']['events'] if e['op']!='story_node']
-        self.assertCode('story_coverage', self.app.submit, result)
-        self.assertEqual(self.repo.headers('main'), [])
-
-    def test_bad_event_coordinate_returns_domain_error_not_traceback(self):
-        drive_tracked(self.app,until='chapter_review')
-        result=tracked_response(self.app)
-        result['data']['facts']['events'][1]['node']={'invalid':'shape'}
-        self.assertCode('story_coverage',self.app.submit,result)
-
-    def test_unplanned_reveal_is_rejected(self):
-        drive_tracked(self.app, until='chapter_review')
-        result = tracked_response(self.app)
-        result['data']['facts']['events'].append({'op':'reader_knowledge','topic':'source','before':None,'after':'confirmed','claim':'提前揭晓。','evidence':{'chapter':1,'quote':'次日'}})
-        self.assertCode('disclosure', self.app.submit, result)
-
-    def test_required_line_cannot_close_early(self):
-        drive_tracked(self.app, until='chapter_review')
-        result = tracked_response(self.app)
-        result['data']['facts']['events'].append({'op':'story_thread','thread':'main','before':'active','after':'resolved','reason':'提前结束。','evidence':{'chapter':1,'quote':'次日'}})
-        self.assertCode('story_closure', self.app.submit, result)
-
-    def test_current_character_state_is_evidenced_and_replans_changed_assumption(self):
-        b=self.repo.load(); b['target']=6; self.repo.save(b)
-        drive_tracked(self.app, until='chapter_review')
-        result = tracked_response(self.app)
-        change = {'desire':'保护同事。','stance':'愿意承担责任。','relationship_focus':'信任被怀疑的同事。'}
-        result['data']['facts']['events'].append({'op':'character_current','entity':'shen','before':None,'after':change,'choice':'站出来担责。','cost':'可能丢掉工作。','change':'先保住同事。','evidence':{'chapter':1,'quote':'次日'}})
-        self.app.submit(result)
-        self.app.approve(self.repo.chapter('main',1)['prose'], '工程认可。')
-        b=self.repo.load(); b['target']=6; b['plans']['2']['preconditions']=[{'kind':'character_current','key':'shen','expected':None}]; self.repo.save(b)
-        handle=self.app.advance()
-        self.assertEqual(handle['task']['stage'],'plan')
-        self.assertEqual(self.repo.load()['state']['character_current']['shen']['value'],change)
-
-    def test_dormant_line_requires_a_return_condition(self):
-        event={'op':'story_thread','thread':'side','before':None,'after':'dormant','reason':'等主角回来。','evidence':{'chapter':1,'quote':'次日'}}
-        self.assertCode('story_thread',facts.settle,self.repo.load()['state'],[event],'次日',1)
-        event['return_by']=3
-        state,_=facts.settle(self.repo.load()['state'],[event],'次日',1)
-        self.assertCode('thread_due',facts.settle,state,[],'第三日',3)
-
-    def test_completion_requires_all_required_nodes_and_lines(self):
-        b=self.repo.load(); b['designs']['book']={'nodes':[story_node('end',6)],'threads':[{'id':'main','kind':'main','required':True}]}
-        self.assertCode('story_closure',narrative.closure,b)
-
-    def test_budget_reads_the_derived_band(self):
-        raw=json.loads((Path(__file__).resolve().parents[1]/'assets/contract.example.json').read_text(encoding='utf-8'))
-        c=planning.validate_contract(raw)
-        last=c['volumes'][-1]['end']
-        self.assertEqual(c['word_range'],[last*c['chapter_min'],last*c['chapter_max']])
-        budget=narrative.word_budget(c,last*c['chapter_min'],last)
-        self.assertEqual(budget['minimum'],c['chapter_min'])
-        self.assertGreaterEqual(budget['maximum'],c['chapter_aim'])
-
-    def test_budget_cap_is_the_derived_band_not_an_average(self):
-        raw=tracked_contract(2); raw.update(chapter_min=20,chapter_aim=70,chapter_max=150,word_range=[100,200])
-        c=planning.validate_contract(raw)
-        self.assertEqual(c['word_range'],[2*20,2*150])
-        self.assertEqual(narrative.word_budget(c,140,2)['maximum'],150)
-
-    def test_narrow_revision_budget_reserves_unchanged_suffix(self):
-        raw=tracked_contract(3); raw.update(chapter_min=20,chapter_aim=50,chapter_max=100,word_range=[120,180])
-        c=planning.validate_contract(raw)
-        self.assertEqual(c['word_range'],[3*20,3*100])
-        budget=narrative.word_budget(c,50,2,60,1)
-        self.assertEqual((budget['minimum'],budget['maximum']),(20,100))
-
-    def test_normalized_plan_does_not_mutate_receipt_or_break_idempotence(self):
-        drive_tracked(self.app,until='plan')
-        result=tracked_response(self.app)
-        original=copy.deepcopy(result)
-        self.app.submit(result)
-        self.assertEqual(result,original)
-        self.assertTrue(self.app.submit(original)['idempotent'])
-
-    def test_every_cold_stage_has_brief_and_blind_stage_hides_formal_brief(self):
-        handle=drive_tracked(self.app,until='write')['task']
-        work=self.repo.pending()['input']
-        self.assertTrue(work['brief']); self.assertIn('craft.md',str(handle['guides']))
-        self.app.submit(tracked_response(self.app))
-        blind=self.app.advance()['task']
-        self.assertEqual(blind['delivery_phase'],'first_read')
-        self.assertNotIn('node_actions',blind['brief'])
-        self.assertNotIn('input_path',blind)
-
-    def test_story_context_uses_direct_dependencies_not_500_ancestors(self):
-        drive_tracked(self.app,until='write')
-        self.repo.cancel_pending('工程上下文测量')
-        b=self.repo.load()
-        b['designs']['book']['nodes']=[{**story_node('a'+str(i),1,dependencies=() if i==0 else ['a'+str(i-1)]),'required':False} for i in range(500)]
-        b['plans']['1'].update(node_ids=['a499'],node_actions=[{'node':'a499','after':'seeded'}],node_contracts={'a499':b['designs']['book']['nodes'][-1]})
-        self.repo.save(b)
-        self.app.advance()
-        w=self.repo.pending()['input']
-        self.assertEqual(len(self.repo.read_document(w['records']['story'])),2)
-        self.assertEqual(len(self.repo.read_document(w['records']['design:book'])['nodes']),500)
-
-    def test_later_planner_receives_completed_direct_prerequisites(self):
-        owner=self.app.run(finish=True)['owner']
-        for _ in range(80):
-            h=self.app.advance(owner=owner)
-            if h['action']=='await_author':
-                self.app.approve(h['prose_hash'],'工程认可。',owner); continue
-            w=self.repo.pending()['input']
-            if w['stage']=='plan' and w['chapter']==4:
-                frontier=self.repo.read_document(w['records']['progress_frontier'])
-                self.assertEqual(frontier['nodes']['n3']['status'],'resolved')
-                return
-            self.app.submit(tracked_response(self.app))
-        self.fail('没有出现下一窗口')
-
-    def test_memory_lookup_is_frozen_and_blind_lookup_is_sealed(self):
-        owner=self.app.run(finish=True)['owner']
-        drive_tracked(self.app,owner,until='chapter_review')
-        task=self.repo.pending()
-        self.assertCode('first_read_sealed',self.app.recall,task['id'],None,False,'entity','shen')
-        self.app.submit(tracked_response(self.app))
-        self.app.approve(self.repo.chapter('main',1)['prose'],'工程认可。',owner)
-        self.app.advance(owner=owner)
-        task=self.repo.pending()
-        found=self.app.recall(task['id'],None,False,'node','n1')
-        self.assertEqual(found['matches'][0]['chapter'],1)
-        self.assertEqual(found['matches'][0]['evidence']['quote'],'要求先核对退件人的名字再开箱')
-
-    def test_receipt_cannot_downgrade_frozen_check_version(self):
-        drive_tracked(self.app,until='chapter_review')
-        result=tracked_response(self.app)
-        result['data']['facts']['checks_version']=1
-        self.assertCode('checks_version',self.app.submit,result)
-
-    def test_original_inflight_review_keeps_original_check_set(self):
-        self.repo.save(workflow.new_book(contract()))
-        from support import drive
-        drive(self.app,until='chapter_review')
-        original=copy.deepcopy(self.repo.pending()['input'])
-        original.pop('checks_version')
-        self.repo.cancel_pending('工程模拟更新前的冻结任务')
-        self.repo.add_task(original)
-        result=response(self.app)
-        self.assertEqual(result['data']['facts']['checks_version'],1)
-        self.app.submit(result)
-        self.assertTrue(self.app.audit()['ok'])
-
-    def test_book_view_contains_narrative_progress_and_reader_state(self):
-        from novel_ledger import bookpage
-        owner=self.app.run(finish=True)['owner']
-        drive_tracked(self.app,owner)
-        html=bookpage.render(self.repo)
-        self.assertIn('节点实际推进',html)
-        self.assertIn('读者已见信息',html)
-        self.assertIn('近期节奏与情绪承接',html)
-
-    def test_world_secret_stays_optional_and_disclosure_boundary_is_explicit(self):
-        drive_tracked(self.app,until='write')
-        self.repo.cancel_pending('工程隐秘材料')
-        b=self.repo.load(); b['plans']['1']['world_refs']=['characters:shen']
-        b['world']={'premise':'仓库','rules':[],'story_capacity':'工程模型','characters':[{'id':'shen','links':['mysteries:source']}],
-                    'mysteries':[{'id':'source','truth':'真正退件人是主管','disclosure':'卷末','causal_role':'追查责任','links':[]}]}
-        self.repo.save(b); self.app.advance(); w=self.repo.pending()['input']
-        self.assertNotIn('真正退件人是主管',dump({k:self.repo.read_document(w['records'][k]) for k in w['required']}))
-        self.assertIn('真正退件人是主管',dump(self.repo.read_document(w['records']['world_author_records'])))
-        self.assertEqual(self.repo.read_document(w['records']['disclosure_boundary'])['allowed_changes'],[])
-
-    def test_basic_project_never_receives_the_author_truth_as_required_material(self):
-        """Turning tracking off changes node bookkeeping, not who may read the ending.
-
-        The basic branch used to hand the whole world closure — including `mysteries` — to the
-        writer as required reading, and dropped the disclosure boundary with it. A writer who is
-        told the answer cannot be judged on whether the prose discloses it properly.
-        """
-        from support import drive
-        self.repo.save(workflow.new_book(contract(2)))
-        drive(self.app, until='write')
-        self.repo.cancel_pending('工程隐秘材料')
-        b = self.repo.load(); b['plans']['1']['world_refs'] = ['characters:shen']
-        b['world'] = {'premise': '仓库', 'rules': [], 'story_capacity': '工程模型',
-                      'characters': [{'id': 'shen', 'links': ['mysteries:source']}],
-                      'mysteries': [{'id': 'source', 'truth': '真正退件人是主管', 'disclosure': '卷末',
-                                     'causal_role': '追查责任', 'links': []}]}
-        self.repo.save(b); self.app.advance(); w = self.repo.pending()['input']
-        required = {k: self.repo.read_document(w['records'][k]) for k in w['required']}
-        self.assertNotIn('真正退件人是主管', dump(required))
-        self.assertIn('world_records', w['required'])
-        boundary = self.repo.read_document(w['records']['disclosure_boundary'])
-        self.assertEqual([row['id'] for row in boundary['author_secrets']], ['mysteries:source'])
-        self.assertNotIn('真正退件人是主管', dump(boundary))
-        # The bounded `story` slice carries the nodes this dispatch decides on, so the complete
-        # design scope stays available to read without being required material.
-        self.assertNotIn('design:book', w['required'])
-        self.assertIn('design:book', w['records'])
-
-    def test_the_world_is_never_required_twice_on_one_dispatch(self):
-        """The full model and its core projection were both required on every design dispatch.
-
-        A real run paid 47,636 bytes of world plus an 11,199-byte projection of the same world on each
-        design and review task. The projection is required only where the model is not.
-        """
-        handle = drive_tracked(self.app, until='write')
-        self.repo.cancel_pending('工程世界投影')
         book = self.repo.load()
-        book['world'] = {'premise': '仓库', 'rules': [], 'story_capacity': '工程模型',
-                         'characters': [{'id': 'shen', 'links': []}], 'mysteries': []}
-        book['plans']['1']['world_refs'] = ['characters:shen']
-        self.repo.save(book)
-        self.app.advance()
-        work = self.repo.pending()['input']
-        self.assertEqual(work['stage'], 'write')
-        self.assertIn('world_core', work['required'])
-        self.assertNotIn('world_model', work['required'])
-        self.assertIn('world_model', work['records'])
-        self.repo.cancel_pending('工程世界投影')
-        # A design dispatch reads the record the projection comes from, not both.
-        built = context.build(self.repo, self.repo.load(), Job('book_plan', 1, 'book'))
-        self.assertIn('world_model', built['required'])
-        self.assertNotIn('world_core', built['required'])
-        self.assertIn('world_core', built['records'])
-
-    def test_review_tree_bounds_parent_fanout_and_invalidates_changed_chain(self):
-        headers=[{'n':i,'chain':str(i)} for i in range(1,501)]
-        parts=scopes.tree(headers,1,500,3,3)
-        self.assertEqual((parts[-1]['first'],parts[-1]['last']),(1,500))
-        self.assertLessEqual(max(len(p['children']) for p in parts),3)
-        headers[-1]['chain']='changed'
-        newer=scopes.tree(headers,1,500,3,3)
-        self.assertNotEqual(parts[-1]['part_id'],newer[-1]['part_id'])
-        self.assertEqual(parts[0]['part_id'],newer[0]['part_id'])
-
-    def test_scope_coverage_and_synthesis_are_bounded_in_real_workflow(self):
-        self.repo.save(workflow.new_book(tracked_contract(12)))
-        owner=self.app.run(finish=True)['owner']
-        seen=[]
-        for _ in range(300):
-            h=self.app.advance(owner=owner)
-            if h['action']=='await_author':
-                self.app.approve(h['prose_hash'],'工程认可。',owner); continue
-            if h['action']!='task_ready':
-                self.assertEqual(h['action'],'ready_to_complete'); break
-            w=self.repo.pending()['input']
-            if w['stage']=='scope_synthesis':
-                self.assertLessEqual(len(w['prose']),6)
-                self.assertLessEqual(len(w['payload']['children']),3)
-                seen.append(w['payload']['level'])
-                result=tracked_response(self.app)
-                bad=copy.deepcopy(result); bad['data']['coverage'].pop()
-                self.assertCode('scope_coverage',self.app.submit,bad)
-                self.app.submit(result)
-            else:
-                self.app.submit(tracked_response(self.app))
-        self.assertGreaterEqual(max(seen),2)
-        self.assertTrue(self.app.complete(owner)['completed'])
-
-    def test_tracked_narrow_revision_carries_suffix_and_reaudits(self):
-        owner=self.app.run(finish=True)['owner']
-        drive_tracked(self.app,owner); self.app.complete(owner)
-        self.app.revise(1,'工程仅改标题。',owner,1)
-        self.assertEqual(drive_tracked(self.app,owner)['action'],'revision_ready')
-        self.app.promote(owner)
+        self.assertEqual(book['state']['thread_progress']['line-v1']['status'], 'resolved')
+        self.assertEqual(len(book['state']['story_nodes']), 6)
         self.assertTrue(self.app.audit()['ok'])
+        self.assertEqual(self.app.complete(owner)['idempotent'], True)
+
+    def test_every_design_drift_row_is_visible_to_the_closing_audit(self):
+        owner = self.app.run(finish=True, source='工程夹具授权完本。')['owner']
+        # One declared deviation on the first chapter; the engine books it and re-plans the rest.
+        drive(self.app, owner, until='write')
+        result = response(self.app)
+        target = next(item for item in result['data']['drift_check']['items']
+                      if item['kind'] == 'resources')
+        target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='正文里他多领了一趟车费。')
+        result['data']['drift_check']['verdict'] = 'deviated'
+        self.app.submit(result)
+        drive(self.app, owner)
+        report = self.app.audit()
+        self.assertTrue(report['ok'])
+        self.assertEqual([row['kind'] for row in report['design_drift']], ['resources'])
+
+    def test_rework_budget_still_bounds_the_loop(self):
+        owner = self.app.run(finish=True, source='工程夹具授权完本。')['owner']
+        drive(self.app, owner, until='write')
+        # Every round files a receipt the engine refuses the same way: the budget must run out at
+        # REPAIRS and hand the decision to the author instead of looping forever.
+        rounds = 0
+        while rounds < 6:
+            handoff = self.app.advance(owner=owner)
+            if handoff['action'] != 'task_ready':
+                break
+            if handoff['task']['stage'] not in ('write', 'repair', 'redesign'):
+                break
+            result = response(self.app)
+            result['data']['drift_check']['items'].pop(0)
+            self.app.submit(result)
+            rounds += 1
+        book = self.repo.load()
+        self.assertNotIn(book['status'], ('completed',))
+        self.assertTrue(rounds <= 3, '返修轮次应有界：%d' % rounds)
+        self.assertTrue(book['draft'] is not None)
+        handoff = self.app.advance(owner=owner)
+        self.assertEqual(handoff['action'], 'paused')
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     unittest.main()

@@ -23,13 +23,12 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 import novel
-from novel_ledger import creation, delivery, quality, workflow, world
+from novel_ledger import creation, delivery, workflow, world
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import CHECKS_VERSION, RESULT, Error
+from novel_ledger.contracts import RESULT, Error
 from novel_ledger.sqlite_store import SQLiteRepository
 from test_opening import shown
 from test_opening_inline import gate_result
-from test_opening_v2 import combined, model, options, receipt, review_data
 
 CHOICES = {'world': {'world_premise': '一座仓库的夜班退件纠纷。', 'mechanism': {'mode': 'none'}},
            'protagonist': {'id': 'shen', 'name': '沈桐', 'identity': '夜班退件工，背着一笔旧账。',
@@ -101,20 +100,6 @@ class ArtifactTests(unittest.TestCase):
         # The blank form is untouched by the quarantine; a fresh render of a fresh task keeps
         # whatever the active worker has written (no prior view, no quarantine).
         self.assertTrue((base / 'result.template.json').exists())
-
-    def test_the_review_enums_are_told_not_probed(self):
-        """The same live reviewer spent two preflight rounds on 'fail' and finding shapes."""
-        from novel_ledger import briefs
-        receipt = {'verdict': 'fail', 'checks_version': CHECKS_VERSION,
-                   'checks': [{'id': 'causality', 'result': 'fail', 'reason': '工程反例。',
-                               'evidence': [{'chapter': 0, 'quote': '原文。'}]}],
-                   'findings': []}
-        with self.assertRaises(Error) as caught:
-            quality.checks(receipt, ('causality',), {0: '原文。'})
-        self.assertEqual(caught.exception.code, 'review')
-        self.assertIn('没有 fail', caught.exception.details['rule'])
-        self.assertEqual(caught.exception.details['expect'], {'verdict': 'pass|fix'})
-        self.assertIn('没有 fail', briefs.FINDING_SHAPE)
 
     def test_compact_advance_trims_the_board_echo_and_snapshots_the_full_view(self):
         self.app.advance()
@@ -281,67 +266,27 @@ class ClaimRoleTests(unittest.TestCase):
         self.assertIn('claim --task task-claim-lesson', caught.exception.details['recover'])
 
 
-class RepairDiffTests(unittest.TestCase):
-    """The re-review reads the engine's repair_diff record instead of hand-rolling a diff."""
+class RepairScopeTests(unittest.TestCase):
+    """A local repair may only change the records its findings name; the summary says what moved.
 
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.project = Path(self.temp.name) / 'book'
-        self.repo = SQLiteRepository.initialize(self.project,
-                                                workflow.preparing_book(guided=True, opening_version=2))
-        self.app = Application(self.repo)
+    v2 keeps the guard but moves it to the one repair that still re-drafts records in bulk: the
+    volume outline. A chapter outline repair is re-derived from the state that actually moved, so
+    the guard's job is narrower — an unnamed record must come back byte-identical.
+    """
 
-    def tearDown(self):
-        self.repo.close()
-        self.temp.cleanup()
-
-    def choose_current_gate(self):
-        handoff = self.app.advance()
-        if handoff['action'] == 'await_choice':
-            board = handoff['board']
-        else:
-            self.app.submit(receipt(self.app, options(self.app)))
-            board = self.app.advance()['board']
-        self.app.opening_choice(board['options'][0]['id'], board['hash'], '作者选它。')
-
-    def test_the_re_review_receives_the_engine_rendered_scope_summary(self):
-        for _gate in range(10):
-            self.choose_current_gate()
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
-        self.app.submit(receipt(self.app, combined(self.app)))
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_review')
-        # The independent review fails one named record and asks for a local repair.
-        data = review_data(self.app)
-        criterion = data['checks'][0]['id']
-        data['verdict'] = 'fix'
-        data['findings'] = [{'criterion': criterion, 'severity': 'quality',
-                             'reason': '这条规则没有写出漏登的处置：夜班退件必须登记负责人。',
-                             'evidence': {'chapter': 0, 'quote': '夜班退件必须登记负责人。'},
-                             'target_chapter': 0, 'repair_scope': 'local'}]
-        data['checks'][0].update(result='fix', reason='同上。')
-        self.app.submit(receipt(self.app, data))
-        repair = self.app.advance()['task']
-        self.assertEqual(repair['stage'], 'world_model')
-        repaired = model(self.app)
-        repaired['rules'][0]['principle'] = '夜班退件必须由当班负责人当场登记并签字。'
-        self.app.submit(receipt(self.app, repaired))
-        diff = self.repo.load()['proposal']['repair_diff']
-        self.assertIn('rules:r1', diff['changed'])
-        self.assertIn('rules:r1', diff['named_by_findings'])
-        self.assertEqual(diff['changed_but_not_named'], [])
-        self.assertIn('characters:shen', diff['unchanged'])
-        # The re-review dispatch carries the summary as required material and says so in the brief.
-        handoff = self.app.advance()
-        self.assertEqual(handoff['task']['stage'], 'world_review')
-        work = self.repo.pending()['input']
-        self.assertIn('repair_diff', work['records'])
-        self.assertEqual(sorted(work['required']), ['opening_choices', 'proposal', 'repair_diff'])
-        self.assertIn('返修后重核', work['brief'])
-        self.assertIn('repair_diff', work['brief'])
-        fetched = self.app.read(work['task_id'] if 'task_id' in work else handoff['task']['task_id'],
-                                record='repair_diff')
-        self.assertEqual(fetched['records']['repair_diff']['value']['changed'], diff['changed'])
-        self.assertTrue(fetched['records']['repair_diff']['value']['findings'])
+    def test_a_local_repair_refuses_to_change_a_record_its_findings_never_named(self):
+        previous = {'chapters': [{'chapter': 1, 'synopsis': '旧第一章。'},
+                                 {'chapter': 2, 'synopsis': '旧第二章。'}]}
+        candidate = {'chapters': [{'chapter': 1, 'synopsis': '被悄悄改掉的第一章。'},
+                                  {'chapter': 2, 'synopsis': '新第二章。'}]}
+        findings = [{'criterion': 'chapter_quality', 'reason': '第 2 章的推进需要改写。',
+                     'evidence': [], 'target_chapter': 2, 'repair_scope': 'local'}]
+        with self.assertRaises(Error) as caught:
+            workflow.require_narrow_repair(previous, candidate, findings)
+        self.assertEqual(caught.exception.code, 'repair_scope')
+        self.assertEqual(caught.exception.details['changed_but_not_named'], ['chapter:1'])
+        # The guarded case is exactly the named one: a chapter-scope finding may move more.
+        workflow.require_narrow_repair(previous, candidate, [{**findings[0], 'repair_scope': 'chapter'}])
 
     def test_repair_summary_counts_named_changed_and_untouched(self):
         previous = {'rules': [{'id': 'r1', 'principle': '旧规则。'}, {'id': 'r2', 'principle': '稳定规则。'}]}

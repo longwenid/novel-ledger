@@ -7,6 +7,13 @@ from .contracts import digest, require, text
 KINDS = ('entities', 'facts', 'knowledge', 'resources', 'relations', 'placements', 'places',
          'character_current', 'reader_knowledge', 'hooks', 'node', 'clock', 'clock_threads',
          'thread_progress', 'historical_assertions', 'developments')
+# The coordinate names a chapter outline uses for its enter/exit rows, mapped onto the projection
+# fields the state stores. A chapter says `character`/`thread`/`places`; the projection is
+# `character_current`/`thread_progress`/`placements`.
+COORDINATE_ALIASES = {'character': 'character_current', 'characters': 'character_current',
+                      'characters_current': 'character_current', 'thread': 'thread_progress',
+                      'threads': 'thread_progress', 'places': 'placements', 'place': 'placements',
+                      'resources': 'resources', 'node': 'node', 'clock': 'clock', 'knowledge': 'knowledge'}
 READING_KINDS = ('character', 'relationship', 'theme', 'voice', 'disclosure')
 READING_SCHEMA = 'reading-dependencies/1'
 
@@ -34,10 +41,16 @@ def reading_refs(plan):
 
 
 def coordinate(value):
-    require(isinstance(value, dict) and value.get('kind') in KINDS and text(value.get('key')),
+    require(isinstance(value, dict) and text(value.get('key')),
             'story_dependency', '依赖坐标须为 {kind,key}，kind 使用事实投影种类。', {'valid_kinds': list(KINDS)})
-    require(value['kind'] != 'clock' or value['key'] == 'main', 'story_dependency', '主时钟坐标使用 clock/main。')
-    return value['kind'], value['key']
+    kind = COORDINATE_ALIASES.get(value.get('kind'), value.get('kind'))
+    require(kind in KINDS, 'story_dependency', '依赖坐标须为 {kind,key}，kind 使用事实投影种类。',
+            {'valid_kinds': list(KINDS), 'got': value.get('kind')})
+    # One main clock, whatever a chapter outline calls its key: both spellings are normalized so no
+    # call site has to remember which vocabulary it is holding.
+    key = 'main' if kind == 'clock' and value['key'] in ('clock', 'main') else value['key']
+    require(kind != 'clock' or key == 'main', 'story_dependency', '主时钟坐标使用 clock/main。')
+    return kind, key
 
 
 def bind(plan, previous, identity_version=1, reading_version=None):
@@ -109,11 +122,41 @@ def bind(plan, previous, identity_version=1, reading_version=None):
 
 
 def reads(plan):
+    """Every state coordinate this row reads, from the plan shape and the chapter-outline shape.
+
+    A v2 row declares its own increments and its enter/exit handshake, so those coordinates are
+    inputs too: a revision that changes a resource or a reveal has to see the chapter that reads it.
+    """
     result = {coordinate(r) for scene in plan.get('scenes', []) for r in scene.get('reads', [])}
     result.update(coordinate(r) for r in plan.get('preconditions', []))
+    result.update(coordinate(r) for r in plan.get('enter', []) if isinstance(r, dict) and 'expected' in r)
+    for row in plan.get('exit', []) if isinstance(plan.get('exit'), list) else []:
+        if isinstance(row, dict) and text(row.get('key')):
+            result.add(coordinate({'kind': row.get('kind'), 'key': row.get('key')}))
     result.update(('node', ident) for ident in plan.get('node_ids', []))
     for definition in plan.get('node_contracts', {}).values():
         result.update(('node', ident) for ident in definition.get('depends_on', []))
+        if text(definition.get('line')):
+            result.add(('thread_progress', definition['line']))
+    for row in plan.get('resources') or []:
+        if isinstance(row, dict) and text(row.get('key')):
+            result.add(('resources', row['key']))
+    for row in plan.get('places') or []:
+        if isinstance(row, dict) and text(row.get('entity')):
+            result.add(('placements', row['entity']))
+    for row in plan.get('knowledge') or []:
+        if isinstance(row, dict) and text(row.get('who')) and text(row.get('topic')):
+            result.add(('knowledge', row['who'] + ':' + row['topic']))
+    for row in plan.get('characters') or []:
+        if isinstance(row, dict) and text(row.get('entity')):
+            result.add(('character_current', row['entity']))
+    plot = plan.get('plot') if isinstance(plan.get('plot'), dict) else {}
+    result.update(('node', row['node']) for row in plot.get('nodes') or []
+                  if isinstance(row, dict) and text(row.get('node')))
+    result.update(('thread_progress', row['thread']) for row in plot.get('threads') or []
+                  if isinstance(row, dict) and text(row.get('thread')))
+    result.update(('reader_knowledge', row['topic']) for row in plan.get('disclosures') or []
+                  if isinstance(row, dict) and text(row.get('topic')))
     result.update(('hooks', ident) for ident in plan.get('hook_refs', []))
     result.update(('reader_knowledge', ident) for ident in plan.get('reader_refs', []))
     result.update(('historical_assertions', ident) for ident in plan.get('history_refs', []))

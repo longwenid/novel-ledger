@@ -7,7 +7,11 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-VERSION = '1.5.0'
+# The five-step pipeline is a protocol generation change: v2 removed every reviewer dispatch, so a
+# task frozen by v1 (checks_version, obligations, blind first read, plan/book_plan stages) can no
+# longer be executed by this build. Projects keep their storage schema; what changed is the
+# pipeline, and the version says so.
+VERSION = '2.0.0'
 SCHEMA = 'novel-ledger/3'
 # The guided opening has its own protocol version, carried by the creation state itself. It is not the
 # database schema: a new gate set only changes a JSON document inside the book record, so raising the
@@ -18,44 +22,11 @@ TASK = 'novel-ledger.task/1'
 RESULT = 'novel-ledger.result/1'
 # The dispatch's own copy of who it is: data for cross-checking, never a permission.
 IDENTITY = 'novel-ledger.identity/1'
-FACT_CHECKS = ('coverage', 'continuity', 'resources', 'knowledge', 'time', 'world_rules', 'space')
-READER_CHECKS = ('read_on', 'character', 'change', 'emotion_cost', 'language', 'repetition', 'substance')
-LONG_CHECKS = ('causality', 'character_arcs', 'payoffs', 'pacing', 'world_rules', 'coverage')
-DESIGN_CHECKS = ('author_constraints', 'causality', 'characters', 'disclosure', 'scale')
-WORLD_CHECKS = ('choice_alignment', 'rule_consistency', 'spatial_connections', 'historical_causes',
-                'faction_interests', 'economic_consequences', 'social_pressure', 'character_boundaries', 'disclosure', 'story_capacity')
-# Check lists are part of the wire contract: a book already reviewed must keep being judged by the
-# list it was reviewed against, or adding a check would retroactively fail every finished project.
-# Receipts carry their own `checks_version` (absent means the original set); new submissions are
-# always judged by CHECKS_VERSION, so raising it only affects work yet to be reviewed.
-CHECKS_VERSION = 2
-CHECK_SETS = {1: {'fact': FACT_CHECKS, 'reader': READER_CHECKS, 'design': DESIGN_CHECKS,
-                  'world': WORLD_CHECKS, 'long': LONG_CHECKS}}
-CHECK_SETS[2] = {'fact': FACT_CHECKS + ('narrative',),
-                 'reader': READER_CHECKS + ('disclosure', 'pacing'),
-                 'design': DESIGN_CHECKS + ('threads',),
-                 'world': WORLD_CHECKS, 'long': LONG_CHECKS + ('bridges', 'disclosure')}
-EDITORIAL_VERSION = 3
-CHECK_SETS[3] = {**CHECK_SETS[2],
-                 'fact': CHECK_SETS[2]['fact'] + ('character_consistency', 'stable_facts'),
-                 'reader': CHECK_SETS[2]['reader'] + ('dialogue_identity', 'voice_match'),
-                 'long': CHECK_SETS[2]['long'] + ('voice_evolution', 'revision_intent')}
-# Version 4 exists because the opening now lets the author choose the narrative person and scope, and a
-# chosen view has to be verified by an independent reader. It is only dispatched for contracts that
-# actually declare `pov`: an imported contract without that field must not be judged against a view
-# nobody chose.
-POV_CHECKS_VERSION = 4
-CHECK_SETS[4] = {**CHECK_SETS[3], 'reader': CHECK_SETS[3]['reader'] + ('pov_consistency',)}
-
-
-def checks_for(version, kind):
-    table = CHECK_SETS.get(version)
-    require(table is not None, 'checks_version', '未知的检查清单版本。',
-            {'known_versions': sorted(CHECK_SETS), 'recover': '回执按下发的模板版本填写，不要沿用旧版本号。'})
-    entries = table.get(kind)
-    require(entries is not None, 'checks_kind', '未知的检查类别。',
-            {'kind': kind if isinstance(kind, str) else type(kind).__name__, 'known_kinds': sorted(table)})
-    return entries
+# v2 removed every reviewer stage: the check lists (FACT_CHECKS/READER_CHECKS/… and the
+# CHECK_SETS versions they were raised under) are gone with the receipts that carried them.
+# What a chapter owes is now declared by its own chapter outline, and what it actually did is
+# computed by the engine from the writer's drift_check — see drift.py. Raises no longer travel
+# as findings between a producer and a reviewer; a broken receipt is refused where it is filed.
 
 
 # Frozen task capabilities: which version of a protocol a dispatch was planned under. A consumer reads
@@ -69,7 +40,11 @@ SCENE_IDENTITY_V1 = 'scene-identity/1'
 SCENE_IDENTITY_CAPABILITY = 'scene-identity/2'
 READING_DEPENDENCIES_CAPABILITY = 'reading-dependencies/1'
 OPENING_BOUNDS_CAPABILITY = 'opening-bounds/1'
-VOLUME_OUTLINE_CAPABILITY = 'volume-outline/1'
+# The volume outline protocol changed shape in v2: a volume is now one ~1000-character outline
+# carrying its own nodes/threads and state boundaries, and the per-chapter rows live in the
+# chapter outline that follows it. A task frozen under volume-outline/1 describes a batch of
+# chapters instead, so this build refuses it rather than reinterpreting its fields.
+VOLUME_OUTLINE_CAPABILITY = 'volume-outline/2'
 SCENE_MEMORY_CAPABILITY = 'scene-memory/1'
 HOOK_LINKS_CAPABILITY = 'hook-links/1'
 CAPABILITIES = {
@@ -99,29 +74,16 @@ def capabilities_for(task):
             {'unknown': unknown, 'known': {key: list(values) for key, values in CAPABILITIES.items()},
              'recover': '该任务由不识别这些协议的版本冻结；用原版本继续执行，或取消后按当前协议重新派工。'})
     return frozen
-FIRST_READ = ('desire', 'obstacle', 'change', 'read_on_reason')
-# Findings a reviewer may raise. The first three describe work a writer can repair; 'author' means
-# no rewrite can settle it — the premise itself must be decided, so it is routed to the author
-# instead of becoming a repair target (and it is the only severity that carries `decision`).
+# Findings the engine itself raises when a receipt cannot be reconciled (drift, lint, budget).
+# 'author' means no rewrite can settle it — the premise itself must be decided, so it is routed to
+# the author instead of becoming a repair target.
 FINDING_SEVERITIES = ('blocker', 'quality', 'note', 'author')
 AUTHOR_SEVERITY = 'author'
-# Same shape as the author block this engine already pauses on, plus an id for provenance.
-AUTHOR_DECISION_FIELDS = ('id', 'question', 'options')
-DECISION_OPTION_FIELDS = ('label', 'impact')
-# One pending decision at a time is the engine's existing invariant (a single author_block that
-# `resume` refuses to bypass), so a receipt may hand up at most this many author-level findings.
-AUTHOR_DECISIONS_PER_RECEIPT = 1
-# Reviews taken while the book may still be paused for the author, before prose is committed to a
-# chapter: only there can a design question be handed up and answered. Chapter-level reviews keep
-# the strict default, so a finding there always describes work a writer can do right now.
-AUTHOR_CHANNEL_STAGES = frozenset({'world_review', 'outline_review', 'design_review', 'contract_review',
-                                   'alignment_review', 'scope_review', 'scope_synthesis'})
-# Stages the controller session may execute itself. They carry no prose, no blind first read and
-# no review-to-writer independence -- the opening gates are creative proposals the author judges
-# live -- so the cold-session rule buys nothing here while costing a subagent per gate (measured:
-# 0.4M~1M input tokens and 2~5 minutes each, for a 3.6K-character envelope). Everything else,
-# starting with world_model, keeps the new-worker rule. Mirrors the guided-hatching design the
-# v3 line proved: the choice chain runs inline, creative artefacts are dispatched.
+# Stages the controller session may execute itself. They carry no prose and no review-to-writer
+# independence -- the opening gates are creative proposals the author judges live -- so the
+# cold-session rule buys nothing here while costing a subagent per gate (measured: 0.4M~1M input
+# tokens and 2~5 minutes each, for a 3.6K-character envelope). Everything else, starting with
+# world_model, keeps the new-worker rule.
 CONTROLLER_STAGES = frozenset({'opening_options'})
 # The male-channel category ladder shown whole when the author starts with no direction: a genre
 # decision should begin from the full menu, not from three cold samples (the first gate of a real
@@ -253,21 +215,23 @@ OPENING_DIRECTION_GATES = {
     'title': '书名按男频搜索习惯给：关键词直接点出题材与金手指或身份优势，一眼能看懂看点，不用意象化短名。',
 }
 SCALE_WINDOW = 3          # how many consecutive tiers one board shows
-# How the pipeline itself scales with the chosen size class. Gates, world domains, design layers
-# and review layers used to be constants, so a three-chapter book paid the same pre-prose
-# dispatch count as a serial (measured on a real micro project: 59 of 81 dispatches happened
-# before the first word). The first shape decision: on the smallest tier a single volume's
-# design IS the book design — one cause chain, one review — so `volume_plan` and its review are
-# not dispatched; the accepted book design is installed as the volume design instead. Tiers that
-# keep the separate layer say so here; a guard test derives the coverage requirement from the
-# tier table itself, so a new tier cannot arrive without declaring its shape.
+# How the pipeline itself scales with the chosen size class. Gates, world domains and design
+# dispatches used to be constants, so a three-chapter book paid the same pre-prose dispatch count
+# as a serial (measured on a real micro project: 59 of 81 dispatches happened before the first
+# word). v2 keeps exactly one shape decision per tier: whether the volume outline dispatch also
+# drafts the chapter outlines of the volumes it just designed. On the smallest tiers a volume's
+# chapter outline is a few hundred characters of deltas, so splitting it into a second cold
+# session only buys latency; the combined receipt is validated by both contracts (the volume
+# outline and the chapter outline) before either half is installed. Tiers that keep the separate
+# dispatch say so here, and a guard test derives the requirement from the tier table itself, so a
+# new tier cannot arrive without declaring its shape.
 PIPELINE_SHAPES = {
-    't0': {'merge_volume_design': True, 'outline_batch': 'volume', 'merge_contract_review': True},
-    't1': {'merge_volume_design': False, 'outline_batch': 'volume', 'merge_contract_review': True},
-    't2': {'merge_volume_design': False, 'outline_batch': 'volume', 'merge_contract_review': False},
-    't3': {'merge_volume_design': False, 'outline_batch': 'window', 'merge_contract_review': False},
-    't4': {'merge_volume_design': False, 'outline_batch': 'window', 'merge_contract_review': False},
-    't5': {'merge_volume_design': False, 'outline_batch': 'window', 'merge_contract_review': False},
+    't0': {'merge_chapter_outline': True},
+    't1': {'merge_chapter_outline': True},
+    't2': {'merge_chapter_outline': False},
+    't3': {'merge_chapter_outline': False},
+    't4': {'merge_chapter_outline': False},
+    't5': {'merge_chapter_outline': False},
 }
 
 
@@ -339,15 +303,29 @@ CONTRACT_FIELDS = (
     {'key': 'chapter_min', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_min')},
     {'key': 'chapter_max', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_max')},
     {'key': 'chapter_aim', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_aim')},
-    {'key': 'planning_window', 'kind': 'int', 'default': 3, 'alignment': False},
-    {'key': 'review_interval', 'kind': 'int', 'default': 10, 'alignment': False},
-    {'key': 'review_chunk', 'kind': 'int', 'default': 3, 'alignment': False},
-    {'key': 'verification', 'kind': 'text', 'default': 'full', 'alignment': False},
+    # Legacy review-pipeline knobs. v2 has no reviewer dispatches, so nothing reads them any
+    # more; they stay declared because a project written under the old pipeline still carries
+    # them and must keep loading. See references/protocol.md for the retirement note.
+    {'key': 'planning_window', 'kind': 'int', 'default': 3, 'alignment': False, 'legacy': True},
+    {'key': 'review_interval', 'kind': 'int', 'default': 10, 'alignment': False, 'legacy': True},
+    {'key': 'review_chunk', 'kind': 'int', 'default': 3, 'alignment': False, 'legacy': True},
+    {'key': 'verification', 'kind': 'text', 'default': 'full', 'alignment': False, 'legacy': True},
     {'key': 'narrative_tracking', 'kind': 'bool', 'default': True, 'alignment': False},
-    {'key': 'review_fanout', 'kind': 'int', 'default': 3, 'alignment': False},
+    {'key': 'review_fanout', 'kind': 'int', 'default': 3, 'alignment': False, 'legacy': True},
     {'key': 'editorial_features', 'kind': 'bool', 'default': True, 'alignment': False},
     {'key': 'scope_append_limit', 'kind': 'int', 'default': 3, 'alignment': False},
-    {'key': 'volume_outline', 'kind': 'map', 'default': {'scope': 'rolling', 'words': 500, 'tolerance': 50}, 'alignment': False, 'optional': True},
+    # Step three of the five-step pipeline: one ~1000-character outline per volume, written from
+    # the world model and the opening choices. `scope=all` drafts every volume before the first
+    # word; `rolling` drafts each volume just before it is entered. `words` counts one volume.
+    {'key': 'volume_outline', 'kind': 'map', 'default': {'scope': 'all', 'words': 1000, 'tolerance': 100},
+     'alignment': False, 'optional': True},
+    # Step four: the per-chapter outline that carries the drift declarations. `words` bounds each
+    # chapter's synopsis, not the delta rows — those are as long as the state they describe.
+    # `scope=volume` builds a volume's chapter outlines just before writing it; `all` builds every
+    # volume's up front, which is what an author who wants the whole resource chain resolved before
+    # the first word should choose.
+    {'key': 'chapter_outline', 'kind': 'map', 'default': {'scope': 'volume', 'words': 150, 'tolerance': 60},
+     'alignment': False, 'optional': True},
     {'key': 'anchors', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'links', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'initial_facts', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
@@ -398,12 +376,8 @@ ENFORCEMENT = {
     'opening_options': {'terms': ('title', 'premise', 'driver', 'tradeoff', 'fit_reason', 'value'),
                         'names': ('value.name',)},
     'world_model': {'names': ('characters.name',)},
-    'book_plan': {'terms': ('intent', 'ending_conditions', 'nodes')},
-    'volume_plan': {'terms': ('intent', 'ending_conditions', 'nodes', 'brainstorm', 'chapters', 'selection_reason')},
-    'volume_outline': {'terms': ('chapters',)},
-    'plan': {'terms': ('plans',), 'names': ('new_entities',)},
-    'profiles': {'terms': ('profiles',)},
-    'alignment_plan': {'terms': ('plan', 'designs')},
+    'volume_outline': {'terms': ('volumes',)},
+    'chapter_outline': {'terms': ('chapters',), 'names': ('new_entities',)},
     'write': {'terms': ('title', 'prose')},
     'repair': {'terms': ('title', 'prose')},
     'redesign': {'terms': ('title', 'prose')},
