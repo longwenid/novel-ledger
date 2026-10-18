@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import creation, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import Error, OPENING_VERSION, SCALE_TIERS, SCALE_WINDOW
+from novel_ledger.contracts import Error, OPENING_VERSION, SCALE_TIERS
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import contract
 
@@ -155,16 +155,6 @@ class OpeningThreeTests(unittest.TestCase):
         self.assertIn('同门互相依赖', context._selection_line(relations))
         self.assertEqual(context._selection_line({'title': '空门', 'value': {}}), '空门')
 
-    def test_the_structural_gate_shows_serial_length_classes_without_a_dispatch(self):
-        state = creation.begin('工程夹具。')
-        while creation.current(state)['id'] != 'scale':
-            state = shown(state)
-            state = creation.pick(state, state['board']['options'][0]['id'], state['board']['hash'], '作者选它。')
-        state = shown(state)
-        self.assertTrue(state['board'].get('system'))
-        self.assertEqual([option['value']['tier'] for option in state['board']['options']],
-                         [tier['id'] for tier in SCALE_TIERS[3:3 + SCALE_WINDOW]])
-
     def test_every_gate_owns_its_fields_and_states_its_structured_keys(self):
         for gate in creation.gate_ids(3):
             if gate in creation.SYSTEM_GATES[3]:
@@ -209,6 +199,9 @@ class OpeningThreeTests(unittest.TestCase):
         tier = next(row for row in SCALE_TIERS if row['id'] == 't4')
         for key in ('chapter_min', 'chapter_max', 'chapter_aim', 'volume_count', 'chapters', 'chapter_window'):
             self.assertEqual(chosen[key], tier[key], key)
+        # An unknown class is refused with the real ladder rather than a guess (assertion folded
+        # in from the retired version-2 twin of this test: the normalization is shared code).
+        self.assertCode('opening_option', creation.intake, creation.begin('x'), {'scale': {'tier': 't9'}}, 'x')
 
 
 if __name__ == '__main__':

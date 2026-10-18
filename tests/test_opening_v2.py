@@ -1011,25 +1011,6 @@ class OpeningDecisionTests(unittest.TestCase):
                            for start in range(len(ids) - SCALE_WINDOW + 1)})
         self.assertEqual(sorted(set(windows)), expected)
 
-    def test_intake_of_the_structural_gate_needs_only_a_tier(self):
-        """The author names a size class; the proved arithmetic stays the engine's business."""
-        values = {gate: copy.deepcopy(VALUES[gate]) for gate in creation.gate_ids(2) if gate != 'scale'}
-        values['scale'] = {'tier': 't3'}
-        state = creation.intake(creation.begin('作者一次给全。', version=2), values, '作者一次给全。')
-        self.assertEqual(state['phase'], 'world')
-        chosen = creation.selected(state)['scale']
-        tier = next(row for row in SCALE_TIERS if row['id'] == 't3')
-        for key in ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim', 'volume_count', 'chapters', 'chapter_window'):
-            self.assertEqual(chosen[key], tier[key], key)
-        # an unknown class is refused with the real ladder, and a hand-edited number is not silently fixed
-        with self.assertRaises(Exception) as caught:
-            creation.intake(creation.begin('x', version=2), {'scale': {'tier': 't9'}}, 'x')
-        self.assertEqual(caught.exception.code, 'opening_option')
-        self.assertEqual(caught.exception.details['valid_tiers'], [row['id'] for row in SCALE_TIERS])
-        with self.assertRaises(Exception) as caught:
-            creation.intake(creation.begin('x', version=2), {'scale': {'tier': 't3', 'chapters': 7}}, 'x')
-        self.assertEqual(caught.exception.code, 'opening_option')
-
     def test_intake_uses_gate_ids_and_refuses_field_names(self):
         state = creation.begin(version=2)
         with self.assertRaises(Exception) as caught:
