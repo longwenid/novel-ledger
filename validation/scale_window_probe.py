@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, r'C:\Users\longwen\.zcode\skills\novel-ledger\scripts')
-from novel_ledger import creation, world
+from novel_ledger import creation
 from novel_ledger.contracts import SCALE_TIERS, Error
 
 project = Path(sys.argv[1])

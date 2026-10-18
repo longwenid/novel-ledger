@@ -18,7 +18,7 @@ class RevisionService:
         self.cancel_pending = cancel_pending
 
     def replay(self, branch, contract, through=None):
-        state, previous = facts.seed(contract), 'genesis'
+        state, previous, number = facts.seed(contract), 'genesis', 0
         rows = self.repo.headers(branch)
         for row in rows:
             if through is not None and row['n'] > through:

@@ -70,7 +70,7 @@ print('%-34s %5s %5s  %s' % ('阶段×检查项', '次数', '重复', '机械判
 for (stage, criterion), row in sorted(rows.items(), key=lambda kv: -kv[1]['count']):
     print('%-34s %5d %5d  %s %s' % ('%s×%s' % (stage, criterion), row['count'], row['again'],
                                     MECHANICAL.get(criterion, ''), row['reasons'][0] if row['reasons'] else ''))
-candidates = sorted(((again, stage, criterion, row['count'])
+candidates = sorted(((row['again'], stage, criterion, row['count'])
                      for (stage, criterion), row in rows.items()
                      if row['again'] and criterion not in MECHANICAL), reverse=True)
 if candidates:

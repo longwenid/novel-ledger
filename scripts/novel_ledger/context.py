@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, SCALE_TIERS, TASK, Job, checks_for, dump, digest, require, tier_of)
+from .contracts import (CHECKS_VERSION, EDITORIAL_VERSION, POV_CHECKS_VERSION, TASK, Job, checks_for, dump, digest, require, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
 from . import briefs, creation, narrative, scopes, world, editorial, story_memory, understanding

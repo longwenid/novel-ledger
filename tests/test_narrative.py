@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from support import contract, node, response
 from novel_ledger import context, facts, narrative, planning, scopes, workflow
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import CHECKS_VERSION, RESULT, Error, Job, digest, dump
+from novel_ledger.contracts import Error, Job, dump
 from novel_ledger.sqlite_store import SQLiteRepository
 
 

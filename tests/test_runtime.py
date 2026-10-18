@@ -1,4 +1,3 @@
-import ast
 import copy
 import json
 import os
@@ -13,7 +12,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger.bootstrap import local_application as Application, local_workspace
-from novel_ledger.contracts import CHECKS_VERSION, ENFORCEMENT, Error, FACT_CHECKS, RESULT, digest, dump
+from novel_ledger.contracts import CHECKS_VERSION, ENFORCEMENT, Error, RESULT, dump
 from novel_ledger import delivery, facts, host, planning, workflow
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import contract, drive, response

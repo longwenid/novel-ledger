@@ -16,9 +16,8 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 from novel_ledger import creation, delivery, workflow
-from novel_ledger.bootstrap import local_application as Application, local_workspace
+from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract
 from test_opening import rows_for, shown
 from test_opening_inline import gate_result
 
@@ -38,7 +37,6 @@ class BoardCardTests(unittest.TestCase):
         state = self.app.repo.load()['creation']
         offered = shown(state)
         card = delivery.render_board_card(offered['board'])
-        gate = offered['board']['gate']
         self.assertIn('第 1/10 门', card)
         self.assertIn(offered['board']['hash'], card)
         for option in offered['board']['options']:

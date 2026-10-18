@@ -1,8 +1,7 @@
 """Synthetic engineering receipts. These are never literary judgments."""
-import copy
 import uuid
 from novel_ledger import context, scopes
-from novel_ledger.contracts import RESULT, digest
+from novel_ledger.contracts import RESULT
 from novel_ledger.result_templates import template
 
 

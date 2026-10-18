@@ -1,7 +1,6 @@
 """Engineering-only dependency and frozen-record measurements; no model calls."""
 import argparse
 import ast
-import copy
 import json
 import sys
 import tempfile

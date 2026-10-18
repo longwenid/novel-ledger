@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (AUTHOR_CHANNEL_STAGES, CHECKS_VERSION, FAST_REVIEW_BLOCK, HOOK_LINKS_CAPABILITY,
+from .contracts import (AUTHOR_CHANNEL_STAGES, FAST_REVIEW_BLOCK, HOOK_LINKS_CAPABILITY,
                         OPENING_BOUNDS_CAPABILITY, OPENING_VERSION, READING_DEPENDENCIES_CAPABILITY, REPAIRS, REDESIGNS,
                         SCENE_IDENTITY_CAPABILITY, UNDERSTANDING_CAPABILITY, PIPELINE_SHAPES, tier_of,
                         Job, Outcome, capabilities_for, checks_for, digest, han_count, require, text)

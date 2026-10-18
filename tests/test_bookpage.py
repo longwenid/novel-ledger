@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import bookpage, planning, world
+from novel_ledger import bookpage, world
 from novel_ledger.bootstrap import local_application as Application, local_workspace
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book

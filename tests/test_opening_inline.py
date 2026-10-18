@@ -8,7 +8,6 @@ These tests pin the carve-out: controller reads for opening gates only, one sess
 gates, and every other stage keeping the new-worker rule.
 """
 import argparse
-import io
 import json
 import sys
 import tempfile
@@ -25,7 +24,6 @@ from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import CONTROLLER_STAGES, Error
 from novel_ledger.result_templates import template
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract
 from test_opening import rows_for, shown
 
 GATE_RECEIPT = {'genre': {'genre': '都市异能', 'reader_promise': '看他从仓库夜班把签字责任查到底。', 'tone': '冷硬利落。'},

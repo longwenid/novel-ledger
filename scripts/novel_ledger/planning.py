@@ -110,11 +110,6 @@ def policy_material(versions, stage):
             'editable': '作者改规则：novel.py lexical --file 规则.json --source 原话（逐版留档，开书阶段即生效）。'}
 
 
-def policy_block(book, stage):
-    """Compatibility query; the material builder accepts policy history only."""
-    return policy_material(book.get('lexical_policy'), stage)
-
-
 def skeleton():
     """Blank contract-shaped object: the delivery template for the opening contract stage."""
     return contract_skeleton()
