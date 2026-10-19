@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from .creation import gate_note, gate_title, value_rules
 from .contracts import (GENRE_CATALOG, OPENING_DIRECTION, OPENING_DIRECTION_GATES, OPENING_VERSION,
-                        OPTION_CONTRACT)
+                        OPTION_CONTRACT, WORLD_ARCHITECTURE)
 from . import stages, world
 BRIEFS = {
     'opening_options': '开书方案简报',
@@ -52,7 +52,7 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
         # direction. Inlining both sides of that instruction here keeps one authority.
         lines.extend(['## 全类目目录（作者未给方向时先用它收方向）',
                       '主控先在对话里把下面十二个类目铺给作者（原文照抄即可），收一句方向或自定义；',
-                      '本任务回执不列全目录——按作者点名的类目给 2～3 个深化方案，每案写该类目下的具体落点：主角生态位、第一卷压力与开篇三章的第一个爽点：',
+                      '本任务回执不列全目录——按作者点名的类目给 2～3 个深化方案，每案写该类目下的具体落点：独特阅读体验、核心冲突的可能入口与早期回报；人物身份留给后门：',
                       *['- %s：%s' % (name, hook) for name, hook in GENRE_CATALOG],
                       '作者已给方向时跳过铺目录，直接在方向内出案。', ''])
     if previous:
@@ -63,7 +63,7 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
     lines.extend(['## 本轮创意透镜（用来想，不要写进方案文本）', lens_brief, ''])
     lines.extend(['## 换组纪律（本轮若是因为换组重新生成）',
                   '- 新一组必须与被拒的旧组方向实质不同：不得换名、改写收益或微调细节冒充新组；',
-                  '- 吸收作者随换组补充的偏好（原因里写了「格局太小」就把格局拉高一级：从个人恩怨到生态位，从一条街到一座城、一个秩序）；',
+                  '- 吸收作者随换组补充的偏好（原因里写了「格局太小」就把格局拉高一级：从个人困局追到历史成因、规则冲突与文明选择，不只放大地名）；',
                   '- 已拒方向见 opening_rejections 记录，逐条避开其思路而不只是避开其措辞。', ''])
     lines.extend(['## 交付契约', OPTION_CONTRACT])
     lines.append('')
@@ -106,7 +106,7 @@ WORLD_SELF_CHECK = (
 # underlying design. Every item names the world section it is written into; no field is invented here.
 WORLD_LAYERS = (
     ('核心理念（底层）', (
-        ('rules', '世界的底层规则：读者看得见的等级/台阶与门槛，升级条件、违反后果都要能落成场景；'
+        ('rules', '世界的底层规则如何影响生产、生活与权力：适用范围、门槛与后果都要能落成场景；'
                   '规则之间不得互相否定。'),
         ('mechanisms', '有特殊机制时：原理/代价/限制/失效条件，外加升级材料从哪来、谁在抢（供料链）；'
                        '已选无特殊机制时保持空数组。'),
@@ -128,10 +128,10 @@ WORLD_LAYERS = (
                     '历史要能解释当下的利益与矛盾，不是背景年表。'),
     )),
     ('势力与利益（底层）', (
-        ('factions', '至少一个有权分配硬通货的组织：压迫要落成具体考核、任务或贡献；'
+        ('factions', '不同组织或文明的生存方案、资源依赖与不能退让的利益；'
                      '跨卷仍在场的势力写清它靠什么延续（可选深字段 survives_scale_up），'
                      '避免上一卷势力到下一卷作废。'),
-        ('characters', '主角在阶梯上的位置与可升级点：欲望与底线之外，写清他现在站在哪一级、下一级怎么上。'),
+        ('characters', '主角及关键人物的欲望、底线、所属秩序与知识边界；成长改变行动范围，也改变关系与责任。'),
     )),
     ('资源与经济（底层）', (
         ('economy', '硬通货：**门里 world 门选的 resource（name/source/allocator）必须进这里**——'
@@ -148,7 +148,7 @@ WORLD_LAYERS = (
         ('everyday', '生活细节与器物：能被写进场景的日常，用来给宏大设定落地，不做纯氛围铺陈。'),
     )),
 )
-WORLD_PIECE_NOTE = ('这三条绑定是机械核对的，写错会被 world_alignment 直接拒：'
+WORLD_PIECE_NOTE = ('以下基础绑定与上列已声明的世界架构都由引擎核对，写错会被 world_alignment 拒绝：'
                     '① 门里选的位阶表（world_tiers）逐字进 powers；'
                     '② 门里选的硬通货（world_resource）进 economy，分配者写进分配方式；'
                     '③ 格局阶梯每一级（ladder 的 stage）在本世界有一条同名记录'
@@ -169,6 +169,9 @@ def _world_piece_lines(sections):
         lines.append('- **%s**' % layer)
         for name, text in rows:
             lines.append('  - %s（%s）：%s' % (name, world.LABELS.get(name, name), text))
+    lines.append('- 若 world 门声明 architecture，以下对应字段须逐字保留（无声明的旧项目不补填）：')
+    lines.extend('  - architecture.%s → %s.%s：%s' % (key, section, field, note)
+                 for key, note, section, field in WORLD_ARCHITECTURE)
     return lines
 
 
@@ -199,8 +202,8 @@ def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections
         # for only some of them: a single-volume micro book only needs the institutions and people
         # its one line actually walks through.
         lines.extend(['## 规模要与已选体量相称', '本项目的体量与分卷是：' + scale + '。'
-                      '世界只需支撑这条主线走完：写进每条记录前先问它会在哪一章被用到，用不上的城市史、势力谱系与日常细节不要为凑数写进来；'
-                      '每多一条记录，之后每一次派工都要多读它。story_capacity 用一句话说清这个世界能撑住多少章、靠什么持续供料。', ''])
+                      '世界架构先保留空间、历史、文明与终极问题的全貌；本书实际涉及的部分展开完整记录，远期背景保留能约束当前选择的骨架，不要求每条背景立即登场；'
+                      '完整世界会被后续设计任务读取，扩展记录应确实支持故事。story_capacity 用一句话说清这个世界能撑住多少章、靠什么持续供料。', ''])
     if repair:
         # A repair re-emits the whole candidate, so an unrequested rewrite of untouched records is
         # pure cost: it reopens questions already settled, and the next check spends a round on new
@@ -293,9 +296,11 @@ def stage(name, payload=None):
         'opening_contract': '把已选方向与已核验世界整理为完整约定，严格保留对齐字段，按模板逐字段填写，不增加正文事实。',
         'volume_outline': '交付 volumes：恰好覆盖本批次的每一卷（payload.volume_ids），顺序与 contract.volumes 一致。'
                           '每卷是约 words 汉字的极简卷纲，把这一卷的因果骨架说完（words±tolerance 按性质是每卷总量，不是每段）。'
-                          'stage 必填（opening/5 项目）：从已选格局阶梯里取一级，逐字写那一级的 stage 名；'
+                          'stage 必填（opening/5 及之后的逐门项目）：从已选格局阶梯里取一级，逐字写那一级的 stage 名；'
                           '按合同卷序只升不降（后一卷的层级序号不得低于前一卷），不写「第一卷」这类编号——'
                           '阶梯每一级在世界模型里都有同名记录，卷纲的 stage 必须对得上。'
+                          '已声明 world_architecture 时，arc/turns 承接其长期矛盾、历史后果与文明立场；'
+                          '远期真相先以 hooks/window 登记可见线索和揭示窗口，章纲逐步披露，不把作者全知当角色知情。'
                           'purpose ≤60 汉字说这一卷的职责；arc 约 250 汉字写开局处境→关键转折→卷末局面；'
                           'turns 至少两条转折（at 取「卷中」「卷尾」或「第N章附近」）；climax 写卷末高潮与兑现物；'
                           'nodes 给 {id,kind:main|side|hidden,purpose,ending_condition,required,window:[本卷最早章,本卷最晚章]}；'

@@ -260,7 +260,7 @@ class DomainBoundaryTests(unittest.TestCase):
         """
         from novel_ledger import creation
         from novel_ledger.contracts import OPENING_DIRECTION_GATES, OPENING_VERSION
-        for version in (1, 2, 3, 4, OPENING_VERSION):
+        for version in (1, 2, 3, 4, 5, OPENING_VERSION):
             with self.subTest(version=version):
                 self.assertIn(version, creation.VALUE_RULES, '每版必须有规则块')
                 gates = creation.gate_ids(version)
@@ -311,7 +311,7 @@ class DomainBoundaryTests(unittest.TestCase):
         # The v5 order: the core idea right after the genre, the origin behind it, and the world
         # structure before the scale ladder that steps on it.
         gates = [ident for ident, _title in creation.GATE_SETS[OPENING_VERSION]]
-        self.assertEqual(gates[:4], ['genre', 'premise', 'origin', 'voice'])
+        self.assertEqual(gates[:4], ['genre', 'premise', 'voice', 'scale'])
         self.assertEqual(gates.index('world') + 1, gates.index('ladder'))
         self.assertEqual(creation.value_fields('premise', OPENING_VERSION),
                          ('novelty', 'first_cause', 'stance', 'dark_side'))
@@ -353,7 +353,7 @@ class DomainBoundaryTests(unittest.TestCase):
         from novel_ledger import creation
         from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS, alignment_for,
                                             opening_source)
-        for version in (2, 3, 4, 5):
+        for version in (2, 3, 4, 5, 6):
             for row in CONTRACT_FIELDS:
                 if row.get('since', 1) > version or row['key'] in DERIVED_FIELDS \
                         or row['key'] not in alignment_for(version):
@@ -531,7 +531,7 @@ class WebnovelSettingMethodTests(unittest.TestCase):
         self.assertTrue(note.strip())
         for word in ('等级', '资源', '三章'):
             self.assertIn(word, note)
-        for word in ('等级', '资源', '三章', '加层'):
+        for word in ('历史', '文明', '矛盾', '资源'):
             self.assertIn(word, OPENING_DIRECTION_GATES['world'])
         self.assertIn('供料', OPENING_DIRECTION_GATES['edge'])
         # The world gate note belongs to opening/3; the earlier gate set never carried one.

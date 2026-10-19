@@ -86,12 +86,21 @@ GATES_V5 = (
     ('payoff', '爽点兑现、主题锚点与终局'),
     ('title', '书名'),
 )
-GATE_SETS = {1: GATES_V1, 2: GATES_V2, 3: GATES_V3, 4: GATES_V4, 5: GATES_V5}
+# World and escalation precede protagonist origins; the count stays thirteen.
+GATES_V6 = (
+    ('genre', '题材与阅读承诺'), ('premise', '核心脑洞与世界命题'),
+    ('voice', '叙述视角与阅读质地'), ('scale', '体量与分卷'),
+    ('world', '世界架构：空间、历史与文明'), ('ladder', '格局路径与终局视野'),
+    ('origin', '主角来历与世界联系'), ('edge', '核心优势与成长线'),
+    ('protagonist', '主角处境与底线'), ('relationships', '人物关系与立场'),
+    ('opposition', '多方对抗与持续冲突'), ('payoff', '阶段兑现与终局回应'), ('title', '书名'),
+)
+GATE_SETS = {1: GATES_V1, 2: GATES_V2, 3: GATES_V3, 4: GATES_V4, 5: GATES_V5, 6: GATES_V6}
 # No bare `GATES` alias on purpose: which gate set applies is a property of the project's creation
 # document, so every lookup goes through gates(state) instead of a module-level constant.
 # Gates the engine answers itself from a table it has already proved satisfiable. A worker must not
 # invent them, and no dispatch is spent on them.
-SYSTEM_GATES = {1: (), 2: ('scale',), 3: ('scale',), 4: ('scale',), 5: ('scale',)}
+SYSTEM_GATES = {1: (), 2: ('scale',), 3: ('scale',), 4: ('scale',), 5: ('scale',), 6: ('scale',)}
 # Inputs used by the world/scale derivation rules rather than copied into a contract.
 # Direct choices and the protagonist value shape come from CONTRACT_FIELDS.opening.
 DERIVATION_INPUTS = {'world': ('world_premise', 'mechanism', 'red_lines'),
@@ -125,6 +134,20 @@ def gate_title(gate_id, version=None):
         if found:
             return found
     return next((title for ident, title in GATES_V2 + GATES_V1 if ident == gate_id), gate_id)
+
+GATE_LENSES = {
+    'premise': ('规则博弈', '纪元断层', '世界暗面'),
+    'world': ('纪元断层', '生态位垄断', '世界暗面', '长线续航'),
+    'ladder': ('非数值成长', '长线续航', '规则博弈'),
+    'origin': ('表层锚点', '身份马甲', '纪元断层'),
+    'opposition': ('生态位垄断', '规则博弈', '世界暗面'),
+}
+
+
+def lens_index(gate, round_no, version=OPENING_VERSION):
+    """Rotate methods suited to this gate; legacy openings retain their original order."""
+    pool = GATE_LENSES.get(gate) if version >= 6 else None
+    return LENSES.index(pool[round_no % len(pool)]) if pool else round_no % len(LENSES)
 
 
 def lens_brief(index):
@@ -287,6 +310,12 @@ VALUE_RULES[5] = {
               'ending 终局兑现的那场胜利、theme 母题、'
               'anchor={deliverable 第 N 章前必须兑现什么（≥12字）, deadline_chapter 最迟章号（纯数字，不超过档位上限定）}',
 }
+VALUE_RULES[6] = {**VALUE_RULES[5],
+    'world': VALUE_RULES[5]['world'] + '；architecture 世界架构={'
+             + '；'.join(key + ' ' + note for key, note, _section, _field in contracts.WORLD_ARCHITECTURE)
+             + '}，五项为非空文本，保存作者已选的全书设定，完整展开留给世界模型。',
+    'title': 'title 可用书名：承诺独特的世界意象或核心看点，可用凝练短名或清晰长名',
+}
 GATE_NOTES = {
     2: {
         'pov': '本门只决定一件事：谁在讲。每个方案的 scene 用该方案的人称写出来，让作者读到的不是解释，而是这个人称讲出来的样子；pitch 也一样。不要在本门讨论情节走向。',
@@ -364,6 +393,32 @@ GATE_NOTES[5] = {
               'anchor 写主题锚点：deliverable 是"世界再大也必须先兑现的那件事"（≥12字），deadline_chapter 用纯数字'
               '写最迟章号，且不得超过已选档位的上限——这个锚点是宏大设定的对价，读者要在前三十章内看到它兑现。'
               '不要写成章节大纲，也不要在这里改对抗梯度。',
+}
+
+GATE_NOTES[6] = {
+    **GATE_NOTES[5],
+    'premise': '只改世界的一条根规则，并推演它对日常生活、组织利益与文明未来的连锁后果。'
+               'novelty 写清新规则及至少两类后果；first_cause 写历史选择为何在此刻失衡；'
+               'stance/dark_side 沿枚举填写，但不要强迫所有世界都由幕后黑手操纵。'
+               '同组方案用不同的规则因果与终极问题拉开差距，不能只换职业、能力或敌人。'
+               '大世界用一场具体异常展示，主角身份留给后门。',
+    'world': '先定全书 architecture，再从中长出位阶与资源。space 写清已知世界、多方居所及通行边界；'
+             'history 写历史断层如何影响今天；civilizations 给出不同生存方案、依存与冲突；'
+             'conflict 写主角不行动也会持续扩大的根本矛盾；mystery 写终极真相及揭开后的问题。'
+             '这些可表现为大陆、星际与多层现实，也可表现为历史时代和现实制度网络，遵守题材与禁区。'
+             '开局只展示一个切面，世界规模不等于开篇信息量。与 premise 同源，不用更大地名掩盖局部设定。',
+    'ladder': '先想终局需要回答什么，再倒推各阶段的可行动范围。scale.opening 是第一章可见切面；'
+              'terminal 按实际问题选，宏大可以来自规则、文明或认知而不靠宇宙地图；unchanged 写旧人物与历史后果为何仍有效。'
+              '每级 new_rule 同时说明揭开的认知、由谁维持该规则；cost 说明承担的新责任。'
+              'stage 沿已有世界发展，允许同一空间内升格，不要求每卷换地图。完整字段和枚举按 value 规则。',
+    'origin': '世界与格局已经确定。本门在魂穿/身穿/本土/其他中给出不同来历，'
+              '说明带来的东西为何能介入既有世界矛盾，以及身份代价、谁会起疑与最初知识边界。'
+              '不推翻已选历史与机制，不替后面的主角门起名或定职业。',
+    'opposition': '给各方可理解的目标、依赖和不能退让的利益。opposition 串起眼前对手与长期冲突；'
+                  'story_engine 写胜利如何改变资源、联盟或认知并引出下一次行动，避免只把敌人的战力调高。',
+    'payoff': '用 plan 安排行动、探索、关系与成长的阶段回报，ending 回答核心脑洞的全书问题并交代人的去向。'
+              'anchor 仍给准确早期兑现物与章号；不机械固定三五章打脸，也不以揭开真相代替解决矛盾。',
+    'title': '本门只决定书名：提炼独特意象或核心卖点，凝练短名和直述长名都可，贴合已选语感。',
 }
 
 
@@ -469,7 +524,7 @@ def system_board(state):
 
 def validate_value(gate, value, version=OPENING_VERSION, choices=None):
     require(isinstance(value, dict), 'opening_option', '每个方案须有结构化 value。')
-    if version in (3, 4, 5):
+    if version in (3, 4, 5, 6):
         return _validate_value_modern(gate, value, version, choices)
     if version == 2:
         return _validate_value_v2(gate, value)
@@ -648,6 +703,13 @@ def _validate_value_modern(gate, value, version=3, choices=None):
                 'opening_option', '机制允许范围必须与机制类型一致：有机制为真，无机制为假。')
         if version >= 5:
             _validate_world_structures(value, tier_id, floors)
+        if version >= 6:
+            fields = tuple(row[0] for row in contracts.WORLD_ARCHITECTURE)
+            frame = value.get('architecture')
+            require(isinstance(frame, dict) and set(frame) == set(fields)
+                    and all(text(frame.get(key)) for key in fields), 'opening_option',
+                    '世界架构须完整声明空间、历史、文明、持续矛盾与终极谜题。',
+                    {'expected_fields': list(fields), 'got': frame})
     elif gate == 'ladder':
         _validate_ladder(value, tier_id, floors)
     elif gate == 'opposition':

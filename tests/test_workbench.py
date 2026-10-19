@@ -330,7 +330,7 @@ class GuidedV5WorkbenchTests(unittest.TestCase):
         handoff = drive(self.app)
         self.assertEqual(handoff['action'], 'outline_ready')
         book = self.repo.load()
-        self.assertEqual(creation.opening_version(book['creation']), 5)
+        self.assertEqual(creation.opening_version(book['creation']), creation.OPENING_VERSION)
         self.assertEqual(len(book['creation']['selections']), 13)
         self.assertIn('understanding', book)                 # the workbench is on for a new book
         run = self.app.run(through=1, source='作者授权试写一章。')

@@ -39,7 +39,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 ## 主干循环（默认执行路径）
 
-主干执行治理命令，子 agent 负责读取材料、写卷纲与章纲、执笔和返修；workflow 决定下一任务，SQLite 保存实际状态。开书门任务（opening_options）例外：主干在同一会话内自执（实测每门省一个冷子 agent 的 0.4M～1M input token 与 2～5 分钟等待，换组即同会话连续生成）；世界门及之后恢复派工。主干只保留授权目标、owner、当前 task_id 与宿主子 agent 会话的对应关系，以及简短执行状态。
+主干执行治理命令，子 agent 负责读取材料、写卷纲与章纲、执笔和返修；workflow 决定下一任务，SQLite 保存实际状态。开书门任务（opening_options）例外：主干在同一会话内自执，换组时延续已选方向与否决记录；完成全部开书选择、进入 world_model 后恢复派工。主干只保留授权目标、owner、当前 task_id 与宿主子 agent 会话的对应关系，以及简短执行状态。
 
 | 交接点 | 主干动作 | 核实依据 |
 |---|---|---|

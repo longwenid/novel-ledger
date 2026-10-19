@@ -215,9 +215,10 @@ def choose(book, headers):
         if opening['board']:
             return {'action': 'await_choice', **creation.view(opening)}
         gate = creation.current(opening)
+        method = creation.lens_index(gate['id'], opening['round'], creation.opening_version(opening))
         return Job('opening_options', 0, 'opening', payload={'gate': gate, 'round': opening['round'],
-            'creative_lens': creation.LENSES[opening['round'] % len(creation.LENSES)],
-            'lens_brief': creation.lens_brief(opening['round'])})
+            'creative_lens': creation.LENSES[method],
+            'lens_brief': creation.lens_brief(method)})
     if book['status'] != 'running':
         return {'action': book['status']}
     if book.get('pending_contract'):

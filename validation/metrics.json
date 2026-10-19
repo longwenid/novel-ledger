@@ -1,10 +1,10 @@
 {
   "metadata": {
     "schema": "novel-ledger.measurements/1",
-    "generated_at": "2026-10-19T07:44:34+00:00",
-    "source_commit": "9a2a5bb40be72c0d2d02c2bacc2bcf4fe7c0acf8",
-    "source_sha256": "9fd2459670becd2c00678e9af070e27ca0aae6602601d09f497785bc998fa817",
-    "source_files": 112
+    "generated_at": "2026-10-19T12:23:04+00:00",
+    "source_commit": "30a56e131a755b093caef5df97abaf09c3a65117",
+    "source_sha256": "6342e7a9e1b9d07664c277d576947676d0bb85b3bd738a85ea07c6cacc2b146a",
+    "source_files": 113
   },
   "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
   "pipeline": "five steps: opening gates / world_model / volume_outline / chapter_outline / write",
@@ -12,7 +12,7 @@
     "status": "ok",
     "value": {
       "modules": 40,
-      "runtime_lines_including_cli": 12106,
+      "runtime_lines_including_cli": 12171,
       "cycles_including_deferred_imports": [],
       "dependency_edges": 137
     }
@@ -21,15 +21,15 @@
     "status": "ok",
     "value": {
       "gates": {
-        "opening_version": 5,
+        "opening_version": 6,
         "gates": [
           "genre",
           "premise",
-          "origin",
           "voice",
           "scale",
           "world",
           "ladder",
+          "origin",
           "edge",
           "protagonist",
           "relationships",
@@ -242,7 +242,7 @@
         "required_records": 4,
         "declared_records": 9,
         "required_bytes": 5045,
-        "envelope_bytes": 6851
+        "envelope_bytes": 7093
       },
       "chapter_outline": {
         "required_names": [
@@ -301,12 +301,12 @@
       },
       "world_model": {
         "status": "ok",
-        "opening_version": 5,
+        "opening_version": 6,
         "required_names": [
           "opening_basis",
           "opening_choices"
         ],
-        "required_bytes": 4563
+        "required_bytes": 5127
       }
     }
   },
@@ -385,13 +385,13 @@
         "synthetic_prose_han_at_least": 60000,
         "history_source_bytes": 197,
         "previous_full_catalog_and_event_index_bytes": 5846,
-        "first_build_ms": 0.232,
-        "six_repeated_snapshot_ms": 0.285,
+        "first_build_ms": 0.208,
+        "six_repeated_snapshot_ms": 0.273,
         "six_repeated_snapshot_document_reads": 6,
         "repeated_snapshot_new_documents": 0,
         "recent_five_match_event_pages_read": 6,
         "missing_match_event_pages_read": 20,
-        "missing_match_ms": 1.191,
+        "missing_match_ms": 1.065,
         "oldest_prose_complete": true,
         "observed_read_chars": 4237
       },
@@ -400,13 +400,13 @@
         "synthetic_prose_han_at_least": 300000,
         "history_source_bytes": 198,
         "previous_full_catalog_and_event_index_bytes": 29370,
-        "first_build_ms": 1.023,
-        "six_repeated_snapshot_ms": 0.308,
+        "first_build_ms": 0.972,
+        "six_repeated_snapshot_ms": 0.25,
         "six_repeated_snapshot_document_reads": 6,
         "repeated_snapshot_new_documents": 0,
         "recent_five_match_event_pages_read": 6,
         "missing_match_event_pages_read": 100,
-        "missing_match_ms": 3.719,
+        "missing_match_ms": 3.37,
         "oldest_prose_complete": true,
         "observed_read_chars": 4240
       },
@@ -415,13 +415,13 @@
         "synthetic_prose_han_at_least": 1500000,
         "history_source_bytes": 198,
         "previous_full_catalog_and_event_index_bytes": 148570,
-        "first_build_ms": 4.975,
-        "six_repeated_snapshot_ms": 0.306,
+        "first_build_ms": 4.874,
+        "six_repeated_snapshot_ms": 0.278,
         "six_repeated_snapshot_document_reads": 6,
         "repeated_snapshot_new_documents": 0,
         "recent_five_match_event_pages_read": 6,
         "missing_match_event_pages_read": 500,
-        "missing_match_ms": 16.238,
+        "missing_match_ms": 14.92,
         "oldest_prose_complete": true,
         "observed_read_chars": 4253
       }

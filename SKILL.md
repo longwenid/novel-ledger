@@ -1,7 +1,7 @@
 ---
 name: novel-ledger
 description: >-
-  在用户要求从零开书、续写长篇网络小说、修订正文或恢复小说项目时使用。通过十三门设定（含核心脑洞与格局阶梯）、卷纲与章纲状态链、伏笔账、文风代理指标与执笔自比，按作者授权推进并交付。
+  在用户要求从零开书、续写长篇网络小说、修订正文或恢复小说项目时使用。通过十三门设定（含核心脑洞、世界架构与格局路径）、卷纲与章纲状态链、伏笔账、文风代理指标与执笔自比，按作者授权推进并交付。
 ---
 
 # novel-ledger
@@ -18,7 +18,7 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 
 | 当前任务 | 首先读取 | 何时补读 |
 |---|---|---|
-| 从零开书、导入已有设定 | [逐门开书](references/opening.md) | 换组或方案同质化读 [创意工具箱](references/hatch.md)；世界任务读 [世界模型](references/world.md)。已有项目按原版本门序继续。 |
+| 从零开书、导入已有设定 | [逐门开书](references/opening.md) | 构思或换组读 [创意工具箱](references/hatch.md)；世界任务读 [世界模型](references/world.md)。已有项目按原版本门序继续。 |
 | 续写、恢复、暂停、改变作者约定 | [运行与恢复](references/runtime.md) | 沿当前状态和原授权接续，不重新创建项目或重问已定事项。 |
 | 写卷纲、写章纲、执笔或返修 | [创作与自比](references/craft.md) | 字段、状态链、伏笔和文风核算读 [叙事推进](references/narrative.md)。 |
 | 历史修订、影响分析、候选采纳或撤销 | [修订影响分析](references/runtime.md#修订影响分析) | 阅读关联与理解版本读 [叙事工作台](references/workbench.md)；补丁与人物/场景字段读 [编辑能力](references/editorial.md)。 |

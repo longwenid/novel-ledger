@@ -783,7 +783,7 @@ class GuidedOpeningV5Tests(unittest.TestCase):
         handoff = drive(self.app)
         self.assertEqual(handoff['action'], 'outline_ready')
         book = self.repo.load()
-        self.assertEqual(creation.opening_version(book['creation']), 5)
+        self.assertEqual(creation.opening_version(book['creation']), creation.OPENING_VERSION)
         self.assertEqual(len(book['creation']['selections']), 13)
         self.assertEqual(book['creation']['phase'], 'ready')
         self.assertEqual(self.repo.headers('main'), [])

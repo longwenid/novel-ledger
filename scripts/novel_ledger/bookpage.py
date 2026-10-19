@@ -43,13 +43,13 @@ FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '
                 'chapter_outline': '章纲要求', 'style_window': '文风容差',
                 # opening/5: the brainstorm gate's four questions, the ladder's scale, the tier
                 # ladder, the hard currency, and the promise anchor.
-                'core_premise': '核心脑洞', 'world_scale': '格局尺度', 'world_ladder': '升格阶梯',
+                'world_architecture': '世界架构', 'architecture': '世界架构', 'core_premise': '核心脑洞', 'world_scale': '格局尺度', 'world_ladder': '升格阶梯',
                 'world_tiers': '位阶阶梯', 'world_resource': '硬通货', 'promise_anchor': '主题锚点',
                 'anchors': '稳定设定', 'links': '空间连接'}
 # Option values that are engine bookkeeping rather than an author-facing decision: the structural gate's
 # tier id and its arithmetic window are already stated in the option's own sentence.
 OPENING_VALUE_HIDDEN = ('tier', 'chapter_window')
-SUB_LABELS = {'id': '标识', 'name': '名称', 'kind': '类型', 'aliases': '别名', 'identity': '身份',
+SUB_LABELS = {'space': '世界全貌', 'history': '历史断层', 'civilizations': '文明与秩序', 'mystery': '终极谜题', 'id': '标识', 'name': '名称', 'kind': '类型', 'aliases': '别名', 'identity': '身份',
               'desire': '欲望', 'limit': '底线', 'purpose': '卷职责', 'end': '卷末章', 'holder': '持有者',
               'asset': '资产', 'unit': '单位', 'quantity': '数量', 'entity': '实体', 'key': '键', 'value': '值'}
 SUB_LABELS.update(tier='人物层次', biography='小传与矛盾', speech='表达方式', public_role='公开身份', contradiction='内在矛盾',

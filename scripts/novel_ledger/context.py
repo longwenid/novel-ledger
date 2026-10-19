@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (SCALE_TIERS, TASK, Job, require, tier_of)
+from .contracts import (SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, require, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY,
                         OUTLINE_CHECKS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
@@ -47,7 +47,7 @@ PROJECTIONS = (
 # prerequisite of a draft: it carries the enter/exit state chain the writer must satisfy, and the
 # `drift_check` it submits is reconciled against exactly this row.
 STAGE_MATERIAL = {
-    'opening_options': ('opening_rejections',),
+    'opening_options': ('opening_choices', 'opening_rejections'),
     'world_model': ('author_feedback', 'opening_basis', 'opening_choices', 'previous_proposal'),
     'opening_contract': ('author_feedback', 'opening_basis', 'opening_choices', 'world_model'),
     'volume_outline': ('author_feedback', 'contract', 'effective_layout', 'hooks', 'opening_basis',
@@ -222,9 +222,10 @@ def _scale_line(book):
     return ''
 
 
-# The nested decision maps an opening/5 gate hands back: each is read by a later gate, so the line
+# The nested decision maps an opening gate hands back: each is read by a later gate, so the line
 # expands the fields that decide direction rather than printing the object.
 SELECTION_MAPS = (
+    ('architecture', tuple(row[0] for row in WORLD_ARCHITECTURE)),
     ('scale', ('opening', 'terminal', 'unchanged')),        # 格局尺度：开局边界/终局等级/跨卷不变
     ('resource', ('name', 'allocator')),                    # 硬通货与分配者
     ('anchor', ('deliverable', 'deadline_chapter')),        # 主题锚点与最迟兑现章
@@ -536,12 +537,12 @@ def build(repo: ContextStore, book, job):
     if book.get('author_block'):
         add('author_block', book['author_block'])
     if book.get('creation'):
-        # The brief already names every chosen direction in full, so the choices record is required
-        # only where the dispatch has to build on all of them at once (world and volume design).
-        # Rejections stay required for the opening, which must not re-propose a refused group.
+        # Brief summaries are bounded. New gates must read the full frozen choices so world
+        # architecture and other long decisions survive without being reconstructed from snippets.
         chosen = stage in ('world_model', 'opening_contract', 'volume_outline')
         add('opening_basis', {'selection_hash': book['creation'].get('selection_hash'), 'source': book['creation']['source']}, chosen)
-        add('opening_choices', creation.selected(book['creation']), chosen)
+        choices_required = chosen or (stage == 'opening_options' and creation.opening_version(book['creation']) >= 6)
+        add('opening_choices', creation.selected(book['creation']), choices_required)
         if stage == 'opening_options':
             add('opening_rejections', [r for r in book['creation']['rejections'] if r['gate'] == job.payload['gate']['id']])
     if book.get('world'):
