@@ -47,7 +47,7 @@ def ladder_book(ladder=True):
     """A seeded book whose opening declared a scale ladder (or a legacy book that declared none)."""
     book = seeded_book(contract(chapters=4, volumes=2))
     if ladder:
-        state = creation.begin('工程夹具：格局阶梯。', version=5)
+        state = creation.begin('工程夹具：格局阶梯。')
         state['selections'] = [{'gate': 'ladder',
                                 'option': {'id': 'A', 'title': '方案A', 'premise': '工程夹具。',
                                            'value': ladder_value()},

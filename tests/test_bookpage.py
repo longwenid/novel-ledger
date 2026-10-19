@@ -161,15 +161,21 @@ class BookPageTests(unittest.TestCase):
                              'fit_reason': '承接夜班题材，把推进压在一件具体物件上。', 'value': entry})
             return {'gate': gate, 'options': rows}
 
-        state = creation.begin('工程夹具。', version=2)
-        state = creation.offer(state, offered('genre', {'genre': '都市生活', 'reader_promise': '在退件里查清责任。',
+        state = creation.begin('工程夹具。')
+        state = creation.offer(state, offered('genre', {'genre': '都市生活', 'reader_promise': '在夜班退件里查清责任。',
                                                        'tone': '冷硬的夜班底色。'}, 'reader_promise'))
         state = creation.pick(state, 'A', state['board']['hash'], 'A')
-        state = creation.offer(state, offered('pov', {'pov': '第三人称限知，只跟沈桐的所见与所知。'}, 'pov'))
+        premise = {'novelty': '登记制度本身会记住每一个签字的人。', 'first_cause': '旧登记制度在一次退件事故后自我封闭。',
+                   'stance': '利用', 'dark_side': '制度'}
+        state = creation.offer(state, offered('premise', premise, 'novelty'))
+        state = creation.pick(state, 'A', state['board']['hash'], 'A')
+        voice = {'pov': '第三人称限知，只跟沈桐的所见与所知。', 'voice': '具体动作与有立场的对白。',
+                 'style_traits': ['少重复解释。']}
+        state = creation.offer(state, offered('voice', voice, 'voice'))
         state = creation.pick(state, 'A', state['board']['hash'], 'A')
         board = state['board']                                     # the structural gate answered itself
         state = creation.pick(state, board['options'][0]['id'], board['hash'], '选它。')
-        book = workflow.preparing_book(guided=True, opening_version=2)
+        book = workflow.preparing_book(guided=True)
         book['creation'] = state
         self.repo.save(book)
         page = bookpage.render(self.repo)

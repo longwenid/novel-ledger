@@ -26,7 +26,7 @@ class WorldArchitectureTests(unittest.TestCase):
             function(*args)
         self.assertEqual(caught.exception.code, code)
 
-    def test_world_gate_requires_complete_frame_only_for_v6(self):
+    def test_world_gate_requires_the_complete_frame(self):
         value = copy.deepcopy(VALUES['world'])
         creation.validate_value('world', value, 6)
         for key in FRAME:
@@ -42,10 +42,9 @@ class WorldArchitectureTests(unittest.TestCase):
         self.assertCode('opening_option', creation.validate_value, 'world', value, 6)
         del value['architecture']
         self.assertCode('opening_option', creation.validate_value, 'world', value, 6)
-        creation.validate_value('world', value, 5)
 
     def test_contract_preserves_every_architecture_decision(self):
-        state = walk(creation.begin(version=6))
+        state = walk(creation.begin())
         contract = contract_from(state)
         model = {'rules': [{'principle': '夜班退件必须登记负责人。'}]}
         creation.validate_contract(contract, state, model)
@@ -76,45 +75,39 @@ class WorldArchitectureTests(unittest.TestCase):
         legacy = choices_v5()
         check(base_model(legacy), legacy)
 
-    def test_returning_to_world_invalidates_origin_only_in_new_order(self):
-        for version, origin_retained in ((5, True), (6, False)):
-            with self.subTest(version=version):
-                complete = walk(creation.begin(version=version))
-                restored = creation.back(complete, 'world', '世界重新构思。')
-                self.assertEqual('origin' in creation.selected(restored), origin_retained)
-                self.assertNotIn('ladder', creation.selected(restored))
-                self.assertEqual(creation.current(restored)['id'], 'world')
-                self.assertEqual(creation.opening_version(restored), version)
+    def test_returning_to_world_invalidates_every_later_gate(self):
+        complete = walk(creation.begin())
+        restored = creation.back(complete, 'world', '世界重新构思。')
+        self.assertNotIn('origin', creation.selected(restored))
+        self.assertNotIn('ladder', creation.selected(restored))
+        self.assertEqual(creation.current(restored)['id'], 'world')
 
     def test_later_gate_reads_full_frozen_choices_across_reopening(self):
-        for version in (5, 6):
-            with self.subTest(version=version), tempfile.TemporaryDirectory() as folder:
-                book = workflow.preparing_book(guided=True, opening_version=version)
-                book['creation'] = walk_to(book['creation'], 'edge')
-                repo = SQLiteRepository.initialize(Path(folder) / 'book', book)
-                try:
-                    app = Application(repo)
-                    app.advance()
-                    pending = repo.pending()['input']
-                    choices = repo.read_document(pending['records']['opening_choices'])
-                    self.assertEqual(choices, creation.selected(book['creation']))
-                    self.assertEqual('opening_choices' in pending['required'], version == 6)
-                    if version == 6:
-                        self.assertEqual(choices['world']['architecture'], FRAME)
-                    # Reopening preserves both the frozen payload and the project's version.
-                    frozen = copy.deepcopy(pending)
-                    repo.close()
-                    repo = SQLiteRepository(Path(folder) / 'book')
-                    self.assertEqual(repo.pending()['input'], frozen)
-                    self.assertEqual(creation.opening_version(repo.load()['creation']), version)
-                finally:
-                    repo.close()
+        with tempfile.TemporaryDirectory() as folder:
+            book = workflow.preparing_book(guided=True)
+            book['creation'] = walk_to(book['creation'], 'edge')
+            repo = SQLiteRepository.initialize(Path(folder) / 'book', book)
+            try:
+                app = Application(repo)
+                app.advance()
+                pending = repo.pending()['input']
+                choices = repo.read_document(pending['records']['opening_choices'])
+                self.assertEqual(choices, creation.selected(book['creation']))
+                self.assertIn('opening_choices', pending['required'])
+                self.assertEqual(choices['world']['architecture'], FRAME)
+                # Reopening preserves the frozen payload and the project's protocol.
+                frozen = copy.deepcopy(pending)
+                repo.close()
+                repo = SQLiteRepository(Path(folder) / 'book')
+                self.assertEqual(repo.pending()['input'], frozen)
+                self.assertEqual(creation.opening_version(repo.load()['creation']),
+                                 contracts.OPENING_VERSION)
+            finally:
+                repo.close()
 
-    def test_regroup_rotates_gate_methods_and_legacy_keeps_global_rotation(self):
+    def test_regroup_rotates_gate_methods(self):
         for gate, expected in (('premise', '规则博弈'), ('world', '纪元断层'),
                                ('ladder', '非数值成长')):
-            self.assertEqual(creation.LENSES[creation.lens_index(gate, 0, 6)], expected)
-            self.assertNotEqual(creation.lens_index(gate, 0, 6), creation.lens_index(gate, 1, 6))
-            self.assertEqual(creation.lens_index(gate, 0, 5), 0)
-            self.assertEqual(creation.lens_index(gate, 1, 5), 1)
+            self.assertEqual(creation.LENSES[creation.lens_index(gate, 0)], expected)
+            self.assertNotEqual(creation.lens_index(gate, 0), creation.lens_index(gate, 1))
         self.assertEqual(contracts.OPENING_VERSION, 6)

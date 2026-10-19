@@ -1,5 +1,7 @@
 """Current opening decisions, versioned gate ownership and contract alignment."""
 import copy
+import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -234,12 +236,11 @@ class CurrentOpeningTests(unittest.TestCase):
 
     def test_premise_and_origin_briefs_request_the_counts_the_receiver_accepts(self):
         from novel_ledger import briefs
-        for version, gate in ((4, 'origin'), (5, 'premise'), (5, 'origin')):
-            with self.subTest(version=version, gate=gate):
-                state = walk_to(creation.begin(version=version), gate)
+        for gate in ('premise', 'origin'):
+            with self.subTest(gate=gate):
+                state = walk_to(creation.begin(), gate)
                 brief = briefs.opening_options(creation.current(state),
-                                               creation.lens_brief(0), version=version)
-                self.assertIn('2～3', creation.gate_note(version, gate))
+                                               creation.lens_brief(0), version=OPENING_VERSION)
                 self.assertNotIn('四个方向各给一个方案', brief)
                 options = rows_for(gate)
                 third = copy.deepcopy(options[0])
@@ -401,24 +402,84 @@ class CurrentOpeningTests(unittest.TestCase):
         self.assertCode('opening_option', creation.validate_value, 'payoff', empty,
                         OPENING_VERSION, {})
 
-    def test_a_project_opened_under_an_older_protocol_keeps_its_gate_set(self):
-        """A gate set is a property of the project's own protocol: v3/v4 do not gain the v5 gates."""
-        for version, size in ((3, 10), (4, 11), (OPENING_VERSION, 13)):
-            state = creation.begin('工程夹具：旧协议项目。', version=version)
-            with self.subTest(version=version):
-                self.assertEqual(len(creation.gate_ids(version)), size)
-                self.assertEqual(creation.opening_version(state), version)
-                self.assertEqual(creation.gates(state), creation.GATE_SETS[version])
-        self.assertNotIn('premise', creation.gate_ids(4))
-        self.assertNotIn('ladder', creation.gate_ids(4))
+    def test_an_older_declared_protocol_is_refused_with_the_fix_named(self):
+        """Old gate sets are not re-planned: a state that declares one is refused, and a fresh init
+        starts on the current protocol."""
+        state = {'schema': 'novel-ledger.creation/3', 'phase': 'choosing', 'cursor': 0}
+        self.assertCode('creation', creation.opening_version, state)
+        self.assertCode('creation', creation.begin, 'x', 3)
+        self.assertEqual(creation.opening_version(self.repo.load()['creation']), OPENING_VERSION)
+        self.assertEqual(creation.gates(self.repo.load()['creation']), creation.GATES)
 
-    def test_the_anti_cliche_naming_discipline_survives_every_gate_order(self):
-        """The naming rules live on the protagonist gate, whichever protocol asks it."""
-        for version in (3, 4, OPENING_VERSION):
-            note = creation.gate_note(version, 'protagonist')
-            with self.subTest(version=version):
-                self.assertTrue(note.strip())
-                self.assertIn('命名', note)
+    def test_every_tier_is_writable_under_the_contract_rules(self):
+        """No tier may be offered unless a contract inside it passes the same rules the engine enforces."""
+        for tier in SCALE_TIERS:
+            with self.subTest(tier=tier['id']):
+                choices = {'scale': {k: copy.deepcopy(tier[k]) for k in
+                                     ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim', 'volume_count')}}
+                choices['scale'].update(tier=tier['id'], chapters=tier['chapters'], chapter_window=list(tier['chapter_window']))
+                creation.validate_value('scale', choices['scale'], OPENING_VERSION, choices)
+                # Every chapter count the window declares must survive the contract rules, not just
+                # the shortest one: the band, the per-chapter aim and the declared maximum have to
+                # hold together at each end of the window, or the ladder offers a size nobody can
+                # actually write at that length.
+                for total in range(tier['chapter_window'][0], tier['chapter_window'][1] + 1):
+                    with self.subTest(tier=tier['id'], chapters=total):
+                        raw = contract()
+                        raw.update({key: copy.deepcopy(tier[key]) for key in
+                                    ('word_range', 'chapter_min', 'chapter_max', 'chapter_aim')})
+                        raw['volumes'] = [{'id': 'v' + str(i + 1), 'purpose': '查明来源并面对后果。',
+                                           'end': total * (i + 1) // tier['volume_count']}
+                                          for i in range(tier['volume_count'])]
+                        checked = planning.validate_contract(raw)
+                        self.assertEqual(checked['volumes'][-1]['end'], total)
+                        self.assertEqual(checked['word_range'],
+                                         [total * tier['chapter_min'], total * tier['chapter_max']])
+
+    def test_importing_a_contract_is_allowed_before_the_first_gate_and_refused_after(self):
+        command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project)]
+        example = str(ROOT / 'assets' / 'contract.example.json')
+        early = subprocess.run(command + ['opening', '--file', example, '--source', '作者开书前给完整约定。'],
+                               capture_output=True, text=True, encoding='utf-8', errors='replace')
+        self.assertEqual(early.returncode, 0, early.stdout)
+        self.assertTrue(json.loads(early.stdout)['staged'])
+        self.assertIsNone(self.repo.load()['creation'])
+        # An imported contract is activated on the engine's alignment check instead of dispatching a
+        # contract review; the first dispatch of the book is the volume outline.
+        task = self.app.advance()['task']
+        self.assertEqual(task['stage'], 'volume_outline')
+        self.assertIsNotNone(self.repo.load()['contract'])
+
+        # A project that has already shown a gate refuses the import; a fresh init stays importable.
+        with tempfile.TemporaryDirectory() as temporary:
+            late_project = Path(temporary) / 'started'
+            cli = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(late_project)]
+            subprocess.run(cli + ['init'], capture_output=True, text=True, encoding='utf-8', errors='replace')
+            subprocess.run(cli + ['advance'], capture_output=True, text=True, encoding='utf-8', errors='replace')
+            late = subprocess.run(cli + ['opening', '--file', example, '--source', '作者中途给完整约定。'],
+                                  capture_output=True, text=True, encoding='utf-8', errors='replace')
+            self.assertEqual(late.returncode, 2)
+            self.assertEqual(json.loads(late.stdout)['error'], 'creation')
+            repo = SQLiteRepository(late_project)
+            try:
+                self.assertIsNotNone(repo.load()['creation'])
+                self.assertIsNone(repo.load()['contract'])
+                self.assertIsNotNone(repo.pending())
+            finally:
+                repo.close()
+            other = Path(temporary) / 'other'
+            subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(other), 'init'],
+                           capture_output=True, text=True, encoding='utf-8', errors='replace')
+            ready = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(other),
+                                    'opening', '--file', example, '--source', '作者开书前给完整约定。'],
+                                   capture_output=True, text=True, encoding='utf-8', errors='replace')
+            self.assertEqual(ready.returncode, 0, ready.stdout)
+
+    def test_the_anti_cliche_naming_discipline_survives_the_gate_order(self):
+        """The naming rules live on the protagonist gate that asks it."""
+        note = creation.gate_note(OPENING_VERSION, 'protagonist')
+        self.assertTrue(note.strip())
+        self.assertIn('命名', note)
 
     def test_every_later_gate_receives_the_direction_already_chosen(self):
         """A promise without its channel and setting is how a later gate drifts into another era.
@@ -443,20 +504,19 @@ class CurrentOpeningTests(unittest.TestCase):
         self.assertEqual(context._selection_line({'title': '空门', 'value': {}}), '空门')
 
     def test_every_gate_owns_its_fields_and_states_its_structured_keys(self):
-        for version in (3, 4, OPENING_VERSION):
-            values = values_for_version(version)
-            for gate, value in values.items():
-                with self.subTest(gate=gate, version=version):
-                    self.assertEqual(set(creation.value_fields(gate, version)), set(value))
-                    self.assertCode('opening_option', creation.validate_value, gate,
-                                    {**copy.deepcopy(value), 'unrelated': '越权字段。'}, version, {})
-        # A premise the engine cannot check is refused: every declared key must be stated.
+        values = values_for_version(OPENING_VERSION)
+        for gate, value in values.items():
+            with self.subTest(gate=gate):
+                self.assertEqual(set(creation.value_fields(gate, OPENING_VERSION)), set(value))
+                self.assertCode('opening_option', creation.validate_value, gate,
+                                {**copy.deepcopy(value), 'unrelated': '越权字段。'}, OPENING_VERSION, {})
+        # A value the engine cannot check is refused: every declared key must be stated.
         edge = copy.deepcopy(VALUES['edge'])
         del edge['ceiling']
-        self.assertCode('opening_option', creation.validate_value, 'edge', edge, 3, {})
+        self.assertCode('opening_option', creation.validate_value, 'edge', edge, OPENING_VERSION, {})
         payoff = copy.deepcopy(VALUES['payoff'])
         payoff['plan']['ways'] = []
-        self.assertCode('opening_option', creation.validate_value, 'payoff', payoff, 3, {})
+        self.assertCode('opening_option', creation.validate_value, 'payoff', payoff, OPENING_VERSION, {})
 
     def test_walking_every_gate_forms_a_contract_that_keeps_each_decision(self):
         state = walk(creation.begin('工程夹具：走完全程。'))

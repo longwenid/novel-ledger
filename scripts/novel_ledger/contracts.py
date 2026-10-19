@@ -131,15 +131,11 @@ UNDERSTANDING_CAPABILITY = 'understanding/1'
 SCENE_IDENTITY_V1 = 'scene-identity/1'
 SCENE_IDENTITY_CAPABILITY = 'scene-identity/2'
 READING_DEPENDENCIES_CAPABILITY = 'reading-dependencies/1'
-OPENING_BOUNDS_CAPABILITY = 'opening-bounds/1'
 # The volume outline protocol changed shape in v2: a volume is now one outline per volume, complete
 # in a single receipt, carrying its own nodes/threads and state boundaries, and the per-chapter rows
 # live in the chapter outline that follows it. A task frozen under volume-outline/1 describes a batch
 # of chapters instead, so this build refuses it rather than reinterpreting its fields.
 VOLUME_OUTLINE_CAPABILITY = 'volume-outline/2'
-# New tasks require explicit style and computable volume terminals. Old frozen tasks keep their
-# original interpretation; upgrading the engine does not add fields to an existing dispatch.
-OUTLINE_CHECKS_CAPABILITY = 'outline-checks/1'
 SCENE_MEMORY_CAPABILITY = 'scene-memory/1'
 HOOK_LINKS_CAPABILITY = 'hook-links/1'
 CAPABILITIES = {
@@ -147,9 +143,7 @@ CAPABILITIES = {
     'understanding': (UNDERSTANDING_CAPABILITY,),
     'scene_identity': (SCENE_IDENTITY_V1, SCENE_IDENTITY_CAPABILITY),
     'reading_dependencies': (READING_DEPENDENCIES_CAPABILITY,),
-    'opening_bounds': (OPENING_BOUNDS_CAPABILITY,),
     'volume_outline': (VOLUME_OUTLINE_CAPABILITY,),
-    'outline_checks': (OUTLINE_CHECKS_CAPABILITY,),
     'scene_memory': (SCENE_MEMORY_CAPABILITY,),
     'hook_links': (HOOK_LINKS_CAPABILITY,),
 }
@@ -550,13 +544,12 @@ def opening_source(row, version):
 
 
 def alignment_for(version):
-    """The alignment fields an opening of this version actually decides.
+    """The alignment fields the one opening protocol in force actually decides.
 
-    A contract written before opening/2 never chose a tone, theme or view, so those fields must not be
-    read back as author decisions it failed to keep.
+    A contract written before opening/2 never chose a tone, theme or view, and contracts from those
+    protocols are refused rather than read back — so there is no per-version filter to apply.
     """
-    return tuple(row['key'] for row in CONTRACT_FIELDS
-                 if row['alignment'] and row.get('since', 1) <= version)
+    return tuple(row['key'] for row in CONTRACT_FIELDS if row['alignment'])
 CHARACTERS = ('name', 'role', 'desire', 'limit', 'knowledge_boundary')
 POLICY_FIELDS = ('forbidden_terms', 'forbidden_name_chars')
 # Where the author's lexical rules are enforced, declared per task stage. One table, used both to

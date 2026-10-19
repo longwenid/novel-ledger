@@ -54,7 +54,7 @@ AI 起名高度趋同（潇洒姓×玄乎单字是重灾区，同一个玄乎字
 
 ## 门序与字段归属
 
-新项目使用 `creation.GATES_V6`（`opening/6`），仍为 **13 门**。世界与格局先于主角来历确定，避免整套世界围着一个局部身份生长。字段以当前任务的简报与模板为准，详细约束见 [协议](protocol.md)。
+项目使用 `creation.GATES`（`opening/6`），共 **13 门**。世界与格局先于主角来历确定，避免整套世界围着一个局部身份生长。字段以当前任务的简报与模板为准，详细约束见 [协议](protocol.md)。
 
 | # | 门 | 决定什么 |
 |---|---|---|
@@ -78,7 +78,7 @@ AI 起名高度趋同（潇洒姓×玄乎单字是重灾区，同一个玄乎字
 
 后续每门必读完整的已选记录 `opening_choices`；简报里的短摘要只用于导航。想改已选脑洞或世界须返回对应门，后续依赖重选。世界与约定阶段机械检查逐字承接，卷纲、章纲在原有任务内完成因果、揭示顺序及状态链核验，不新增独立校验子 agent。机械通过不代表脑洞原创或文学质量达标。
 
-旧项目按保存版本继续，**不迁移、不重排旧选择**：`creation/5` 保留“题材→脑洞→来历→视角→体量→世界→格局…”十三门；`creation/4` 十一门，`creation/3` 与 `creation/2` 十门，`creation/1` 八门。旧项目与自备约定不追溯要求补填世界架构。
+**旧开书协议不再支持**：声明 `creation/1`～`creation/5` 的项目在读取时被明确拒绝（错误说明以当前协议重开），不迁移、不按新门重读旧选择。自备约定（`init --contract`）不经门序核验，仍可不带 opening/5/6 的结构化字段。
 
 无预填、换组或回退时，为 12 次创意方案生成、1 次引擎结构板与 13 次作者选择。已有要求跳过相应门；实际次数随操作变化。生成方法和换组原则见 [创意工具箱](hatch.md)。
 
@@ -88,7 +88,7 @@ AI 起名高度趋同（潇洒姓×玄乎单字是重灾区，同一个玄乎字
 
 运行时默认只维护在 `contracts.OPENING_DIRECTION` 与 `OPENING_DIRECTION_GATES`，简报据此生成。**作者原话和已选方向优先**：不因题材、短名、慢热、非数值成长或不同文风判错；不固定每三五章打脸，也不要求每卷更换地图与对手。
 
-新项目保存 `novel-ledger.creation/6`；数据库布局仍为 `novel-ledger/3`，两者独立。
+开书项目保存 `novel-ledger.creation/6`（唯一支持的协议）；数据库布局为 `novel-ledger/3`，两者独立。
 
 ## 结构门（体量与分卷）
 
@@ -108,9 +108,9 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 - 透镜与方法**只用于构思，不得出现在给作者看的文本里**。`driver` 写这一版如何推进，`tradeoff` 写选它要放弃什么（与同组另外两案相比），`fit_reason` 写与已选方向的具体接口。写"某透镜落地/典型落法"会被 `opening_voice` 拒绝。
 - 同组方案的推进方式不得同构（例如三案都以"以…为刻度推进"起句），会被 `opening_diversity` 拒绝。
 
-新派 opening_options 冻结 capabilities.opening_bounds=opening-bounds/1，程序按去除首尾空白后的字符数执行 pitch≤40、scene 最多3条。没有该能力的旧冻结任务保留原校验规则，已接受的旧方案板继续按原展示版本选择，不因升级重新拒绝；creation/1 和 creation/2 的门序及 value 规则仍由各自协议决定。
+程序对每份方案回执按去除首尾空白后的字符数执行 pitch≤40、scene 最多 3 条；这是唯一规则，没有旧任务的宽松解释。
 
-创意门执行者（默认主干，派工时为 Worker）先读 task.json、任务目录的 `brief.md` 和 required 中的完整记录。本门规则、当轮方法及已选方向摘要写入 brief；v6 必读 opening_choices 与 opening_rejections，旧版本按冻结 required 执行；完整回执的成品示例见 `assets/opening-options.example.json`。单一决定门按简报的专门交付要求执行；结构门由主干展示引擎档位板，不派 Worker 或提交方案回执。
+创意门执行者（默认主干，派工时为 Worker）先读 task.json、任务目录的 `brief.md` 和 required 中的完整记录。本门规则、当轮方法及已选方向摘要写入 brief；必读 opening_choices 与 opening_rejections；完整回执的成品示例见 `assets/opening-options.example.json`。单一决定门按简报的专门交付要求执行；结构门由主干展示引擎档位板，不派 Worker 或提交方案回执。
 
 `value` 只接受本门负责的字段，任务简报会列出允许字段。携带其他门的字段或未知字段按 `opening_option` 拒绝，详情给出 `allowed_fields`、`unknown_fields` 和修正出口；例如书名门不能附带 `pov` 改写已选视角。intake 使用相同边界，形成约定时还会再次校验闭合选择；改此前决定须 back 返回对应门。
 

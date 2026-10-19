@@ -198,20 +198,6 @@ class WorkbenchTests(unittest.TestCase):
         with self.assertRaises(Error):
             context.build(self.repo, book, Job('repair', 2))
 
-    def test_old_frozen_task_does_not_acquire_new_memory_capability(self):
-        drive(self.app, self.owner, until='write')
-        task = self.repo.pending()
-        # A persisted pre-upgrade envelope has no capability: the same receipt must not gain the
-        # memory the newer protocol reads out of it.
-        work = copy.deepcopy(task['input'])
-        work['capabilities'].pop('understanding')
-        candidate = response(self.app)
-        candidate['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]
-        before = self.repo.load()['understanding']
-        outcome = workflow.apply(self.repo.load(), work, candidate['data'], candidate['session'],
-                                 self.app._sources(work))
-        self.assertEqual(outcome.book['understanding'], before)
-
     def test_existing_book_can_explicitly_enable_at_a_safe_boundary(self):
         book = self.repo.load()
         book.pop('understanding')

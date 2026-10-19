@@ -239,13 +239,12 @@ def chapter_policy(contract, volume, model=None):
 
 
 def validate_volume_outline(data, contract, world, selected=None, existing=None, missing_ids=None,
-                            state=None, strict=True):
+                            state=None):
     """Delegate the volume outline's mechanical checks to `drift` (single implementation)."""
-    return drift.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state,
-                                         strict=strict)
+    return drift.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state)
 
 
-def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0, strict=True):
+def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0):
     """Delegate the chapter outline's chain checks, then freeze the scenes it declares.
 
     `drift` owns the state chain; this entry point adds the one piece that needs the scene protocol
@@ -253,8 +252,7 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     pure drift core. Rows without scenes are bound too: the binding is what records that the row
     declared no dependency, which a revision later reads as "conservatively expand".
     """
-    rows = drift.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0,
-                                         strict=strict)
+    rows = drift.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0)
     entities = copy.deepcopy((state0 or {}).get('entities') or {})
     previous = {}
     for row in rows:

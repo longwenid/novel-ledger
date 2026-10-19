@@ -10,17 +10,14 @@ and a gate that declared nothing new must not be asked about anything new.
 """
 import copy
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import briefs, contracts, creation, drift, world, workflow
-from novel_ledger.bootstrap import local_application as Application
+from novel_ledger import briefs, contracts, creation, drift, world
 from novel_ledger.contracts import Error, dump
-from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, drive, response, seeded_book, volume_rows
+from support import contract, seeded_book, volume_rows
 
 PREMISE = '退件来源背后是一条被垄断的登记制度。'
 PROTAGONIST = {'id': 'shen', 'name': '沈桐', 'identity': '夜班工人',
@@ -393,9 +390,9 @@ class PromiseAnchorTests(unittest.TestCase):
     def test_the_deadline_is_capped_by_the_tier_window_and_the_platform_line(self):
         cap = contracts.DEFAULTS['world_ladder']['anchor_max_chapter']
         choices = {'scale': {'tier': TIER}}
-        creation.validate_value('payoff', self.payoff(deadline_chapter=str(cap)), 5, choices)
+        creation.validate_value('payoff', self.payoff(deadline_chapter=str(cap)), creation.OPENING_VERSION, choices)
         with self.assertRaises(Error) as caught:
-            creation.validate_value('payoff', self.payoff(deadline_chapter=str(cap + 1)), 5, choices)
+            creation.validate_value('payoff', self.payoff(deadline_chapter=str(cap + 1)), creation.OPENING_VERSION, choices)
         self.assertEqual(caught.exception.code, 'opening_option')
         self.assertIn(str(cap), dump(caught.exception.details))
 
@@ -406,54 +403,8 @@ class PromiseAnchorTests(unittest.TestCase):
                        {'deliverable': '第 N 章前必须兑现一次当众反转。', 'deadline_chapter': '0'}):
             with self.subTest(anchor=anchor):
                 with self.assertRaises(Error) as caught:
-                    creation.validate_value('payoff', self.payoff(**anchor), 5, choices)
+                    creation.validate_value('payoff', self.payoff(**anchor), creation.OPENING_VERSION, choices)
                 self.assertEqual(caught.exception.code, 'opening_option')
-
-
-class LegacyV4ProjectTests(unittest.TestCase):
-    """The largest compatibility risk: an in-flight v4 project with a ten-domain world.
-
-    opening/5 widened the world and the gate set, but a project already running keeps its own
-    protocol: its eleven gates still put boards in front of the author, its world (written before the
-    grand domains existed, so it has no `powers`/`cosmology` key at all) still passes the `_audit`
-    re-check, and the derived book page still renders every legacy domain.
-    """
-
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.project = Path(self.temp.name) / 'book'
-        self.repo = SQLiteRepository.initialize(self.project,
-                                                workflow.preparing_book(guided=True, opening_version=4))
-        self.app = Application(self.repo)
-
-    def tearDown(self):
-        self.repo.close()
-        self.temp.cleanup()
-
-    def test_a_v4_project_with_a_ten_domain_world_still_boards_audits_and_renders(self):
-        from novel_ledger import bookpage
-        handoff = self.app.advance()
-        self.assertEqual(handoff['task']['stage'], 'opening_options')
-        self.app.submit(response(self.app))
-        handoff = self.app.advance()
-        self.assertEqual(handoff['action'], 'await_choice')
-        self.assertTrue(handoff['board']['options'])
-        card = Path(handoff['board_card']).read_text(encoding='utf-8')
-        self.assertIn(handoff['board']['hash'], card)
-        self.assertIn(handoff['board']['gate']['title'], card)
-        self.assertIn('第 1/%d 门' % len(creation.GATE_SETS[4]), card)
-
-        handoff = drive(self.app)
-        self.assertEqual(handoff['action'], 'outline_ready')
-        book = self.repo.load()
-        self.assertEqual(len(book['creation']['selections']), 11)     # the v4 gate set
-        for section in world.GRAND_SECTIONS:
-            book['world'].pop(section, None)                          # exactly what an old project has
-        self.repo.save(book)
-        self.assertTrue(self.app.audit()['ok'])
-        page = bookpage.render(self.repo)
-        for section in world.LEGACY_SECTIONS:
-            self.assertIn(world.LABELS[section], page, section)
 
 
 if __name__ == '__main__':

@@ -777,7 +777,7 @@ def _ladder_stages(selected):
 
 
 def validate_volume_outline(data, contract, world, selected=None, existing=None, missing_ids=None,
-                            state=None, strict=True):
+                            state=None):
     """Check and normalize the volume outline batch; returns `{volume_id: row}`.
 
     One volume per contract row, in contract order, each within the policy's length band, with node
@@ -827,7 +827,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
                 {k: volume.get(k) for k in ('purpose', 'arc', 'climax', 'exit_state')}),
                 '卷纲需要职责、卷内弧线、卷末高潮与卷末状态各一句。', 'volume_shape', 'blocker', 'volume'))
         volume_style = volume.get('style')
-        if strict and (not isinstance(volume_style, dict) or not text(volume_style.get('trend'))):
+        if not isinstance(volume_style, dict) or not text(volume_style.get('trend')):
             findings.append(_finding(chapter_no, 'style', ident, '{trend:非空文本}',
                                      _safe(volume_style), '新卷纲须声明具体的 style.trend。',
                                      'volume_style', 'blocker', 'volume'))
@@ -858,7 +858,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
         clock = volume.get('clock')
         if not isinstance(clock, dict) or type(clock.get('advance_days')) is not int \
                 or clock['advance_days'] < 0 \
-                or (strict and (type(clock.get('to')) is not int or clock['to'] < 0)):
+                or type(clock.get('to')) is not int or clock['to'] < 0:
             findings.append(_finding(chapter_no, 'volume', ident,
                                      '{advance_days:非负整数,to:卷末绝对天数}', _safe(clock),
                                      '新卷纲须声明本卷推进天数与可计算的卷末绝对时钟 clock.to。',
@@ -986,7 +986,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
             after = row.get('to') if isinstance(row, dict) else None
             structured = isinstance(after, dict) and all(text(after.get(k))
                                                        for k in ('desire', 'stance', 'relationship_focus'))
-            if not isinstance(row, dict) or not text(entity) or not (structured or not strict and text(after)) \
+            if not isinstance(row, dict) or not text(entity) or not structured \
                     or not text(row.get('reason')):
                 findings.append(_finding(chapter_no, 'characters', entity,
                                          '{entity,to:{desire,stance,relationship_focus},reason}', _safe(row),
@@ -1040,7 +1040,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
     return report
 
 
-def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0, strict=True):
+def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0):
     """Check and normalize one volume's chapter outlines; returns the chapter rows.
 
     Every rule of §4: continuous coverage of the volume's chapter range, synopsis length inside the
@@ -1095,12 +1095,12 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
                                      'chapter_world', 'blocker', 'outline'))
         plot = row.get('plot')
         chapter_style = row.get('style')
-        if strict and chapter_no >= anchor and (not isinstance(chapter_style, dict)
+        if chapter_no >= anchor and (not isinstance(chapter_style, dict)
                                      or not all(text(chapter_style.get(k)) for k in ('pov', 'rhythm'))):
             findings.append(_finding(chapter_no, 'style', 'style', '{pov,rhythm:非空文本}',
                                      _safe(chapter_style), '新章纲须声明非空的 style.pov 与 style.rhythm。',
                                      'chapter_style', 'blocker', 'outline'))
-        if strict and chapter_no >= anchor and isinstance(chapter_style, dict) and 'dialogue_ratio' in chapter_style:
+        if chapter_no >= anchor and isinstance(chapter_style, dict) and 'dialogue_ratio' in chapter_style:
             ratio = chapter_style['dialogue_ratio']
             if isinstance(ratio, bool) or not isinstance(ratio, (int, float)) or not 0 <= ratio <= 1:
                 findings.append(_finding(chapter_no, 'style', 'dialogue_ratio', '0~1 数值', _safe(ratio),

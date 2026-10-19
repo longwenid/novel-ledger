@@ -48,7 +48,7 @@ python3 validation/measure.py --out /path/to/metrics.json
 | 历史修订与影响 | 直接及传递依赖、连续区间输出、节点带动线路与保守扩大；表达/阅读不改事实，窄修核对后缀，扩大终点同步传播，重排章纲后重新写，重排与人物重核不重复消耗正文额度。 | test_longform、test_revision_repairs、test_workbench |
 | 自动回改与授权 | 创建分支前计算影响边界，超界保留原稿与额度；准确哈希授权、来源过期拒绝与预检回滚。 | test_revision_bounds |
 | 编辑、页面与交付 | 成长重核、补丁与重新核算、终审覆盖；模板随安装复制、异地运行、离线单文件及内容转义，准确快照交付。 | test_editorial、test_bookpage、test_bootstrap |
-| 旧项目与冻结版本 | 基础/叙事/编辑夹具分别验证；旧事件、阅读关联和旧章纲按原版本解释；v2 及更早库拒绝且原文件不变，旧已接受开书板仍可选择。 | test_runtime、test_opening_legacy、test_creation_bounds、test_workbench |
+| 协议边界 | 旧开书协议（creation/1~/5）读取即拒并给出重开指引；方案上限唯一规则无宽松解释；v2 及更早数据库拒绝且原文件不变。 | test_opening、test_creation_bounds、test_runtime |
 | 技能、文档与测试入口 | 元信息、链接锚点、命令示例及当前操作说明一致；架构图源与派生物一致；快速组无重复且为完整组的子集，保留关键边界。 | [技能指令与路由验收](#技能指令与路由验收)、test_architecture、test_validation_runner |
 
 表中的入口是定位起点，按实际调用关系补充关联回归；核验要求分别维护于 [运行](runtime.md)、[协议](protocol.md)、[叙事推进](narrative.md) 和 [编辑能力](editorial.md)。新增或改写后的用例名以 `tests/` 实际内容为准。验证观察提交、拒绝、保留、恢复和交付等结果，避免只匹配文档措辞或实现细节。真实模型历史隔离仍需宿主另验收。

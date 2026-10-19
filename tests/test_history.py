@@ -1,5 +1,4 @@
 """Synthetic storage and context fixtures, never literary or complete-book acceptance."""
-import copy
 import sys
 import tempfile
 import unittest
@@ -156,20 +155,6 @@ class HistoryTests(unittest.TestCase):
         self.assertCode('recall', self.app.recall, task['id'], chapter=4)
         self.assertEqual(self.app.recall(task['id'], kind='node', key='missing')['matches'], [])
 
-    def test_old_frozen_catalog_and_event_index_remain_readable(self):
-        self.populate(3)
-        task = self.task()
-        snapshot = self.repo.read_document(task['input']['records']['history_source'])
-        pages = [p for _, p in self.repo.history_pages(snapshot)]
-        work = copy.deepcopy(task['input'])
-        del work['records']['history_source']
-        work['records']['historical_index'] = self.repo.document([{'chapter': p['n'], 'prose_hash': p['prose'], 'summary': p['summary']} for p in pages])
-        work['records']['memory_index'] = self.repo.document([r for p in pages for r in self.repo.memory_rows(p)])
-        self.repo.cancel_pending('模拟旧在途协议')
-        legacy = self.repo.add_task(work)
-        self.assertEqual(self.app.recall(legacy['id'], chapter=2)['chapter'], 2)
-        self.assertEqual([r['chapter'] for r in self.app.recall(legacy['id'], kind='entity', key='shen', limit=2)['matches']], [3, 2])
-
     def test_explicit_full_index_read_remains_available_without_entering_default_input(self):
         self.populate(3)
         task = self.task()
@@ -244,26 +229,6 @@ class HookContextTests(unittest.TestCase):
             facts.settle(after, [{**event, 'before': 'open', 'topics': [], 'evidence': {'chapter': 2, 'quote': prose}}], prose, 2)
         changed = {**event, 'before': 'open', 'topics': [], 'reason': '正文交代了核查话题的变化。', 'evidence': {'chapter': 2, 'quote': prose}}
         self.assertEqual(facts.settle(after, [changed], prose, 2)[0]['hooks']['promise']['topics'], [])
-
-    def test_legacy_hooks_replay_without_new_fields_and_the_due_check_is_preserved(self):
-        state = workflow.new_book(tracked_contract(200))['state']
-        event = {'op': 'hook', 'id': 'old', 'status': 'open', 'before': None, 'due': 2,
-                 'text': '旧承诺', 'evidence': {'chapter': 1, 'quote': '工程承诺'}}
-        after, _ = facts.settle(state, [event], '工程承诺', 1)
-        self.assertNotIn('subjects', after['hooks']['old'])
-        with self.assertRaises(Error) as caught:
-            facts.settle(after, [], '工程后文', 2)
-        self.assertEqual(caught.exception.code, 'hook_due')
-        # Uninterpreted extension fields an old project once wrote change no historical projection.
-        state = workflow.new_book(tracked_contract(200))['state']
-        event = {'op': 'hook', 'id': 'old', 'status': 'open', 'before': None, 'due': 180,
-                 'text': '旧承诺', 'subjects': ['shen'], 'topics': '过去未解释的扩展值',
-                 'evidence': {'chapter': 1, 'quote': '工程承诺'}}
-        legacy = facts.prepare_hook_links([event], False)
-        self.assertEqual(legacy, [event])
-        after, _ = facts.settle(state, legacy, '工程承诺', 1)
-        self.assertNotIn('subjects', after['hooks']['old'])
-        self.assertNotIn('topics', after['hooks']['old'])
 
     def test_dispatch_baseline_uses_frozen_selected_state(self):
         with tempfile.TemporaryDirectory() as temporary:

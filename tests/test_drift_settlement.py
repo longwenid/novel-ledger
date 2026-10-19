@@ -225,15 +225,15 @@ class ComputableTerminalTests(unittest.TestCase):
         self.outline = self.validate_volume(self.raw_outline)
         self.chapters = chapter_rows(self.book, self.volume, self.state)
 
-    def validate_volume(self, outline, strict=True):
+    def validate_volume(self, outline):
         return drift.validate_volume_outline({'volumes': [outline]}, self.contract, self.world,
-                                             {}, {}, ['v1'], self.state, strict=strict)['v1']
+                                             {}, {}, ['v1'], self.state)['v1']
 
-    def validate_chapters(self, rows=None, outline=None, state=None, strict=True):
+    def validate_chapters(self, rows=None, outline=None, state=None):
         return drift.validate_chapter_outline({'volume': 'v1', 'chapters': rows or self.chapters},
                                                self.contract['chapter_outline'], self.volume,
                                                outline or self.outline, self.world,
-                                               self.state if state is None else state, strict=strict)
+                                               self.state if state is None else state)
 
     def test_structured_character_terminal_must_equal_the_simulated_current_state(self):
         self.validate_chapters()
@@ -261,19 +261,6 @@ class ComputableTerminalTests(unittest.TestCase):
         broken['clock']['to'] = 99
         with self.assertRaises(Error):
             self.validate_chapters(tail, outline=broken, state=prefix_state)
-
-    def test_old_frozen_outline_shapes_keep_their_original_interpretation(self):
-        old = copy.deepcopy(self.raw_outline)
-        old['clock'] = {'advance_days': 99}
-        old['characters'][0]['to'] = '卷末已承担责任。'
-        old.pop('style')
-        normalized = self.validate_volume(old, strict=False)
-        chapters = copy.deepcopy(self.chapters)
-        for row in chapters:
-            row.pop('style')
-        self.validate_chapters(chapters, normalized, strict=False)
-        with self.assertRaises(Error):
-            self.validate_volume(old)
 
     def test_new_outlines_require_style_shapes_and_computable_terminals(self):
         for mutate in (lambda r: r.pop('style'), lambda r: r['style'].update(trend=''),

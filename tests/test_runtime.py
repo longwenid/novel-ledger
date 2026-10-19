@@ -735,7 +735,7 @@ class DomainTests(unittest.TestCase):
 
 
 
-class GuidedOpeningV5Tests(unittest.TestCase):
+class GuidedOpeningTests(unittest.TestCase):
     """A new project opens on the thirteen-gate setting protocol and writes through it.
 
     The gates themselves are covered in test_opening; what this class pins is the hand-off: thirteen
@@ -767,8 +767,9 @@ class GuidedOpeningV5Tests(unittest.TestCase):
 
     def test_the_thirteen_gates_end_at_the_design_boundary_without_prose(self):
         from novel_ledger import creation
-        self.assertEqual(creation.gate_ids(5), tuple(gate for gate, _title in creation.GATES_V5))
-        self.assertEqual(len(creation.GATES_V5), 13)
+        self.assertEqual(creation.gate_ids(creation.OPENING_VERSION),
+                         tuple(gate for gate, _title in creation.GATES))
+        self.assertEqual(len(creation.GATES), 13)
         handoff = drive(self.app)
         self.assertEqual(handoff['action'], 'outline_ready')
         book = self.repo.load()

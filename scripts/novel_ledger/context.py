@@ -4,8 +4,8 @@ from __future__ import annotations
 import copy
 import json
 from .contracts import (SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, require, tier_of)
-from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY,
-                        OUTLINE_CHECKS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
+from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY,
+                        SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
 from . import briefs, creation, narrative, style, world, editorial, story_memory, understanding
 from .planning import policy_material, resolve_outline_policy, volume_for
@@ -17,7 +17,6 @@ EDITORIAL = 'editorial'
 UNDERSTANDING = 'understanding'
 SCENE_IDENTITY = 'scene_identity'
 READING_DEPENDENCIES = 'reading_dependencies'
-OPENING_BOUNDS = 'opening_bounds'
 VOLUME_OUTLINE = 'volume_outline'
 SCENE_MEMORY = 'scene_memory'
 HOOK_LINKS = 'hook_links'
@@ -541,7 +540,7 @@ def build(repo: ContextStore, book, job):
         # architecture and other long decisions survive without being reconstructed from snippets.
         chosen = stage in ('world_model', 'opening_contract', 'volume_outline')
         add('opening_basis', {'selection_hash': book['creation'].get('selection_hash'), 'source': book['creation']['source']}, chosen)
-        choices_required = chosen or (stage == 'opening_options' and creation.opening_version(book['creation']) >= 6)
+        choices_required = chosen or stage == 'opening_options'
         add('opening_choices', creation.selected(book['creation']), choices_required)
         if stage == 'opening_options':
             add('opening_rejections', [r for r in book['creation']['rejections'] if r['gate'] == job.payload['gate']['id']])
@@ -698,11 +697,9 @@ def build(repo: ContextStore, book, job):
             # protocol version string must be reading the same constant, or a rename degrades into
             # "this project is old" instead of failing.
             'capabilities': {**({EDITORIAL: EDITORIAL_CAPABILITY} if enhanced else {}),
-                             'outline_checks': OUTLINE_CHECKS_CAPABILITY,
                              **({UNDERSTANDING: UNDERSTANDING_CAPABILITY,
                                  SCENE_IDENTITY: SCENE_IDENTITY_CAPABILITY,
                                  READING_DEPENDENCIES: story_memory.READING_SCHEMA} if 'understanding' in book else {}),
-                             **({OPENING_BOUNDS: OPENING_BOUNDS_CAPABILITY} if stage == 'opening_options' else {}),
                              **({VOLUME_OUTLINE: VOLUME_OUTLINE_CAPABILITY} if contract.get('volume_outline') else {}),
                              **({SCENE_MEMORY: SCENE_MEMORY_CAPABILITY} if scene_task else {}),
                              **({HOOK_LINKS: HOOK_LINKS_CAPABILITY} if tracking else {})},

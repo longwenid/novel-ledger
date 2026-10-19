@@ -207,16 +207,16 @@ class EditorialTests(unittest.TestCase):
         self.assertEqual(accepted.get('scene_schema'), 'scene-identity/2')
 
     def test_partial_intake_skips_only_already_decided_gates(self):
-        state = creation.begin(version=2)
-        value = {'ending': '退件来源公开，承担后果。', 'theme': '责任怎样在人之间传递。'}
-        state = creation.intake(state, {'ending': value, 'title': {'title': '夜班退件'}}, '作者已给结局、母题和书名。')
+        state = creation.begin()
+        voice = {'pov': '第三人称限知，只跟沈桐的所见与所知。', 'voice': '具体动作与有立场的对白。',
+                 'style_traits': ['少重复解释。']}
+        state = creation.intake(state, {'voice': voice, 'title': {'title': '夜班退件'}}, '作者已给文风和书名。')
         self.assertEqual(creation.current(state)['id'], 'genre')
-        self.assertEqual(creation.selected(state)['ending'], value)
+        self.assertEqual(creation.selected(state)['voice'], voice)
         self.assertEqual(creation.selected(state)['title'], {'title': '夜班退件'})
-        self.assertCode('intake', creation.intake, state,
-                        {'ending': {'ending': '改结局。', 'theme': '改母题。'}}, '冲突')
-        reopened = creation.back(state, 'ending', '重开结局。')
-        self.assertNotIn('ending', creation.selected(reopened))
+        self.assertCode('intake', creation.intake, state, {'title': {'title': '改名。'}}, '冲突')
+        reopened = creation.back(state, 'voice', '重开文风。')
+        self.assertNotIn('voice', creation.selected(reopened))
         self.assertNotIn('title', creation.selected(reopened))
 
     def test_usage_counts_actual_reads_without_inventing_billed_tokens(self):
