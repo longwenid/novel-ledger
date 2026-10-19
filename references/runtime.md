@@ -31,7 +31,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" status
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 ```
 
-开书交付按 outline_ready 的实际卷纲覆盖说明，关闭卷纲时为 world_ready；不将设计完成视为正文授权。
+开书交付按 outline_ready 的实际卷纲覆盖说明；卷纲与章纲为必选阶段；不将设计完成视为正文授权。
 
 ## 目标与主控认领
 
@@ -70,7 +70,7 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 | world_ready / outline_ready | 交付返回的世界及实际卷纲覆盖；已有正文授权但尚未保存时，用 run 保存同一授权后继续，否则到本次开书目标结束 |
 | await_choice | 返回携带 `board_card`（work/board.md，引擎渲染的作者卡片）与 `question_card`（work/question.json，可直接投给宿主提问组件的选项结构，封顶 4 项）。先在回复正文贴出 board.md 内容（或链接），再用 question.json 的选项原样发起提问，不自拟摘要替换引擎文案；宿主选项数更低时截到“换一组”为止，不删板面方案腾位，自定义走宿主 Other/自由填答。不在控制台直接读长 JSON（GBK 控制台会乱码）也不手工重排版。--compact 时返回只带门名/哈希/option_ids，完整板面在 board.md 与 work/last-advance.json。已有该板的明确选择则按卡内 id 与 hash 执行 choose 后继续，否则等待作者选择。第一门未定向时另有任务目录的 `catalog.md`（compact 的 catalog_path）：目录铺陈用正文贴出，不用提问选项装十二个类目 |
 | await_author | 已有对应 prose_hash 的明确认可则 approve 后继续，否则提供该版本首章并等待认可 |
-| paused / repair_exhausted | 保留候选和失败记录，报告具体阻碍；不自动 resume 或重派任务来重置预算。**设计类候选（世界、卷纲、章纲）**的返修额度用尽（`REPAIRS=2`/`REDESIGNS=1`），或同一条漂移/机械项在返修后连续两轮未解决（`repair-stalled`，额度未尽也停）时，`resume` 不重置额度，而是把处理方式交成作者决定：再返修一轮（只改被点名的项）／接受候选并把问题记为未解决项／重开本阶段或改约。用 `answer` 记录选择后才继续；被接受的条目写进 `accepted_findings`，在 `status` 与完本篇审计里可见，**接受不等于通过** |
+| paused / repair_exhausted | 保留候选和失败记录，报告具体阻碍；不自动 resume 或重派任务来重置预算。正文返修额度用尽（`REPAIRS=2`/`REDESIGNS=1`），或同一条漂移/机械项连续两轮未解决（`repair-stalled`）时，`resume` 不重置额度，而是保留候选并交由作者决定：再返修一轮（只改被点名的项）／保留候选并暂停，另行调整约定。用 `answer` 记录原话；只有明确追加一轮才授予该轮机会，不能接受机械失败稿直接入库。旧 `accepted_findings` 留档可见，旧卡的接受选项会拒绝且不丢候选 |
 | preparing | 按初始化入口导入已有完整约定或完成开书准备；只对真实缺口等待作者，不空转调用 advance |
 
 未登记的动作和命令错误按返回的 code/details 核实修正入口，不猜测成功或无条件重试。字段拒绝交回当前子 agent 修正；完整性失败、作者裁决和修复耗尽保留现场并报告。可恢复的执行失败先核实任务是否已提交、原执行者是否仍在运行，再决定等待或恢复；换执行者不增加返修额度。
@@ -103,7 +103,7 @@ await_author 给准确 prose_hash；已获得该版本认可时由主干 `approv
 | 需要 | 命令入口 | 边界 |
 |---|---|---|
 | 暂停 | pause --reason 原因 | 保留任务与候选；--cancel 取消但留档。 |
-| 恢复 | resume | 不增加额度；耗尽时保留材料并报告，不重开任务清零。内容与篇幅共享两次返修、一次重设计，字段拒绝与预检回滚不计次。设计类候选（世界、卷纲、章纲）返修额度用尽或停滞时，把处理方式交成一条作者决定：再返修一轮（只改被点名的项）、接受候选并把这几条记为未解决项（写进 carry_findings，完本篇审计与全书视图可见，不是 pass）、或重开本阶段与改约；选项之外的新决定仍走改约，代价照写进 impact |
+| 恢复 | resume | 不增加额度；耗尽时保留材料并报告，不重开任务清零。内容与篇幅共享两次返修、一次重设计，字段拒绝与预检回滚不计次。正文候选返修额度用尽或停滞时，保留候选与已花额度，交由作者选择再返修一轮或保留候选并暂停调整约定；机械失败不提供“接受并继续”。旧卡接受选项会拒绝并保留原状态，选项之外的新决定仍走改约，代价照写进 impact |
 | 候选稿反馈 | feedback --text 原话 | 对当前候选安排修复；已验收正文改用 revise。 |
 | 历史正文修改 | revise --from-chapter N --reason 原话 | 必须声明作用范围四选一：`--through M` / `--changes-file` / `--proposal-hash` / `--to-end`；不给范围时命令直接拒绝，并提示先跑 revision-impact 查看影响终点。影响分析、后缀处理和完整范围验收见 [修订影响分析](#修订影响分析)。 |
 | 未写窗口重排 | replan --from-chapter N --reason 原因 | 已有草稿或正式稿的章纲不能直接删除；重排后的章纲重新过卷内状态链。 |
@@ -124,7 +124,7 @@ lexical 将新版本追加到项目记录，旧版本保留；规则不属于作
 
 target_reached 表示授权章节目标完成；ready_to_complete 仍须 complete 验收。export 可导出纯文本（`--format md`）或简化 HTML，html 生成包含设计、事实和正文的全书视图，两者返回绝对路径；导出不代替完本验收。
 
-**卷末不是审查阶段**：卷末闭合由该卷章纲的 `exit_state` 与卷内状态链的模拟结果（容差 0）机械保证，不再有卷末范围审与根问题裁决。完本仍须 `complete` 验收：章数、每章篇幅区间、required 节点与线路解清、首章认可；之后执行 `deliver`，得到 book.md/book.html/delivery.json；交付失败重试该快照的 deliver，不重新写书。`usage` 查看实际记录字符，宿主 token 用独立 observe.py 导入观测，不从字符估算。
+**卷末不是审查阶段**：卷末闭合核对卷纲的结构化资源/位置/知情/人物终值、主线时钟 `clock.to` 与必要伏笔；自然语言 `exit_state` 只作说明，不宣称语义已被机械证明，不再有卷末范围审与根问题裁决。完本仍须 `complete` 验收：章数、每章篇幅区间、required 节点与线路解清、首章认可；之后执行 `deliver`，得到 book.md/book.html/delivery.json；交付失败重试该快照的 deliver，不重新写书。`usage` 查看实际记录字符，宿主 token 用独立 observe.py 导入观测，不从字符估算。
 
 工作台新能力与旧 v3 项目的显式启用见 [叙事工作台](workbench.md)。阅读变化在新流程里不再派独立重读任务：受影响的章纲由 `chapter_outline`（payload 带 `repair=True` 与偏差清单）重排，正文按实际需要重写或原样携带。
 

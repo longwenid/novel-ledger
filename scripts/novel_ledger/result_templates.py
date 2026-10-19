@@ -79,25 +79,23 @@ def drift_items(row):
 def volume_row(ident):
     """One volume of a blank volume outline: every declared field present, all values empty.
 
-    `hooks` and `style` follow the same rule as the delta arrays: an empty array (or an empty trend)
-    is the declaration "this volume opens no promise / states no style shift", while a missing field
-    is nothing the validator can read. `stage` is the chosen rung of the opening's ladder; an opening
+    `hooks` can declare that this volume opens no promise. Style trend and the absolute clock
+    terminal must be filled before submission. `stage` is the chosen rung of the opening's ladder; an opening
     that declared no ladder leaves it empty, which is the pre-opening/5 shape.
     """
     return {'id': ident, 'purpose': '', 'stage': '', 'arc': '', 'turns': [{'at': '', 'turn': ''}], 'climax': '',
             'nodes': [], 'threads': [], 'hooks': [],
             'resources': [], 'places': [], 'characters': [],
-            'knowledge': [], 'clock': {'advance_days': 0}, 'exit_state': '',
+            'knowledge': [], 'clock': {'advance_days': 0, 'to': None}, 'exit_state': '',
             'style': {'trend': '', 'window': {}}}
 
 
 def chapter_row(number, volume=None):
     """One blank chapter outline row: the required fields plus the declared delta arrays.
 
-    The arrays are empty rather than absent on purpose: an empty array is the declaration "nothing
-    of this kind changes in this chapter", which is a claim the state chain can check, while a
-    missing field is nothing to check at all. `hooks` follows the same rule — an empty array says the
-    chapter plants and pays off nothing, which the volume's promise ledger then has to survive.
+    The template lists every array so a writer checks each kind of change. The validator interprets
+    absent or null factual delta arrays just like empty arrays. Hooks remain an explicit required
+    declaration: an empty hooks array says this chapter plants and pays off nothing.
     """
     row = {'chapter': number, 'synopsis': '',
            'plot': {'beat': '', 'nodes': [], 'threads': []},
@@ -108,7 +106,7 @@ def chapter_row(number, volume=None):
            'hooks': [],
            'hook_refs': [], 'reader_refs': [], 'history_refs': [],
            'scenes': [], 'pacing': {},
-           'style': {'pov': '', 'rhythm': '', 'dialogue_ratio': 0, 'notes': ''},
+           'style': {'pov': '', 'rhythm': '', 'notes': ''},
            # Optional workbench protocol: the template states the keys so a writer who declares a
            # full reading dependency knows the names, and 'partial' keeps the conservative default
            # for everyone who does not. Empty here means "nothing declared", not "nothing depends".
@@ -170,6 +168,7 @@ def template(stage, chapter, extra=(), payload=None, tracking=False):
         last = policy.get('last', payload.get('last', -1))
         volume = policy.get('volume') or payload.get('volume') or ''
         return {'volume': volume,
+                **({'through_chapter': last} if payload.get('allow_retained_suffix') else {}),
                 'chapters': [chapter_row(number) for number in range(first, (last if isinstance(last, int) else -1) + 1)]}
     if stage in ('write', 'repair', 'redesign'):
         # The planned deltas of this chapter, one blank row each. `actual` starts empty because the

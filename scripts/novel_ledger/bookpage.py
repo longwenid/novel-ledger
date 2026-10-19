@@ -154,13 +154,6 @@ def _display(value):
     return _esc(value)
 
 
-def _records(items, label_key):
-    """Cards for a list of dict records, one table row per field."""
-    return ''.join('<div class="card"><b>' + _esc(item.get(label_key, '')) + '</b><table class="t">' + ''.join(
-        '<tr><th>' + _esc(SUB_LABELS.get(k, k)) + '</th><td>' + _display(v) + '</td></tr>'
-        for k, v in item.items() if k != label_key) + '</table></div>' for item in items)
-
-
 def _anchor(prefix, ident):
     return prefix + '-' + str(ident).encode('utf-8').hex()
 

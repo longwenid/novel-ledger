@@ -19,7 +19,7 @@
 
 ### 人物档案
 
-新人物不再有独立档案派工：首次登场时在章纲 `new_entities` 内联给出 `id`/`kind`/`name`/`role`/`desire`/`limit`/`knowledge_boundary`，落地后按 id 引用。更新已有人物时给 `change_reason`；引擎绑定完整成长史与人物当前状态的 growth_basis，签名变化后相关人物下次执笔前重核。
+新人物不再有独立档案派工：首次登场时在章纲 `new_entities` 内联给出 `id`/`kind`/`name`/`role`/`desire`/`limit`/`knowledge_boundary`，落地后按 id 引用。已有角色的事实变化由章纲 `characters` 和正文自比提交；人物解释与样本按作品理解协议维护。
 
 旧冻结任务里的档案字段（tier / biography / speech / relationship_modes 等）按各自协议解释，新任务模板以当前契约为准。档案解释行动和表达，不能自行确立经历、资源或知情；当前动机与成长事实仍由正文的漂移项与引擎结算确立。档案整份按参与人交付，不额外派昂贵索引任务。
 
@@ -33,7 +33,7 @@
 
 ### 声线锚点
 
-首章批准保存准确正文样本、声线、traits 与作者原话为 style_anchor，作为后续执笔的声线依据，**也是文风代理指标的基线**（`book['style_anchor']['sample']`；没有它时 `style` 只跑重复度与视角两项）。约定声明 `pov` 时，执笔与自比按 pov 核对人称、视角范围和切换交代。具体问题由原文与影响支持；没有对白或没有修订时说明实际情况并举证，不强迫额外对白或虚构修订目标。
+首章批准保存准确正文样本、声线、traits 与作者原话为 style_anchor，作为后续执笔的声线依据，**也是文风代理指标的基线**（`book['style_anchor']['sample']`；没有锚点时仍核对重复度、视角及本章显式对白目标，详见 [文风](narrative.md#文风)）。约定声明 `pov` 时，执笔与自比按 pov 核对人称、视角范围和切换交代。具体问题由原文与影响支持；没有对白或没有修订时说明实际情况并举证，不强迫额外对白或虚构修订目标。
 
 ## 版本补丁
 
@@ -51,7 +51,7 @@ repair/redesign 可以交完整 prose，或者以下两种方式之一；仍交 
 
 prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符位置；补丁不重叠，不对空 old 插入，不原样替换，不清空整章。`commands.patch --old 原文 --new 新文 [--start N]` 返回准确基稿哈希及补丁；歧义时给目标 start。基稿、前态及引擎拒绝的具体项仍必读，局部编辑不承诺无需读取全章。
 
-程序合成全文后执行原篇幅、字面规则、lint 与漂移核算；预检回滚不计次，实际 repair/redesign 计同一章的共享额度。补丁和复用都保留补丁审计、重新执行同一套机械判据；**没有第二次独立阅读**，旧稿通过不代表新稿在文学上成立。
+程序合成全文后执行原篇幅、字面规则、lint 与漂移核算；预检回滚不计次，实际 repair/redesign 计同一章的共享额度。补丁和复用都保留补丁审计、重新执行同一套机械判据。
 
 人物与关系解释、原文表达样本、跨章场景身份与先重排后改写见 [叙事工作台](workbench.md)。
 
@@ -59,13 +59,11 @@ prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符�
 
 ## 正文偏离
 
-执笔自比里 `deviated`/`skipped` 的项必须给 `reason`，引擎把它们登记进 `book['design_drift']`，并在下一章派工前对该卷剩余章纲派一次 `chapter_outline`（payload 带 `repair=True` 与偏差清单）重排。这是唯一路径：**v2 没有独立改案阶段**，也没有“保留当前稿不入库、进入改案”的动作——偏差如实登记、本章照常入库，由重排后的章纲消化。
-
-因此不要用偏差去掩盖计划缺陷，也不要在自比里把 `deviated` 写成 `kept`：引擎比对 `planned`/`actual`/投影前态，覆盖不全或前态不符直接拒绝。重排后的章纲要重新过卷内状态链（资源、位置、知情、时钟、人物增量与 enter/exit 一致性），并保证卷末仍能满足 `exit_state`。
+偏差需在 `drift_check` 中给出原因与引文。通过全部机械判据后才入库，并触发后续章纲重排；覆盖、前态或事实规则不满足时不能凭偏差理由放行。字段和处理路径见 [漂移核算](narrative.md#执笔自比与引擎核算)。重排重新核验状态链与结构化卷末终值，`exit_state` 仅作文字说明。
 
 ## 完本与关闭
 
-**卷末不是审查阶段**：卷末闭合由该卷章纲的 `exit_state` 与卷内状态链的模拟结果机械保证（容差 0），不再有卷末范围审、根问题裁决、有界补写或 scope 追加通道。要追加计划外章节，只能由作者明确的新授权或改约完成，并在新章纲里重新登记增量。
+卷末闭合核对卷纲的结构化终值、绝对时钟 `clock.to` 与必要伏笔（容差 0）；自然语言 `exit_state` 只作文字说明。要追加计划外章节，只能由作者明确的新授权或改约完成，并在新章纲里重新登记增量。
 
 `complete` 核对当前全部卷的闭合状态、required 节点与线路是否 resolved、首章认可、实际篇幅（章数与每章区间），再保存不可变 completion_snapshot；有来源覆盖枚举的项目按各自冻结版本复核。`deliver` 从该快照导出 book.md/book.html/delivery.json，清单含快照引用、章节哈希及文件内容哈希（规范 JSON 字符串的 SHA256）。导出失败只重试 deliver，内容完成状态与快照不变。已完本的 export/html 同样使用冻结版本。
 
@@ -83,7 +81,7 @@ prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符�
 | travel | entity/from/to/links:[逐段路径ID]；可同时给 depart/arrive，单位为主线天数 |
 | perceive | observer/target/channel:sight或sound/from/to；跨地点须直接给 link，不自动更新 knowledge |
 
-有 path 拓扑时使用 travel，不能以基础 `places` 的文字路线绕过条件；未建拓扑且满足移动前提时可登记普通移动。已知耗时为下限，未知段不捏造数字。已记录到达下限由携带物继承，转交或放下不清零；未给精确时间时不宣称移动耗时已验证。拓扑只核对登记连接、条件与时间；遮挡、指代、视距和生理能力**没有独立审稿者判断**，只能靠作者抽读与下一章章纲的状态链暴露问题。
+有 path 拓扑时使用 travel，不能以基础 `places` 的文字路线绕过条件；未建拓扑且满足移动前提时可登记普通移动。已知耗时为下限，未知段不捏造数字。已记录到达下限由携带物继承，转交或放下不清零；未给精确时间时不宣称移动耗时已验证。拓扑只核对登记连接、条件与时间；遮挡、指代、视距和生理能力的语义合理性需人工核对。
 
 ## 用量与文学评测
 
@@ -91,4 +89,4 @@ prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符�
 
 `usage` 观察任务信封、已接受回执和 CLI read 实际交付字符；未记录的尝试或宿主计费为 null，字符不换算费用。`scripts/observe.py summary 宿主观测.jsonl` 对 provider/session_id/request_id 去重，同调用冲突拒绝累加；输入非缓存 token、缓存读取和输出分别记录，任一缺失则总量未知。观察工具不推进故事。
 
-离线盲测工具用 `scripts/quality_eval.py prepare --manifest 清单.json --out 独立目录` 随机化完整样本，保留私有植入位置与预期；评审只获得自己的 input.json。先用 `first-read --input 样本/input.json --file 首读.json` 冻结首读，review.json 的 first_read 必须与冻结 data 一致，再 `score --directory 评测目录` 统计定位命中、漏检和已裁决误报。原稿不是金标准，没有独立裁决时误报率留未知；预期的文件/工具隔离由宿主落实，工具不证明模型真的盲读。**v2 流水线里没有独立阅读任务，这套工具是判断文学效果的主要外部手段**；所有评测数据存小说项目或独立临时目录，不写进 skill。
+离线盲测工具用 `scripts/quality_eval.py prepare --manifest 清单.json --out 独立目录` 随机化完整样本，保留私有植入位置与预期；评审只获得自己的 input.json。先用 `first-read --input 样本/input.json --file 首读.json` 冻结首读，review.json 的 first_read 必须与冻结 data 一致，再 `score --directory 评测目录` 统计定位命中、漏检和已裁决误报。原稿不是金标准，没有独立裁决时误报率留未知；预期的文件/工具隔离由宿主落实，工具不证明模型真的盲读。所有评测数据存小说项目或独立临时目录，不写进 skill。

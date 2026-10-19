@@ -39,7 +39,7 @@ ALLOWED = {
     # outline's declared deltas, the simulation that walks them, and the comparison the writer
     # files against them. It reads the same tables the checks do (world sections, nodes, spatial
     # rules, the ledger), which is what lets a whole volume be checked before a word is written.
-    'drift': {'contracts', 'entities', 'narrative', 'spatial', 'ledger', 'world', 'evidence'},
+    'drift': {'facts', 'contracts', 'entities', 'narrative', 'spatial', 'ledger', 'world', 'evidence'},
     'result_templates': {'contracts', 'world', 'editorial', 'narrative', 'stages', 'drift'},
     'revision_impact': {'contracts', 'story_memory'},
     'spatial': {'contracts'},

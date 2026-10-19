@@ -171,7 +171,7 @@ def _declared_person(declared, contract):
 
 def _relative(got, base):
     if not base:
-        return 0.0
+        return 0.0 if not got else float('inf')
     return abs(got - base) / abs(base)
 
 
@@ -212,9 +212,12 @@ def compare(prose, declared, anchor, window, chapter=0, contract=None):
                 findings.append(_finding(chapter, metric, base, measured[metric],
                                          label + '相对首章定调偏离超过容差，正文的语感走了形。'))
     target = declared.get('dialogue_ratio')
-    if isinstance(target, (int, float)) and 0 < float(target) <= 1:
-        if _relative(measured['dialogue_share'], float(target)) > limits.get('dialogue', DEFAULT_WINDOW['dialogue']):
-            findings.append(_finding(chapter, 'dialogue_ratio', float(target), measured['dialogue_share'],
+    if type(target) in (int, float) and 0 <= float(target) <= 1:
+        # A zero target must not lose a small amount of dialogue to the display metric's rounding.
+        share = (han_count(_dialogue_spans(prose)[0]) / measured['han'] if target == 0
+                 else measured['dialogue_share'])
+        if _relative(share, float(target)) > limits.get('dialogue', DEFAULT_WINDOW['dialogue']):
+            findings.append(_finding(chapter, 'dialogue_ratio', float(target), share,
                                      '对白占比与章纲声明不符，本章的推进方式变了。'))
     elif anchor and anchor.get('dialogue_share') and _same_order(measured.get('han'), anchor.get('han')):
         base = anchor['dialogue_share']

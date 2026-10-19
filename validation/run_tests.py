@@ -19,7 +19,7 @@ FAST = (
     'test_architecture', 'test_domain_boundaries', 'test_application_ports',
     'test_cli_boundary', 'test_dependency_bounds', 'test_longform', 'test_outlines',
     'test_pipeline_shapes.PipelineShapeTests', 'test_review_material', 'test_storage_growth',
-    'test_validation_runner',
+    'test_validation_runner', 'test_architecture_repairs',
     # Revision bounds stay in the fast gate by one stable case while the rest of that module's
     # revision/review expectations are being re-derived under v2.
     'test_revision_bounds.RevisionBoundsTests.test_a_revision_inside_the_window_opens_its_exact_range',

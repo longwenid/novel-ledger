@@ -18,11 +18,14 @@ itself mid-rewrite cannot stop the measurement.
 """
 import argparse
 import ast
+import hashlib
 import json
+import subprocess
 import sys
 import tempfile
 import time
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -32,7 +35,7 @@ from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import (OPENING_VERSION, PIPELINE_SHAPES, SCALE_TIERS, Job,
                                     digest, dump)
 from novel_ledger.sqlite_store import SQLiteRepository
-from novel_ledger.workflow import new_book
+from novel_ledger.workflow import new_book, preparing_book
 from novel_ledger import context, creation, facts
 from support import (chapter_outline_fixture, contract, drive, response, seeded_book,
                      volume_outline_fixture)
@@ -132,10 +135,13 @@ def dispatch_ledger():
                          'volume_scope': scope, 'merge_chapter_outline': merged,
                          'world_model': 1, 'volume_outline': volume_dispatches,
                          'chapter_outline': chapter_dispatches, 'write': chapters,
-                         'before_prose': 1 + volume_dispatches + chapter_dispatches,
+                         'before_prose': 2 + (0 if merged else 1),
+                         'planning_total': 1 + volume_dispatches + chapter_dispatches,
+                         'initial_volume_outlines': volumes if scope == 'all' else 1,
                          'total': 1 + volume_dispatches + chapter_dispatches + chapters})
     return {'gates': gates, 'by_tier': rows,
-            'boundary': '依 PIPELINE_SHAPES 与 contract.volume_outline.scope 的机械计数；不含返修/重设计额度。'}
+            'boundary': '依 PIPELINE_SHAPES 与 volume_outline.scope 的机械计数，chapter_outline.scope=volume；'
+                        'before_prose 只计首章前派工，planning_total 计全程规划；不含返修/重设计和真实模型用量。'}
 
 
 def _built_bytes(repo, book, job):
@@ -175,7 +181,7 @@ def material_metrics():
     """Per-class dispatch material, and whether future outlines inflate a live dispatch."""
     report = {'boundary': '字符量来自冻结信封与必读记录；不能换算成 token 或费用。'
                           '本表走 seeded 路径（无 creation），因此不含 opening_basis/opening_choices 三项；'
-                          'world_model 一类要等逐门开书夹具可用于 drive() 才能量（见 blocked）。'}
+                          'world_model 另走当前版本逐门开书夹具测量。'}
     with tempfile.TemporaryDirectory() as temporary:
         repo = SQLiteRepository.initialize(Path(temporary) / 'seeded',
                                            seeded_book(contract(chapters=4, volumes=2)))
@@ -201,10 +207,20 @@ def material_metrics():
                                'bounded_selection': before['required_names'] == after['required_names']}
         finally:
             repo.close()
-    report['world_model'] = {'status': 'blocked',
-                             'reason': 'support.drive() 无法回答 opening_options 派工：'
-                                       'response() 交回 gate="" options=[] 的空骨架，creation.offer 拒绝。'
-                                       '逐门开书夹具在 tests/test_opening_v2.py 内，不在本工具写域。'}
+    with tempfile.TemporaryDirectory() as temporary:
+        repo = SQLiteRepository.initialize(Path(temporary) / 'guided',
+                                           preparing_book('工程度量夹具。', guided=True))
+        try:
+            app = Application(repo)
+            drive(app, until='world_model')
+            work = repo.pending()['input']
+            assert work['stage'] == 'world_model'
+            report['world_model'] = {'status': 'ok', 'opening_version': creation.opening_version(repo.load()['creation']),
+                'required_names': work['required'],
+                'required_bytes': len(dump({name: repo.read_document(work['records'][name])
+                                          for name in work['required']}).encode('utf-8'))}
+        finally:
+            repo.close()
     return report
 
 
@@ -212,8 +228,8 @@ def tracked_state_metrics(size):
     """Where a tracked write dispatch's material comes from as the volume's node list grows.
 
     Two different bounds are measured separately because they move independently: the settled-state
-    slice is filtered to the nodes this chapter declares and to nothing else, while the volume row
-    (the arc the chapter has to land on) carries one node declaration per chapter in the volume.
+    slice and the required volume nodes follow this chapter and its dependencies. The complete
+    volume source remains optional; the envelope must not sneak the full source back into payload.
     """
     with tempfile.TemporaryDirectory() as temporary:
         repo = SQLiteRepository.initialize(Path(temporary) / 'tracked',
@@ -234,6 +250,9 @@ def tracked_state_metrics(size):
                     'settled_story_nodes_in_slice': len(state['story_nodes']),
                     'state_record_bytes': len(dump(state).encode('utf-8')),
                     'volume_outline_bytes': volume_row_bytes,
+                    'complete_volume_outline_bytes': len(dump(repo.read_document(
+                        work['records']['complete_volume_outline'])).encode('utf-8')),
+                    'envelope_bytes': len(dump(work).encode('utf-8')),
                     'required_bytes': len(dump({name: repo.read_document(work['records'][name])
                                                 for name in work['required']}).encode('utf-8'))}
         finally:
@@ -344,6 +363,26 @@ SECTIONS = {
 }
 
 
+def snapshot_metadata(root=ROOT):
+    """Bind a measurement to its source bytes, including local uncommitted fixes."""
+    fingerprint = hashlib.sha256()
+    files = sorted(path for directory in ('scripts', 'tests', 'validation')
+                   for path in (root / directory).rglob('*.py'))
+    for path in files:
+        fingerprint.update(str(path.relative_to(root)).encode('utf-8') + b'\0')
+        fingerprint.update(path.read_bytes() + b'\0')
+    try:
+        result = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, capture_output=True,
+                                text=True, timeout=2)
+        commit = result.stdout.strip() if result.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired):
+        commit = None
+    return {'schema': 'novel-ledger.measurements/1',
+            'generated_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+            'source_commit': commit, 'source_sha256': fingerprint.hexdigest(),
+            'source_files': len(files)}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='工程材料与依赖度量（不调用模型）。')
     parser.add_argument('--out', type=Path)
@@ -353,7 +392,8 @@ def main(argv=None):
     unknown = [name for name in wanted if name not in SECTIONS]
     if unknown:
         parser.error('未知的节：' + ','.join(unknown))
-    report = {'scope': 'engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings',
+    report = {'metadata': snapshot_metadata(),
+              'scope': 'engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings',
               'pipeline': 'five steps: opening gates / world_model / volume_outline / chapter_outline / write'}
     failed = []
     for name in wanted:

@@ -239,6 +239,28 @@ class CurrentOpeningTests(unittest.TestCase):
         self.assertEqual(creation.SYSTEM_GATES[OPENING_VERSION], ('scale',))
         self.assertEqual(gates.index('world') + 1, gates.index('ladder'))
 
+    def test_premise_and_origin_briefs_request_the_counts_the_receiver_accepts(self):
+        from novel_ledger import briefs
+        for version, gate in ((4, 'origin'), (5, 'premise'), (5, 'origin')):
+            with self.subTest(version=version, gate=gate):
+                state = walk_to(creation.begin(version=version), gate)
+                brief = briefs.opening_options(creation.current(state),
+                                               creation.lens_brief(0), version=version)
+                self.assertIn('2～3', creation.gate_note(version, gate))
+                self.assertNotIn('四个方向各给一个方案', brief)
+                options = rows_for(gate)
+                third = copy.deepcopy(options[0])
+                third.update(id='C', title='方案C', premise='第三种具体方案。',
+                             driver='另从旧账切入，追查责任转手的证据。')
+                options.append(third)
+                for count in (2, 3):
+                    board = creation.offer(state, {'gate': gate, 'options': options[:count]})['board']
+                    self.assertEqual(len(board['options']), count)
+                fourth = copy.deepcopy(third)
+                fourth['id'] = 'D'
+                self.assertCode('opening_options', creation.offer, state,
+                                {'gate': gate, 'options': options + [fourth]})
+
     def test_the_premise_gate_asks_the_four_questions_and_projects_them_verbatim(self):
         """The core idea is four answers, projected as one contract field (`core_premise`)."""
         from novel_ledger.contracts import (CONTRACT_FIELDS, DARK_SIDES, STANCES, alignment_for,
@@ -488,6 +510,15 @@ class CurrentOpeningTests(unittest.TestCase):
         # An unknown class is refused with the real ladder rather than a guess (assertion folded
         # in from the retired version-2 twin of this test: the normalization is shared code).
         self.assertCode('opening_option', creation.intake, creation.begin('x'), {'scale': {'tier': 't9'}}, 'x')
+
+    def test_partial_intake_keeps_complete_simple_gates_without_inventing_other_decisions(self):
+        values = {'title': {'title': '作者已定书名'}, 'scale': {'tier': 't0'}}
+        state = creation.intake(creation.begin(), values, '作者已经决定书名与体量。')
+        selected = creation.selected(state)
+        self.assertEqual(set(selected), {'title', 'scale'})
+        self.assertEqual(selected['title'], values['title'])
+        self.assertEqual(selected['scale']['tier'], 't0')
+        self.assertEqual(creation.current(state)['id'], 'genre')
 
 
 if __name__ == '__main__':

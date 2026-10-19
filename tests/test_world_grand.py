@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import contracts, creation, drift, world, workflow
+from novel_ledger import briefs, contracts, creation, drift, world, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error, dump
 from novel_ledger.sqlite_store import SQLiteRepository
@@ -161,7 +161,7 @@ class DeclaredSectionTests(unittest.TestCase):
     """A domain the gates declared is a domain the world has to fill."""
 
     def test_a_declared_rank_ladder_makes_powers_required(self):
-        choices = choices_v5(ladder=False)
+        choices = choices_v5(ladder=False, resource=False)
         self.assertEqual(world.declared_sections(choices), ('powers',))
         self.assertIn('powers', world.required_sections(TIER, choices))
         model = base_model(choices)
@@ -172,6 +172,44 @@ class DeclaredSectionTests(unittest.TestCase):
         self.assertIn('powers', dump(caught.exception.details))
         # With the declared ranks present, the same model passes.
         check(base_model(choices), choices)
+
+    def test_declared_currency_reaches_the_small_tier_brief_and_validator(self):
+        for tier in ('t0', 't1', 't2'):
+            with self.subTest(tier=tier):
+                choices = choices_v5(tier=tier, scales=('局部', '一城', '一域'))
+                # These stages are already represented in powers, so a small
+                # world does not need extra geography solely to hold the names.
+                for index, rung in enumerate(choices['ladder']['ladder']):
+                    rung['stage'] = choices['world']['tiers'][index]['name']
+                required = world.required_sections(tier, choices)
+                self.assertIn('economy', required)
+                brief = briefs.world_model(sections=required)
+                instruction = next(line for line in brief.splitlines()
+                                   if line.startswith('本项目按体量只需要：'))
+                requested, empty = instruction.split('其余领域（', 1)
+                self.assertIn('economy（资源与经济）', requested)
+                self.assertNotIn('economy', empty)
+                # Follow the rendered brief exactly: only its required domains
+                # are populated, while all other domains stay empty.
+                model = base_model(choices)
+                for section in world.SECTIONS:
+                    if section not in required:
+                        model[section] = []
+                    elif section != 'mechanisms' and not model[section]:
+                        model[section] = [record(section, section + '-1')]
+                checked = world.validate(model, choices, 'sel', sections=required)
+                self.assertEqual(checked['economy'][0]['resource'],
+                                 choices['world']['resource']['name'])
+                model['economy'] = []
+                with self.assertRaises(Error) as caught:
+                    world.validate(model, choices, 'sel', sections=required)
+                self.assertEqual(caught.exception.code, 'world_section')
+
+    def test_a_legacy_small_world_does_not_gain_a_currency_requirement(self):
+        for tier in ('t0', 't1', 't2'):
+            with self.subTest(tier=tier):
+                choices = choices_v5(tier=tier, tiers=False, ladder=False, resource=False)
+                self.assertEqual(world.required_sections(tier, choices), world.TIER_SECTIONS[tier])
 
     def test_a_scope_ladder_that_reaches_a_plane_makes_cosmology_required(self):
         for scope in contracts.COSMOLOGY_SCOPES:

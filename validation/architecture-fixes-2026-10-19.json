@@ -1,0 +1,89 @@
+{
+  "schema": "novel-ledger.architecture-fixes/1",
+  "metadata": {
+    "schema": "novel-ledger.measurements/1",
+    "generated_at": "2026-10-19T03:23:08+00:00",
+    "source_commit": "9a2a5bb40be72c0d2d02c2bacc2bcf4fe7c0acf8",
+    "source_sha256": "5ffbce7d6db8e5e8840f3acd38fb13e828cf06fa608c1144d023a445fd523c3e",
+    "source_files": 112
+  },
+  "pytest": {
+    "passed": 585,
+    "subtests_passed": 1377,
+    "failed": 0,
+    "seconds": 47.84
+  },
+  "harnesses": [
+    {
+      "name": "e2e_guided",
+      "exit": 0,
+      "seconds": 23.76
+    },
+    {
+      "name": "adversarial",
+      "exit": 0,
+      "seconds": 1.48
+    },
+    {
+      "name": "e2e_drift_acceptance",
+      "exit": 0,
+      "seconds": 1.2
+    },
+    {
+      "name": "repro_hook_matrix",
+      "exit": 0,
+      "seconds": 1.13
+    },
+    {
+      "name": "repro_hook_chain",
+      "exit": 0,
+      "seconds": 1.19
+    },
+    {
+      "name": "repro_v21_gaps",
+      "exit": 0,
+      "seconds": 2.83
+    },
+    {
+      "name": "repro_style_window",
+      "exit": 0,
+      "seconds": 0.24
+    },
+    {
+      "name": "repro_merged_tier",
+      "exit": 0,
+      "seconds": 0.18
+    },
+    {
+      "name": "repro_drift_clock",
+      "exit": 0,
+      "seconds": 0.05
+    },
+    {
+      "name": "repro_knowledge_readback",
+      "exit": 0,
+      "seconds": 0.05
+    },
+    {
+      "name": "repro_understanding_channel",
+      "exit": 0,
+      "seconds": 0.24
+    }
+  ],
+  "checks": {
+    "anchors": true,
+    "skill": true,
+    "pyflakes": true,
+    "python39_syntax_files": 112,
+    "diff_whitespace_cr_at_eol": true
+  },
+  "changes": [
+    "required outline policies, explicit empty/null rejection and compatible scope combinations",
+    "shared facts.apply_event and chapter deadlines for simulation and settlement",
+    "required volume node dependency closure and matching payload, full frozen source on demand",
+    "partial chapter replan with retained suffix and frozen anchor validation",
+    "first-prose vs total planning measurement; current guided-world material measurement"
+  ],
+  "boundary": "Synthetic engineering only. No paid model calls, literary evaluation or token/billing evidence.",
+  "acceptance": "architecture-acceptance-2026-10-19.json"
+}

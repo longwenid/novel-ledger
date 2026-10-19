@@ -128,6 +128,9 @@ OPENING_BOUNDS_CAPABILITY = 'opening-bounds/1'
 # live in the chapter outline that follows it. A task frozen under volume-outline/1 describes a batch
 # of chapters instead, so this build refuses it rather than reinterpreting its fields.
 VOLUME_OUTLINE_CAPABILITY = 'volume-outline/2'
+# New tasks require explicit style and computable volume terminals. Old frozen tasks keep their
+# original interpretation; upgrading the engine does not add fields to an existing dispatch.
+OUTLINE_CHECKS_CAPABILITY = 'outline-checks/1'
 SCENE_MEMORY_CAPABILITY = 'scene-memory/1'
 HOOK_LINKS_CAPABILITY = 'hook-links/1'
 CAPABILITIES = {
@@ -137,6 +140,7 @@ CAPABILITIES = {
     'reading_dependencies': (READING_DEPENDENCIES_CAPABILITY,),
     'opening_bounds': (OPENING_BOUNDS_CAPABILITY,),
     'volume_outline': (VOLUME_OUTLINE_CAPABILITY,),
+    'outline_checks': (OUTLINE_CHECKS_CAPABILITY,),
     'scene_memory': (SCENE_MEMORY_CAPABILITY,),
     'hook_links': (HOOK_LINKS_CAPABILITY,),
 }

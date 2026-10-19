@@ -30,14 +30,14 @@ python3 validation/measure.py --out /path/to/metrics.json
 
 `fast` 固定覆盖架构、端口替换、角色隔离、有限预算、修订授权及端到端交付（含档位形状声明、章纲状态链与漂移核算的守卫）；`full` 自动发现 tests/ 中全部测试。两种入口均在失败时返回非零状态，可供本机或 CI 调用；`--list` 仅列出案例，`-v` 显示逐项结果。全量回归优先用 pytest 并行入口（16 核实测 470 项约 87 秒，串行约 10 分钟；最慢的修订边界/长篇全流程驱动单条 15～25 秒，由多核吸收）。新增关键边界时维护快速组，新增测试始终由完整组自动收集。快速检查通过后，跨模块重构仍须完整回归；原 unittest discovery 命令继续可用。
 
-`validation/anchor_check.py` 核对仓库内全部 markdown 锚点引用可解析（改标题或挪小节后运行）。quick_validate 属宿主自带工具，路径按本机实际安装替换；它是可选的附加校验，缺失时不影响上面的测试与测量。Windows 控制台默认 GBK：测试与 CLI 自身按 UTF-8 读写，但外部校验脚本可能仍按本地编码读文件，此时对全部命令加 `PYTHONUTF8=1`。
+`validation/anchor_check.py` 核对根目录、references/ 与 docs/ 活跃 Markdown 的行内本地文件链接、同页与跨页精确标题锚点；跳过围栏代码示例，坏引用返回非零。历史 validation/ 报告、引用式链接和 Setext 标题不在此入口覆盖内（改标题或挪小节后运行）。quick_validate 属宿主自带工具，路径按本机实际安装替换；它是可选的附加校验，缺失时不影响上面的测试与测量。Windows 控制台默认 GBK：测试与 CLI 自身按 UTF-8 读写，但外部校验脚本可能仍按本地编码读文件，此时对全部命令加 `PYTHONUTF8=1`。
 
 ### 按改动类型选择验证
 
 | 改动类型 | 必查行为 | 回归入口（tests/ 下） |
 |---|---|---|
 | 提交、约定与恢复 | 原子初始化、幂等、预检回滚、有限返修和准确版本认可；改约优先完成机械校验，字面规则跨激活与撤销保留；畸形回执与评测清单不留下部分提交。 | test_runtime、test_output_repairs |
-| 章纲与漂移核算 | 卷 id 与 volumes 对齐、字数区间；enter/exit 冗余一致；卷内状态链拒绝人为漂移（资源为负、时钟倒退、位置未知、知情倒退、人物缺 choice/cost、节点重复推进）；卷末按 exit_state 闭合；drift_check 漏项/多项被拒、`actual.from` 取投影而不取自报值、偏差挂账并触发下一章纲重排。 | test_outlines、test_narrative、test_longform |
+| 章纲与漂移核算 | 卷 id 与 volumes 对齐、字数区间；enter/exit 冗余一致；卷内状态链拒绝人为漂移（资源为负、时钟倒退、位置未知、知情倒退、人物缺 choice/cost、节点重复推进）；卷末核对结构化人物终值与 clock.to、整卷推进天数；drift_check 漏项/多项被拒、`actual.from` 取投影而不取自报值、偏差挂账并触发下一章纲重排。 | test_outlines、test_narrative、test_longform、test_architecture_repairs |
 | 伏笔账 | 卷纲 hooks 的 id 唯一/窗口合法/`text` 非空/跨卷必须 `continues:true` 且 `required:false`；章纲反例矩阵逐条被拒（未声明就 plant、payoff 早于 plant、同一 id plant 两次、payoff 两次、plant/payoff 越窗、卷末 required 未 paid、`hook_refs` 承接未埋的 hook）；`state.hooks` 非空、跨卷条目带入下一卷；`complete()` 因未兑现承诺拒绝，兑现后通过。 | test_outlines、test_longform、validation/ 的 `repro_hook_*.py` |
 | 文风代理指标 | 句长/段长/对白占比越界出 style finding 并进有界返修；`dialogue_ratio` 目标越界被核；`repetition` 绝对占比上限与视角标记一致性；锚点缺失时只跑重复度与视角两项。 | test_prose_lint、validation/ 的 `repro_style_*.py` |
 | 派工、身份与宿主 | compact 保留完整材料及已填表单；--after 拒绝未提交或旧回调；认领后故障释放租约，非文件交付在认领前拒绝。 | test_runtime、test_host_ports |

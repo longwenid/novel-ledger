@@ -1,11 +1,4 @@
-"""Author constraints, the live contract, and the outline entry points. All functions are pure.
-
-v2 removed the plan/profile stages: the contract still declares the author's decisions, but the
-design that used to be validated here (book plan, volume plan, rolling chapter plans, character
-profiles) is now a volume outline plus a chain of chapter outlines. Those carry the drift
-declarations, so the mechanical checking lives in `drift` and this module owns the policy each
-batch is dispatched under and delegates the validation.
-"""
+"""Pure author constraints, outline policies and planning validation entry points."""
 from __future__ import annotations
 
 import copy
@@ -137,15 +130,32 @@ def check_contract_names(contract, policy):
             check_text(name, policy, names=True)
 
 
-def _map_policy(contract, key, scopes):
-    """The shape check for a `{scope,words,tolerance}` policy field, present or not."""
-    policy = contract.get(key)
-    if policy is None:
-        return
-    require(not policy or set(policy) == {'scope', 'words', 'tolerance'} and policy.get('scope') in scopes
-            and type(policy.get('words')) is int and policy['words'] > 0
+def resolve_outline_policy(contract, key):
+    """Required pipeline policies: absence defaults, explicit invalid values never do."""
+    scopes = ('all', 'rolling', 'current') if key == 'volume_outline' else ('volume', 'all')
+    policy = contract[key] if key in contract else contracts.policy_default(key)
+    require(isinstance(policy, dict) and set(policy) == {'scope', 'words', 'tolerance'}
+            and policy.get('scope') in scopes and type(policy.get('words')) is int and policy['words'] > 0
             and type(policy.get('tolerance')) is int and 0 <= policy['tolerance'] < policy['words'],
-            key, key + ' 为 {} 或 {scope:' + '|'.join(scopes) + ',words:正整数,tolerance:非负整数且小于 words}。')
+            key, key + ' 是必选阶段，不能用空对象或 null 关闭；须为 {scope:' + '|'.join(scopes)
+            + ',words:正整数,tolerance:非负整数且小于 words}。',
+            {'recover': '通过明确改约填写完整策略；缺省字段可使用默认值。',
+             'default': contracts.policy_default(key)})
+    resolved = copy.deepcopy(policy)
+    if resolved['scope'] == 'current':
+        resolved['scope'] = 'rolling'
+    return resolved
+
+
+def outline_policies(contract):
+    policies = {key: resolve_outline_policy(contract, key)
+                for key in ('volume_outline', 'chapter_outline')}
+    require(not (policies['volume_outline']['scope'] == 'rolling'
+                 and policies['chapter_outline']['scope'] == 'all'
+                 and len(contract.get('volumes') or []) > 1),
+            'outline_policy', '多卷 rolling 卷纲须搭配 volume 章纲；全书章纲须先有 all 卷纲。',
+            {'recover': '明确改约选择 all/volume、all/all 或 rolling/volume。'})
+    return policies
 
 
 def validate_contract(raw):
@@ -188,8 +198,7 @@ def validate_contract(raw):
     # v2's two outline policies: the volume outline (whole book or one volume at a time) and the
     # chapter outline (one volume at a time, or ahead for every volume). `current` is the v1
     # spelling of rolling and is still loadable.
-    _map_policy(contract, 'volume_outline', ('all', 'rolling', 'current'))
-    _map_policy(contract, 'chapter_outline', ('volume', 'all'))
+    contract.update(outline_policies(contract))
     volumes = contract['volumes']
     seen, last = set(), 0
     for volume in volumes:
@@ -217,29 +226,26 @@ def volume_for(contract, chapter):
 
 def outline_policy(contract, volume, model=None):
     """The volume-outline policy bound to one volume of the live contract."""
-    policy = contract.get('volume_outline') or {}
-    if not policy:
-        return None
+    policy = resolve_outline_policy(contract, 'volume_outline')
     return {**copy.deepcopy(policy), 'first': volume['first'], 'last': volume['end'],
             'world_hash': digest(model) if model else None}
 
 
 def chapter_policy(contract, volume, model=None):
     """The chapter-outline policy bound to one volume, with the same window vocabulary."""
-    policy = contract.get('chapter_outline') or {}
-    if not policy:
-        return None
+    policy = resolve_outline_policy(contract, 'chapter_outline')
     return {**copy.deepcopy(policy), 'volume': volume['id'], 'first': volume['first'],
             'last': volume['end'], 'world_hash': digest(model) if model else None}
 
 
 def validate_volume_outline(data, contract, world, selected=None, existing=None, missing_ids=None,
-                            state=None):
+                            state=None, strict=True):
     """Delegate the volume outline's mechanical checks to `drift` (single implementation)."""
-    return drift.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state)
+    return drift.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state,
+                                         strict=strict)
 
 
-def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0):
+def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0, strict=True):
     """Delegate the chapter outline's chain checks, then freeze the scenes it declares.
 
     `drift` owns the state chain; this entry point adds the one piece that needs the scene protocol
@@ -247,7 +253,8 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     pure drift core. Rows without scenes are bound too: the binding is what records that the row
     declared no dependency, which a revision later reads as "conservatively expand".
     """
-    rows = drift.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0)
+    rows = drift.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0,
+                                         strict=strict)
     entities = copy.deepcopy((state0 or {}).get('entities') or {})
     previous = {}
     for row in rows:

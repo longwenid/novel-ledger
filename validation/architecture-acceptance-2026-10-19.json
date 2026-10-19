@@ -1,0 +1,556 @@
+{
+  "metadata": {
+    "schema": "novel-ledger.measurements/1",
+    "generated_at": "2026-10-19T03:23:16+00:00",
+    "source_commit": "9a2a5bb40be72c0d2d02c2bacc2bcf4fe7c0acf8",
+    "source_sha256": "5ffbce7d6db8e5e8840f3acd38fb13e828cf06fa608c1144d023a445fd523c3e",
+    "source_files": 112
+  },
+  "cases": [
+    {
+      "scope": "all",
+      "chapters": 36,
+      "volumes": 3,
+      "completed": true,
+      "volume_boundary_restart": true,
+      "delivery": {
+        "delivered": true,
+        "snapshot_hash": "a7993b2c5a4735aef1806ff15cce385aaa47b36ac51e39dde6f41f89406a2a2f",
+        "files_verified": 2
+      },
+      "elapsed_seconds": 4.181,
+      "first_prose": {
+        "dispatches": 2,
+        "required_bytes": 19926,
+        "volume_outlines": 3,
+        "generated_han": 11320
+      },
+      "dispatches": [
+        {
+          "stage": "volume_outline",
+          "chapter": 1,
+          "required_bytes": 4052,
+          "result_han": 7500,
+          "volume_outline_han": 7500
+        },
+        {
+          "stage": "chapter_outline",
+          "chapter": 1,
+          "required_bytes": 15874,
+          "result_han": 3820
+        },
+        {
+          "stage": "write",
+          "chapter": 1,
+          "required_bytes": 19289,
+          "result_han": 373
+        },
+        {
+          "stage": "write",
+          "chapter": 2,
+          "required_bytes": 20433,
+          "result_han": 359
+        },
+        {
+          "stage": "write",
+          "chapter": 3,
+          "required_bytes": 20791,
+          "result_han": 359
+        },
+        {
+          "stage": "write",
+          "chapter": 4,
+          "required_bytes": 20462,
+          "result_han": 332
+        },
+        {
+          "stage": "write",
+          "chapter": 5,
+          "required_bytes": 20147,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 6,
+          "required_bytes": 20143,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 7,
+          "required_bytes": 20147,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 8,
+          "required_bytes": 20143,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 9,
+          "required_bytes": 20457,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 10,
+          "required_bytes": 20771,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 11,
+          "required_bytes": 20787,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 12,
+          "required_bytes": 21454,
+          "result_han": 356
+        },
+        {
+          "stage": "chapter_outline",
+          "chapter": 13,
+          "required_bytes": 18017,
+          "result_han": 3746
+        },
+        {
+          "stage": "write",
+          "chapter": 13,
+          "required_bytes": 21263,
+          "result_han": 383
+        },
+        {
+          "stage": "write",
+          "chapter": 14,
+          "required_bytes": 20397,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 15,
+          "required_bytes": 20401,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 16,
+          "required_bytes": 20397,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 17,
+          "required_bytes": 20401,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 18,
+          "required_bytes": 20397,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 19,
+          "required_bytes": 20401,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 20,
+          "required_bytes": 20397,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 21,
+          "required_bytes": 20713,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 22,
+          "required_bytes": 21013,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 23,
+          "required_bytes": 21017,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 24,
+          "required_bytes": 21681,
+          "result_han": 356
+        },
+        {
+          "stage": "chapter_outline",
+          "chapter": 25,
+          "required_bytes": 17963,
+          "result_han": 3731
+        },
+        {
+          "stage": "write",
+          "chapter": 25,
+          "required_bytes": 20924,
+          "result_han": 356
+        },
+        {
+          "stage": "write",
+          "chapter": 26,
+          "required_bytes": 20217,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 27,
+          "required_bytes": 20221,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 28,
+          "required_bytes": 20216,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 29,
+          "required_bytes": 20220,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 30,
+          "required_bytes": 20216,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 31,
+          "required_bytes": 20220,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 32,
+          "required_bytes": 20216,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 33,
+          "required_bytes": 20532,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 34,
+          "required_bytes": 20528,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 35,
+          "required_bytes": 20532,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 36,
+          "required_bytes": 21196,
+          "result_han": 356
+        }
+      ],
+      "total_dispatches": 40,
+      "total_required_bytes": 794646,
+      "written_han": 2700
+    },
+    {
+      "scope": "rolling",
+      "chapters": 36,
+      "volumes": 3,
+      "completed": true,
+      "volume_boundary_restart": true,
+      "delivery": {
+        "delivered": true,
+        "snapshot_hash": "ee5ee97f0d52646b0745b66d2ed007ff917a3de83050c76a96bbb82a5df4e237",
+        "files_verified": 2
+      },
+      "elapsed_seconds": 3.89,
+      "first_prose": {
+        "dispatches": 2,
+        "required_bytes": 19376,
+        "volume_outlines": 1,
+        "generated_han": 6320
+      },
+      "dispatches": [
+        {
+          "stage": "volume_outline",
+          "chapter": 1,
+          "required_bytes": 4056,
+          "result_han": 2500,
+          "volume_outline_han": 2500
+        },
+        {
+          "stage": "chapter_outline",
+          "chapter": 1,
+          "required_bytes": 15320,
+          "result_han": 3820
+        },
+        {
+          "stage": "write",
+          "chapter": 1,
+          "required_bytes": 18735,
+          "result_han": 373
+        },
+        {
+          "stage": "write",
+          "chapter": 2,
+          "required_bytes": 19879,
+          "result_han": 359
+        },
+        {
+          "stage": "write",
+          "chapter": 3,
+          "required_bytes": 20237,
+          "result_han": 359
+        },
+        {
+          "stage": "write",
+          "chapter": 4,
+          "required_bytes": 19908,
+          "result_han": 332
+        },
+        {
+          "stage": "write",
+          "chapter": 5,
+          "required_bytes": 19593,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 6,
+          "required_bytes": 19589,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 7,
+          "required_bytes": 19593,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 8,
+          "required_bytes": 19589,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 9,
+          "required_bytes": 19903,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 10,
+          "required_bytes": 20217,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 11,
+          "required_bytes": 20233,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 12,
+          "required_bytes": 20900,
+          "result_han": 356
+        },
+        {
+          "stage": "volume_outline",
+          "chapter": 13,
+          "required_bytes": 4735,
+          "result_han": 2500,
+          "volume_outline_han": 2500
+        },
+        {
+          "stage": "chapter_outline",
+          "chapter": 13,
+          "required_bytes": 17832,
+          "result_han": 3746
+        },
+        {
+          "stage": "write",
+          "chapter": 13,
+          "required_bytes": 21078,
+          "result_han": 383
+        },
+        {
+          "stage": "write",
+          "chapter": 14,
+          "required_bytes": 20212,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 15,
+          "required_bytes": 20216,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 16,
+          "required_bytes": 20212,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 17,
+          "required_bytes": 20216,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 18,
+          "required_bytes": 20212,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 19,
+          "required_bytes": 20216,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 20,
+          "required_bytes": 20212,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 21,
+          "required_bytes": 20528,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 22,
+          "required_bytes": 20828,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 23,
+          "required_bytes": 20832,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 24,
+          "required_bytes": 21496,
+          "result_han": 356
+        },
+        {
+          "stage": "volume_outline",
+          "chapter": 25,
+          "required_bytes": 5104,
+          "result_han": 2500,
+          "volume_outline_han": 2500
+        },
+        {
+          "stage": "chapter_outline",
+          "chapter": 25,
+          "required_bytes": 17967,
+          "result_han": 3731
+        },
+        {
+          "stage": "write",
+          "chapter": 25,
+          "required_bytes": 20928,
+          "result_han": 356
+        },
+        {
+          "stage": "write",
+          "chapter": 26,
+          "required_bytes": 20221,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 27,
+          "required_bytes": 20225,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 28,
+          "required_bytes": 20220,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 29,
+          "required_bytes": 20224,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 30,
+          "required_bytes": 20220,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 31,
+          "required_bytes": 20224,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 32,
+          "required_bytes": 20220,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 33,
+          "required_bytes": 20536,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 34,
+          "required_bytes": 20532,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 35,
+          "required_bytes": 20536,
+          "result_han": 302
+        },
+        {
+          "stage": "write",
+          "chapter": 36,
+          "required_bytes": 21200,
+          "result_han": 356
+        }
+      ],
+      "total_dispatches": 42,
+      "total_required_bytes": 794934,
+      "written_han": 2700
+    }
+  ],
+  "boundary": "合成短正文的36章3卷工程验收；验证派工、卷界重启、完本交付和材料量。未调用真实创作模型；耗时为本机引擎耗时，不代表创作延迟、文学效果或计费。"
+}

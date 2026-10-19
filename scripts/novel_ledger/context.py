@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (SCALE_TIERS, TASK, Job, policy_default, require, tier_of)
-from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
+from .contracts import (SCALE_TIERS, TASK, Job, require, tier_of)
+from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY,
+                        OUTLINE_CHECKS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
 from . import briefs, creation, narrative, style, world, editorial, story_memory, understanding
-from .planning import policy_material, volume_for
+from .planning import policy_material, resolve_outline_policy, volume_for
 from .ports import ContextStore
 from .envelope import validate_work
 
@@ -347,6 +348,37 @@ def volume_row(book, volume):
     return (book.get('volumes_outline') or {}).get(volume['id']) if volume else None
 
 
+def writing_volume_outline(outline, plan, chapter, source_hash):
+    """Keep full prose direction and complete relevant records, with the full source available."""
+    view = copy.deepcopy(outline)
+    registry = {row['id']: row for row in outline.get('nodes', [])}
+    selected = _planned_nodes(plan)
+    selected.update(row['id'] for row in registry.values()
+                    if isinstance(row.get('window'), list) and len(row['window']) == 2
+                    and row['window'][0] <= chapter <= row['window'][1])
+    for item in plan.get('enter', []) + plan.get('exit', []):
+        if item.get('kind') == 'node':
+            selected.add(item['key'])
+    todo = list(selected)
+    while todo:
+        ident = todo.pop()
+        for dependency in registry.get(ident, {}).get('depends_on', []):
+            if dependency not in selected:
+                selected.add(dependency)
+                todo.append(dependency)
+    view['nodes'] = [row for row in view.get('nodes', []) if row['id'] in selected]
+    lines = {row.get('line') for row in view['nodes']}
+    lines.update(row['thread'] for row in (plan.get('plot') or {}).get('threads', []))
+    lines.update(item['key'] for item in plan.get('enter', []) + plan.get('exit', [])
+                 if item.get('kind') == 'thread')
+    view['threads'] = [row for row in view.get('threads', []) if row['id'] in lines]
+    view['source'] = {'record': 'complete_volume_outline', 'hash': source_hash,
+                      'chapter': chapter,
+                      'note': '仅筛选本章节点、前置依赖与所在线路；方向、转折、伏笔、文风及卷末声明保留完整。'
+                              '未选记录仍可按 complete_volume_outline 补读。'}
+    return view
+
+
 def hook_ledger(book, volume=None):
     """The promise account a design decision reads: what is declared, and what is still open.
 
@@ -554,13 +586,18 @@ def build(repo: ContextStore, book, job):
         # The batch extends this volume's approved outline, so the volume row is the first thing it
         # has to read: node/thread ids and the exit_state it must land on are declared there.
         add('volume_outline', volume_outline_row)
+        if (job.payload or {}).get('allow_retained_suffix'):
+            add('prior_chapter_outlines', [r for r in (book.get('chapter_outlines') or {}).get(volume['id'], [])
+                                           if r['chapter'] >= job.chapter], False)
     if plan:
         if stage in ('write', 'repair', 'redesign'):
             # The chapter outline is the hard prerequisite of a draft: it carries the enter/exit
             # state chain, and the drift_check the writer submits is reconciled against its deltas.
             add('chapter_outline', plan)
             if volume_outline_row is not None:
-                add('volume_outline', volume_outline_row)
+                add('complete_volume_outline', volume_outline_row, False)
+                add('volume_outline', writing_volume_outline(
+                    volume_outline_row, plan, chapter, records['complete_volume_outline']))
         if scene_task:
             add('scene_context', story_memory.packet(plan, book['state']))
             dependencies = []
@@ -602,7 +639,7 @@ def build(repo: ContextStore, book, job):
         # word target. `volume_outline` is the policy map here; on a draft dispatch the same key
         # carries this volume's approved row instead. The defaults mirror the contract's own, so a
         # project loaded from before v2 still gets a stated target rather than an empty one.
-        policy = contract.get('volume_outline') or policy_default('volume_outline')
+        policy = resolve_outline_policy(contract, 'volume_outline')
         ids = payload.get('volume_ids') or [v['id'] for v in contract.get('volumes') or []]
         chosen = [v for v in contract.get('volumes') or [] if v['id'] in set(ids)]
         payload['volume_outline'] = {**policy,
@@ -612,12 +649,12 @@ def build(repo: ContextStore, book, job):
         if merged_outline:
             # The merged half reads the same chapter-outline policy, per volume: the outer key names
             # the volumes this receipt must also outline chapter by chapter.
-            chapter_policy_ = contract.get('chapter_outline') or policy_default('chapter_outline')
+            chapter_policy_ = resolve_outline_policy(contract, 'chapter_outline')
             payload['chapter_outline'] = {
                 **chapter_policy_,
                 'volumes': [{'id': v['id'], 'first': v['first'], 'last': v['end']} for v in chosen]}
     if stage == 'chapter_outline':
-        policy = contract.get('chapter_outline') or policy_default('chapter_outline')
+        policy = resolve_outline_policy(contract, 'chapter_outline')
         first, last = _batch_range(job, volume, payload)
         payload['volume'] = volume['id'] if volume else payload.get('volume')
         payload['from_chapter'] = first
@@ -626,7 +663,9 @@ def build(repo: ContextStore, book, job):
         # The writer compares its own prose against both rows; the chapter row is what the engine
         # reconciles the drift_check against, and the volume row is where the arc has to land.
         payload['chapter_outline'] = plan
-        payload['volume_outline'] = volume_outline_row
+        payload['volume_outline'] = (writing_volume_outline(
+            volume_outline_row, plan, chapter, records['complete_volume_outline'])
+            if volume_outline_row is not None else None)
     if book.get('design_drift') and stage in ('chapter_outline', 'write', 'repair', 'redesign'):
         # Deviations the engine already booked. A re-plan has to absorb them, and a writer must know
         # which earlier promises no longer hold before continuing from them.
@@ -658,6 +697,7 @@ def build(repo: ContextStore, book, job):
             # protocol version string must be reading the same constant, or a rename degrades into
             # "this project is old" instead of failing.
             'capabilities': {**({EDITORIAL: EDITORIAL_CAPABILITY} if enhanced else {}),
+                             'outline_checks': OUTLINE_CHECKS_CAPABILITY,
                              **({UNDERSTANDING: UNDERSTANDING_CAPABILITY,
                                  SCENE_IDENTITY: SCENE_IDENTITY_CAPABILITY,
                                  READING_DEPENDENCIES: story_memory.READING_SCHEMA} if 'understanding' in book else {}),

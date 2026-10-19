@@ -38,9 +38,10 @@ def watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, n
     require(poll > 0 and idle_limit > 0, 'watch', 'poll 与 idle-limit 须为正数秒。')
     rounds, waited = 0, []
     while True:
-        handoff = app.advance(owner=owner, compact=True)
+        handoff = app.advance(owner=owner, compact=True,
+                              wait_pending=not steps or rounds < steps)
         action = handoff.get('action')
-        if action != 'task_ready':
+        if action not in ('task_ready', 'wait_for_submit'):
             return {**handoff, 'dispatched': waited,
                     'watch_note': 'watch 在此停下：这一步需要主控或作者处理，处理后再次运行 watch 继续。'}
         if steps and rounds >= steps:

@@ -131,7 +131,9 @@ class PresentationBoundaryTests(unittest.TestCase):
     def test_world_files_need_only_reader_and_workspace(self):
         model = {'selection_hash': 'frozen-selection', 'premise': '夜班仓库的退件纠纷。',
                  'story_capacity': '调查责任怎样沿经手关系传递。'}
-        self.repo.book.update(world=model, creation={'selections': [{'gate': 'genre'}]})
+        choices = [{'gate': 'genre', 'option': {'id': 'author:genre', 'title': '作者已有要求',
+                                               'value': {'genre': '都市生活'}}, 'source': '作者指定都市生活。'}]
+        self.repo.book.update(world=model, creation={'selections': choices})
         self.workspace.project.mkdir()
         external = self.root / 'external-world.txt'
         external.write_text('external world content', encoding='utf-8')
@@ -144,7 +146,7 @@ class PresentationBoundaryTests(unittest.TestCase):
         self.assertIn(model['premise'], Path(result['html_path']).read_text(encoding='utf-8'))
         data = json.loads(Path(result['json_path']).read_text(encoding='utf-8'))
         self.assertEqual(data['world'], model)
-        self.assertEqual(data['choices'], [{'gate': 'genre'}])
+        self.assertEqual(data['choices'], choices)
         self.assertEqual(data['model_hash'], result['model_hash'])
 
     def test_publication_keeps_completed_content_frozen_without_storage_adapter(self):
@@ -254,6 +256,19 @@ class PresentationBoundaryTests(unittest.TestCase):
 
         self.assertEqual(outside.read_text(encoding='utf-8'), '作者的其他文档')
         self.assertFalse(alias.is_symlink())
+
+    def test_malformed_old_task_views_are_rebuilt_from_the_frozen_task(self):
+        task = self.task()
+        view = self.presentation.task(task)
+        task_file = Path(view['task_path'])
+        for broken in ('{unfinished', '[]', 'null', '{"input_hash":"frozen-input","redispatch_count":"bad"}'):
+            with self.subTest(broken=broken):
+                task_file.write_text(broken, encoding='utf-8')
+                rebuilt = self.presentation.task(task)
+                stored = json.loads(task_file.read_text(encoding='utf-8'))
+                self.assertEqual(stored['task_id'], task['id'])
+                self.assertEqual(stored['input_hash'], task['input_hash'])
+                self.assertEqual(rebuilt['redispatch_count'], 1)
 
     def test_materializing_work_symlink_replaces_the_link_and_preserves_external_target(self):
         outside = self.root / 'outside-draft.txt'

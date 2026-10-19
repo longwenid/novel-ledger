@@ -437,8 +437,9 @@ def _volume_row(book, volume, words, tracking, hooks=False, stage=None):
            'climax': VOLUME_CLIMAX,
            'nodes': nodes, 'threads': threads,
            'resources': [], 'places': [], 'knowledge': [], 'characters': [],
-           'clock': {'advance_days': count},
+           'clock': {'advance_days': count, 'to': last},
            'exit_state': VOLUME_EXIT,
+           'style': {'trend': '以短句、动作与凭据核对推进，卷末用较长段落交代责任后果。'},
            # A required array in v2.1: an empty one is the declaration "this volume promises nothing
            # new", which is a claim the chain can read, while a missing field is nothing at all.
            'hooks': volume_hooks(book, volume) if hooks else []}
@@ -563,6 +564,8 @@ def _chapter_row(state, book, volume, number, words, resources=True, places=True
            'clock': {'advance_days': clock_days}, 'enter': [], 'exit': [],
            'disclosures': [], 'world_refs': _world_refs(book), 'new_entities': [],
            'hook_refs': [], 'reader_refs': [], 'history_refs': [], 'scenes': [], 'pacing': {},
+           'style': {'pov': contract.get('pov') or '第三人称限知',
+                     'rhythm': '短句交代动作，核对结果后用完整句说明后果。'},
            # Required in v2.1; `[]` means this chapter executes no promise action.
            'hooks': chapter_hooks(book, volume, number) if hooks else []}
     deltas = []          # (kind, key, before, after)

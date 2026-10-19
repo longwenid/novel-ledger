@@ -114,7 +114,12 @@ class RevisionRepairTests(unittest.TestCase):
         for n in (1, 2, 3):
             self.assertEqual(repo.chapter(branch, n)['prose'], parent[n])
         self.assertTrue(app.audit()['ok'])
-        self.assertEqual(drive(app, owner)['action'], 'target_reached')
+        self.assertEqual(drive(app, owner)['action'], 'revision_ready')
+        self.assertEqual(app.status()['formal_branch'], 'main')
+        app.promote(owner)
+        self.assertEqual(app.status()['formal_branch'], branch)
+        self.assertEqual(app.status()['formal_chapters'], 5)
+        self.assertIsNone(repo.load()['revision_run'])
 
 
 if __name__ == '__main__':

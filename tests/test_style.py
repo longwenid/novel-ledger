@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import style
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.sqlite_store import SQLiteRepository
+from novel_ledger.result_templates import chapter_row
 from support import contract, drive, response, seeded_book
 
 # The engine's own default (spec §2.1), read from the module so a re-calibration is a visible change
@@ -261,6 +262,28 @@ class CompareTests(unittest.TestCase):
         # A chapter that hits its declared ratio is not reported, even with no anchor to compare to.
         spoken = sentences(12, 8, start=0x6000, quoted=True)
         self.assertEqual(style.compare(spoken, {'dialogue_ratio': 1.0}, None, WINDOW, chapter=5), [])
+
+    def test_a_zero_dialogue_target_is_distinct_from_an_absent_target(self):
+        silent = sentences(12, 8)
+        spoken = sentences(12, 8, start=0x6000, quoted=True)
+        self.assertEqual(style.compare(silent, {'dialogue_ratio': 0}, None, WINDOW), [])
+        findings = style.compare(spoken, {'dialogue_ratio': 0}, None, WINDOW, chapter=5)
+        self.assertEqual([(row['metric'], row['expect'], row['got']) for row in findings],
+                         [('dialogue_ratio', 0.0, 1.0)])
+        self.assertEqual(style.compare(spoken, {}, None, WINDOW), [])
+        # An explicit zero takes precedence over a talkative anchor too.
+        self.assertEqual(style.compare(silent, {'dialogue_ratio': 0},
+                                       metrics_of(spoken), WINDOW), [])
+        almost_silent = sentences(12, 500) + '「好」'
+        self.assertEqual(metrics_of(almost_silent)['dialogue_share'], 0.0)
+        self.assertTrue(by_metric(style.compare(almost_silent, {'dialogue_ratio': 0},
+                                                None, WINDOW), 'dialogue'))
+
+    def test_the_blank_chapter_form_does_not_choose_a_dialogue_target(self):
+        declared = chapter_row(1)['style']
+        declared.update(pov=THIRD_POV, rhythm='短句')
+        spoken = sentences(12, 8, start=0x6000, quoted=True)
+        self.assertEqual(style.compare(spoken, declared, None, WINDOW), [])
 
     def test_repetition_over_the_cap_is_reported_without_an_anchor(self):
         findings = style.compare('他把责任栏推到主管面前，要求先核对名字。' * 8, {}, None, WINDOW)

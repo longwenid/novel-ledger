@@ -1,15 +1,4 @@
-"""Per-dispatch briefs: the one page a worker actually needs, instead of every guide in full.
-
-A guide is a reference document for a whole stage; a dispatch needs the part that applies to the
-task in hand. Keeping the brief generated here — next to the methods it quotes — means the author
-pays for the current gate's rules and lens, not for the entire toolbox on every round.
-
-Since the independent review stages were removed, a brief no longer quotes a reviewer's rubric.
-What replaces that rubric is the state chain: the chapter outline declares the deltas, the writer's
-`drift_check` answers them line by line, and the engine reconciles the two. The self-check block
-below is derived from the same delta-kind table the reconciliation uses, so the brief cannot ask
-for a comparison the engine does not perform.
-"""
+"""Task-specific briefs generated from shared contracts and domain rules."""
 from __future__ import annotations
 
 from .creation import gate_note, gate_title, value_rules
@@ -196,7 +185,8 @@ def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections
         # Same declaration the validator uses: asking for the full twelve domains while the check
         # happens to accept a smaller world is how a micro project ends up writing records nobody
         # reads and repairing four times. The list is the tier's domains plus whatever this opening's
-        # own gates declared (a tier ladder adds `powers`, a grand scale adds `cosmology`).
+        # own gates declared (currency adds `economy`, ranks add `powers`, a grand scale adds
+        # `cosmology`).
         labels = '、'.join('%s（%s）' % (name, world.LABELS.get(name, name)) for name in sections)
         empty = '、'.join(name for name in world.SECTIONS if name not in sections)
         lines.extend(['## 本档位要填的领域', '本项目按体量只需要：' + labels + '。'
@@ -311,7 +301,9 @@ def stage(name, payload=None):
                           'nodes 给 {id,kind:main|side|hidden,purpose,ending_condition,required,window:[本卷最早章,本卷最晚章]}；'
                           'threads 给 {id,kind,purpose,ending_condition,required}，跨卷延续的线路加 continues=true；'
                           'resources 给本卷资源大势 {key,from,to,reason}（key 必须已存在于世界模型或既有状态）；'
-                          'places/characters 给 {entity,from,to,reason} 的本卷起止；knowledge 给 {who,topic,from,to,reason}；'
+                          'places 给 {entity,from,to,reason} 的本卷起止；characters 给同样四键，'
+                          'to 必须是 {desire,stance,relationship_focus} 的结构化卷末人物状态；'
+                          'knowledge 给 {who,topic,from,to,reason}；'
                           'hooks 是必填数组（本卷没有伏笔就给空数组，缺字段会被拒）：每条 '
                           '{id,text,plant:[最早章,最迟章],payoff:[最早章,最迟章],required:true|false,continues:true|false}——'
                           'id 全书唯一（与 node/thread 同一命名空间，跨卷续用必须 continues=true 且 required=false）；'
@@ -323,15 +315,17 @@ def stage(name, payload=None):
                           'style.trend 必填：用具体文字说清本卷文风怎么走（相对首章定调的松紧、对白占比、句长、节奏），'
                           '不写「同上」「保持」；可选 style.window 逐项覆盖契约 style_window'
                           '（sentence/paragraph/dialogue/repetition/person），只在对本卷有明确意图时才改。'
-                          'clock.advance_days 是本卷总推进天数；exit_state 必须非空，把卷末资源/位置/人物/知情/线路各一句写死——'
-                          '它是卷内状态链的闭合条件。node/thread/hook id 全书唯一，不覆盖已批准 id。'
+                          'clock.advance_days 是本卷总推进天数，clock.to 是卷末主线时钟的绝对累计天数（从初始状态累计，'
+                          '不是相对增量）；章纲模拟最后一章时必须达到 clock.to。exit_state 必须非空，用自然语言说明卷末局面，'
+                          '仅作创作提示；引擎闭合的是资源/位置/知情/人物与时钟的结构化终值，不验证 exit_state 的语义。'
+                          'node/thread/hook id 全书唯一，不覆盖已批准 id。'
                           '不写逐章 synopsis，不写脑暴与选案理由，不写正文。',
         'chapter_outline': '交付 {volume, chapters}：章号连续、恰好覆盖本卷冻结范围 [first,last]。每章给：'
                            'synopsis（words±tolerance 汉字：行动、阻力、选择、代价、结果、对下一章的推动，只写因果不写氛围）；'
                            'plot.beat 一句话说清本章情节变化，plot.nodes=[{node,after:seeded|advanced|resolved,outcome}]、'
                            'plot.threads=[{thread,after:active|dormant|resolved,reason}] 只引用本卷卷纲已登记的 id；'
                            'resources=[{key,from,to,reason}]、places=[{entity,from,to,reason}]、'
-                           'knowledge=[{who,topic,from,to,reason}]、characters=[{entity,from,to,choice,cost}] 四个数组不得省略——'
+                           'knowledge=[{who,topic,from,to,reason}]、characters=[{entity,from,to,choice,cost}] 四类数组按模板逐项核对，缺省或 null 与空数组同义——'
                            '空数组就是「本章无此类变化」的声明；knowledge 的 to 取 hinted|suspected|misled|confirmed|retracted，'
                            'character 的 to 是 {desire,stance,relationship_focus} 且 choice/cost 缺一不可；'
                            'clock.advance_days 是本章经过的天数，不倒退；'
@@ -356,12 +350,12 @@ def stage(name, payload=None):
                            'hook_refs/reader_refs/history_refs 声明要承接的旧资料；'
                            'scenes/pacing 可选，保留工作台兼容。不写正文。',
         'write': '交 title/完整 prose/summary/具体 self_check 与逐条 drift_check。'
-                 '本章纲（chapter_outline）与本章卷纲（volume_outline）都是必读：按章纲的场景与增量落笔，'
+                 '本章纲（chapter_outline）与卷纲材料（volume_outline）都是必读；卷纲节点已按本章及前置依赖筛选，完整卷纲可从 complete_volume_outline 补读：按章纲的场景与增量落笔，'
                  '不添章纲没有的重大变化，也不漏掉章纲声明要发生的。'
                  'drift_check.items 已按章纲的计划增量预填，逐条把 actual 填成正文实际发生的值'
                  '（actual.from 由引擎投影，不是你自报的前态）、status 取 kept|deviated|skipped，'
                  'deviated/skipped 必须写 reason，evidence.quote 必须是正文原文片段；'
-                 '计划外发生的变化写进 unplanned（同样给 reason）。'
+                 '计划外资源/位置/知情/人物变化写进 unplanned，必须给 actual.from/to、reason 和本章 evidence；不接受只有 change 的说明，其他种类须回章纲契约处理。'
                  '以动作、对白、选择、后果写场景，删除重复解释。遵守 word_budget 的本章范围；'
                  '静章承担余波、恢复、关系或暗线作用。作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
                  '文风上照 style_anchor 的首章定调、本卷 style.trend 与本章 style 写：'
@@ -391,6 +385,9 @@ def stage(name, payload=None):
         if payload.get('repair'):
             if payload.get('from_chapter'):
                 rule += ' 从第 %d 章开始重排剩余章纲。' % payload['from_chapter']
+            if payload.get('allow_retained_suffix'):
+                rule += (' 可先补读 prior_chapter_outlines 核对原后缀，再用 through_chapter 指定最后修改章，chapters 只交从起始章到该章的连续区间；'
+                         '后续原章纲由引擎接回并完整核算，衔接或卷末闭合失败时扩大范围，不得省略受影响章节。')
             rule += (' 这是返修不是重写：payload.drift 列出已经发生的偏差，'
                      '只重排受影响的章与后续章，未受影响的章保持上一版逐字一致；'
                      '已经定稿在前章的 enter 值必须沿用引擎投影的真实状态，不要改写历史。')

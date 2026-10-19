@@ -74,13 +74,16 @@ def _ordered(names):
 def declared_sections(choices):
     """What the opening declared the world must therefore carry.
 
-    The world gate's rank ladder lands in `powers`; a 格局 ladder that reaches a 界 or wider lands in
-    `cosmology`. An opening that declared neither asks for nothing extra, which is what keeps every
-    v1–v4 project's required set exactly what it was. A selection that is not the declared shape
-    yields nothing rather than raising: the gate owns that shape, the world model only reads it.
+    The world gate's currency lands in `economy` and its rank ladder in `powers`; a 格局 ladder that
+    reaches a 界 or wider lands in `cosmology`. An opening that declared none asks for nothing extra,
+    which keeps every v1–v4 project's required set exactly what it was. A selection that is not the
+    declared shape yields nothing rather than raising: the gate owns that shape, the world model
+    only reads it.
     """
     extra = []
     world_choice = choices.get('world') if isinstance(choices, dict) else None
+    if isinstance(world_choice, dict) and world_choice.get('resource'):
+        extra.append('economy')
     if isinstance(world_choice, dict) and world_choice.get('tiers'):
         extra.append('powers')
     ladder_choice = choices.get('ladder') if isinstance(choices, dict) else None
