@@ -272,29 +272,6 @@ def set_hooks_default(value):
     HOOKS_DEFAULT = None if value is None else bool(value)
 
 
-def hooks_ready():
-    """Whether the drift hook chain is complete enough to run end to end on this build.
-
-    The field tables can land before the validator's helper bodies do, and a `NameError` from a
-    half-landed validator would turn every unrelated flow test red. The probe therefore runs a real
-    hook-bearing volume outline through the validator: a structured rejection means the path works
-    (the fixture is valid, so it should pass, but a clean `design_drift` still proves the code ran);
-    a `NameError` means it has not landed yet.
-    """
-    if not hooks_supported():
-        return False
-    try:
-        book = seeded_book(contract())
-        rows = volume_rows(book, ['v1'], hooks=True)
-        drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
-                                      {}, {}, ['v1'], book['state'])
-    except NameError:
-        return False
-    except Exception:                       # a structured refusal still means the path executed
-        return True
-    return True
-
-
 def _hooks_on(value):
     """Whether a fixture row declares promises: explicit wins, else the session default.
 
@@ -1187,27 +1164,6 @@ def tracked_contract(chapters=6, volumes=1):
     raw = contract(chapters=chapters, volumes=volumes)
     raw['narrative_tracking'] = True
     return raw
-
-
-def tracked_response(app, task_id=None, session=None, claim=None):
-    """A receipt for a tracked book. v2 has one receipt shape: the writer's drift_check carries the
-    node/thread items, so there is no separate tracked form to fill."""
-    return response(app, task_id, session, claim)
-
-
-def drive_tracked(app, owner=None, until=None, limit=300):
-    """`drive`, named for the tracked flows that used to need their own driver."""
-    return drive(app, owner=owner, until=until, limit=limit)
-
-
-def enhanced_response(app, task_id=None, session=None, claim=None):
-    """A receipt for an editorial-enabled book.
-
-    v2 has no separate enhanced result shape: the chapter outline owns the scene material and the
-    writer files the same drift_check as any other dispatch. The name survives because half the
-    editorial fixtures mean "the receipt for this project" and the difference disappeared.
-    """
-    return response(app, task_id, session, claim)
 
 
 def plan_extras(plan):

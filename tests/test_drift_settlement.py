@@ -77,7 +77,9 @@ class UnplannedSettlementTests(unittest.TestCase):
         state, _ = facts.settle(self.state, settled['events'], QUOTE, 1)
         self.assertEqual(state['resources'][key], '2')
 
-    def test_unplanned_knowledge_steps_keep_each_prior_claim_for_fact_settlement(self):
+    def test_unplanned_knowledge_carries_the_prior_claim_into_fact_settlement(self):
+        """Both shapes of an unplanned knowledge step: an extra delta chain and a planned row whose
+        reconciled `actual` supplies the claim — each keeps the prior claim as `before` when settling."""
         settled = self.reconcile([
             extra('knowledge', 'shen:secret', None, 'hinted', claim='先发现封条有异。'),
             extra('knowledge', 'shen:secret', 'suspected', 'confirmed', claim='核对后确认来源。')])
@@ -88,7 +90,6 @@ class UnplannedSettlementTests(unittest.TestCase):
         self.assertEqual(state['knowledge']['shen:secret']['claim'], '核对后确认来源。')
         self.assertEqual(state['knowledge']['shen:secret']['stance'], 'knows')
 
-    def test_unplanned_knowledge_reads_the_claim_from_the_planned_event(self):
         row = empty_row()
         row['knowledge'] = [{'who': 'shen', 'topic': 'secret', 'from': None,
                              'to': 'hinted', 'reason': '先发现一处疑点。'}]
@@ -127,7 +128,9 @@ class UnplannedSettlementTests(unittest.TestCase):
         self.assertEqual(spatial.location(state, 'shen'), 'yard')
         self.assertEqual(spatial.location(state, 'box'), 'yard')
 
-    def test_notes_missing_values_and_unsupported_kinds_are_explicitly_rejected(self):
+    def test_malformed_unplanned_deltas_are_rejected_with_their_own_criterion(self):
+        """Malformed notes, missing values, unsupported kinds, negative resources, unknown places and
+        missing evidence are all refused — no delta settles and no state event is emitted."""
         cases = [{'kind': 'knowledge', 'key': 'shen:secret', 'change': '知晓秘密。', 'reason': '发生了变化。'},
                  extra('knowledge', 'shen:secret', None, None),
                  extra('knowledge', 'shen:secret', None, {'status': 'confirmed'}),
@@ -141,21 +144,18 @@ class UnplannedSettlementTests(unittest.TestCase):
                 settled = self.reconcile([entry])
                 self.assertIn('drift_unplanned', {f['criterion'] for f in settled['findings']})
                 self.assertEqual(settled['events'], [])
+        for entry, criterion in ((extra('resources', '["shen","车费","元"]', 4, -1), 'drift_resource'),
+                                 (extra('places', 'shen', 'office', 'missing-place'), 'drift_place')):
+            with self.subTest(criterion=criterion):
+                self.assertIn(criterion, {f['criterion'] for f in self.reconcile([entry])['findings']})
+        missing = extra('knowledge', 'shen:secret', None, 'confirmed')
+        missing.pop('evidence')
+        self.assertIn('drift_evidence', {f['criterion'] for f in self.reconcile([missing])['findings']})
 
     def test_the_second_unplanned_delta_must_read_the_first_delta_state(self):
         key = '["shen","车费","元"]'
         settled = self.reconcile([extra('resources', key, 4, 7), extra('resources', key, 4, 8)])
         self.assertIn('drift_before', {f['criterion'] for f in settled['findings']})
-
-    def test_negative_resources_unknown_places_and_missing_evidence_are_rejected(self):
-        cases = [(extra('resources', '["shen","车费","元"]', 4, -1), 'drift_resource'),
-                 (extra('places', 'shen', 'office', 'missing-place'), 'drift_place')]
-        missing = extra('knowledge', 'shen:secret', None, 'confirmed')
-        missing.pop('evidence')
-        cases.append((missing, 'drift_evidence'))
-        for entry, criterion in cases:
-            with self.subTest(criterion=criterion):
-                self.assertIn(criterion, {f['criterion'] for f in self.reconcile([entry])['findings']})
 
     def test_unplanned_evidence_is_checked_by_the_existing_fact_reducer(self):
         entry = extra('knowledge', 'shen:secret', None, 'confirmed')

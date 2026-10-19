@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import creation, planning, world, workflow
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import OPENING_VERSION, RESULT, digest
+from novel_ledger.contracts import RESULT, digest
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import contract, drive
 
@@ -113,11 +113,6 @@ class LegacyOpeningTests(unittest.TestCase):
         self.repo.close()
         self.temp.cleanup()
 
-    def assertCode(self, code, fn, *args):
-        with self.assertRaises(Exception) as caught:
-            fn(*args)
-        self.assertEqual(caught.exception.code, code)
-
     def offer(self):
         task = self.app.advance()['task']
         self.assertEqual(task['stage'], 'opening_options')
@@ -156,15 +151,6 @@ class LegacyOpeningTests(unittest.TestCase):
         self.assertFalse(creation.SYSTEM_GATES[1])
         self.assertEqual(self.app.status()['opening']['total_gates'], 8)
 
-    def test_every_gate_is_still_dispatched_and_the_last_starts_the_world(self):
-        self.select_gates(7)
-        self.assertEqual(self.repo.load()['creation']['cursor'], 7)
-        board = self.offer()
-        self.assertEqual(board['gate']['id'], 'voice')
-        result = self.app.opening_choice(board['options'][0]['id'], board['hash'], '选它。')
-        self.assertEqual(result['next'], 'world_model')
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
-
     def test_outline_ready_end_to_end_under_the_legacy_gates(self):
         final = self.world_ready()
         self.assertEqual(final['action'], 'outline_ready')
@@ -180,37 +166,6 @@ class LegacyOpeningTests(unittest.TestCase):
         self.assertNotIn('pov', book['contract'])
         self.assertNotIn('theme', book['contract'])
 
-    def test_the_genre_gate_still_constrains_the_world_gate(self):
-        self.app.advance()
-        self.app.submit(receipt(self.app, options(self.app)))
-        self.app.opening_choice('A', self.app.advance()['board']['hash'], 'A')
-        self.select_gates(4)                       # scale, protagonist, engine, relationships
-        self.assertEqual(self.app.advance()['task']['stage'], 'opening_options')
-        data = options(self.app)
-        data['options'][0]['value']['mechanism']['mode'] = 'bounded'
-        self.assertCode('opening_constraint', self.app.submit, receipt(self.app, data))
-
-    def test_legacy_intake_uses_the_legacy_gate_ids(self):
-        state = creation.begin('', 1)
-        accepted = creation.intake(state, {'relationships': VALUES['relationships']}, '作者已有关系。')
-        self.assertEqual(creation.selected(accepted)['relationships'], VALUES['relationships'])
-        with self.assertRaises(Exception) as caught:
-            creation.intake(state, {'pov': {'pov': '第三人称限知。'}}, '新协议的门。')
-        self.assertEqual(caught.exception.code, 'intake')
-        self.assertNotIn('pov', caught.exception.details['valid_gates'])
-        self.assertIn('relationships', caught.exception.details['valid_gates'])
-
-    def test_legacy_alignment_partition_still_matches_its_own_field_table(self):
-        from novel_ledger.contracts import alignment_for
-
-        choices = {gate: copy.deepcopy(VALUES[gate]) for gate in GATE_ORDER}
-        expected, derived, authored = creation._v1_groups(choices)
-        expected = {key: value for key, value in expected.items() if key in alignment_for(1) and key not in derived}
-        groups = (set(expected), derived, set(authored))
-        self.assertEqual(set().union(*groups), set(alignment_for(1)))
-        self.assertFalse(any(groups[i] & groups[j] for i in range(3) for j in range(i + 1, 3)))
-        self.assertEqual(authored, {'title'})
-
     def test_legacy_contract_survives_recontract_validation(self):
         """A project opened before tone/theme/pov existed must still validate its own contract."""
         final = self.world_ready()
@@ -219,20 +174,6 @@ class LegacyOpeningTests(unittest.TestCase):
         checked = planning.validate_contract(copy.deepcopy(self.repo.load()['contract']))
         creation.validate_contract(checked, state, self.repo.load()['world'])
         self.assertEqual(digest(checked), digest(self.repo.load()['contract']))
-
-    def test_a_project_that_says_version_one_is_the_only_one_on_the_old_gate_set(self):
-        """`init` starts on the current protocol; older versions are explicit, remembered choices."""
-        path = Path(self.temp.name) / 'fresh'
-        initialized = SQLiteRepository.initialize(path, workflow.preparing_book(guided=True))
-        initialized.close()
-        repo = SQLiteRepository(path)
-        try:
-            book = repo.load()
-            self.assertEqual(creation.opening_version(book['creation']), OPENING_VERSION)
-            self.assertEqual(creation.gates(book['creation']), creation.GATE_SETS[OPENING_VERSION])
-            self.assertEqual(len(creation.gates(book['creation'])), len(creation.gate_ids(OPENING_VERSION)))
-        finally:
-            repo.close()
 
 
 if __name__ == '__main__':

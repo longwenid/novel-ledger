@@ -155,7 +155,7 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(memory['interpretations']['fear']['evidence'][0]['quote'], '要求先核对退件人的名字再开箱。')
         self.assertIn('作品理解', bookpage.render(self.repo))
 
-    def test_a_malformed_memory_candidate_is_refused_at_submission(self):
+    def test_a_malformed_memory_candidate_is_refused_and_rolls_the_submission_back(self):
         drive(self.app, self.owner, until='write')
         candidate = response(self.app)
         candidate['data']['understanding'] = [{'id': 'fear', 'kind': 'character'}]
@@ -164,6 +164,22 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'understanding')
         self.assertEqual(self.repo.headers('main'), [])
         self.assertIsNone(self.repo.load()['draft'])
+        # A founded candidate whose quote is forged is refused the same way, atomically.
+        first = response(self.app)
+        first['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]
+        self.app.submit(first)
+        drive(self.app, self.owner, until='write')
+        self.app.revise(1, '改写第一章。', self.owner, changes={'mode': 'expression'})
+        self.app.advance(owner=self.owner)
+        candidate = response(self.app)
+        candidate['data']['understanding'] = [interpretation(quote='伪造的原文。')]
+        root = self.repo.get('book')
+        rows = self.repo.headers(self.repo.load()['branch'])
+        with self.assertRaises(Error):
+            self.app.submit(candidate)
+        self.assertEqual(self.repo.get('book'), root)
+        self.assertEqual(self.repo.headers(self.repo.load()['branch']), rows)
+        self.assertEqual(self.repo.pending()['id'], candidate['task_id'])
 
     def test_context_resolves_opaque_scene_ids_from_accepted_versions(self):
         handoff = drive(self.app, self.owner, until='chapter_outline')
@@ -215,7 +231,9 @@ class WorkbenchTests(unittest.TestCase):
         self.assertTrue(self.app.enable_workbench('同一要求。', self.owner)['already_enabled'])
         self.assertEqual(root, self.repo.get('book'))
 
-    def test_revision_memory_is_invalidated_and_discard_restores_it(self):
+    def test_revision_memory_is_invalidated_and_restored_only_from_unchanged_sources(self):
+        """A revision discards the memory built on the rewritten range; a discard restores it, and a
+        rewritten chapter's memory stays gone while the untouched chapter's memory survives."""
         drive(self.app, self.owner, until='write')
         candidate = response(self.app)
         candidate['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]
@@ -227,25 +245,6 @@ class WorkbenchTests(unittest.TestCase):
         self.app.discard(self.owner)
         self.assertEqual(self.repo.load()['understanding'], memory)
 
-    def test_a_rejected_memory_candidate_rolls_the_submission_back(self):
-        drive(self.app, self.owner, until='write')
-        first = response(self.app)
-        first['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]
-        self.app.submit(first)
-        drive(self.app, self.owner, until='write')
-        self.app.revise(1, '改写第一章。', self.owner, changes={'mode': 'expression'})
-        self.app.advance(owner=self.owner)
-        candidate = response(self.app)
-        candidate['data']['understanding'] = [interpretation(quote='伪造的原文。')]
-        root = self.repo.get('book')
-        rows = self.repo.headers(self.repo.load()['branch'])
-        with self.assertRaises(Error):
-            self.app.submit(candidate)
-        self.assertEqual(self.repo.get('book'), root)
-        self.assertEqual(self.repo.headers(self.repo.load()['branch']), rows)
-        self.assertEqual(self.repo.pending()['id'], candidate['task_id'])
-
-    def test_unchanged_suffix_restores_memory_but_changed_source_does_not(self):
         drive(self.app, self.owner, until='write')
         first = response(self.app)
         first['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]

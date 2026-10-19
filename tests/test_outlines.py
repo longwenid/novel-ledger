@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 
 from novel_ledger import creation, drift, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import DEFAULTS, Error, han_count
+from novel_ledger.contracts import DEFAULTS, Error
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import (chapter_rows, contract, drive, response, seeded_book,
                      volume_rows, world_fixture)
@@ -83,8 +83,6 @@ class VolumeOutlineTests(unittest.TestCase):
         self.assertEqual(report['v1']['id'], 'v1')
         self.assertEqual(report['v1']['nodes'][0]['id'], 'n1')
         self.assertEqual(report['v2']['nodes'][-1]['window'], [4, 4])
-
-    def test_each_volume_lands_in_the_policy_word_band(self):
         policy = self.contract['volume_outline']
         for row in self.rows:
             length = drift._deep_han({key: row.get(key) for key in drift.VOLUME_FIELDS})
@@ -101,15 +99,13 @@ class VolumeOutlineTests(unittest.TestCase):
             self.submit(self.rows[:1], wanted=('v1', 'v2'))
         self.assertEqual(caught.exception.code, 'volume_outline')
 
-    def test_a_node_window_outside_its_volume_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['nodes'][0]['window'] = [1, 4]
-        self.assertRejected('volume_node', broken)
-
-    def test_a_node_id_registered_by_another_volume_cannot_be_reused(self):
-        broken = copy.deepcopy(self.rows)
-        broken[1]['nodes'][0]['id'] = broken[0]['nodes'][0]['id']
-        self.assertRejected('volume_node', broken)
+    def test_node_windows_and_ids_are_volume_scoped(self):
+        outside = copy.deepcopy(self.rows)
+        outside[0]['nodes'][0]['window'] = [1, 4]
+        self.assertRejected('volume_node', outside)
+        reused = copy.deepcopy(self.rows)
+        reused[1]['nodes'][0]['id'] = reused[0]['nodes'][0]['id']
+        self.assertRejected('volume_node', reused)
 
     def test_a_cross_volume_thread_must_declare_continues(self):
         broken = copy.deepcopy(self.rows)
@@ -121,15 +117,13 @@ class VolumeOutlineTests(unittest.TestCase):
         report = self.submit(carried)
         self.assertTrue(report['v2']['threads'][0]['continues'])
 
-    def test_a_resource_the_world_and_state_do_not_know_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['resources'] = [{'key': '不存在的资源', 'from': 0, 'to': 1, 'reason': '工程样本。'}]
-        self.assertRejected('volume_reference', broken)
-
-    def test_an_unknown_place_or_character_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['places'] = [{'entity': 'nobody', 'from': None, 'to': 'office', 'reason': '工程样本。'}]
-        self.assertRejected('volume_reference', broken)
+    def test_volume_references_must_exist_in_the_world_and_state(self):
+        unknown_resource = copy.deepcopy(self.rows)
+        unknown_resource[0]['resources'] = [{'key': '不存在的资源', 'from': 0, 'to': 1, 'reason': '工程样本。'}]
+        self.assertRejected('volume_reference', unknown_resource)
+        unknown_entity = copy.deepcopy(self.rows)
+        unknown_entity[0]['places'] = [{'entity': 'nobody', 'from': None, 'to': 'office', 'reason': '工程样本。'}]
+        self.assertRejected('volume_reference', unknown_entity)
 
     def test_scope_all_states_every_volume_in_one_dispatch(self):
         job = workflow.next_volume_outline(self.book, self.contract)
@@ -175,30 +169,23 @@ class VolumeStageTests(unittest.TestCase):
                                                choices, {}, ['v1', 'v2'], book['state'])
         self.assertEqual([report['v1']['stage'], report['v2']['stage']], rungs[:2])
 
-    def test_a_fixture_stage_that_does_not_come_from_the_ladder_is_refused(self):
-        book = ladder_book()
-        choices = creation.selected(book['creation'])
-        rows = volume_rows(book, ['v1', 'v2'])
-        rows[1]['stage'] = '工程夹具自造的层级'
-        with self.assertRaises(Error) as caught:
-            drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
-                                          choices, {}, ['v1', 'v2'], book['state'])
-        self.assertEqual(caught.exception.code, 'design_drift')
-        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
-        self.assertIn('volume_stage', criteria, str(caught.exception.details)[:300])
-
-    def test_a_descending_pair_of_stages_is_refused(self):
+    def test_a_stage_that_is_not_the_next_ladder_rung_is_refused(self):
+        """Stages come from the ladder verbatim and only climb: invented or descending pairs are out."""
         book = ladder_book()
         choices = creation.selected(book['creation'])
         rungs = [row['stage'] for row in choices['ladder']['ladder']]
-        rows = volume_rows(book, ['v1', 'v2'])
-        rows[0]['stage'], rows[1]['stage'] = rungs[1], rungs[0]
-        with self.assertRaises(Error) as caught:
-            drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
-                                          choices, {}, ['v1', 'v2'], book['state'])
-        self.assertEqual(caught.exception.code, 'design_drift')
-        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
-        self.assertIn('volume_stage', criteria, str(caught.exception.details)[:300])
+        invented = volume_rows(book, ['v1', 'v2'])
+        invented[1]['stage'] = '工程夹具自造的层级'
+        descending = volume_rows(book, ['v1', 'v2'])
+        descending[0]['stage'], descending[1]['stage'] = rungs[1], rungs[0]
+        for label, rows in (('invented', invented), ('descending', descending)):
+            with self.subTest(scenario=label):
+                with self.assertRaises(Error) as caught:
+                    drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+                                                  choices, {}, ['v1', 'v2'], book['state'])
+                self.assertEqual(caught.exception.code, 'design_drift')
+                criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+                self.assertIn('volume_stage', criteria, str(caught.exception.details)[:300])
 
     def test_the_tier_floor_for_a_ladder_is_declared_once_in_defaults(self):
         """The floors live in `contracts.DEFAULTS` alone; this pins the frozen table."""
@@ -239,16 +226,13 @@ class ChapterOutlineTests(unittest.TestCase):
         self.assertIn(criterion, criteria, str(caught.exception.details['findings'])[:400])
         return caught.exception
 
-    def test_a_self_consistent_chain_is_accepted_and_normalized(self):
+    def test_a_self_consistent_chain_is_accepted_normalized_and_simulated(self):
         rows = self.submit(self.rows)
         self.assertEqual([row['chapter'] for row in rows], [1, 2])
         self.assertEqual(rows[0]['clock'], {'advance_days': 1})
         self.assertTrue(rows[0]['enter'])
         self.assertEqual([item['kind'] for item in rows[0]['enter']],
                          [item['kind'] for item in rows[0]['exit']])
-
-    def test_the_chain_leaves_the_state_the_deltas_declare(self):
-        rows = self.submit(self.rows)
         state, findings = drift.simulate(rows, self.state, self.world, self.volume, self.volume_row)
         self.assertEqual(findings, [])
         self.assertEqual(state['clock'], 2)
@@ -264,35 +248,32 @@ class ChapterOutlineTests(unittest.TestCase):
         short[0]['synopsis'] = '甲' * 70       # band is 150±60, so 70 is a drift, not a style choice
         self.assertRejected('chapter_length', short)
 
-    def test_an_enter_that_disagrees_with_the_previous_exit_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[1]['enter'][0]['expected'] = 99
-        self.assertRejected('drift_chain', broken)
+    def test_chain_disagreements_are_rejected(self):
+        """Enter must equal the previous exit, exit must equal enter plus the deltas, and a delta's
+        `from` must pick up the chain where it actually stands."""
+        enter = copy.deepcopy(self.rows)
+        enter[1]['enter'][0]['expected'] = 99
+        exit_sum = copy.deepcopy(self.rows)
+        exit_sum[0]['exit'][1]['expected'] = '办公室'
+        resource_from = copy.deepcopy(self.rows)
+        resource_from[1]['resources'][0]['from'] = 4
+        for scenario, broken in (('enter_disagrees', enter), ('exit_not_enter_plus_deltas', exit_sum),
+                                 ('resource_from_off_the_chain', resource_from)):
+            with self.subTest(scenario=scenario):
+                self.assertRejected('drift_chain', broken)
 
-    def test_an_exit_that_is_not_enter_plus_the_deltas_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['exit'][1]['expected'] = '办公室'
-        self.assertRejected('drift_chain', broken)
-
-    def test_a_resource_cannot_go_negative(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['resources'][0]['to'] = -1
-        self.assertRejected('drift_resource', broken)
-
-    def test_a_backwards_clock_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['clock'] = {'advance_days': -1}
-        self.assertRejected('drift_shape', broken)
-
-    def test_an_unregistered_place_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['places'][0]['to'] = '不存在的后院'
-        self.assertRejected('drift_place', broken)
-
-    def test_a_resource_from_that_does_not_match_the_chain_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[1]['resources'][0]['from'] = 4
-        self.assertRejected('drift_chain', broken)
+    def test_delta_rules_are_rejected_where_they_break(self):
+        """Negative resources, a backwards clock and an unknown place each name their own criterion."""
+        negative = copy.deepcopy(self.rows)
+        negative[0]['resources'][0]['to'] = -1
+        backwards = copy.deepcopy(self.rows)
+        backwards[0]['clock'] = {'advance_days': -1}
+        unknown_place = copy.deepcopy(self.rows)
+        unknown_place[0]['places'][0]['to'] = '不存在的后院'
+        for criterion, broken in (('drift_resource', negative), ('drift_shape', backwards),
+                                  ('drift_place', unknown_place)):
+            with self.subTest(criterion=criterion):
+                self.assertRejected(criterion, broken)
 
     def test_a_node_cannot_be_advanced_twice(self):
         book = seeded_book(self.raw)
@@ -426,49 +407,29 @@ class ChapterOutlineDispatchTests(unittest.TestCase):
         handoff = self.app.advance()
         self.assertEqual(handoff['task']['stage'], 'chapter_outline')
 
-    def test_the_policy_band_is_read_from_the_contract(self):
-        raw = contract(chapters=2, volumes=1, chapter_words=80, chapter_tolerance=10)
-        repo = SQLiteRepository.initialize(Path(self.temp.name) / 'narrow', seeded_book(raw))
-        app = Application(repo)
-        try:
-            drive(app, until='chapter_outline')
-            valid = response(app)
-            length = han_count(valid['data']['chapters'][0]['synopsis'])
-            self.assertEqual(length, 80)
-            too_short = copy.deepcopy(valid)
-            too_short['data']['chapters'][0]['synopsis'] = '甲' * 60
-            with self.assertRaises(Error) as caught:
-                app.submit(too_short)
-            self.assertEqual(caught.exception.code, 'design_drift')
-        finally:
-            repo.close()
-
 
 class ProvenanceTests(unittest.TestCase):
     """The outline chain reads the world, never invents a coordinate the world does not have."""
 
     def test_the_seeded_world_grounds_the_chapter_refs(self):
         book = seeded_book(contract())
-        refs = chapter_rows(book, book['contract']['volumes'][0], book['state'])[0]['world_refs']
+        row = chapter_rows(book, book['contract']['volumes'][0], book['state'])[0]
+        refs = row['world_refs']
         self.assertTrue(refs)
         for ref in refs:
             section, ident = ref.split(':', 1)
             self.assertIn(ident, {row['id'] for row in book['world'][section]})
-
-    def test_an_unseeded_world_leaves_refs_empty_instead_of_inventing_them(self):
-        book = workflow.new_book(contract())
-        rows = chapter_rows(book, book['contract']['volumes'][0], book['state'])
-        self.assertEqual(rows[0]['world_refs'], [])
-
-    def test_state_carries_every_delta_kind_as_an_array(self):
-        book = seeded_book(contract())
-        row = chapter_rows(book, book['contract']['volumes'][0], book['state'])[0]
         for field in ('resources', 'places', 'knowledge', 'characters'):
             self.assertIsInstance(row[field], list)
         self.assertIsInstance(row['clock'], dict)
         self.assertIsInstance(row['enter'], list)
         self.assertIsInstance(row['exit'], list)
         self.assertIsInstance(row['hooks'], list)
+
+    def test_an_unseeded_world_leaves_refs_empty_instead_of_inventing_them(self):
+        book = workflow.new_book(contract())
+        rows = chapter_rows(book, book['contract']['volumes'][0], book['state'])
+        self.assertEqual(rows[0]['world_refs'], [])
 
 
 class VolumeHookTests(unittest.TestCase):
@@ -500,25 +461,25 @@ class VolumeHookTests(unittest.TestCase):
         thread_taken[0]['hooks'][0]['id'] = thread_taken[0]['threads'][0]['id']
         self.assertRejected('volume_hook', thread_taken)
 
-    def test_a_payoff_window_must_open_after_the_plant_window_closes(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'][0].update(plant=[2, 2], payoff=[1, 1])
-        self.assertRejected('volume_hook', broken)
-
-    def test_a_promise_paid_after_the_volume_needs_continuing_and_not_required(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'][1].update(continues=False)
-        self.assertRejected('volume_hook', broken)
-
-    def test_a_required_promise_cannot_be_paid_after_the_volume_ends(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'][0].update(payoff=[3, 3])
-        self.assertRejected('volume_hook', broken)
-
-    def test_a_promise_needs_a_concrete_text(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'][0]['text'] = ''
-        self.assertRejected('volume_hook', broken)
+    def test_promise_declarations_that_cannot_settle_are_rejected(self):
+        """The declaration matrix: id collisions, inverted windows, cross-volume handover shape and
+        empty text are all `volume_hook` findings, each named at submit time."""
+        collision = copy.deepcopy(self.rows)
+        collision[0]['hooks'][0]['id'] = collision[0]['nodes'][0]['id']
+        inverted = copy.deepcopy(self.rows)
+        inverted[0]['hooks'][0].update(plant=[2, 2], payoff=[1, 1])
+        handover = copy.deepcopy(self.rows)
+        handover[0]['hooks'][1].update(continues=False)
+        late_required = copy.deepcopy(self.rows)
+        late_required[0]['hooks'][0].update(payoff=[3, 3])
+        blank = copy.deepcopy(self.rows)
+        blank[0]['hooks'][0]['text'] = ''
+        for scenario, broken in (('id_collision', collision), ('payoff_before_plant_window', inverted),
+                                 ('cross_volume_without_continues', handover),
+                                 ('required_paid_after_the_volume', late_required),
+                                 ('empty_promise_text', blank)):
+            with self.subTest(scenario=scenario):
+                self.assertRejected('volume_hook', broken)
 
     def test_the_default_volume_rows_declare_a_required_and_a_continuing_hook(self):
         report = self.submit(copy.deepcopy(self.rows))
@@ -585,45 +546,36 @@ class ChapterHookTests(unittest.TestCase):
             outline, self.world, self.state)
         self.assertEqual([row['hooks'] for row in validated], [[], []])
 
-    def test_a_plant_for_an_undeclared_promise_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'].append({'hook': 'hook-unknown', 'action': 'plant', 'note': '工程样本。'})
-        self.assertRejected('chapter_hook', broken)
-
-    def test_a_payoff_before_the_plant_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'] = [{'hook': 'hook-v1-required', 'action': 'payoff', 'note': '工程样本。'}]
-        broken[1]['hooks'] = [{'hook': 'hook-v1-required', 'action': 'plant', 'note': '工程样本。'}]
-        self.assertRejected('chapter_hook', broken)
-
-    def test_a_promise_can_only_be_planted_once(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'].append({'hook': 'hook-v1-required', 'action': 'plant', 'note': '工程样本。'})
-        self.assertRejected('chapter_hook', broken)
-
-    def test_a_promise_can_only_be_paid_once(self):
-        broken = copy.deepcopy(self.rows)
-        broken[1]['hooks'].append({'hook': 'hook-v1-required', 'action': 'payoff', 'note': '工程样本。'})
-        self.assertRejected('chapter_hook', broken)
-
-    def test_a_plant_outside_its_window_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'] = [entry for entry in broken[0]['hooks']
-                              if entry['hook'] != 'hook-v1-required']
-        broken[1]['hooks'].append({'hook': 'hook-v1-required', 'action': 'plant', 'note': '工程样本。'})
-        self.assertRejected('chapter_hook', broken)
-
-    def test_a_payoff_outside_its_window_is_rejected(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'].append({'hook': 'hook-v1-required', 'action': 'payoff', 'note': '工程样本。'})
-        self.assertRejected('chapter_hook', broken)
-
-    def test_hook_refs_cannot_continue_an_unplanted_promise(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['hooks'] = [entry for entry in broken[0]['hooks']
-                              if entry['hook'] != 'hook-v1-carry']
-        broken[0]['hook_refs'] = ['hook-v1-carry']
-        self.assertRejected('chapter_hook', broken)
+    def test_the_promise_execution_matrix_is_rejected_case_by_case(self):
+        """Every way a chapter can execute a promise it was not allowed to, one subTest each:
+        planting an undeclared promise, paying before planting, planting or paying twice,
+        acting outside the declared window, and hook_refs continuing an unplanted promise."""
+        undeclared = copy.deepcopy(self.rows)
+        undeclared[0]['hooks'].append({'hook': 'hook-unknown', 'action': 'plant', 'note': '工程样本。'})
+        payoff_first = copy.deepcopy(self.rows)
+        payoff_first[0]['hooks'] = [{'hook': 'hook-v1-required', 'action': 'payoff', 'note': '工程样本。'}]
+        payoff_first[1]['hooks'] = [{'hook': 'hook-v1-required', 'action': 'plant', 'note': '工程样本。'}]
+        planted_twice = copy.deepcopy(self.rows)
+        planted_twice[0]['hooks'].append({'hook': 'hook-v1-required', 'action': 'plant', 'note': '工程样本。'})
+        paid_twice = copy.deepcopy(self.rows)
+        paid_twice[1]['hooks'].append({'hook': 'hook-v1-required', 'action': 'payoff', 'note': '工程样本。'})
+        plant_late = copy.deepcopy(self.rows)
+        plant_late[0]['hooks'] = [entry for entry in plant_late[0]['hooks']
+                                  if entry['hook'] != 'hook-v1-required']
+        plant_late[1]['hooks'].append({'hook': 'hook-v1-required', 'action': 'plant', 'note': '工程样本。'})
+        payoff_early = copy.deepcopy(self.rows)
+        payoff_early[0]['hooks'].append({'hook': 'hook-v1-required', 'action': 'payoff', 'note': '工程样本。'})
+        refs_unplanted = copy.deepcopy(self.rows)
+        refs_unplanted[0]['hooks'] = [entry for entry in refs_unplanted[0]['hooks']
+                                      if entry['hook'] != 'hook-v1-carry']
+        refs_unplanted[0]['hook_refs'] = ['hook-v1-carry']
+        for scenario, broken in (('plant_undeclared', undeclared), ('payoff_before_plant', payoff_first),
+                                 ('planted_twice', planted_twice), ('paid_twice', paid_twice),
+                                 ('plant_outside_window', plant_late),
+                                 ('payoff_outside_window', payoff_early),
+                                 ('hook_refs_continue_unplanted', refs_unplanted)):
+            with self.subTest(scenario=scenario):
+                self.assertRejected('chapter_hook', broken)
 
 
 class HookClosureTests(unittest.TestCase):

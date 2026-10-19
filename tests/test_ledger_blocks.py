@@ -81,21 +81,18 @@ class LedgerFlowTests(unittest.TestCase):
         self.assertEqual(caught.exception.details['computed'], 6)
         self.assertIsNone(self.repo.load()['volumes_outline'].get('v1'))
 
-    def test_a_chapter_outline_with_balanced_arithmetic_is_accepted(self):
+    def test_chapter_outline_arithmetic_is_proved_at_submit(self):
         drive(self.app, until='chapter_outline')
-        result = response(self.app)
-        result['data']['ledger'] = [{'key': '垫付总数', 'value': 6, 'sum_of': [2, 4]}]
-        self.app.submit(result)
-        self.assertEqual(sorted(self.repo.load()['chapter_outlines']), ['v1'])
-
-    def test_bad_arithmetic_in_a_chapter_outline_is_rejected_at_submit(self):
-        drive(self.app, until='chapter_outline')
-        result = response(self.app)
-        result['data']['ledger'] = [{'key': '垫付总数', 'value': 6, 'product_of': [2, 4]}]
+        bad = response(self.app)
+        bad['data']['ledger'] = [{'key': '垫付总数', 'value': 6, 'product_of': [2, 4]}]
         with self.assertRaises(Error) as caught:
-            self.app.submit(result)
+            self.app.submit(bad)
         self.assertEqual(caught.exception.code, 'ledger')
         self.assertEqual(self.repo.load()['chapter_outlines'], {})
+        good = response(self.app)
+        good['data']['ledger'] = [{'key': '垫付总数', 'value': 6, 'sum_of': [2, 4]}]
+        self.app.submit(good)
+        self.assertEqual(sorted(self.repo.load()['chapter_outlines']), ['v1'])
 
 
 if __name__ == '__main__':

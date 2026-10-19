@@ -21,35 +21,30 @@ class StorageBoundaryTests(unittest.TestCase):
         self.repo.close()
         self.temp.cleanup()
 
-    def test_cancellation_only_changes_rows_and_returns_the_task_id(self):
-        task = self.repo.add_task({'stage': 'storage-probe'})
-        artifact = self.project / 'work' / task['id'] / 'result.template.json'
-        artifact.parent.mkdir(parents=True)
-        artifact.write_text('worker draft', encoding='utf-8')
-
-        with self.repo.transaction():
-            self.assertEqual(self.repo.cancel_pending('cancel probe'), task['id'])
-
-        self.assertEqual(self.repo.task(task['id'])['status'], 'cancelled')
-        self.assertEqual(artifact.read_text(encoding='utf-8'), 'worker draft')
-        logged = self.repo.db.execute("SELECT value FROM journal WHERE action='cancel'").fetchone()
-        self.assertEqual(json.loads(logged['value']), {'reason': 'cancel probe', 'task': task['id']})
-        self.assertIsNone(self.repo.cancel_pending('nothing left'))
-
-    def test_cancellation_rollback_keeps_task_and_worker_files(self):
+    def test_cancellation_commits_rows_and_rollback_keeps_task_and_worker_files(self):
         task = self.repo.add_task({'stage': 'storage-probe'})
         artifact = self.project / 'work' / task['id'] / 'result.json'
         artifact.parent.mkdir(parents=True)
         artifact.write_text('submitted receipt', encoding='utf-8')
 
+        with self.repo.transaction():
+            self.assertEqual(self.repo.cancel_pending('cancel probe'), task['id'])
+        self.assertEqual(self.repo.task(task['id'])['status'], 'cancelled')
+        self.assertEqual(artifact.read_text(encoding='utf-8'), 'submitted receipt')
+        logged = self.repo.db.execute("SELECT value FROM journal WHERE action='cancel'").fetchone()
+        self.assertEqual(json.loads(logged['value']), {'reason': 'cancel probe', 'task': task['id']})
+        self.assertIsNone(self.repo.cancel_pending('nothing left'))
+
+        task = self.repo.add_task({'stage': 'storage-probe-2'})
+        journal_before = self.repo.db.execute("SELECT count(*) FROM journal WHERE action='cancel'").fetchone()[0]
         with self.assertRaisesRegex(RuntimeError, 'abort'):
             with self.repo.transaction():
                 self.repo.cancel_pending('rolled back')
                 raise RuntimeError('abort')
-
         self.assertEqual(self.repo.pending()['id'], task['id'])
         self.assertEqual(artifact.read_text(encoding='utf-8'), 'submitted receipt')
-        self.assertEqual(self.repo.db.execute("SELECT count(*) FROM journal WHERE action='cancel'").fetchone()[0], 0)
+        self.assertEqual(self.repo.db.execute("SELECT count(*) FROM journal WHERE action='cancel'").fetchone()[0],
+                         journal_before)
 
     def test_after_commit_runs_in_order_after_data_is_visible_to_another_connection(self):
         calls = []
@@ -69,12 +64,8 @@ class StorageBoundaryTests(unittest.TestCase):
             self.assertEqual(calls, [])
         self.assertEqual(calls, ['visible', 'second'])
 
-    def test_after_commit_runs_immediately_outside_a_transaction(self):
-        calls = []
-        self.repo.after_commit(lambda: calls.append('now'))
-        self.assertEqual(calls, ['now'])
-
-    def test_preview_discards_callbacks_and_database_changes(self):
+    def test_discarded_transactions_discard_callbacks_and_database_changes(self):
+        """Both a preview and a failure discard the staged rows and the callbacks they registered."""
         calls = []
         with self.repo.transaction(preview=True):
             self.repo.put('preview', True)
@@ -83,9 +74,6 @@ class StorageBoundaryTests(unittest.TestCase):
         with self.repo.transaction():
             self.repo.put('real', True)
         self.assertEqual(calls, [])
-
-    def test_failure_discards_callbacks_and_database_changes(self):
-        calls = []
         with self.assertRaisesRegex(RuntimeError, 'abort'):
             with self.repo.transaction():
                 self.repo.put('failed', True)
@@ -110,6 +98,7 @@ class StorageBoundaryTests(unittest.TestCase):
             self.assertIs(observer.get('committed'), True)
         finally:
             observer.close()
+        # Outside a transaction a callback runs immediately.
         calls = []
         self.repo.after_commit(lambda: calls.append('still outside'))
         self.assertEqual(calls, ['still outside'])

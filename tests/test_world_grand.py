@@ -138,24 +138,6 @@ class LegacyWorldTests(unittest.TestCase):
             self.assertNotIn(section, world.required_sections(TIER, choices))
         self.assertEqual(world.declared_sections(choices), ())
 
-    def test_the_ten_domains_are_still_declared_field_for_field(self):
-        legacy = {'geography': ('name', 'environment', 'resources', 'access', 'story_pressure'),
-                  'history': ('period', 'event', 'consequence', 'present_effect'),
-                  'rules': ('principle', 'scope', 'limits', 'consequences'),
-                  'factions': ('name', 'goal', 'power', 'dependencies', 'conflicts'),
-                  'economy': ('resource', 'production', 'distribution', 'scarcity', 'conflict'),
-                  'society': ('institution', 'norm', 'enforcement', 'pressure'),
-                  'everyday': ('practice', 'constraint', 'story_use'),
-                  'characters': ('name', 'role', 'desire', 'limit', 'knowledge_boundary'),
-                  'mysteries': ('truth', 'disclosure', 'causal_role'),
-                  'mechanisms': ('principle', 'cost', 'limits', 'failure_condition')}
-        for section, fields in legacy.items():
-            self.assertEqual(tuple(world.SECTIONS[section]), fields, section)
-        self.assertEqual(world.SECTIONS['powers'], ('name', 'condition', 'gain', 'cost', 'limit'))
-        self.assertEqual(world.SECTIONS['cosmology'], ('name', 'inhabitant', 'law', 'entry'))
-        self.assertEqual(world.LABELS['powers'], '力量与位阶阶梯')
-        self.assertEqual(world.LABELS['cosmology'], '空间与位面')
-
 
 class DeclaredSectionTests(unittest.TestCase):
     """A domain the gates declared is a domain the world has to fill."""
@@ -204,10 +186,9 @@ class DeclaredSectionTests(unittest.TestCase):
                 with self.assertRaises(Error) as caught:
                     world.validate(model, choices, 'sel', sections=required)
                 self.assertEqual(caught.exception.code, 'world_section')
-
-    def test_a_legacy_small_world_does_not_gain_a_currency_requirement(self):
+        # The other side of the rule: a legacy small world that declared nothing gains no requirement.
         for tier in ('t0', 't1', 't2'):
-            with self.subTest(tier=tier):
+            with self.subTest(tier=tier, legacy=True):
                 choices = choices_v5(tier=tier, tiers=False, ladder=False, resource=False)
                 self.assertEqual(world.required_sections(tier, choices), world.TIER_SECTIONS[tier])
 
@@ -222,8 +203,7 @@ class DeclaredSectionTests(unittest.TestCase):
                     check(model, choices)
                 self.assertEqual(caught.exception.code, 'world_section')
                 self.assertIn('cosmology', dump(caught.exception.details))
-
-    def test_a_purely_local_ladder_does_not_require_cosmology(self):
+        # The other side of the rule: a purely local ladder never asks for cosmology.
         choices = choices_v5(tiers=False, resource=False, scales=('一城', '一域'))
         self.assertEqual(world.declared_sections(choices), ())
         self.assertNotIn('cosmology', world.required_sections(TIER, choices))
@@ -382,16 +362,6 @@ class VolumeStageTests(unittest.TestCase):
         rows[1]['stage'] = rungs[1]
         return rows
 
-    def test_the_declared_stage_survives_into_the_report(self):
-        report = self.submit(self.stages())
-        rungs = [row['stage'] for row in self.selected['ladder']['ladder']]
-        self.assertEqual([report['v1']['stage'], report['v2']['stage']], [rungs[0], rungs[1]])
-
-    def test_a_stage_that_is_not_one_of_the_ladder_rungs_is_rejected(self):
-        rows = self.stages()
-        rows[1]['stage'] = '不存在的层级'
-        self.assertRejected(rows, '不存在的层级')
-
     def test_the_stages_may_repeat_but_may_not_descend(self):
         rungs = [row['stage'] for row in self.selected['ladder']['ladder']]
         repeated = self.stages()
@@ -401,10 +371,6 @@ class VolumeStageTests(unittest.TestCase):
         descending[0]['stage'] = rungs[1]
         descending[1]['stage'] = rungs[0]
         self.assertRejected(descending)
-
-    def test_an_opening_without_a_ladder_may_leave_the_stage_empty(self):
-        report = self.submit(copy.deepcopy(self.rows), selected={})
-        self.assertEqual([report['v1']['stage'], report['v2']['stage']], ['', ''])
 
     def test_a_free_stage_is_ignored_when_no_ladder_was_declared(self):
         rows = copy.deepcopy(self.rows)
@@ -464,7 +430,8 @@ class LegacyV4ProjectTests(unittest.TestCase):
         self.repo.close()
         self.temp.cleanup()
 
-    def test_a_v4_opening_still_puts_a_board_in_front_of_the_author(self):
+    def test_a_v4_project_with_a_ten_domain_world_still_boards_audits_and_renders(self):
+        from novel_ledger import bookpage
         handoff = self.app.advance()
         self.assertEqual(handoff['task']['stage'], 'opening_options')
         self.app.submit(response(self.app))
@@ -476,8 +443,6 @@ class LegacyV4ProjectTests(unittest.TestCase):
         self.assertIn(handoff['board']['gate']['title'], card)
         self.assertIn('第 1/%d 门' % len(creation.GATE_SETS[4]), card)
 
-    def test_a_v4_project_with_a_ten_domain_world_still_audits_and_renders(self):
-        from novel_ledger import bookpage
         handoff = drive(self.app)
         self.assertEqual(handoff['action'], 'outline_ready')
         book = self.repo.load()

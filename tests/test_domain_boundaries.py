@@ -239,8 +239,7 @@ class DomainBoundaryTests(unittest.TestCase):
             envelope.validate_identity(dict(identity, credential='forge-me'))
         with self.assertRaises(Error):
             envelope.validate_identity({k: v for k, v in identity.items() if k != 'worker_env'})
-
-    def test_unknown_task_stage_is_rejected_instead_of_degrading(self):
+        # An unknown stage is refused for the same reason: never degrade into a guessed shape.
         from novel_ledger import stages
         with self.assertRaises(Error):
             stages.require_stage('not_a_stage')
@@ -461,15 +460,12 @@ class DomainBoundaryTests(unittest.TestCase):
 class HookDeclarationTests(unittest.TestCase):
     """The promise ledger's field tables are one declaration, read by templates and checks alike."""
 
-    def test_the_hook_fields_are_declared_in_the_drift_tables(self):
+    def test_the_hook_fields_are_declared_and_a_missing_array_is_a_shape_error(self):
         from novel_ledger import drift
         self.assertIn('hooks', drift.VOLUME_FIELDS)
         self.assertIn('hooks', drift.CHAPTER_FIELDS)
         self.assertIn('hook', drift.ITEM_KINDS)
         self.assertTrue(drift.HOOK_ACTIONS)
-
-    def test_a_volume_outline_without_the_hook_array_is_a_shape_error(self):
-        from novel_ledger import drift
         book = seeded_book(contract(chapters=2, volumes=1))
         rows = volume_rows(book, ['v1'])
         rows[0].pop('hooks')

@@ -58,23 +58,44 @@ class PresentationBoundaryTests(unittest.TestCase):
                           'prose': [{'chapter': 1, 'hash': 'prose'}],
                           'records': {'state': 'state'}, 'required': [], 'payload': {}, 'obligations': []}}
 
-    def test_view_and_task_files_need_only_reader_and_workspace(self):
-        rendered = bookpage.render(self.repo)
-        self.assertIn('未定名书稿', rendered)
-        self.assertNotIn('novel.sqlite3', rendered)
-        page = bookpage.write(self.repo, workspace=self.workspace)
-        self.assertEqual(Path(page['path']).read_text(encoding='utf-8'), rendered)
-        view = self.presentation.task(self.task(), baseline={'clock': 0})
-        self.assertEqual(view['project_path'], str(self.workspace.project))
-        self.assertEqual(view['host_log_path'], str(self.workspace.project / 'work/opaque-task/host.log'))
-        self.assertEqual(Path(view['prose_files'][0]['path']).read_text(encoding='utf-8'), self.repo.documents['prose'])
-        self.assertIn(str(self.workspace.project), view['commands']['submit'])
-        form = Path(view['template_path'])
-        receipt = json.loads(form.read_text(encoding='utf-8'))
-        receipt['data']['title'] = 'Worker 已填写'
-        form.write_text(json.dumps(receipt, ensure_ascii=False), encoding='utf-8')
-        self.presentation.task(self.task())
-        self.assertEqual(json.loads(form.read_text(encoding='utf-8'))['data']['title'], 'Worker 已填写')
+    def test_view_task_and_world_files_need_only_reader_and_workspace(self):
+        with self.subTest(surface='world files'):
+            model = {'selection_hash': 'frozen-selection', 'premise': '夜班仓库的退件纠纷。',
+                     'story_capacity': '调查责任怎样沿经手关系传递。'}
+            choices = [{'gate': 'genre', 'option': {'id': 'author:genre', 'title': '作者已有要求',
+                                                   'value': {'genre': '都市生活'}}, 'source': '作者指定都市生活。'}]
+            self.repo.book.update(world=model, creation={'selections': choices})
+            self.workspace.project.mkdir()
+            external = self.root / 'external-world.txt'
+            external.write_text('external world content', encoding='utf-8')
+            for name in ('world.json', 'book.html'):
+                link_or_skip(self, self.workspace.project / name, external)
+            result = self.presentation.world()
+            self.assertEqual(external.read_text(encoding='utf-8'), 'external world content')
+            self.assertFalse((self.workspace.project / 'world.json').is_symlink())
+            self.assertFalse((self.workspace.project / 'book.html').is_symlink())
+            self.assertIn(model['premise'], Path(result['html_path']).read_text(encoding='utf-8'))
+            data = json.loads(Path(result['json_path']).read_text(encoding='utf-8'))
+            self.assertEqual(data['world'], model)
+            self.assertEqual(data['choices'], choices)
+            self.assertEqual(data['model_hash'], result['model_hash'])
+        with self.subTest(surface='view and task files'):
+            rendered = bookpage.render(self.repo)
+            self.assertIn('未定名书稿', rendered)
+            self.assertNotIn('novel.sqlite3', rendered)
+            page = bookpage.write(self.repo, workspace=self.workspace)
+            self.assertEqual(Path(page['path']).read_text(encoding='utf-8'), rendered)
+            view = self.presentation.task(self.task(), baseline={'clock': 0})
+            self.assertEqual(view['project_path'], str(self.workspace.project))
+            self.assertEqual(view['host_log_path'], str(self.workspace.project / 'work/opaque-task/host.log'))
+            self.assertEqual(Path(view['prose_files'][0]['path']).read_text(encoding='utf-8'), self.repo.documents['prose'])
+            self.assertIn(str(self.workspace.project), view['commands']['submit'])
+            form = Path(view['template_path'])
+            receipt = json.loads(form.read_text(encoding='utf-8'))
+            receipt['data']['title'] = 'Worker 已填写'
+            form.write_text(json.dumps(receipt, ensure_ascii=False), encoding='utf-8')
+            self.presentation.task(self.task())
+            self.assertEqual(json.loads(form.read_text(encoding='utf-8'))['data']['title'], 'Worker 已填写')
 
     def test_every_dispatch_is_formal_and_shows_the_baseline_it_reconciles_against(self):
         """v2 has no blind first read: the drift_check is compared with the projected before-state.
@@ -127,27 +148,6 @@ class PresentationBoundaryTests(unittest.TestCase):
             self.presentation.revision(plan)
         self.assertEqual(caught.exception.code, 'output')
         self.assertEqual(list(outside.iterdir()), [])
-
-    def test_world_files_need_only_reader_and_workspace(self):
-        model = {'selection_hash': 'frozen-selection', 'premise': '夜班仓库的退件纠纷。',
-                 'story_capacity': '调查责任怎样沿经手关系传递。'}
-        choices = [{'gate': 'genre', 'option': {'id': 'author:genre', 'title': '作者已有要求',
-                                               'value': {'genre': '都市生活'}}, 'source': '作者指定都市生活。'}]
-        self.repo.book.update(world=model, creation={'selections': choices})
-        self.workspace.project.mkdir()
-        external = self.root / 'external-world.txt'
-        external.write_text('external world content', encoding='utf-8')
-        for name in ('world.json', 'book.html'):
-            link_or_skip(self, self.workspace.project / name, external)
-        result = self.presentation.world()
-        self.assertEqual(external.read_text(encoding='utf-8'), 'external world content')
-        self.assertFalse((self.workspace.project / 'world.json').is_symlink())
-        self.assertFalse((self.workspace.project / 'book.html').is_symlink())
-        self.assertIn(model['premise'], Path(result['html_path']).read_text(encoding='utf-8'))
-        data = json.loads(Path(result['json_path']).read_text(encoding='utf-8'))
-        self.assertEqual(data['world'], model)
-        self.assertEqual(data['choices'], choices)
-        self.assertEqual(data['model_hash'], result['model_hash'])
 
     def test_publication_keeps_completed_content_frozen_without_storage_adapter(self):
         frozen = copy.deepcopy(self.repo.book)

@@ -48,13 +48,6 @@ class TrackingChainTests(unittest.TestCase):
             self.volume_row, self.world,
             self.book['state'] if state0 is None else state0)
 
-    def assertRejected(self, criterion, rows):
-        with self.assertRaises(Error) as caught:
-            self.submit(rows)
-        self.assertEqual(caught.exception.code, 'design_drift')
-        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
-        self.assertIn(criterion, criteria, str(caught.exception.details['findings'])[:400])
-
     def test_the_node_registry_is_read_off_the_volume_outlines(self):
         book = copy.deepcopy(self.book)
         book['volumes_outline'] = {'v1': self.volume_row}
@@ -71,36 +64,49 @@ class TrackingChainTests(unittest.TestCase):
         self.assertEqual(state['story_nodes'][rows[0]['plot']['nodes'][0]['node']]['status'], 'resolved')
         self.assertEqual(state['thread_progress']['line-v1']['status'], 'resolved')
 
-    def test_a_node_cannot_be_advanced_before_its_dependency(self):
-        volume = copy.deepcopy(self.volume_row)
-        volume['nodes'][1]['depends_on'] = ['n1']
-        broken = copy.deepcopy(self.rows)
-        broken[0]['plot']['nodes'] = copy.deepcopy(broken[1]['plot']['nodes'])
-        with self.assertRaises(Error) as caught:
-            drift.validate_chapter_outline(
-                {'volume': 'v1', 'chapters': broken}, self.contract['chapter_outline'],
-                self.volume, volume, self.world, self.book['state'])
-        criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
-        self.assertIn('drift_node', criteria)
+    def test_a_broken_chain_declaration_is_refused_before_the_prose(self):
+        # One rule, three declarations the simulation refuses: a node ahead of its dependency, a
+        # reopened line, a character delta without a cost. Each scenario is copied verbatim from the
+        # micro-test it replaces; what is shared is that the chain check runs before any prose.
+        def node_order():
+            volume = copy.deepcopy(self.volume_row)
+            volume['nodes'][1]['depends_on'] = ['n1']
+            broken = copy.deepcopy(self.rows)
+            broken[0]['plot']['nodes'] = copy.deepcopy(broken[1]['plot']['nodes'])
+            return volume, broken
 
-    def test_a_resolved_line_cannot_be_reused(self):
-        rows = chapter_rows(self.book, self.volume, self.book['state'])
-        # Chapter 1 closes the line; chapter 2 tries to reopen it. Both rows stay self-consistent as
-        # declarations, so what fails is the simulation's own guard, not the exit arithmetic.
-        rows[0]['plot']['threads'] = [{'thread': 'line-v1', 'after': 'resolved',
-                                       'reason': '本卷核对提前收束。'}]
-        rows[0]['enter'].append({'kind': 'thread', 'key': 'line-v1', 'expected': None})
-        rows[0]['exit'].append({'kind': 'thread', 'key': 'line-v1', 'expected': 'resolved'})
-        rows[1]['plot']['threads'] = [{'thread': 'line-v1', 'after': 'active',
-                                       'reason': '工程样本：试图重开已收束的线路。'}]
-        rows[1]['enter'].append({'kind': 'thread', 'key': 'line-v1', 'expected': 'resolved'})
-        rows[1]['exit'].append({'kind': 'thread', 'key': 'line-v1', 'expected': 'resolved'})
-        self.assertRejected('drift_thread', rows)
+        def line_reuse():
+            rows = chapter_rows(self.book, self.volume, self.book['state'])
+            # Chapter 1 closes the line; chapter 2 tries to reopen it. Both rows stay self-consistent
+            # as declarations, so what fails is the simulation's own guard, not the exit arithmetic.
+            rows[0]['plot']['threads'] = [{'thread': 'line-v1', 'after': 'resolved',
+                                           'reason': '本卷核对提前收束。'}]
+            rows[0]['enter'].append({'kind': 'thread', 'key': 'line-v1', 'expected': None})
+            rows[0]['exit'].append({'kind': 'thread', 'key': 'line-v1', 'expected': 'resolved'})
+            rows[1]['plot']['threads'] = [{'thread': 'line-v1', 'after': 'active',
+                                           'reason': '工程样本：试图重开已收束的线路。'}]
+            rows[1]['enter'].append({'kind': 'thread', 'key': 'line-v1', 'expected': 'resolved'})
+            rows[1]['exit'].append({'kind': 'thread', 'key': 'line-v1', 'expected': 'resolved'})
+            return self.volume_row, rows
 
-    def test_a_character_delta_needs_a_choice_and_a_cost(self):
-        broken = copy.deepcopy(self.rows)
-        broken[0]['characters'][0].pop('cost')
-        self.assertRejected('drift_shape', broken)
+        def character_shape():
+            broken = copy.deepcopy(self.rows)
+            broken[0]['characters'][0].pop('cost')
+            return self.volume_row, broken
+
+        cases = [('drift_node', node_order), ('drift_thread', line_reuse),
+                 ('drift_shape', character_shape)]
+        for criterion, build in cases:
+            with self.subTest(criterion=criterion):
+                outline, rows = build()
+                with self.assertRaises(Error) as caught:
+                    drift.validate_chapter_outline(
+                        {'volume': 'v1', 'chapters': rows}, self.contract['chapter_outline'],
+                        self.volume, outline, self.world, self.book['state'])
+                self.assertEqual(caught.exception.code, 'design_drift')
+                criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
+                self.assertIn(criterion, criteria,
+                              str(caught.exception.details['findings'])[:400])
 
     def test_closure_refuses_unresolved_required_work(self):
         book = copy.deepcopy(self.book)
@@ -144,6 +150,18 @@ class DriftCheckReconciliationTests(unittest.TestCase):
     def criteria(self):
         return {finding.get('criterion') for finding in self.findings()}
 
+    def draft_book(self):
+        """A second driven book, for a variant that needs to commit its own first chapter."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        repo = SQLiteRepository.initialize(Path(temp.name) / 'book',
+                                           seeded_book(tracked_contract(6)))
+        self.addCleanup(repo.close)
+        app = Application(repo)
+        owner = app.run(through=6, source='工程夹具授权写完六章。')['owner']
+        drive(app, owner, until='write')
+        return app
+
     def test_the_fixture_receipt_commits_and_settles_the_planned_events(self):
         result = self.submit(self.receipt())
         self.assertEqual(result['committed_chapter'], 1)
@@ -155,14 +173,15 @@ class DriftCheckReconciliationTests(unittest.TestCase):
         # outline speaks: `hinted` is the reader-facing name for "suspects".
         self.assertEqual(book['state']['knowledge']['shen:source']['stance'], 'suspects')
 
-    def test_a_missing_item_is_a_coverage_drift(self):
+    def test_a_missing_or_extra_item_is_a_coverage_drift(self):
+        # One rule, two shapes: a planned increment left unfiled, and a filed row the plan never
+        # declared. The refused round moves the draft to repair, where the second shape is filed.
         result = self.receipt()
         result['data']['drift_check']['items'].pop(0)
         self.submit(result)
         self.assertIn('drift_coverage', self.criteria())
         self.assertEqual(self.repo.load()['draft']['stage'], 'repair')
-
-    def test_an_extra_item_is_also_a_coverage_drift(self):
+        self.advance()
         result = self.receipt()
         result['data']['drift_check']['items'].append({
             'kind': 'resources', 'key': '["shen","不存在","元"]',
@@ -172,15 +191,17 @@ class DriftCheckReconciliationTests(unittest.TestCase):
         self.submit(result)
         self.assertIn('drift_coverage', self.criteria())
 
-    def test_a_self_reported_before_that_contradicts_the_projection_is_refused(self):
+    def test_receipt_arithmetic_must_match_the_engine_projection(self):
+        # One rule, two fields: the before-value is the engine's projection, never the writer's
+        # guess, and a `kept` row's result must be the planned one. Both are findings, so the second
+        # shape is filed on the repair round the first one opened.
         result = self.receipt()
         target = next(item for item in result['data']['drift_check']['items']
                       if item['kind'] == 'resources')
         target['actual']['from'] = 99
         self.submit(result)
         self.assertIn('drift_before', self.criteria())
-
-    def test_kept_must_land_on_the_planned_value(self):
+        self.advance()
         result = self.receipt()
         target = next(item for item in result['data']['drift_check']['items']
                       if item['kind'] == 'resources')
@@ -188,14 +209,32 @@ class DriftCheckReconciliationTests(unittest.TestCase):
         self.submit(result)
         self.assertIn('drift_kept', self.criteria())
 
-    def test_evidence_must_be_a_verbatim_fragment_of_the_prose(self):
-        result = self.receipt()
-        result['data']['drift_check']['items'][0]['evidence']['quote'] = '这句话不在正文里。'
-        with self.assertRaises(Error) as caught:
-            self.app.submit(result)
-        self.assertEqual(caught.exception.code, 'evidence')
+    def test_the_receipt_cannot_smuggle_claims_past_the_check(self):
+        # One rule, two smuggles: an evidence quote the prose does not contain, and a self-written
+        # events array. Both are refused outright (the failed submit rolls back, so the pending task
+        # serves both cases).
+        def fabricated_quote():
+            result = self.receipt()
+            result['data']['drift_check']['items'][0]['evidence']['quote'] = '这句话不在正文里。'
+            return result, 'evidence'
 
-    def test_a_declared_deviation_is_booked_into_design_drift(self):
+        def self_reported_events():
+            result = self.receipt()
+            result['data']['events'] = [{'op': 'clock', 'before': 0, 'after': 1,
+                                         'evidence': {'chapter': 1, 'quote': '次日'}}]
+            return result, 'writer_events'
+
+        for build in (fabricated_quote, self_reported_events):
+            result, code = build()
+            with self.subTest(code=code):
+                with self.assertRaises(Error) as caught:
+                    self.app.submit(result)
+                self.assertEqual(caught.exception.code, code)
+
+    def test_declared_departures_are_booked_into_design_drift(self):
+        # One rule, two declared statuses: a `deviated` item settles its real value and books a row,
+        # a `skipped` promise books a row without planting it. Each variant commits its chapter, so
+        # the second one runs on its own book.
         result = self.receipt()
         target = next(item for item in result['data']['drift_check']['items']
                       if item['kind'] == 'resources')
@@ -209,6 +248,17 @@ class DriftCheckReconciliationTests(unittest.TestCase):
         self.assertEqual(len(book['design_drift']), 1)
         self.assertEqual(book['design_drift'][0]['kind'], 'resources')
         self.assertIn('多领了', book['design_drift'][0]['reason'])
+
+        app = self.draft_book()
+        result = response(app)
+        check = result['data']['drift_check']
+        item = next(item for item in check['items'] if item['kind'] == 'hook')
+        item.update(status='skipped', actual=None, reason='本章未埋设这条承诺，需重排后续安排。')
+        check['verdict'] = 'deviated'
+        self.assertEqual(app.submit(result)['committed_chapter'], 1)
+        book = app.repo.load()
+        self.assertNotIn(item['key'], book['state']['hooks'])
+        self.assertEqual(book['design_drift'][0]['kind'], 'hook')
 
     def test_unplanned_facts_are_committed_and_replanning_reads_the_updated_state(self):
         result = self.receipt()
@@ -231,22 +281,20 @@ class DriftCheckReconciliationTests(unittest.TestCase):
             self.app.approve(handoff['prose_hash'], '工程夹具认可首章版本。', self.owner)
             handoff = self.advance()
         self.assertEqual(handoff['task']['stage'], 'chapter_outline')
+        # The booking re-plans the rest of the volume from the chapter after the booked one, with the
+        # drift rows riding along in the dispatch payload.
+        work = self.repo.pending()['input']
+        self.assertTrue(work['payload'].get('repair'))
+        self.assertTrue(work['payload'].get('drift'))
+        self.assertEqual(work['payload']['from_chapter'], 2)
         replanned = response(self.app)
         resource = replanned['data']['chapters'][0]['resources'][0]
         self.assertEqual(resource['from'], 7)
 
-    def test_a_skipped_plant_commits_a_deviation_without_planting_the_promise(self):
-        result = self.receipt()
-        check = result['data']['drift_check']
-        item = next(item for item in check['items'] if item['kind'] == 'hook')
-        item.update(status='skipped', actual=None, reason='本章未埋设这条承诺，需重排后续安排。')
-        check['verdict'] = 'deviated'
-        self.assertEqual(self.submit(result)['committed_chapter'], 1)
-        book = self.repo.load()
-        self.assertNotIn(item['key'], book['state']['hooks'])
-        self.assertEqual(book['design_drift'][0]['kind'], 'hook')
-
-    def test_a_deviated_item_without_a_reason_is_refused(self):
+    def test_a_deviation_without_a_reason_or_a_clean_verdict_over_deviations_is_refused(self):
+        # One rule, two contradictions between the verdict and the rows: a departure filed without a
+        # reason, and a departure filed under a `clean` verdict. Both are findings, so the second
+        # shape is filed on the repair round the first one opened.
         result = self.receipt()
         target = next(item for item in result['data']['drift_check']['items']
                       if item['kind'] == 'resources')
@@ -254,39 +302,14 @@ class DriftCheckReconciliationTests(unittest.TestCase):
         result['data']['drift_check']['verdict'] = 'deviated'
         self.submit(result)
         self.assertIn('drift_reason', self.criteria())
-
-    def test_a_clean_verdict_with_deviations_is_a_contradiction(self):
+        self.advance()
         result = self.receipt()
         target = next(item for item in result['data']['drift_check']['items']
                       if item['kind'] == 'resources')
         target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='正文里多领了一趟车费。')
+        # The fresh receipt's verdict stays `clean`: a booked deviation contradicts it.
         self.submit(result)
         self.assertIn('drift_verdict', self.criteria())
-
-    def test_the_engine_replans_the_rest_of_the_volume_after_a_booking(self):
-        result = self.receipt()
-        target = next(item for item in result['data']['drift_check']['items']
-                      if item['kind'] == 'resources')
-        target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='正文里他多领了一趟车费。')
-        result['data']['drift_check']['verdict'] = 'deviated'
-        self.submit(result)
-        handoff = self.advance()
-        if handoff['action'] == 'await_author':
-            self.app.approve(handoff['prose_hash'], '工程夹具认可首章版本。', self.owner)
-            handoff = self.advance()
-        self.assertEqual(handoff['task']['stage'], 'chapter_outline')
-        work = self.repo.pending()['input']
-        self.assertTrue(work['payload'].get('repair'))
-        self.assertTrue(work['payload'].get('drift'))
-        self.assertEqual(work['payload']['from_chapter'], 2)
-
-    def test_the_writer_cannot_self_report_events(self):
-        result = self.receipt()
-        result['data']['events'] = [{'op': 'clock', 'before': 0, 'after': 1,
-                                     'evidence': {'chapter': 1, 'quote': '次日'}}]
-        with self.assertRaises(Error) as caught:
-            self.app.submit(result)
-        self.assertEqual(caught.exception.code, 'writer_events')
 
 
 class CompletionTests(unittest.TestCase):
@@ -401,12 +424,14 @@ class HookCompletionTests(unittest.TestCase):
         self.app = Application(self.repo)
         return self.app, self.repo
 
-    def test_a_book_completes_once_its_promises_are_paid(self):
-        app, repo = self.build()
-        owner = app.run(finish=True, source='工程夹具授权按伏笔账完本。')['owner']
+    def test_a_two_volume_book_pays_its_promises_and_completes(self):
+        app, repo = self.build(chapters=4, volumes=2)
+        owner = app.run(finish=True, source='工程夹具授权跨卷伏笔完本。')['owner']
         self.assertEqual(drive(app, owner)['action'], 'ready_to_complete')
-        book = repo.load()
-        self.assertEqual(book['state']['hooks']['hook-v1-required']['status'], 'paid')
+        hooks = repo.load()['state']['hooks']
+        self.assertEqual(hooks['hook-v1-required']['status'], 'paid')
+        self.assertEqual(hooks['hook-v1-carry']['status'], 'paid')
+        self.assertEqual(hooks['hook-v2-required']['status'], 'paid')
         self.assertTrue(app.complete(owner)['completed'])
 
     def test_completion_is_refused_while_a_promise_is_still_open(self):
@@ -442,16 +467,6 @@ class HookCompletionTests(unittest.TestCase):
             app.complete(owner)
         self.assertEqual(caught.exception.code, 'payoffs')
         self.assertFalse(repo.load()['status'] == 'completed')
-
-    def test_a_two_volume_book_pays_the_continuing_promise_in_the_next_volume(self):
-        app, repo = self.build(chapters=4, volumes=2)
-        owner = app.run(finish=True, source='工程夹具授权跨卷伏笔完本。')['owner']
-        self.assertEqual(drive(app, owner)['action'], 'ready_to_complete')
-        hooks = repo.load()['state']['hooks']
-        self.assertEqual(hooks['hook-v1-required']['status'], 'paid')
-        self.assertEqual(hooks['hook-v1-carry']['status'], 'paid')
-        self.assertEqual(hooks['hook-v2-required']['status'], 'paid')
-        self.assertTrue(app.complete(owner)['completed'])
 
     def test_the_hook_chain_does_not_add_a_dispatch(self):
         app, repo = self.build()

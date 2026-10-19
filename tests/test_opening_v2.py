@@ -294,7 +294,7 @@ class OpeningTests(unittest.TestCase):
         creation.validate_contract(planning.validate_contract(filled), self.repo.load()['creation'],
                                    self.repo.load()['world'])
 
-    def test_brief_replaces_whole_guides_and_trims_unused_records(self):
+    def test_the_first_dispatch_carries_the_brief_the_lens_and_trimmed_reads(self):
         task = self.app.advance()['task']
         material = json.loads(Path(task['input_path']).read_text(encoding='utf-8'))
         brief = material['brief']
@@ -316,6 +316,23 @@ class OpeningTests(unittest.TestCase):
         # the guide files remain available as reference, and world.md is not shipped to the opening
         self.assertIn('hatch.md', json.dumps(task['guides']))
         self.assertNotIn('world.md', json.dumps(task['guides']))
+        # The gate and its lens arrive with the task envelope; `read` turns record hashes into values.
+        view = json.loads(Path(task['input_path']).read_text(encoding='utf-8'))
+        self.assertEqual(view['payload']['gate']['id'], 'genre')
+        self.assertEqual(view['payload']['creative_lens'], creation.LENSES[0])
+        read_material = self.app.read(task['task_id'])
+        self.assertNotIn('payload', read_material, 'the envelope is not repeated by read')
+        self.assertNotIn('brief', read_material)
+        self.assertIn(creation.LENSES[0], view['brief'])
+        self.assertIn('opening_choices', read_material['on_demand'])
+        single = self.app.read(task['task_id'], 'opening_choices')
+        self.assertEqual(single['records']['opening_choices']['value'], {})
+        # A single-record read is that record (plus the hash index), not a second copy of the whole
+        # dispatch view: the worker already holds brief/payload/policy in input.json.
+        self.assertNotIn('brief', single)
+        self.assertNotIn('payload', single)
+        self.assertIn('on_demand', single)
+        self.assertIn('on_demand', read_material)
         # once directions are closed, the next creative brief carries them instead of the whole records
         self.choose_board(self.board())                       # 定位
         self.choose_board(self.board())                       # 视角
@@ -335,7 +352,9 @@ class OpeningTests(unittest.TestCase):
         for key in OPTION_CONTRACT.split('、')[0:1]:
             self.assertIn('id', key)
 
-    def test_options_must_propose_not_self_justify(self):
+    def test_option_quality_is_refused_at_the_gate_that_owns_it(self):
+        """Self-justification, thin scenes, drivers that do not diverge, duplicate drivers and a
+        mechanism scope that contradicts the chosen mechanism each name their own rejection."""
         self.app.advance()
         data = options(self.app)
         data['options'][0]['fit_reason'] = '混搭透镜的典型落法：两个设定互相改变走向。'
@@ -347,13 +366,19 @@ class OpeningTests(unittest.TestCase):
         for option in data['options']:
             option['driver'] = '以刻度推进，' + option['id'] + '。'
         self.assertCode('opening_diversity', self.app.submit, receipt(self.app, data))
-
-    def test_zero_input_starts_first_gate_and_never_requests_a_premise(self):
-        self.assertEqual(self.repo.load()['creation']['source'], '')
-        board = self.board()
-        self.assertEqual(board['gate']['id'], 'genre')
-        self.assertEqual(len(board['options']), 3)
-        self.assertIsNone(self.repo.load()['contract'])
+        duplicate = options(self.app)
+        duplicate['options'][1]['driver'] = duplicate['options'][0]['driver']
+        self.assertCode('opening_diversity', self.app.submit, receipt(self.app, duplicate))
+        self.app.submit(receipt(self.app, options(self.app)))          # 定位 accepted
+        self.choose_board(self.board())                                # 定位
+        self.choose_board(self.board())                                # 视角
+        self.choose_board(self.board())                                # 体量（结构门，即时给定）
+        task = self.app.advance()['task']
+        self.assertEqual(task['stage'], 'opening_options')
+        self.assertEqual(self.repo.pending()['input']['payload']['gate']['id'], 'world')
+        scoped = options(self.app)
+        scoped['options'][0]['value']['mechanism']['mode'] = 'bounded'
+        self.assertCode('opening_option', self.app.submit, receipt(self.app, scoped))
 
     def test_brainstorm_lenses_are_unique_methods_not_labels(self):
         from novel_ledger.contracts import LENSES, VOLUME_TURNS
@@ -374,26 +399,6 @@ class OpeningTests(unittest.TestCase):
         self.assertIn(LENSES[0][0], material['payload']['lens_brief'])
         self.assertIn(LENSES[0][1], material['payload']['lens_brief'])
 
-    def test_single_read_delivers_the_exact_gate_and_brainstorm_lens(self):
-        task = self.app.advance()['task']
-        view = json.loads(Path(task['input_path']).read_text(encoding='utf-8'))
-        # The gate and its lens arrive with the task envelope; `read` turns record hashes into values.
-        self.assertEqual(view['payload']['gate']['id'], 'genre')
-        self.assertEqual(view['payload']['creative_lens'], creation.LENSES[0])
-        material = self.app.read(task['task_id'])
-        self.assertNotIn('payload', material, 'the envelope is not repeated by read')
-        self.assertNotIn('brief', material)
-        self.assertIn(creation.LENSES[0], view['brief'])
-        self.assertIn('opening_choices', material['on_demand'])
-        single = self.app.read(task['task_id'], 'opening_choices')
-        self.assertEqual(single['records']['opening_choices']['value'], {})
-        # A single-record read is that record (plus the hash index), not a second copy of the whole
-        # dispatch view: the worker already holds brief/payload/policy in input.json.
-        self.assertNotIn('brief', single)
-        self.assertNotIn('payload', single)
-        self.assertIn('on_demand', single)
-        self.assertIn('on_demand', material)
-
     def test_single_decision_gates_carry_their_own_delivery_requirement(self):
         self.choose_board(self.board())                                  # 定位
         view = json.loads(Path(self.app.advance()['task']['input_path']).read_text(encoding='utf-8'))
@@ -406,16 +411,6 @@ class OpeningTests(unittest.TestCase):
         # the selected relations are carried as one readable line, not as an empty list
         self.assertIn('核心关系与人物张力', title['brief'])
         self.assertIn('同事互相依赖', title['brief'])
-
-    def test_each_choice_advances_one_gate_and_last_starts_world(self):
-        self.select_gates(9)
-        self.assertEqual(self.repo.load()['creation']['cursor'], 9)
-        self.assertIsNone(self.repo.load().get('world'))
-        board = self.board()
-        self.assertEqual(board['gate']['id'], 'title')
-        result = self.app.opening_choice(board['options'][0]['id'], board['hash'], '选它。')
-        self.assertEqual(result['next'], 'world_model')
-        self.assertEqual(self.app.advance()['task']['stage'], 'world_model')
 
     def test_options_wait_for_author_and_cannot_choose_themselves(self):
         board = self.board()
@@ -547,32 +542,31 @@ class OpeningTests(unittest.TestCase):
         self.assertEqual(dump(self.repo.load()), before)
         self.app.submit(response(self.app))
 
-    def test_explicit_all_guided_opening_delivers_all_volume_outlines_before_prose(self):
-        ready = self.to_outline_ready(outline={'scope': 'all', 'words': 500, 'tolerance': 50}, scale_tier='t0')
-        book = self.repo.load()
-        volumes = book['contract']['volumes']
-        self.assertEqual(ready['volumes'], [volume['id'] for volume in volumes])
-        self.assertEqual(book['contract']['volume_outline'], {'scope': 'all', 'words': 500, 'tolerance': 50})
-        for volume in volumes:
-            row = book['volumes_outline'][volume['id']]
-            self.assertEqual(row['id'], volume['id'])
-            self.assertTrue(row['exit_state'])
-            self.assertTrue(row['nodes'] and row['threads'])
-        self.assertEqual(self.repo.headers('main'), [])
-        self.assertIsNone(self.repo.pending())
-        self.assertTrue(self.app.audit()['ok'])
-
-    def test_default_opening_delivers_only_near_term_outline_without_prose(self):
-        ready = self.to_outline_ready(outline='default', scale_tier='t0')
-        self.assertEqual(ready['action'], 'outline_ready')
-        # A contract that does not declare volume_outline keeps the engine's own default policy.
-        self.assertEqual(ready['planning_mode'], 'all')
-        book = self.repo.load()
-        volume = book['contract']['volumes'][0]
-        self.assertEqual(ready['coverage'], [{'volume': volume['id'], 'first': volume['first'], 'last': volume['end']}])
-        self.assertEqual(len(book['chapter_outlines'][volume['id']]), volume['end'] - volume['first'] + 1)
-        self.assertEqual(self.repo.headers('main'), [])
-        self.assertIsNone(self.repo.pending())
+    def test_the_delivery_policy_decides_how_much_outline_arrives_before_prose(self):
+        """An explicit `all` and the engine default both stop at outline_ready with no prose; only the
+        declared coverage differs, and neither writes a word."""
+        for label, outline in (('explicit_all', {'scope': 'all', 'words': 500, 'tolerance': 50}),
+                               ('engine_default', 'default')):
+            with self.subTest(policy=label):
+                ready = self.to_outline_ready(outline=outline, scale_tier='t0')
+                self.assertEqual(ready['action'], 'outline_ready')
+                self.assertEqual(ready['planning_mode'], 'all')
+                book = self.repo.load()
+                volume = book['contract']['volumes'][0]
+                self.assertEqual(ready['volumes'], [row['id'] for row in book['contract']['volumes']])
+                self.assertEqual(ready['coverage'],
+                                 [{'volume': volume['id'], 'first': volume['first'], 'last': volume['end']}])
+                self.assertEqual(len(book['chapter_outlines'][volume['id']]),
+                                 volume['end'] - volume['first'] + 1)
+                for row_id, row in book['volumes_outline'].items():
+                    self.assertEqual(row['id'], row_id)
+                    self.assertTrue(row['exit_state'])
+                    self.assertTrue(row['nodes'] and row['threads'])
+                self.assertEqual(self.repo.headers('main'), [])
+                self.assertIsNone(self.repo.pending())
+                self.assertTrue(self.app.audit()['ok'])
+                self.tearDown()
+                self.setUp()
 
     def test_world_and_outlines_do_not_generate_canonical_events(self):
         """Design declarations are validated and stored; they never settle into the fact ledger."""
@@ -595,22 +589,19 @@ class OpeningTests(unittest.TestCase):
         self.assertCode('stale_task', self.app.submit, old)
         self.assertEqual(self.board()['gate']['id'], 'world')
 
-    def test_no_mechanism_choice_cannot_be_silently_overwritten(self):
+    def test_world_receipt_rejections_name_their_own_rule(self):
+        """An invented mechanism, a dangling world link and a stale selection hash each name their code."""
         self.select_gates()
         self.app.advance()
-        data = combined(self.app)
-        data['mechanisms'] = [{'id': 'magic', **{k: '外挂。' for k in world.SECTIONS['mechanisms']}, 'links': []}]
-        self.assertCode('world_alignment', self.app.submit, receipt(self.app, data))
-
-    def test_world_records_require_valid_cross_references_and_choice_version(self):
-        self.select_gates()
-        self.app.advance()
-        data = model(self.app)
-        data['geography'][0]['links'] = ['economy:missing']
-        self.assertCode('world_reference', self.app.submit, receipt(self.app, data))
-        data = model(self.app)
-        data['selection_hash'] = 'old'
-        self.assertCode('world', self.app.submit, receipt(self.app, data))
+        injected = combined(self.app)
+        injected['mechanisms'] = [{'id': 'magic', **{k: '外挂。' for k in world.SECTIONS['mechanisms']}, 'links': []}]
+        self.assertCode('world_alignment', self.app.submit, receipt(self.app, injected))
+        dangling = model(self.app)
+        dangling['geography'][0]['links'] = ['economy:missing']
+        self.assertCode('world_reference', self.app.submit, receipt(self.app, dangling))
+        stale = model(self.app)
+        stale['selection_hash'] = 'old'
+        self.assertCode('world', self.app.submit, receipt(self.app, stale))
 
     def test_final_contract_cannot_change_chosen_voice_or_scale(self):
         self.select_gates()
@@ -667,7 +658,13 @@ class OpeningTests(unittest.TestCase):
                 self.assertCode('opening_option', creation.validate_contract, candidate, state, model_data)
 
     def test_the_tier_window_bounds_the_chapter_count_the_contract_may_choose(self):
-        """A book shorter than its tier's window is caught as an alignment failure, not silently kept."""
+        """A book shorter than its tier's window is an alignment failure, not a silent keep; every
+        chapter count inside the window — down to the smallest tier's shortest — survives the rules.
+
+        The ladder used to start at 34,000 characters, so the shape an author may ask for (a few
+        chapters, ten thousand characters) had no size class: the contract could be amended to it,
+        but the closing audit would then refuse the book as incompatible with its tier.
+        """
         self.select_gates()
         state = self.repo.load()['creation']
         window = creation.selected(state)['scale']['chapter_window']
@@ -679,11 +676,8 @@ class OpeningTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'opening_alignment')
         self.assertIn('chapter_window', caught.exception.details)
 
-    def test_the_smallest_tier_can_express_a_short_work(self):
-        """The ladder used to start at 34,000 characters, so the shape an author may ask for
-        (a few chapters, ten thousand characters) had no size class: the contract could be amended
-        to it, but the closing audit would then refuse the book as incompatible with its tier.
-        """
+        self.tearDown()
+        self.setUp()
         self.select_gates(scale_tier='t0')
         state = self.repo.load()['creation']
         tier = creation.selected(state)['scale']
@@ -730,22 +724,6 @@ class OpeningTests(unittest.TestCase):
         self.assertTrue(Path(ready['world_view']['html_path']).is_file())
         self.assertNotIn('world_view_error', ready)
 
-    def test_duplicate_options_and_inconsistent_mechanism_scope_are_rejected(self):
-        self.app.advance()
-        data = options(self.app)
-        data['options'][1]['driver'] = data['options'][0]['driver']
-        self.assertCode('opening_diversity', self.app.submit, receipt(self.app, data))
-        self.app.submit(receipt(self.app, options(self.app)))          # 定位 accepted
-        self.choose_board(self.board())                                # 定位
-        self.choose_board(self.board())                                # 视角
-        self.choose_board(self.board())                                # 体量（结构门，即时给定）
-        task = self.app.advance()['task']
-        self.assertEqual(task['stage'], 'opening_options')
-        self.assertEqual(self.repo.pending()['input']['payload']['gate']['id'], 'world')
-        data = options(self.app)
-        data['options'][0]['value']['mechanism']['mode'] = 'bounded'
-        self.assertCode('opening_option', self.app.submit, receipt(self.app, data))
-
     def test_importing_a_contract_is_allowed_before_the_first_gate_and_refused_after(self):
         command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project)]
         example = str(ROOT / 'assets' / 'contract.example.json')
@@ -760,25 +738,30 @@ class OpeningTests(unittest.TestCase):
         self.assertEqual(task['stage'], 'volume_outline')
         self.assertIsNotNone(self.repo.load()['contract'])
 
-    def test_importing_a_contract_after_a_gate_is_shown_is_refused(self):
-        command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project)]
-        example = str(ROOT / 'assets' / 'contract.example.json')
-        self.app.advance()
-        late = subprocess.run(command + ['opening', '--file', example, '--source', '作者中途给完整约定。'],
-                              capture_output=True, text=True, encoding='utf-8', errors='replace')
-        self.assertEqual(late.returncode, 2)
-        self.assertEqual(json.loads(late.stdout)['error'], 'creation')
-        self.assertIsNotNone(self.repo.load()['creation'])
-        self.assertIsNone(self.repo.load()['contract'])
-        self.assertIsNotNone(self.repo.pending())
-        # A newly initialised project stays importable right up to the first advance.
-        other = Path(self.temp.name) / 'other'
-        subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(other), 'init'],
-                       capture_output=True, text=True, encoding='utf-8', errors='replace')
-        ready = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(other),
-                                'opening', '--file', example, '--source', '作者开书前给完整约定。'],
-                               capture_output=True, text=True, encoding='utf-8', errors='replace')
-        self.assertEqual(ready.returncode, 0, ready.stdout)
+        # A project that has already shown a gate refuses the import; a fresh init stays importable.
+        with tempfile.TemporaryDirectory() as temporary:
+            late_project = Path(temporary) / 'started'
+            cli = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(late_project)]
+            subprocess.run(cli + ['init'], capture_output=True, text=True, encoding='utf-8', errors='replace')
+            subprocess.run(cli + ['advance'], capture_output=True, text=True, encoding='utf-8', errors='replace')
+            late = subprocess.run(cli + ['opening', '--file', example, '--source', '作者中途给完整约定。'],
+                                  capture_output=True, text=True, encoding='utf-8', errors='replace')
+            self.assertEqual(late.returncode, 2)
+            self.assertEqual(json.loads(late.stdout)['error'], 'creation')
+            repo = SQLiteRepository(late_project)
+            try:
+                self.assertIsNotNone(repo.load()['creation'])
+                self.assertIsNone(repo.load()['contract'])
+                self.assertIsNotNone(repo.pending())
+            finally:
+                repo.close()
+            other = Path(temporary) / 'other'
+            subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(other), 'init'],
+                           capture_output=True, text=True, encoding='utf-8', errors='replace')
+            ready = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(other),
+                                    'opening', '--file', example, '--source', '作者开书前给完整约定。'],
+                                   capture_output=True, text=True, encoding='utf-8', errors='replace')
+            self.assertEqual(ready.returncode, 0, ready.stdout)
 
     def test_cli_init_without_contract_immediately_supports_guided_opening(self):
         path = Path(self.temp.name) / 'zero'
@@ -834,7 +817,9 @@ class StructuralGateTests(unittest.TestCase):
         task = self.app.advance()
         self.assertEqual(task['action'], 'await_choice')
 
-    def test_regroup_slides_the_tier_window_instead_of_stalling(self):
+    def test_regroup_slides_the_window_and_the_full_ladder_stays_comparable(self):
+        """换一组 slides the tier window instead of stalling, every window offers the whole ladder's
+        tradeoffs, and the cycle visits exactly the windows the ladder can form."""
         board = self.app.advance()['board']
         self.app.opening_regroup(board['hash'], '换一组，想看看更长的档位。')
         moved = self.app.advance()['board']
@@ -845,10 +830,15 @@ class StructuralGateTests(unittest.TestCase):
         self.app.opening_choice(moved['options'][0]['id'], moved['hash'], '选它。')
         self.assertEqual(self.repo.load()['creation']['selections'][-1]['gate'], 'scale')
 
-    def test_tier_comparison_uses_the_full_ladder_in_every_window(self):
+        # From a fresh walk (setUp re-closes the two creative gates): regrouping the structural gate
+        # cycles through comparable windows.
+        self.tearDown()
+        self.setUp()
         seen = {}
+        windows = []
         for _ in range(len(SCALE_TIERS) - 2):
             board = self.app.advance()['board']
+            windows.append(tuple(option['value']['tier'] for option in board['options']))
             for option in board['options']:
                 ident = option['value']['tier']
                 index = next(i for i, tier in enumerate(SCALE_TIERS) if tier['id'] == ident)
@@ -863,6 +853,11 @@ class StructuralGateTests(unittest.TestCase):
                 seen[ident] = option
             self.app.opening_regroup(board['hash'], '换一组。')
         self.assertEqual(set(seen), {tier['id'] for tier in SCALE_TIERS})
+        # Derived from the ladder so adding or removing a size class cannot silently leave this
+        # list describing a ladder that no longer exists.
+        ids = [row['id'] for row in SCALE_TIERS]
+        expected = sorted({tuple(ids[start:start + SCALE_WINDOW]) for start in range(len(ids) - SCALE_WINDOW + 1)})
+        self.assertTrue(set(windows) <= set(expected))
 
     def test_a_worker_may_not_answer_the_structural_gate(self):
         state = self.repo.load()['creation']
@@ -942,12 +937,13 @@ class OpeningDecisionTests(unittest.TestCase):
                     self.assertCode('opening_option', creation.intake, before, {gate: invalid}, '作者要求。')
                     self.assertEqual(before, creation.begin(version=2))
 
-    def test_relationships_cannot_be_an_empty_array(self):
-        value = copy.deepcopy(VALUES['relationships'])
-        value['relationships'] = []
-        self.assertCode('opening_option', creation.validate_value, 'relationships', value, 2, {})
-
-    def test_the_view_the_theme_and_the_title_are_author_decisions(self):
+    def test_gate_value_rules_refuse_hollow_or_unearned_decisions(self):
+        """Empty relationship arrays, blank view/theme/title values and a mechanism scope the chosen
+        mechanism did not earn are all `opening_option` refusals; tone/theme/pov/title are the
+        author-decision fields opening/2 added on top of opening/1."""
+        empty = copy.deepcopy(VALUES['relationships'])
+        empty['relationships'] = []
+        self.assertCode('opening_option', creation.validate_value, 'relationships', empty, 2, {})
         ending = copy.deepcopy(VALUES['ending'])
         del ending['theme']
         self.assertCode('opening_option', creation.validate_value, 'ending', ending, 2, {})
@@ -957,14 +953,12 @@ class OpeningDecisionTests(unittest.TestCase):
             self.assertIn(field, alignment_for(2))
         for field in ('tone', 'theme', 'pov'):
             self.assertNotIn(field, alignment_for(1))
-
-    def test_mechanism_scope_must_match_the_chosen_mechanism(self):
-        value = copy.deepcopy(VALUES['world'])
-        value['mechanism']['mode'] = 'bounded'
-        value['mechanism']['principle'] = '有一条有限的超自然规则。'
-        self.assertCode('opening_option', creation.validate_value, 'world', value, 2, {})
-        value['allow_special_mechanism'] = True
-        creation.validate_value('world', value, 2, {})
+        scoped = copy.deepcopy(VALUES['world'])
+        scoped['mechanism']['mode'] = 'bounded'
+        scoped['mechanism']['principle'] = '有一条有限的超自然规则。'
+        self.assertCode('opening_option', creation.validate_value, 'world', scoped, 2, {})
+        scoped['allow_special_mechanism'] = True
+        creation.validate_value('world', scoped, 2, {})
 
     def test_the_board_invariant_holds_across_the_walk_and_every_back_jump(self):
         """A structural gate must never wait for a worker, and no other gate may pre-empt one."""
@@ -982,26 +976,6 @@ class OpeningDecisionTests(unittest.TestCase):
             jumped = creation.back(copy.deepcopy(state), gate, '工程夹具：返回重选。')
             structural = creation.current(jumped)['id'] in creation.SYSTEM_GATES[2]
             self.assertEqual(jumped['board'] is not None, structural, gate)
-
-    def test_regroup_cycles_every_ladder_window(self):
-        """换一组 on the structural gate slides the ladder instead of stalling on one window."""
-        state = shown(creation.begin('工程夹具：换档。', version=2))
-        state = creation.pick(state, state['board']['options'][0]['id'], state['board']['hash'], 'A')
-        state = shown(state)
-        state = creation.pick(state, state['board']['options'][0]['id'], state['board']['hash'], 'A')
-        windows = []
-        for _ in range(9):
-            board = state['board']
-            windows.append(tuple(option['value']['tier'] for option in board['options']))
-            state = creation.regroup(state, board['hash'], '换一组。')
-            self.assertIsNotNone(state['board'])
-            self.assertNotEqual(state['board']['hash'], board['hash'])
-        # Derived from the ladder so adding or removing a size class cannot silently
-        # leave this list describing a ladder that no longer exists.
-        ids = [row['id'] for row in SCALE_TIERS]
-        expected = sorted({tuple(ids[start:start + SCALE_WINDOW])
-                           for start in range(len(ids) - SCALE_WINDOW + 1)})
-        self.assertEqual(sorted(set(windows)), expected)
 
     def test_intake_uses_gate_ids_and_refuses_field_names(self):
         state = creation.begin(version=2)

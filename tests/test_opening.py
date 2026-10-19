@@ -225,9 +225,7 @@ class CurrentOpeningTests(unittest.TestCase):
         # The direction reaches the option writer, together with what this gate means for it.
         self.assertIn('起点/番茄男频长篇网文', pending['brief'])
         self.assertIn('男频题材要连承诺一起给', pending['brief'])
-
-    def test_world_and_escalation_precede_protagonist_origin(self):
-        """The protagonist enters a world whose architecture is already decided."""
+        # The protagonist enters a world whose architecture is already decided.
         gates = creation.gate_ids(OPENING_VERSION)
         self.assertEqual(len(gates), 13)
         self.assertEqual(gates[:4], ('genre', 'premise', 'voice', 'scale'))
@@ -293,6 +291,23 @@ class CurrentOpeningTests(unittest.TestCase):
         self.assertEqual(tuple(row['shape']), ('family', 'arrival', 'cost'))
         self.assertEqual(opening_source(row, OPENING_VERSION), ('origin', None))
         self.assertIn('protagonist_origin', alignment_for(OPENING_VERSION))
+        # The four accepted directions pass; anything else, or a missing required sentence, is refused.
+        for family in ('魂穿', '身穿', '本土', '其他'):
+            value = copy.deepcopy(VALUES['origin'])
+            value['family'] = family
+            self.assertIsNone(creation.validate_value('origin', value, OPENING_VERSION, {}))
+        for family in ('转世', '', None):
+            broken = copy.deepcopy(VALUES['origin'])
+            broken['family'] = family
+            with self.subTest(family=family):
+                self.assertCode('opening_option', creation.validate_value, 'origin', broken,
+                                OPENING_VERSION, {})
+        for field in ('arrival', 'cost'):
+            incomplete = copy.deepcopy(VALUES['origin'])
+            del incomplete[field]
+            with self.subTest(missing=field):
+                self.assertCode('opening_option', creation.validate_value, 'origin', incomplete,
+                                OPENING_VERSION, {})
 
     def test_the_world_gate_projects_the_tiers_and_the_hard_currency(self):
         """The world gate delivers a tier ladder and a hard currency with its allocator, verbatim."""
@@ -443,25 +458,6 @@ class CurrentOpeningTests(unittest.TestCase):
         payoff['plan']['ways'] = []
         self.assertCode('opening_option', creation.validate_value, 'payoff', payoff, 3, {})
 
-    def test_an_origin_family_outside_the_four_directions_is_refused(self):
-        for family in ('转世', '', None):
-            broken = copy.deepcopy(VALUES['origin'])
-            broken['family'] = family
-            with self.subTest(family=family):
-                self.assertCode('opening_option', creation.validate_value, 'origin', broken,
-                                OPENING_VERSION, {})
-        for field in ('arrival', 'cost'):
-            incomplete = copy.deepcopy(VALUES['origin'])
-            del incomplete[field]
-            with self.subTest(missing=field):
-                self.assertCode('opening_option', creation.validate_value, 'origin', incomplete,
-                                OPENING_VERSION, {})
-        # All four accepted directions pass with the two required sentences present.
-        for family in ('魂穿', '身穿', '本土', '其他'):
-            value = copy.deepcopy(VALUES['origin'])
-            value['family'] = family
-            self.assertIsNone(creation.validate_value('origin', value, OPENING_VERSION, {}))
-
     def test_walking_every_gate_forms_a_contract_that_keeps_each_decision(self):
         state = walk(creation.begin('工程夹具：走完全程。'))
         self.assertEqual(state['phase'], 'world')
@@ -493,7 +489,9 @@ class CurrentOpeningTests(unittest.TestCase):
         rewritten['world_tiers'][0]['name'] = '无名登记员'
         self.assertCode('opening_alignment', creation.validate_contract, rewritten, state, world)
 
-    def test_intake_needs_only_a_tier_for_the_structural_gate(self):
+    def test_intake_takes_whole_and_partial_decisions_without_inventing_anything(self):
+        """A complete intake needs only a tier for the structural gate; a partial intake keeps the
+        complete simple gates it was given and invents no other decision."""
         values = {gate: copy.deepcopy(value) for gate, value in VALUES.items()}
         values['scale'] = {'tier': 't4'}
         state = creation.intake(creation.begin('作者一次给全。'), values, '作者一次给全。')
@@ -506,7 +504,6 @@ class CurrentOpeningTests(unittest.TestCase):
         # in from the retired version-2 twin of this test: the normalization is shared code).
         self.assertCode('opening_option', creation.intake, creation.begin('x'), {'scale': {'tier': 't9'}}, 'x')
 
-    def test_partial_intake_keeps_complete_simple_gates_without_inventing_other_decisions(self):
         values = {'title': {'title': '作者已定书名'}, 'scale': {'tier': 't0'}}
         state = creation.intake(creation.begin(), values, '作者已经决定书名与体量。')
         selected = creation.selected(state)
