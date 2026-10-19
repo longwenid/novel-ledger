@@ -210,6 +210,42 @@ class DriftCheckReconciliationTests(unittest.TestCase):
         self.assertEqual(book['design_drift'][0]['kind'], 'resources')
         self.assertIn('多领了', book['design_drift'][0]['reason'])
 
+    def test_unplanned_facts_are_committed_and_replanning_reads_the_updated_state(self):
+        result = self.receipt()
+        check = result['data']['drift_check']
+        check['unplanned'] = [
+            {'kind': 'knowledge', 'key': 'shen:secret',
+             'actual': {'from': None, 'to': 'confirmed'}, 'reason': '核对中另外确认了秘密。',
+             'evidence': copy.deepcopy(check['items'][0]['evidence'])},
+            {'kind': 'resources', 'key': '["shen","车费","元"]',
+             'actual': {'from': 3, 'to': 7}, 'reason': '花费之后又领到四元车费。',
+             'evidence': copy.deepcopy(check['items'][0]['evidence'])}]
+        check['verdict'] = 'deviated'
+        self.assertEqual(self.submit(result)['committed_chapter'], 1)
+        book = self.repo.load()
+        self.assertEqual(book['state']['knowledge']['shen:secret']['stance'], 'knows')
+        self.assertEqual(book['state']['resources']['["shen","车费","元"]'], '7')
+        self.assertEqual(len(book['design_drift']), 2)
+        handoff = self.advance()
+        if handoff['action'] == 'await_author':
+            self.app.approve(handoff['prose_hash'], '工程夹具认可首章版本。', self.owner)
+            handoff = self.advance()
+        self.assertEqual(handoff['task']['stage'], 'chapter_outline')
+        replanned = response(self.app)
+        resource = replanned['data']['chapters'][0]['resources'][0]
+        self.assertEqual(resource['from'], 7)
+
+    def test_a_skipped_plant_commits_a_deviation_without_planting_the_promise(self):
+        result = self.receipt()
+        check = result['data']['drift_check']
+        item = next(item for item in check['items'] if item['kind'] == 'hook')
+        item.update(status='skipped', actual=None, reason='本章未埋设这条承诺，需重排后续安排。')
+        check['verdict'] = 'deviated'
+        self.assertEqual(self.submit(result)['committed_chapter'], 1)
+        book = self.repo.load()
+        self.assertNotIn(item['key'], book['state']['hooks'])
+        self.assertEqual(book['design_drift'][0]['kind'], 'hook')
+
     def test_a_deviated_item_without_a_reason_is_refused(self):
         result = self.receipt()
         target = next(item for item in result['data']['drift_check']['items']

@@ -8,9 +8,9 @@
 
 ## 创建内容
 
-模型包含 premise/story_capacity/selection_hash 和完整记录数组。领域及记录字段以 `world.SECTIONS` 和当前任务模板为准；**本档位要求填写的领域由 `world.TIER_SECTIONS` 按体量决定（微型档只要求规则、社会、日常、人物、隐秘与机制），列表之外的领域保留为空数组，不要为凑数写进来**——世界被之后每一次派工读取，它的规模是持续成本而不是一次性成本。
+模型包含 premise/story_capacity/selection_hash 和完整记录数组。领域及记录字段以 `world.SECTIONS` 和当前任务模板为准；**必填集合由 `world.required_sections(tier, choices)` 合并档位基础域与门中声明后决定（微型档的基础域是规则、社会、日常、人物、隐秘与机制），最终列表之外的领域保留为空数组，不要为凑数写进来**——世界被之后每一次派工读取，它的规模是持续成本而不是一次性成本。
 
-**v5 起还要叠加门里声明的要求**：`world.required_sections(tier, choices)` = 档位基础域 ∪ `world.declared_sections(choices)`——`world` 门声明了 `tiers` 就把 `powers` 加进来，`ladder` 里有 `一界`/`星海`/`诸天` 级别的 `scope` 就把 `cosmology` 加进来。**t3–t5 的档位基础域是 `LEGACY_SECTIONS`（原有 10 域），不含新增两域**：在跑项目的世界没有 `powers`/`cosmology` 键，拿全领域表去要求会让它们的一致性复检直接失败；新领域只在门里声明时才要求。mechanisms 按所选机制方向为空或实写，不用记录数量替代丰富度判断。
+**v5 起还要叠加门里声明的要求**：`world.required_sections(tier, choices)` = 档位基础域 ∪ `world.declared_sections(choices)`——`world` 门声明了 `resource` 就把 `economy` 加进来（包括原本不要求该域的 t0/t1/t2），声明了 `tiers` 就把 `powers` 加进来，`ladder` 里有 `一界`/`星海`/`诸天` 级别的 `scope` 就把 `cosmology` 加进来。简报与提交校验共用这个集合，已声明的硬通货不会再被要求留空。**t3–t5 的档位基础域是 `LEGACY_SECTIONS`（原有 10 域），不含新增两域**：在跑项目的世界没有 `powers`/`cosmology` 键，拿全领域表去要求会让它们的一致性复检直接失败；新领域只在门里声明时才要求。v6 声明 `architecture` 时，还要求 geography/history/factions/rules/mysteries 承接五项架构；不强制增加宇宙位面。mechanisms 按所选机制方向为空或实写。
 
 | 领域 | 说明 |
 |---|---|
@@ -50,11 +50,11 @@
 |---|---|---|
 | `powers` | 读者看得见的**位阶阶梯**：级别名、升级条件、拿到什么、卡在哪、上限 | `world` 门的 `tiers` 每条在这里有同名记录（逐字） |
 | `economy` | 一种**硬通货**：名称、来源、谁在分配（灵石/贡献点/积分/信用/丹药一类可记账资源） | `world` 门的 `resource` 在这里有同名记录，且 `distribution` 里出现声明的 `allocator` |
-| `factions` | 一个**有资源分配权的组织**，且它的压迫能落成具体考核、任务或贡献点 | 可承接 `ladder` 的 `stage`（跨卷仍在场用 `survives_scale_up` 说明） |
+| `factions` | 有自身目标、资源依赖与冲突的组织，能形成不同的生存或治理方案 | 可承接 `ladder` 的 `stage`（跨卷仍在场用 `survives_scale_up` 说明） |
 | `mechanisms` | 有特殊机制时：代价、上限与**供料链**（升级材料从哪来、谁在抢、世界怎么持续产出） | 与 `edge` 门声明的优势供料链一致 |
-| `geography` / `cosmology` | 留出**下一张地图的位置**：下一级舞台在哪、通行条件、以及到 `一界`/`星海`/`诸天` 尺度时的位面（层名、谁在、什么法则、怎么进） | `ladder` 的每级 `stage` 在这里有同名记录（逐字） |
+| `geography` / `cosmology` | 说明**空间边界与联系**：各方居所、通行条件、以及到 `一界`/`星海`/`诸天` 尺度时的位面（层名、谁在、什么法则、怎么进） | `ladder` 的每级 `stage` 在这里有同名记录（逐字） |
 
-这几件是**给后续设计用的**，不是氛围描写：位阶的当前级别进 `characters`/`knowledge` 的状态（章纲的 `characters`/`knowledge` 增量按它写）；硬通货进资源增量账（章纲 `resources` 的 key 必须能在世界或既有状态里找到）；地图进 `places`——章纲的 `places` 增量会进位置漂移校验，跳到未登记地点直接拒绝。开篇三章的第一场冲突至少用上其中两件，不做纯氛围世界观。
+这几件是**给后续设计用的**，不是氛围描写：位阶的当前级别进 `characters`/`knowledge` 的状态（章纲的 `characters`/`knowledge` 增量按它写）；硬通货进资源增量账（章纲 `resources` 的 key 必须能在世界或既有状态里找到）；地图进 `places`——章纲的 `places` 增量会进位置漂移校验，跳到未登记地点直接拒绝。开篇用具体危机与行动展示必要规则，背景随卷纲的揭示安排展开。
 
 ## 三条逐字绑定
 
@@ -68,23 +68,37 @@
 
 另外，`data` 里缺的领域会先规范化为 `[]`（在返回的深拷贝里补上），只有**本档位或本次声明要求**的领域才要求至少一条实写记录（`mechanisms` 的既有例外保留）——所以在跑项目（10 域、没有新键）仍能通过一致性复检。
 
+## 世界架构绑定
+
+`opening/6` 的 `world.architecture` 原样保存为约定 `world_architecture`。模型必须在下面每个指定字段里，用至少一条记录逐字保留对应声明；其他字段展开细节，links 表达关系。仅在别的字段提到、改写成摘要或重新发明背景，都不算承接。
+
+| architecture 键 | 意义 | 世界记录字段 |
+|---|---|---|
+| space | 世界全貌、文明分布与通行边界 | `geography.environment` |
+| history | 历史断层对当下的影响 | `history.present_effect` |
+| civilizations | 多方生存方式、依存与冲突 | `factions.conflicts` |
+| conflict | 持续恶化的贯穿矛盾 | `rules.consequences` |
+| mystery | 终极真相与揭开后仍需解决的问题 | `mysteries.truth` |
+
+声明与绑定目标共用 `contracts.WORLD_ARCHITECTURE`；旧项目未声明时不追溯补填。存进 `truth` 的作者设定不自动成为人物知识，披露须经卷纲窗口与章纲知情链安排。
+
 ## 机械校验与采纳
 
-world_model 候选不更新正文事实。**世界之后没有独立核验阶段**：提交时由引擎机械校验字段形状、links 引用是否存在、领域是否落在本档位与本次声明的要求内、记录 id 是否唯一、世界与所选前提/机制范围/禁区是否一致，以及上面的**三条逐字绑定**。通过即在同一事务采纳；失败按名返回，走既有 `repair` 预算有界返修，不新增阶段。
+world_model 候选不更新正文事实。提交时由引擎机械校验字段形状、links 引用是否存在、领域是否落在本档位与本次声明的要求内、记录 id 是否唯一、世界与所选前提/机制范围/禁区是否一致，以及上面的位阶、资源、格局及世界架构绑定。通过即在同一事务采纳；失败保持原任务并返回具体错误，修正后重交，不消耗正文返修额度。
 
-机械校验只证明字段、引用和声明一致：**世界的因果承载、长期供料能力和失效风险没有人独立复核**。这类问题只能在后面暴露——卷纲的 `exit_state` 与章纲的卷内状态链在设计与执笔期才能证明它能否供料；需要独立判断时由作者抽读候选，或另行发起一次修订。
+机械校验只证明字段、引用和声明一致。当前设计者须在世界、卷纲与章纲任务内推演因果、长期冲突和揭示顺序，卷纲的 `exit_state` 与章纲状态链检查可计算的资源和状态条件；不新增独立校验子 agent，也不把机械通过当作文学质量证明。
 
 隐秘真相与未来意图不直接变为人物知情或已发生事件。
 
 ## 约定与交付
 
-默认 world_model 在同一任务中起草世界和完整约定；检查 task.stages、payload.also 与模板，按要求把约定放入 data.contract。世界与候选约定由引擎按同一套机械校验在提交时判定（约定字段、与各门选择逐字一致、world_rules 与候选世界逐字一致、三条绑定成立），通过后原子激活，**没有独立核验阶段**。单独的 opening_contract 任务沿自己的冻结材料执行，开书交接见 [系统执行](opening.md#系统执行)。
+默认 world_model 在同一任务中起草世界和完整约定；检查 task.stages、payload.also 与模板，按要求把约定放入 data.contract。世界与候选约定由引擎按同一套机械校验在提交时判定（约定字段、与各门选择逐字一致、world_rules 与候选世界逐字一致、所有已声明的绑定成立），通过后原子激活。单独的 opening_contract 任务沿自己的冻结材料执行，开书交接见 [系统执行](opening.md#系统执行)。
 
 | 交付对象 | 来源与时机 |
 |---|---|
 | book.html | 世界与约定机械校验通过后合并完整设定、已选方向，卷纲推进后继续更新。world_view.html_path 指向该统一页面。 |
 | world.json | 导出已采纳的完整世界；与页面一并提供绝对路径，失败后由 advance 重建视图。 |
-| 卷纲范围 | 按 outline_ready 的实际覆盖说明：默认 scope=all 一次交全部卷，rolling 进卷前交该卷；关闭卷纲时为 world_ready。见 [叙事推进](narrative.md#卷纲)。 |
+| 卷纲范围 | 按 outline_ready 的实际覆盖说明：默认 scope=all 一次交全部卷，rolling 进卷前交该卷；卷纲与章纲为必选阶段。见 [叙事推进](narrative.md#卷纲)。 |
 
 世界关联图只使用显式 links，历史时间线按模型记录顺序展示，不从描述推断关系或时期。
 

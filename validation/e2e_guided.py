@@ -167,7 +167,10 @@ def value_for(gate_id, version, index, choices, vocab=None):
         if gate_id == 'premise':
             return premise_value(index, vocab)
         if gate_id == 'world':
-            return world_gate_value(index, choices, vocab)
+            value = world_gate_value(index, choices, vocab)
+            if version >= 6:
+                value['architecture'] = {'space': '旧大陆与海上城邦靠季节航路相连，远洋断航使各地无法独自存续。', 'history': '上个时代的资源战争留下互保契约，失效的旧承诺正在引发新的饥荒。', 'civilizations': '内陆联邦依赖海上供给，城邦依赖内陆技术，双方为旧契约的解释权冲突。', 'conflict': '各方只能转移灾害而不能消除灾害，越成功自保就越破坏共同生存条件。', 'mystery': '共同灾害来自先民维持航路的选择，揭开真相后仍要决定谁承担修复代价。'}
+            return value
         if gate_id == 'ladder':
             return ladder_value(index, choices, vocab)
         if gate_id == 'payoff':
@@ -268,6 +271,12 @@ def world_receipt(app):
     value['rules'][0]['principle'] = '夜班退件必须登记负责人。'
     if version >= 5:
         _apply_v5_bindings(value, choices)
+    frame = choices['world'].get('architecture') or {}
+    for key, section, field in (('space', 'geography', 'environment'), ('history', 'history', 'present_effect'),
+                                ('civilizations', 'factions', 'conflicts'), ('conflict', 'rules', 'consequences'),
+                                ('mystery', 'mysteries', 'truth')):
+        if key in frame:
+            value[section][0][field] = frame[key]
     value['mechanisms'] = []
     return value
 
@@ -588,8 +597,6 @@ def case_v5_gate_values_shape():
     vocab = vocabulary()
     version = 5
     ids = creation.gate_ids(version)
-    if OPENING_VERSION != 5:
-        problems.append('默认开书版本不是 5：OPENING_VERSION=%s' % OPENING_VERSION)
     if len(ids) != 13 or 'premise' not in ids or 'ladder' not in ids:
         problems.append('v5 门集不是 13 门或缺少新门：%s' % list(ids))
     else:

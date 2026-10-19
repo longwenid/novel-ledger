@@ -1,0 +1,546 @@
+{
+  "schema": "novel-ledger.engineering-audit/1",
+  "audit_date": "2026-10-19",
+  "timezone": "Asia/Shanghai",
+  "source_commit": "9a2a5bb40be72c0d2d02c2bacc2bcf4fe7c0acf8",
+  "python": "3.10.12",
+  "platform": "darwin",
+  "pytest": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider",
+    "passed": 535,
+    "failed": 2,
+    "subtests_passed": 1312,
+    "seconds": 28.24,
+    "raw_output": ".................................... [  6%]\n.................................................................................................... [ 25%]\n.................................................................................................... [ 43%]\n.......................................................... [ 54%]\n....................................... [ 62%]\n.....F.......F......................................... [ 72%]\n................................................................... [ 84%]\n............................................................... [ 96%]\n...................                        [100%]\n=================================== FAILURES ===================================\n_ PresentationBoundaryTests.test_materializing_work_symlink_replaces_the_link_and_preserves_external_target _\n\nself = <test_presentation_boundaries.PresentationBoundaryTests testMethod=test_materializing_work_symlink_replaces_the_link_and_preserves_external_target>\n\n    def test_materializing_work_symlink_replaces_the_link_and_preserves_external_target(self):\n        outside = self.root / 'outside-draft.txt'\n        outside.write_text('作者的其他文档', encoding='utf-8')\n        base = self.workspace.project / 'work/opaque-task'\n        base.mkdir(parents=True)\n        aliases = [base / name for name in ('input.json', 'chapter-1.txt', 'task.json')]\n        for alias in aliases:\n            link_or_skip(self, alias, outside)\n    \n>       view = self.presentation.task(self.task())\n\ntests/test_presentation_boundaries.py:267: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \nscripts/novel_ledger/presentation.py:18: in task\n    return delivery.materialize(self.repo, task, self.entry, baseline, compact,\nscripts/novel_ledger/delivery.py:430: in materialize\n    previous = json.loads(task_file.read_text(encoding='utf-8')) if task_file.exists() else None\n../../../.pyenv/versions/3.10.12/lib/python3.10/json/__init__.py:346: in loads\n    return _default_decoder.decode(s)\n../../../.pyenv/versions/3.10.12/lib/python3.10/json/decoder.py:337: in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <json.decoder.JSONDecoder object at 0x1052a58d0>, s = '作者的其他文档', idx = 0\n\n    def raw_decode(self, s, idx=0):\n        \"\"\"Decode a JSON document from ``s`` (a ``str`` beginning with\n        a JSON document) and return a 2-tuple of the Python\n        representation and the index in ``s`` where the document ended.\n    \n        This can be used to decode a JSON document from a string that may\n        have extraneous data at the end.\n    \n        \"\"\"\n        try:\n            obj, end = self.scan_once(s, idx)\n        except StopIteration as err:\n>           raise JSONDecodeError(\"Expecting value\", s, err.value) from None\nE           json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)\n\n../../../.pyenv/versions/3.10.12/lib/python3.10/json/decoder.py:355: JSONDecodeError\n__ PresentationBoundaryTests.test_world_files_need_only_reader_and_workspace ___\n\nself = <test_presentation_boundaries.PresentationBoundaryTests testMethod=test_world_files_need_only_reader_and_workspace>\n\n    def test_world_files_need_only_reader_and_workspace(self):\n        model = {'selection_hash': 'frozen-selection', 'premise': '夜班仓库的退件纠纷。',\n                 'story_capacity': '调查责任怎样沿经手关系传递。'}\n        self.repo.book.update(world=model, creation={'selections': [{'gate': 'genre'}]})\n        self.workspace.project.mkdir()\n        external = self.root / 'external-world.txt'\n        external.write_text('external world content', encoding='utf-8')\n        for name in ('world.json', 'book.html'):\n            link_or_skip(self, self.workspace.project / name, external)\n>       result = self.presentation.world()\n\ntests/test_presentation_boundaries.py:140: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \nscripts/novel_ledger/presentation.py:30: in world\n    return delivery.export_world(self.repo, bookpage.render, workspace=self.workspace)\nscripts/novel_ledger/delivery.py:505: in export_world\n    atomic_write(html_path, render(repo))\nscripts/novel_ledger/bookpage.py:778: in render\n    _world(book), _outlines(book), _plans(book, contract), _understanding(book),\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nbook = {'branch': 'main', 'chapter_outlines': {}, 'contract': None, 'creation': {'selections': [{'gate': 'genre'}]}, ...}\n\n    def _world(book):\n        pieces = ['<h2 id=\"world\">世界与选择</h2>']\n        opening = book.get('creation')\n        if opening and opening.get('selections'):\n            pieces.append('<h3>逐门选择</h3>')\n            version = creation.opening_version(opening)\n            for row in opening['selections']:\n>               option = row['option']\nE               KeyError: 'option'\n\nscripts/novel_ledger/bookpage.py:317: KeyError\n=========================== short test summary info ============================\nFAILED tests/test_presentation_boundaries.py::PresentationBoundaryTests::test_materializing_work_symlink_replaces_the_link_and_preserves_external_target\nFAILED tests/test_presentation_boundaries.py::PresentationBoundaryTests::test_world_files_need_only_reader_and_workspace\n2 failed, 535 passed, 1312 subtests passed in 28.24s\n"
+  },
+  "harnesses": [
+    {
+      "name": "e2e_guided",
+      "exit": 0,
+      "seconds": 13.1
+    },
+    {
+      "name": "adversarial",
+      "exit": 0,
+      "seconds": 0.71
+    },
+    {
+      "name": "e2e_drift_acceptance",
+      "exit": 0,
+      "seconds": 0.55
+    },
+    {
+      "name": "repro_hook_matrix",
+      "exit": 0,
+      "seconds": 0.58
+    },
+    {
+      "name": "repro_hook_chain",
+      "exit": 0,
+      "seconds": 0.84
+    },
+    {
+      "name": "repro_v21_gaps",
+      "exit": 0,
+      "seconds": 1.57
+    },
+    {
+      "name": "repro_style_window",
+      "exit": 0,
+      "seconds": 0.18
+    },
+    {
+      "name": "repro_merged_tier",
+      "exit": 0,
+      "seconds": 0.14
+    },
+    {
+      "name": "repro_drift_clock",
+      "exit": 0,
+      "seconds": 0.04
+    },
+    {
+      "name": "repro_knowledge_readback",
+      "exit": 0,
+      "seconds": 0.04
+    },
+    {
+      "name": "repro_understanding_channel",
+      "exit": 0,
+      "seconds": 0.17
+    }
+  ],
+  "checks": {
+    "quick_validate": "Skill is valid!",
+    "anchors": "15 checked files, 0 reported bad anchors; checker has false-negative and exit-code defects",
+    "syntax_files": {
+      "scripts": 44,
+      "tests": 41,
+      "validation": 23
+    },
+    "pyflakes_available": false
+  },
+  "measurement": {
+    "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
+    "pipeline": "five steps: opening gates / world_model / volume_outline / chapter_outline / write",
+    "graph": {
+      "status": "ok",
+      "value": {
+        "modules": 40,
+        "runtime_lines_including_cli": 12201,
+        "cycles_including_deferred_imports": [],
+        "dependency_edges": 137
+      }
+    },
+    "dispatch": {
+      "status": "ok",
+      "value": {
+        "gates": {
+          "opening_version": 5,
+          "gates": [
+            "genre",
+            "premise",
+            "origin",
+            "voice",
+            "scale",
+            "world",
+            "ladder",
+            "edge",
+            "protagonist",
+            "relationships",
+            "opposition",
+            "payoff",
+            "title"
+          ],
+          "system_gates": [
+            "scale"
+          ],
+          "dispatched_opening_options": 12,
+          "note": "开书门由主干自执，不计子 agent 派工（spec §1/§7）；门数与系统门由 creation.gate_ids / SYSTEM_GATES 派生。"
+        },
+        "by_tier": [
+          {
+            "tier": "t0",
+            "chapters": 17,
+            "volumes": 1,
+            "volume_scope": "all",
+            "merge_chapter_outline": true,
+            "world_model": 1,
+            "volume_outline": 1,
+            "chapter_outline": 0,
+            "write": 17,
+            "before_prose": 2,
+            "total": 19
+          },
+          {
+            "tier": "t0",
+            "chapters": 17,
+            "volumes": 1,
+            "volume_scope": "rolling",
+            "merge_chapter_outline": true,
+            "world_model": 1,
+            "volume_outline": 1,
+            "chapter_outline": 0,
+            "write": 17,
+            "before_prose": 2,
+            "total": 19
+          },
+          {
+            "tier": "t1",
+            "chapters": 50,
+            "volumes": 2,
+            "volume_scope": "all",
+            "merge_chapter_outline": true,
+            "world_model": 1,
+            "volume_outline": 1,
+            "chapter_outline": 0,
+            "write": 50,
+            "before_prose": 2,
+            "total": 52
+          },
+          {
+            "tier": "t1",
+            "chapters": 50,
+            "volumes": 2,
+            "volume_scope": "rolling",
+            "merge_chapter_outline": true,
+            "world_model": 1,
+            "volume_outline": 2,
+            "chapter_outline": 0,
+            "write": 50,
+            "before_prose": 3,
+            "total": 53
+          },
+          {
+            "tier": "t2",
+            "chapters": 100,
+            "volumes": 4,
+            "volume_scope": "all",
+            "merge_chapter_outline": false,
+            "world_model": 1,
+            "volume_outline": 1,
+            "chapter_outline": 4,
+            "write": 100,
+            "before_prose": 6,
+            "total": 106
+          },
+          {
+            "tier": "t2",
+            "chapters": 100,
+            "volumes": 4,
+            "volume_scope": "rolling",
+            "merge_chapter_outline": false,
+            "world_model": 1,
+            "volume_outline": 4,
+            "chapter_outline": 4,
+            "write": 100,
+            "before_prose": 9,
+            "total": 109
+          },
+          {
+            "tier": "t3",
+            "chapters": 180,
+            "volumes": 6,
+            "volume_scope": "all",
+            "merge_chapter_outline": false,
+            "world_model": 1,
+            "volume_outline": 1,
+            "chapter_outline": 6,
+            "write": 180,
+            "before_prose": 8,
+            "total": 188
+          },
+          {
+            "tier": "t3",
+            "chapters": 180,
+            "volumes": 6,
+            "volume_scope": "rolling",
+            "merge_chapter_outline": false,
+            "world_model": 1,
+            "volume_outline": 6,
+            "chapter_outline": 6,
+            "write": 180,
+            "before_prose": 13,
+            "total": 193
+          },
+          {
+            "tier": "t4",
+            "chapters": 300,
+            "volumes": 8,
+            "volume_scope": "all",
+            "merge_chapter_outline": false,
+            "world_model": 1,
+            "volume_outline": 1,
+            "chapter_outline": 8,
+            "write": 300,
+            "before_prose": 10,
+            "total": 310
+          },
+          {
+            "tier": "t4",
+            "chapters": 300,
+            "volumes": 8,
+            "volume_scope": "rolling",
+            "merge_chapter_outline": false,
+            "world_model": 1,
+            "volume_outline": 8,
+            "chapter_outline": 8,
+            "write": 300,
+            "before_prose": 17,
+            "total": 317
+          },
+          {
+            "tier": "t5",
+            "chapters": 600,
+            "volumes": 10,
+            "volume_scope": "all",
+            "merge_chapter_outline": false,
+            "world_model": 1,
+            "volume_outline": 1,
+            "chapter_outline": 10,
+            "write": 600,
+            "before_prose": 12,
+            "total": 612
+          },
+          {
+            "tier": "t5",
+            "chapters": 600,
+            "volumes": 10,
+            "volume_scope": "rolling",
+            "merge_chapter_outline": false,
+            "world_model": 1,
+            "volume_outline": 10,
+            "chapter_outline": 10,
+            "write": 600,
+            "before_prose": 21,
+            "total": 621
+          }
+        ],
+        "boundary": "依 PIPELINE_SHAPES 与 contract.volume_outline.scope 的机械计数；不含返修/重设计额度。"
+      }
+    },
+    "material": {
+      "status": "ok",
+      "value": {
+        "boundary": "字符量来自冻结信封与必读记录；不能换算成 token 或费用。本表走 seeded 路径（无 creation），因此不含 opening_basis/opening_choices 三项；world_model 一类要等逐门开书夹具可用于 drive() 才能量（见 blocked）。",
+        "volume_outline": {
+          "required_names": [
+            "contract",
+            "hooks",
+            "style",
+            "world_model"
+          ],
+          "required_records": 4,
+          "declared_records": 9,
+          "required_bytes": 4850,
+          "envelope_bytes": 6501
+        },
+        "chapter_outline": {
+          "required_names": [
+            "contract",
+            "state",
+            "hooks",
+            "style",
+            "world_model",
+            "volume_outline",
+            "previous_chapters"
+          ],
+          "required_records": 7,
+          "declared_records": 11,
+          "required_bytes": 14077,
+          "envelope_bytes": 6659
+        },
+        "write": {
+          "without_future_volume": {
+            "required_names": [
+              "contract",
+              "state",
+              "hooks",
+              "style",
+              "world_core",
+              "world_records",
+              "disclosure_boundary",
+              "chapter_outline",
+              "volume_outline",
+              "previous_chapters"
+            ],
+            "required_records": 10,
+            "declared_records": 14,
+            "required_bytes": 16101,
+            "envelope_bytes": 17625
+          },
+          "with_future_volume": {
+            "required_names": [
+              "contract",
+              "state",
+              "hooks",
+              "style",
+              "world_core",
+              "world_records",
+              "disclosure_boundary",
+              "chapter_outline",
+              "volume_outline",
+              "previous_chapters"
+            ],
+            "required_records": 10,
+            "declared_records": 14,
+            "required_bytes": 16101,
+            "envelope_bytes": 17625
+          },
+          "growth_bytes": 0,
+          "bounded_selection": true
+        },
+        "world_model": {
+          "status": "blocked",
+          "reason": "support.drive() 无法回答 opening_options 派工：response() 交回 gate=\"\" options=[] 的空骨架，creation.offer 拒绝。逐门开书夹具在 tests/test_opening_v2.py 内，不在本工具写域。"
+        }
+      }
+    },
+    "tracked": {
+      "status": "ok",
+      "value": [
+        {
+          "volume_chapters": 20,
+          "registered_nodes": 20,
+          "nodes_declared_by_this_chapter": [
+            "n1"
+          ],
+          "settled_story_nodes_in_slice": 0,
+          "state_record_bytes": 609,
+          "volume_outline_bytes": 10475,
+          "required_bytes": 18055
+        },
+        {
+          "volume_chapters": 100,
+          "registered_nodes": 100,
+          "nodes_declared_by_this_chapter": [
+            "n1"
+          ],
+          "settled_story_nodes_in_slice": 0,
+          "state_record_bytes": 609,
+          "volume_outline_bytes": 18440,
+          "required_bytes": 26027
+        },
+        {
+          "volume_chapters": 500,
+          "registered_nodes": 500,
+          "nodes_declared_by_this_chapter": [
+            "n1"
+          ],
+          "settled_story_nodes_in_slice": 0,
+          "state_record_bytes": 609,
+          "volume_outline_bytes": 76426,
+          "required_bytes": 84014
+        }
+      ]
+    },
+    "memory": {
+      "status": "ok",
+      "value": [
+        {
+          "interpretations": 20,
+          "selected_interpretations": 3,
+          "required_record_bytes": 19930,
+          "complete_optional_source_preserved": true
+        },
+        {
+          "interpretations": 100,
+          "selected_interpretations": 3,
+          "required_record_bytes": 19930,
+          "complete_optional_source_preserved": true
+        },
+        {
+          "interpretations": 500,
+          "selected_interpretations": 3,
+          "required_record_bytes": 19930,
+          "complete_optional_source_preserved": true
+        }
+      ]
+    },
+    "history": {
+      "status": "ok",
+      "value": [
+        {
+          "synthetic_chapters": 20,
+          "synthetic_prose_han_at_least": 60000,
+          "history_source_bytes": 197,
+          "previous_full_catalog_and_event_index_bytes": 5846,
+          "first_build_ms": 0.226,
+          "six_repeated_snapshot_ms": 0.24,
+          "six_repeated_snapshot_document_reads": 6,
+          "repeated_snapshot_new_documents": 0,
+          "recent_five_match_event_pages_read": 6,
+          "missing_match_event_pages_read": 20,
+          "missing_match_ms": 1.095,
+          "oldest_prose_complete": true,
+          "observed_read_chars": 4237
+        },
+        {
+          "synthetic_chapters": 100,
+          "synthetic_prose_han_at_least": 300000,
+          "history_source_bytes": 198,
+          "previous_full_catalog_and_event_index_bytes": 29370,
+          "first_build_ms": 0.941,
+          "six_repeated_snapshot_ms": 0.249,
+          "six_repeated_snapshot_document_reads": 6,
+          "repeated_snapshot_new_documents": 0,
+          "recent_five_match_event_pages_read": 6,
+          "missing_match_event_pages_read": 100,
+          "missing_match_ms": 3.388,
+          "oldest_prose_complete": true,
+          "observed_read_chars": 4240
+        },
+        {
+          "synthetic_chapters": 500,
+          "synthetic_prose_han_at_least": 1500000,
+          "history_source_bytes": 198,
+          "previous_full_catalog_and_event_index_bytes": 148570,
+          "first_build_ms": 4.79,
+          "six_repeated_snapshot_ms": 0.289,
+          "six_repeated_snapshot_document_reads": 6,
+          "repeated_snapshot_new_documents": 0,
+          "recent_five_match_event_pages_read": 6,
+          "missing_match_event_pages_read": 500,
+          "missing_match_ms": 15.664,
+          "oldest_prose_complete": true,
+          "observed_read_chars": 4253
+        }
+      ]
+    }
+  },
+  "adversarial_observations": {
+    "workflow": {
+      "exit_code": 0,
+      "observations": [
+        "{\"case\": \"promote_before_any_revision_task\", \"formal_chapters_before\": 5, \"formal_chapters_after\": 4, \"candidate_chapter\": 5, \"revision_run\": null, \"official_branch\": \"revision-e0297832d84f\", \"parent_still_has_chapter_5\": true}",
+        "{\"case\": \"normal_revision_reaches_boundary\", \"action\": \"target_reached\", \"response_keys\": [\"action\", \"status\"], \"formal_branch\": \"main\", \"candidate_branch\": \"revision-80e67a199d76\", \"revision_run\": {\"parent\": \"main\", \"first\": 5, \"last\": 5, \"expansion\": null}, \"candidate_chapters\": 5}",
+        "{\"case\": \"watch_moves_active_receipt\", \"action\": \"idle\", \"result_exists\": false, \"stale_exists\": true}",
+        "{\"case\": \"accepting_exhausted_draft_deadends\", \"first_next_action\": \"repair_exhausted\", \"second_next_action\": \"repair_exhausted\", \"formal_chapters\": 0, \"draft\": null, \"author_decision\": null}"
+      ]
+    },
+    "docs": {
+      "exit_code": 0,
+      "observations": [
+        "{\"root\":\"/Users/longwen/AndroidStudioProjects/skills/novel-ledger\",\"economy\":[{\"tier\":\"t0\",\"economy_required\":false,\"brief_instruction\":\"本项目按体量只需要：rules（世界规则）、society（社会制度）、everyday（生活日常）、characters（人物与关系）、mysteries（隐秘信息与披露）、mechanisms（特殊机制与代价）、powers（力量与位阶阶梯）。其余领域（geography、history、factions、economy、cosmology）保留为空数组，不要为凑数写进来；除 mechanisms 外，列出的每个领域至少一条实写记录；已选无特殊机制时 mechanisms 必须为空数组，有限机制时至少一条。\",\"failure\":{\"code\":\"world_alignment\",\"mismatches\":[{\"rule\":\"world_resource→economy 同名 resource，且 allocator 出现在该记录的 distribution 里\",\"expect\":{\"resource\":\"登记凭证\",\"allocator\":\"夜班主管\"},\"got\":null}]}},{\"tier\":\"t1\",\"economy_required\":false,\"brief_instruction\":\"本项目按体量只需要：geography（地理与通行）、rules（世界规则）、society（社会制度）、everyday（生活日常）、characters（人物与关系）、mysteries（隐秘信息与披露）、mechanisms（特殊机制与代价）、powers（力量与位阶阶梯）。其余领域（history、factions、economy、cosmology）保留为空数组，不要为凑数写进来；除 mechanisms 外，列出的每个领域至少一条实写记录；已选无特殊机制时 mechanisms 必须为空数组，有限机制时至少一条。\",\"failure\":{\"code\":\"world_alignment\",\"mismatches\":[{\"rule\":\"world_resource→economy 同名 resource，且 allocator 出现在该记录的 distribution 里\",\"expect\":{\"resource\":\"登记凭证\",\"allocator\":\"夜班主管\"},\"got\":null}]}},{\"tier\":\"t2\",\"economy_required\":false,\"brief_instruction\":\"本项目按体量只需要：geography（地理与通行）、history（历史与当下影响）、rules（世界规则）、society（社会制度）、everyday（生活日常）、characters（人物与关系）、mysteries（隐秘信息与披露）、mechanisms（特殊机制与代价）、powers（力量与位阶阶梯）。其余领域（factions、economy、cosmology）保留为空数组，不要为凑数写进来；除 mechanisms 外，列出的每个领域至少一条实写记录；已选无特殊机制时 mechanisms 必须为空数组，有限机制时至少一条。\",\"failure\":{\"code\":\"world_alignment\",\"mismatches\":[{\"rule\":\"world_resource→economy 同名 resource，且 allocator 出现在该记录的 distribution 里\",\"expect\":{\"resource\":\"登记凭证\",\"allocator\":\"夜班主管\"},\"got\":null}]}}],\"four_options\":[{\"gate\":\"origin\",\"brief_asks_four\":true,\"submitted_options\":4,\"failure\":{\"code\":\"opening_options\",\"message\":\"每门提供 2～3 个可直接选择的具体方案。\"}},{\"gate\":\"premise\",\"brief_asks_four\":true,\"submitted_options\":4,\"failure\":{\"code\":\"opening_options\",\"message\":\"每门提供 2～3 个可直接选择的具体方案。\"}}],\"volume_closure\":{\"volume_outline_accepted\":true,\"chapter_outline_accepted\":2,\"declared_clock\":{\"advance_days\":30},\"simulated_clock\":2,\"declared_character_to\":\"决意舍身救同伴\",\"simulated_character\":{\"desire\":\"查清退件来源。\",\"stance\":\"先核对再行动。\",\"relationship_focus\":\"与主管的责任边界。\"},\"declared_exit_state\":\"卷末必须三十日过去，沈桐舍身救同伴。\",\"findings\":[]},\"missing_arrays\":{\"removed_fields\":[\"resources\",\"places\",\"knowledge\",\"characters\"],\"chapter_outline_accepted\":2,\"classification\":\"documentation_contract_drift_P3\"},\"intake_example\":{\"documented_input\":{\"payoff\":{\"ending\":\"作者指定结局。\",\"theme\":\"母题。\"},\"title\":{\"title\":\"书名\"},\"scale\":{\"tier\":\"t0\"}},\"failure\":{\"code\":\"opening_option\",\"message\":\"爽点方案 plan.ways 至少列一条兑现方式（脱困、打脸、升级、资源、地位、基建、复仇、争霸等）。\"}}}"
+      ]
+    },
+    "drift": {
+      "exit_code": 0,
+      "observations": [
+        "UNPLANNED {\"submit\": {\"valid\": true, \"accepted\": true, \"checked\": false, \"committed\": true, \"task_id\": \"d3cb03a0580247cdb258615793222f73\", \"worker_boundary\": \"finished\", \"committed_chapter\": 1, \"next_stage\": null, \"rework\": {\"repairs\": 0, \"redesigns\": 0, \"initial_used\": true}, \"status\": \"running\"}, \"knowledge\": {\"shen:source\": {\"claim\": \"正文中该变化有明确动作与后果。\", \"evidence\": {\"chapter\": 1, \"quote\": \"次日，沈桐把退回的箱子放在桌\", \"start\": 0}, \"source\": \"正文自比\", \"stance\": \"suspects\"}}, \"deviations\": [{\"actual\": {\"from\": null, \"to\": \"confirmed\"}, \"chapter\": 1, \"key\": \"shen:secret\", \"kind\": \"knowledge\", \"planned\": null, \"reason\": \"正文意外揭明真相。\"}]}",
+        "SKIP_HOOK {\"submit\": {\"valid\": true, \"accepted\": true, \"checked\": false, \"committed\": true, \"task_id\": \"4ec4738b3d4d434a8aa916f91edbd406\", \"worker_boundary\": \"finished\", \"committed_chapter\": null, \"next_stage\": \"repair\", \"rework\": {\"repairs\": 0, \"redesigns\": 0, \"initial_used\": true}, \"status\": \"running\"}, \"findings\": [{\"chapter\": 1, \"criterion\": \"drift_hook\", \"expect\": \"plant|payoff\", \"got\": null, \"key\": \"hook-v1-required\", \"kind\": \"hook\", \"reason\": \"伏笔自比的动作只有 plant 与 payoff。\", \"repair_scope\": \"chapter\", \"severity\": \"blocker\", \"target_chapter\": 1, \"why\": \"伏笔自比的动作只有 plant 与 payoff。\"}]}",
+        "KNOWLEDGE_BACKWARD {\"findings\": [], \"events\": [{\"op\": \"knowledge\", \"entity\": \"hero\", \"topic\": \"secret\", \"claim\": \"本章只写成怀疑。\", \"source\": \"正文自比\", \"stance\": \"suspects\", \"before\": \"已确认真相\", \"evidence\": {\"chapter\": 1, \"quote\": \"主角仍只怀疑真相。\"}}], \"state\": {\"hero:secret\": {\"claim\": \"本章只写成怀疑。\", \"source\": \"正文自比\", \"stance\": \"suspects\", \"evidence\": {\"chapter\": 1, \"start\": 0, \"quote\": \"主角仍只怀疑真相。\"}}}}",
+        "STYLE_OMISSION {'accepted_volume_style': {}, 'accepted_chapter_style': {}}",
+        "STYLE_ZERO {\"metrics\": {\"han\": 80, \"sentences\": 11, \"sentence_mean\": 7.273, \"sentence_short_share\": 1.0, \"paragraph_mean\": 80.0, \"paragraph_max\": 80, \"dialogue_share\": 1.0, \"repetition_share\": 0.0, \"repetition_grams\": 77, \"person\": \"unknown\"}, \"findings\": []}",
+        "STYLE_QUOTES {\"text\": \"「我问了三个问题。」他答道：“我明天回来。”\", \"dialogue_and_narration\": [\"我明天回来。\", \"「我问了三个问题。」他答道：\"], \"metrics\": {\"han\": 15, \"sentences\": 3, \"sentence_mean\": 5.0, \"sentence_short_share\": 1.0, \"paragraph_mean\": 15.0, \"paragraph_max\": 15, \"dialogue_share\": 0.333, \"repetition_share\": 0.0, \"repetition_grams\": 12, \"person\": \"mixed\"}}"
+      ]
+    },
+    "drift_extended": {
+      "exit_code": 0,
+      "observations": [
+        "BACKWARD_OUTLINE {'valid': True, 'accepted': True, 'checked': False, 'committed': True, 'task_id': 'cab77eb2d4494b169971cb7972a26555', 'worker_boundary': 'finished', 'committed_chapter': None, 'next_stage': None, 'rework': None, 'status': 'running'}",
+        "BASELINE_CHAPTER 1",
+        "BASELINE_CHAPTER 2",
+        "BASELINE_CHAPTER 3",
+        "BACKWARD_E2E {\"submit\": {\"valid\": true, \"accepted\": true, \"checked\": false, \"committed\": true, \"task_id\": \"ba6c2c09ec554477b05cf8c86c6feaa7\", \"worker_boundary\": \"finished\", \"committed_chapter\": 4, \"next_stage\": null, \"rework\": {\"repairs\": 0, \"redesigns\": 0, \"initial_used\": true}, \"status\": \"running\"}, \"knowledge\": {\"shen:source\": {\"claim\": \"本章只写成了怀疑。\", \"evidence\": {\"chapter\": 4, \"quote\": \"次日，沈桐把退回的箱子放在桌\", \"start\": 0}, \"source\": \"正文自比\", \"stance\": \"suspects\"}}}",
+        "ZERO_E2E {\"metrics\": {\"han\": 77, \"sentences\": 9, \"sentence_mean\": 8.556, \"sentence_short_share\": 0.889, \"paragraph_mean\": 77.0, \"paragraph_max\": 77, \"dialogue_share\": 0.831, \"repetition_share\": 0.0, \"repetition_grams\": 74, \"person\": \"unknown\"}, \"submit\": {\"valid\": true, \"accepted\": true, \"checked\": false, \"committed\": true, \"task_id\": \"6d4e2abffbd24837a5acec7146e0360d\", \"worker_boundary\": \"finished\", \"committed_chapter\": 1, \"next_stage\": null, \"rework\": {\"repairs\": 0, \"redesigns\": 0, \"initial_used\": true}, \"status\": \"running\"}}"
+      ]
+    }
+  },
+  "source_sha256": {
+    "scripts/novel_ledger/application.py": "6148b35114b38f3fe8131f0009266a77a55c6b5961da4a8b7492c36f99232fc2",
+    "scripts/novel_ledger/workflow.py": "218bfa84f8bc14fffcf3274e7b41d8252055d614b9e28a8aad5b0f3a0a96afaa",
+    "scripts/novel_ledger/drift.py": "643df459df745818082d99c15a86b9b3a6efad3088c832e7e01d095cd32a7d5e",
+    "scripts/novel_ledger/world.py": "298f08e7d9f9e677561d7cf50ee2a0e99cbc5ebd0846f3d41d0ff4bc9812bd5e",
+    "scripts/novel_ledger/style.py": "d1aa7df85cdfa3acd92ec4857eeef3d09bc2aa28d3cbcdb1b8b75910cba8dbed",
+    "scripts/novel_ledger/delivery.py": "eb5dca90cd715bc805fde98576b6126abaa2cb422bf6a40e588993cfbe222094",
+    "scripts/novel_ledger/creation.py": "4517f9243904b7c2c9595c553c0562e8fd9b01c2254e2c44c4dac6c39e21573d",
+    "validation/anchor_check.py": "d9c7bdc265d59fbc321447f76be0d14373d9e30d96e204d8caa8dfd9978beefa"
+  },
+  "additional_confirmed_observations": {
+    "claimed_worker_watch": {
+      "valid_claim": true,
+      "result_exists_after_watch": false,
+      "stale_exists": true,
+      "action": "idle"
+    },
+    "anchor_guard": {
+      "missing_anchor_reported": 1,
+      "missing_anchor_exit_code": 0,
+      "partial_nonexistent_anchor_reported": 0,
+      "partial_anchor_exit_code": 0
+    }
+  },
+  "boundaries": [
+    "Synthetic temporary projects and in-memory fixtures only.",
+    "No real model writing, literary assessment, billing measurement or live manuscript audit.",
+    "No engine behavior modified in this audit."
+  ],
+  "reproduction_sources": {
+    "novel_workflow_audit_probe.py": "\"\"\"Read-only repository audit: reproduce revision promotion/routing defects in temp projects.\"\"\"\nimport json\nimport sys\nimport tempfile\nfrom pathlib import Path\nROOT = Path('/Users/longwen/AndroidStudioProjects/skills/novel-ledger')\nsys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]\nfrom support import contract, seeded_book, drive\nfrom novel_ledger.bootstrap import local_application\nfrom novel_ledger.sqlite_store import SQLiteRepository\nfrom novel_ledger import store_keys\n\ndef scenario(promote_early):\n    with tempfile.TemporaryDirectory(prefix='novel-workflow-audit-') as directory:\n        repo = SQLiteRepository.initialize(Path(directory) / 'book', seeded_book(contract(6, 2)))\n        try:\n            app = local_application(repo)\n            owner = app.run(through=5, source='作者要求先写到第五章。')['owner']\n            assert drive(app, owner)['action'] == 'target_reached'\n            old_fifth = repo.chapter('main', 5)['prose']\n            app.revise(5, '修改第五章表达。', owner, through=5, changes={'mode': 'expression'})\n            if promote_early:\n                result = app.promote(owner)\n                print(json.dumps({'case': 'promote_before_any_revision_task',\n                                  'formal_chapters_before': 5,\n                                  'formal_chapters_after': result['formal_chapters'],\n                                  'candidate_chapter': result['candidate_chapter'],\n                                  'revision_run': result['revision_run'],\n                                  'official_branch': repo.get(store_keys.OFFICIAL_BRANCH),\n                                  'parent_still_has_chapter_5': repo.chapter('main', 5)['prose'] == old_fifth}, ensure_ascii=False))\n            else:\n                boundary = drive(app, owner)\n                state = app.status()\n                print(json.dumps({'case': 'normal_revision_reaches_boundary',\n                                  'action': boundary['action'],\n                                  'response_keys': sorted(boundary),\n                                  'formal_branch': state['formal_branch'],\n                                  'candidate_branch': state['branch'],\n                                  'revision_run': state['revision_run'],\n                                  'candidate_chapters': state['accepted_chapters']}, ensure_ascii=False))\n        finally:\n            repo.close()\n\nscenario(True)\nscenario(False)\n\ndef watch_moves_active_receipt():\n    from support import response\n    from novel_ledger import unattended\n    with tempfile.TemporaryDirectory(prefix='novel-watch-audit-') as directory:\n        repo = SQLiteRepository.initialize(Path(directory) / 'book', seeded_book(contract()))\n        try:\n            app = local_application(repo)\n            owner = app.run(through=1, source='作者授权试章。')['owner']\n            task = drive(app, owner, until='write')['task']\n            result_path = Path(task['result_path'])\n            result_path.write_text(json.dumps(response(app)), encoding='utf-8')\n            result = unattended.watch(app, owner, steps=1, poll=0.01, idle_limit=0.02)\n            print(json.dumps({'case': 'watch_moves_active_receipt', 'action': result['action'],\n                              'result_exists': result_path.exists(),\n                              'stale_exists': result_path.with_name('result.stale.json').exists()}, ensure_ascii=False))\n        finally:\n            repo.close()\n\ndef accepting_exhausted_draft_deadends():\n    from support import response\n    from novel_ledger import workflow\n    with tempfile.TemporaryDirectory(prefix='novel-repair-audit-') as directory:\n        repo = SQLiteRepository.initialize(Path(directory) / 'book', workflow.new_book(contract()))\n        try:\n            app = local_application(repo)\n            drive(app, until='write')\n            for index, word in enumerate(['check', 'test', 'demo', 'hello']):\n                if index:\n                    app.advance()\n                receipt = response(app)\n                receipt['data']['prose'] = receipt['data']['prose'].replace('要求先核对', '要求 ' + word + ' 核对')\n                app.submit(receipt)\n            assert repo.load()['draft']['stage'] == 'exhausted'\n            decision = app.resume()['author_decision']\n            app.answer(decision['id'], workflow.ACCEPT_OPEN, '接受当前候选继续。')\n            first_next = app.advance()['action']\n            app.resume()\n            second_next = app.advance()['action']\n            print(json.dumps({'case': 'accepting_exhausted_draft_deadends',\n                              'first_next_action': first_next, 'second_next_action': second_next,\n                              'formal_chapters': app.status()['formal_chapters'],\n                              'draft': repo.load()['draft'], 'author_decision': app.status()['author_decision']}, ensure_ascii=False))\n        finally:\n            repo.close()\n\nwatch_moves_active_receipt()\naccepting_exhausted_draft_deadends()\n",
+    "novel_docs_audit_probe.py": "#!/usr/bin/env python3\n\"\"\"Read-only, in-memory audit probes for the novel-ledger repository.\n\nRun: PYTHONDONTWRITEBYTECODE=1 python3 /tmp/novel_docs_audit_probe.py\nOnly prints JSON; never initializes a novel project or writes repository files.\n\"\"\"\nimport copy\nimport json\nimport sys\nfrom pathlib import Path\n\nsys.dont_write_bytecode = True\nROOT = Path('/Users/longwen/AndroidStudioProjects/skills/novel-ledger')\nsys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]\n\nfrom novel_ledger import briefs, creation, drift, world\nfrom novel_ledger.contracts import Error\nfrom support import contract, seeded_book, volume_rows, chapter_rows\nfrom test_world_grand import choices_v5, base_model, record\nfrom test_opening import rows_for\n\n\ndef economy_probe():\n    observed = []\n    for tier in ('t0', 't1', 't2'):\n        choices = choices_v5(tier=tier, scales=('局部', '一城', '一域'))\n        # All declared stages have matching records in powers, isolating the\n        # economy contradiction from geography/stage binding failures.\n        for index, row in enumerate(choices['ladder']['ladder']):\n            row['stage'] = choices['world']['tiers'][index]['name']\n        required = world.required_sections(tier, choices)\n        model = base_model(choices)\n        for section in world.SECTIONS:\n            if section not in required:\n                model[section] = []\n            elif section != 'mechanisms' and not model[section]:\n                model[section] = [record(section, section + '-1')]\n        brief = briefs.world_model(sections=required)\n        instruction = next(line for line in brief.splitlines()\n                           if line.startswith('本项目按体量只需要：'))\n        try:\n            world.validate(model, choices, 'sel', sections=required)\n        except Error as error:\n            failure = {'code': error.code, 'mismatches': error.details.get('got')}\n        else:\n            failure = None\n        assert 'economy' not in required\n        assert 'economy' in instruction.split('其余领域（')[1]\n        assert failure and failure['code'] == 'world_alignment'\n        assert len(failure['mismatches']) == 1\n        assert 'world_resource→economy' in failure['mismatches'][0]['rule']\n        observed.append({'tier': tier, 'economy_required': False,\n                         'brief_instruction': instruction, 'failure': failure})\n    return observed\n\n\ndef four_options_probe():\n    observed = []\n    for gate in ('origin', 'premise'):\n        state = creation.begin()\n        state['cursor'] = creation.gate_ids(5).index(gate)\n        brief = briefs.opening_options(creation.current(state),\n                                       creation.lens_brief(0), version=5)\n        options = rows_for(gate)\n        for ident in ('C', 'D'):\n            additional = copy.deepcopy(options[0])\n            additional.update(id=ident, title='方案' + ident,\n                              premise=ident + '种具体方案。',\n                              driver=ident + '种推进方式。')\n            options.append(additional)\n        try:\n            creation.offer(state, {'gate': gate, 'options': options})\n        except Error as error:\n            failure = {'code': error.code, 'message': str(error)}\n        else:\n            failure = None\n        assert '四个方向各给一个方案' in brief\n        assert failure and failure['code'] == 'opening_options'\n        observed.append({'gate': gate, 'brief_asks_four': True,\n                         'submitted_options': len(options), 'failure': failure})\n    return observed\n\n\ndef closure_and_missing_arrays_probe():\n    raw = contract(chapters=4, volumes=2)\n    raw['narrative_tracking'] = True\n    book = seeded_book(raw)\n    contract_value, model, state = book['contract'], book['world'], book['state']\n    volume = contract_value['volumes'][0]\n    rows = volume_rows(book, ['v1'])\n    rows[0]['characters'] = [\n        {'entity': 'shen', 'from': '胆怯退缩', 'to': '决意舍身救同伴',\n         'reason': '卷末成长承诺。'}]\n    rows[0]['clock'] = {'advance_days': 30}\n    rows[0]['exit_state'] = '卷末必须三十日过去，沈桐舍身救同伴。'\n    volume_outline = drift.validate_volume_outline(\n        {'volumes': rows}, contract_value, model, {}, {}, ['v1'], state)['v1']\n    chapters = chapter_rows(book, volume, state)\n    accepted = drift.validate_chapter_outline(\n        {'volume': volume['id'], 'chapters': chapters},\n        contract_value['chapter_outline'], volume, volume_outline, model, state)\n    final, findings = drift.simulate(accepted, state, model, volume, volume_outline)\n    assert findings == []\n    assert final['clock'] == 2\n    assert volume_outline['clock']['advance_days'] == 30\n    assert final['character_current']['shen']['value']['stance'] == '先核对再行动。'\n    closure = {\n        'volume_outline_accepted': True, 'chapter_outline_accepted': len(accepted),\n        'declared_clock': volume_outline['clock'], 'simulated_clock': final['clock'],\n        'declared_character_to': volume_outline['characters'][0]['to'],\n        'simulated_character': final['character_current']['shen']['value'],\n        'declared_exit_state': volume_outline['exit_state'], 'findings': findings}\n\n    chapters = chapter_rows(book, volume, state, resources=False, places=False,\n                            knowledge=False, characters=False)\n    base_outline = drift.validate_volume_outline(\n        {'volumes': volume_rows(book, ['v1'])}, contract_value, model,\n        {}, {}, ['v1'], state)['v1']\n    missing = ('resources', 'places', 'knowledge', 'characters')\n    for chapter in chapters:\n        for field in missing:\n            chapter.pop(field)\n    accepted = drift.validate_chapter_outline(\n        {'volume': volume['id'], 'chapters': chapters},\n        contract_value['chapter_outline'], volume, base_outline, model, state)\n    assert len(accepted) == 2\n    missing_arrays = {'removed_fields': list(missing),\n                      'chapter_outline_accepted': len(accepted),\n                      'classification': 'documentation_contract_drift_P3'}\n    return closure, missing_arrays\n\n\ndef intake_example_probe():\n    documented = {'payoff': {'ending': '作者指定结局。', 'theme': '母题。'},\n                  'title': {'title': '书名'}, 'scale': {'tier': 't0'}}\n    try:\n        creation.intake(creation.begin(), documented, '作者原话')\n    except Error as error:\n        failure = {'code': error.code, 'message': str(error)}\n    else:\n        failure = None\n    assert failure and failure['code'] == 'opening_option'\n    assert 'plan.ways' in failure['message']\n    return {'documented_input': documented, 'failure': failure}\n\n\ndef main():\n    closure, missing_arrays = closure_and_missing_arrays_probe()\n    print(json.dumps({'root': str(ROOT), 'economy': economy_probe(),\n                      'four_options': four_options_probe(),\n                      'volume_closure': closure, 'missing_arrays': missing_arrays,\n                      'intake_example': intake_example_probe()},\n                     ensure_ascii=False, separators=(',', ':')))\n\n\nif __name__ == '__main__':\n    main()\n",
+    "novel_drift_audit_probe.py": "import sys, copy, json, tempfile\nfrom pathlib import Path\nROOT = Path('/Users/longwen/AndroidStudioProjects/skills/novel-ledger')\nsys.path[:0] = [str(ROOT/'scripts'), str(ROOT/'tests')]\nfrom novel_ledger import drift, facts, style\nfrom novel_ledger.bootstrap import local_application as Application\nfrom novel_ledger.sqlite_store import SQLiteRepository\nfrom support import contract, seeded_book, drive, response, chapter_rows, volume_rows\n\ndef fresh(fn):\n    with tempfile.TemporaryDirectory() as t:\n        raw=contract(6); raw['narrative_tracking']=True\n        repo=SQLiteRepository.initialize(Path(t)/'book',seeded_book(raw))\n        try:\n            app=Application(repo); owner=app.run(through=6, source='工程审计临时夹具授权六章')['owner']; drive(app,owner,until='write')\n            fn(app,repo,owner)\n        finally: repo.close()\n\ndef unplanned(app,repo,owner):\n    r=response(app); r['data']['drift_check']['verdict']='deviated'\n    r['data']['drift_check']['unplanned']=[{'kind':'knowledge','key':'shen:secret','actual':{'from':None,'to':'confirmed'},'reason':'正文意外揭明真相。','evidence':r['data']['drift_check']['items'][0]['evidence']}]\n    result=app.submit(r)\n    b=repo.load()\n    print('UNPLANNED',json.dumps({'submit':result,'knowledge':b['state']['knowledge'],'deviations':b['design_drift']},ensure_ascii=False))\n\ndef skip_hook(app,repo,owner):\n    r=response(app); d=r['data']['drift_check']; x=next(x for x in d['items'] if x['kind']=='hook')\n    x.update(status='skipped',actual=None,reason='正文没有埋下这条伏笔。');d['verdict']='deviated'\n    result=app.submit(r)\n    print('SKIP_HOOK',json.dumps({'submit':result,'findings':repo.load()['draft']['findings']},ensure_ascii=False))\n\nfresh(unplanned); fresh(skip_hook)\n# Planned confirmed remains confirmed; an actual, explicitly disclosed deviation regresses it.\ns=facts.seed({'narrative_tracking':True,'entities':[{'id':'hero','name':'主角','kind':'person'}]})\ns['knowledge']['hero:secret']={'claim':'已确认真相','stance':'knows','source':'先章','evidence':{'chapter':0,'quote':'已知'}}\nrow={'chapter':1,'plot':{'nodes':[],'threads':[]},'hooks':[],'resources':[],'places':[],'characters':[],\n     'knowledge':[{'who':'hero','topic':'secret','from':'confirmed','to':'confirmed','reason':'继续确认真相'}], 'clock':{'advance_days':0}}\ne={'chapter':1,'quote':'主角仍只怀疑真相。'}\nd={'items':[{'kind':'knowledge','key':'hero:secret','planned':{'from':'confirmed','to':'confirmed'},'actual':{'from':'confirmed','to':'hinted'},'status':'deviated','reason':'本章只写成怀疑。','evidence':e}, {'kind':'clock','key':'clock','planned':{'advance_days':0},'actual':{'advance_days':0},'status':'kept','reason':'没有过日','evidence':e}], 'unplanned':[],'verdict':'deviated'}\na=drift.reconcile(d,row,s,{})\nss,ee=facts.settle(s,a['events'],e['quote'],1)\nprint('KNOWLEDGE_BACKWARD',json.dumps({'findings':a['findings'],'events':a['events'],'state':ss['knowledge']},ensure_ascii=False))\n# Required style omissions and invalid declared type.\nb=seeded_book(contract(4)); vols=volume_rows(b,['v1']);vols[0].pop('style',None)\nv=drift.validate_volume_outline({'volumes':vols},b['contract'],b['world'],{}, {},['v1'],b['state'])['v1']\nrows=chapter_rows(b,b['contract']['volumes'][0],b['state'])\nfor row in rows:row.pop('style',None)\nrs=drift.validate_chapter_outline({'volume':'v1','chapters':rows},b['contract']['chapter_outline'],b['contract']['volumes'][0],v,b['world'],b['state'])\nprint('STYLE_OMISSION',{'accepted_volume_style':v['style'],'accepted_chapter_style':rs[0]['style']})\n# Zero-dialogue declared target ignored: diverse quoted text keeps repetition below threshold.\nprose=''.join('「'+''.join(chr(0x4e00+i*8+j) for j in range(8))+'。」' for i in range(10))\nprint('STYLE_ZERO',json.dumps({'metrics':style.metrics(prose),'findings':style.compare(prose,{'dialogue_ratio':0},None,style.DEFAULT_WINDOW)},ensure_ascii=False))\n# Standard quote families in the same paragraph.\nmixed='「我问了三个问题。」他答道：“我明天回来。”'\nprint('STYLE_QUOTES',json.dumps({'text':mixed,'dialogue_and_narration':style._dialogue_spans(mixed),'metrics':style.metrics(mixed)},ensure_ascii=False))\n",
+    "novel_drift_extended_probe.py": "exec(open('/tmp/novel_drift_audit_probe.py').read().split('fresh(unplanned);')[0])\n\ndef backward():\n    with tempfile.TemporaryDirectory() as t:\n        raw=contract(6); raw['narrative_tracking']=True\n        repo=SQLiteRepository.initialize(Path(t)/'book',seeded_book(raw))\n        try:\n            app=Application(repo); owner=app.run(through=6, source='临时审计夹具')['owner']; drive(app,owner,until='chapter_outline')\n            r=response(app)\n            row=next(row for row in r['data']['chapters'] if row['chapter']==4)\n            row['knowledge']=[{'who':'shen','topic':'source','from':'confirmed','to':'confirmed','reason':'继续明确来源。'}]\n            for f in ('enter','exit'):row[f].append({'kind':'knowledge','key':'shen:source','expected':'confirmed'})\n            print('BACKWARD_OUTLINE',app.submit(r))\n            for n in range(1,4):\n                drive(app,owner,until='write'); print('BASELINE_CHAPTER',app.submit(response(app))['committed_chapter'])\n            drive(app,owner,until='write'); r=response(app)\n            item=next(item for item in r['data']['drift_check']['items'] if item['kind']=='knowledge')\n            item.update(status='deviated',reason='本章只写成了怀疑。',actual={'from':'confirmed','to':'hinted'})\n            r['data']['drift_check']['verdict']='deviated'\n            print('BACKWARD_E2E',json.dumps({'submit':app.submit(r),'knowledge':repo.load()['state']['knowledge']},ensure_ascii=False))\n        finally:repo.close()\n\ndef zero():\n    with tempfile.TemporaryDirectory() as t:\n        raw=contract(6); raw['narrative_tracking']=True\n        repo=SQLiteRepository.initialize(Path(t)/'book',seeded_book(raw))\n        try:\n            app=Application(repo); owner=app.run(through=6, source='临时审计夹具')['owner'];drive(app,owner,until='chapter_outline')\n            r=response(app)\n            for row in r['data']['chapters']:row['style']={'pov':'第三人称','rhythm':'短句','dialogue_ratio':0}\n            app.submit(r);drive(app,owner,until='write');r=response(app)\n            prose=r['data']['prose'][:14]+''.join('「'+''.join(chr(0x4e50+i*8+j) for j in range(8))+'。」' for i in range(8))\n            r['data']['prose']=prose\n            print('ZERO_E2E',json.dumps({'metrics':style.metrics(prose),'submit':app.submit(r)},ensure_ascii=False))\n        finally:repo.close()\nbackward();zero()\n"
+  },
+  "reproduction_note": "保存各 reproduction_sources 到 /tmp/ 中对应文件名后运行；脚本 ROOT 指向本次被审计工程，生成小说数据均在临时目录中。此为观察型审计探针，退出 0 表示探针成功执行，不表示观察到的产品缺陷已修复。"
+}

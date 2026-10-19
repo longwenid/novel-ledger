@@ -437,8 +437,9 @@ def _volume_row(book, volume, words, tracking, hooks=False, stage=None):
            'climax': VOLUME_CLIMAX,
            'nodes': nodes, 'threads': threads,
            'resources': [], 'places': [], 'knowledge': [], 'characters': [],
-           'clock': {'advance_days': count},
+           'clock': {'advance_days': count, 'to': last},
            'exit_state': VOLUME_EXIT,
+           'style': {'trend': '以短句、动作与凭据核对推进，卷末用较长段落交代责任后果。'},
            # A required array in v2.1: an empty one is the declaration "this volume promises nothing
            # new", which is a claim the chain can read, while a missing field is nothing at all.
            'hooks': volume_hooks(book, volume) if hooks else []}
@@ -563,6 +564,8 @@ def _chapter_row(state, book, volume, number, words, resources=True, places=True
            'clock': {'advance_days': clock_days}, 'enter': [], 'exit': [],
            'disclosures': [], 'world_refs': _world_refs(book), 'new_entities': [],
            'hook_refs': [], 'reader_refs': [], 'history_refs': [], 'scenes': [], 'pacing': {},
+           'style': {'pov': contract.get('pov') or '第三人称限知',
+                     'rhythm': '短句交代动作，核对结果后用完整句说明后果。'},
            # Required in v2.1; `[]` means this chapter executes no promise action.
            'hooks': chapter_hooks(book, volume, number) if hooks else []}
     deltas = []          # (kind, key, before, after)
@@ -854,7 +857,7 @@ def _opening_model(book):
     The fixture therefore mirrors the choices into those sections instead of writing a generic world;
     the section set it fills is what the engine says this tier and these choices require.
     """
-    from novel_ledger import creation, world as world_module
+    from novel_ledger import contracts, creation, world as world_module
     opening = book.get('creation') or {}
     choices = creation.selected(opening)
     premises = (choices.get('world') or {}).get('world_premise') or '一座仓库的夜班退件纠纷。'
@@ -922,6 +925,12 @@ def _opening_model(book):
         if section == 'mechanisms' or model.get(section):
             continue
         model[section] = [_generic_record(section, 1, tiers)]
+    frame = (choices.get('world') or {}).get('architecture') or {}
+    for key, _note, section, field in contracts.WORLD_ARCHITECTURE:
+        if key in frame:
+            row = _generic_record(section, 99, tiers)
+            row[field] = frame[key]
+            model[section].append(row)
     return model
 
 
@@ -1069,6 +1078,8 @@ def opening_gate_values(book):
                               'deadline_chapter': str(min(6, limit))}},
         'title': {'title': '夜班退件：我能读出第二层笔迹'},
     }
+    if version >= 6:
+        values['world']['architecture'] = {'space': '旧大陆与海上城邦靠季节航路相连，远洋断航使各地无法独自存续。', 'history': '上个时代的资源战争留下互保契约，失效的旧承诺正在引发新的饥荒。', 'civilizations': '内陆联邦依赖海上供给，城邦依赖内陆技术，双方为旧契约的解释权冲突。', 'conflict': '各方只能转移灾害而不能消除灾害，越成功自保就越破坏共同生存条件。', 'mystery': '共同灾害来自先民维持航路的选择，揭开真相后仍要决定谁承担修复代价。'}
     narrowed = {}
     for gate, value in values.items():
         if gate not in creation.gate_ids(version):

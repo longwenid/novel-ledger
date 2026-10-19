@@ -173,7 +173,7 @@ class ArtifactTests(unittest.TestCase):
         self.assertNotIn('catalog_path', second)
         self.assertFalse((Path(second['task_path']).parent / 'catalog.md').exists())
 
-    def test_read_returns_a_records_hash_that_is_stable_across_gates(self):
+    def test_read_hash_changes_with_new_choices_and_is_stable_for_rereads(self):
         self.app.advance()
         first = self.app.read(self.repo.pending()['id'])
         self.app.submit(gate_result(self.app, 'lead-main'))
@@ -182,7 +182,9 @@ class ArtifactTests(unittest.TestCase):
         self.app.advance()
         second = self.app.read(self.repo.pending()['id'])
         self.assertTrue(first['records_hash'] and second['records_hash'])
-        self.assertEqual(first['records_hash'], second['records_hash'])
+        self.assertNotEqual(first['records_hash'], second['records_hash'])
+        reread = self.app.read(self.repo.pending()['id'])
+        self.assertEqual(second['records_hash'], reread['records_hash'])
 
     def test_status_tasks_lists_the_dispatch_lifecycle(self):
         first = self.app.advance()['task']['task_id']

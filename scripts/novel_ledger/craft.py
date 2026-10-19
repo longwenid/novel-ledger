@@ -1,9 +1,4 @@
-"""Scene execution and text patches. Pure values only.
-
-v2 removed the profile stage: a first appearance is inlined in the chapter outline's `new_entities`,
-so the character-interpretation helpers that used to live here (and their growth_basis binding) are
-gone with the stage that dispatched them.
-"""
+"""Pure scene validation, participant selection and versioned text patches."""
 from __future__ import annotations
 
 import copy

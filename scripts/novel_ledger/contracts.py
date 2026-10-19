@@ -17,7 +17,7 @@ SCHEMA = 'novel-ledger/3'
 # database schema: a new gate set only changes a JSON document inside the book record, so raising the
 # storage version would lock every existing project out for no benefit. A project whose creation state
 # is version 1 keeps the gate set it was opened with.
-OPENING_VERSION = 5
+OPENING_VERSION = 6
 TASK = 'novel-ledger.task/1'
 RESULT = 'novel-ledger.result/1'
 # The dispatch's own copy of who it is: data for cross-checking, never a permission.
@@ -97,6 +97,15 @@ def policy_default(key):
 #   WORLD_TERMINALS  the grade the ending must face; it has to match the ladder it was promised with
 #   STANCES          the protagonist's relation to the rule system (顺从/利用/对抗 — the 博弈型 turn)
 #   DARK_SIDES       where the world's malice comes from: an outside force, or people and institutions
+# Opening decisions, their meaning, and their exact destination in world records.
+WORLD_ARCHITECTURE = (
+    ('space', '世界全貌与边界：文明分布、相互通行及尚不能抵达之处', 'geography', 'environment'),
+    ('history', '历史断层：过去的选择如何形成今天的危机与利益结构', 'history', 'present_effect'),
+    ('civilizations', '文明与秩序：不同群体的生存方式、相互依赖及不可兼得的目标', 'factions', 'conflicts'),
+    ('conflict', '贯穿矛盾：即使主角不行动也会持续恶化的问题及其驱动力', 'rules', 'consequences'),
+    ('mystery', '终极谜题：真相会改变什么既有认知，揭开后仍须解决什么', 'mysteries', 'truth'),
+)
+
 WORLD_SCOPES = ('局部', '一城', '一域', '一界', '星海', '诸天')
 WORLD_GROWTHS = ('地盘', '势力', '规则', '认知', '文明')
 WORLD_TERMINALS = ('局部', '势力', '体系', '文明')
@@ -128,6 +137,9 @@ OPENING_BOUNDS_CAPABILITY = 'opening-bounds/1'
 # live in the chapter outline that follows it. A task frozen under volume-outline/1 describes a batch
 # of chapters instead, so this build refuses it rather than reinterpreting its fields.
 VOLUME_OUTLINE_CAPABILITY = 'volume-outline/2'
+# New tasks require explicit style and computable volume terminals. Old frozen tasks keep their
+# original interpretation; upgrading the engine does not add fields to an existing dispatch.
+OUTLINE_CHECKS_CAPABILITY = 'outline-checks/1'
 SCENE_MEMORY_CAPABILITY = 'scene-memory/1'
 HOOK_LINKS_CAPABILITY = 'hook-links/1'
 CAPABILITIES = {
@@ -137,6 +149,7 @@ CAPABILITIES = {
     'reading_dependencies': (READING_DEPENDENCIES_CAPABILITY,),
     'opening_bounds': (OPENING_BOUNDS_CAPABILITY,),
     'volume_outline': (VOLUME_OUTLINE_CAPABILITY,),
+    'outline_checks': (OUTLINE_CHECKS_CAPABILITY,),
     'scene_memory': (SCENE_MEMORY_CAPABILITY,),
     'hook_links': (HOOK_LINKS_CAPABILITY,),
 }
@@ -220,18 +233,18 @@ FORM_ARTIFACTS = ('input.json', 'result.template.json', 'brief.md', 'dispatch.md
 # Each method therefore states what it must produce, and the third element is that check. The
 # general craft discipline these replaced still applies — it lives in references/hatch.md.
 LENSES = (
-    ('金手指倒推', '先定主角独一份的优势，再让世界的资源、势力与等级围着它长出来：它的升级材料、'
+    ('金手指倒推', '先推演世界规则对所有人的后果，再找主角能介入的一处例外：它的升级材料、'
                    '克制它的对手、想抢它的组织，都要能从世界里持续产出；只给一个外挂不算。',
      '写清优势是什么、每次使用要什么、世界里有谁在供料、谁在抢它，以及它开篇三章第一次怎么用上。'),
     ('等级闭环', '把力量做成读者能预期的台阶（境界/段位/星级/职位），每级都有明确的升级条件与可量化'
                  '资源；条件写在世界里，读者随时能答"下一步要什么"。',
      '列出三级台阶：每级的名字、升级条件、拿到什么、卡在哪，以及谁在把守这个门槛。'),
-    ('对手换图', '按舞台层级排对手（村镇→城池→宗门→王朝→界域），每次胜利把舞台推高一级，新舞台'
+    ('对手换图', '从个人困局追到利益网络、规则制定者与文明选择；旧对手的行动留下长期后果，新舞台'
                  '自带新资源与新规则；靠误会或临时加设定维持的梯度不算。',
-     '写出前三级对手、每级挡住的具体利益，以及主角胜利后换到哪张图、图上有什么新东西。'),
-    ('硬通货', '世界必须有一种可记账的稀缺资源（灵石/贡献点/积分/信用/丹药），谁分配它谁就有权，'
+     '写出前三级对手、每级挡住的具体利益，以及主角胜利后改变了什么规则、关系或可行动范围。'),
+    ('硬通货', '从稀缺资源追问整个社会如何运转（能源/寿命/航路/知识/信用），谁分配它谁就有权，'
                '冲突围绕分配权与获取渠道展开；只当背景名词不算。',
-     '写清货币名、来源、稀缺点、分配者，以及主角第一次为它出手的场合与代价。'),
+     '写清资源名、来源、稀缺点、分配者，以及主角第一次为它出手的场合与代价。'),
     ('身份马甲', '主角在多个势力里有不同身份，制造扮猪吃虎、打脸与信息差；每个身份都要带暴露风险，'
                  '身份之间不能互相打架。',
      '写出至少两个身份、各自的用处、暴露会失去什么，以及第一次差点暴露的场合。'),
@@ -272,9 +285,9 @@ LENSES = (
     ('非数值成长', '成长不只靠数值：认知迭代、心性、关系、真相掌握各给一条能兑现的线，让读者在'
                    '等级之外也能感到他变了；只更新面板不算成长。',
      '写出等级之外的两条成长线、各自第一次兑现的场合，以及它如何改变他下一步的选择。'),
-    ('表层锚点', '每条底层设定都要绑定一个开篇就能看见的载体（一件物、一个场景、一次冲突），'
-                 '底层概设可以后揭，表层必须先叫座；只写在设定文档里等于没有。',
-     '为三条底层设定各写一个载体，并说明它出现在开篇三章的哪一幕、由谁看见。'),
+    ('表层锚点', '选择与开局有关的底层设定，绑定一个读者能看见的载体（一件物、一个场景、一次冲突），'
+                 '其余背景按揭示窗口展开；先展示异常或后果，再逐步说明原因。',
+     '为开局关联的设定选一件物、一个场景或一次冲突，说明谁看见了什么、尚不知道什么。'),
 )
 # Volume-level turn methods: what makes a volume mid-point change direction instead of
 # stacking everything on the finale. Used when planning the current volume.
@@ -316,61 +329,32 @@ SCALE_TIERS = (
 # author is allowed to choose — the author's own words, or an option already chosen, always win over
 # this default, and a gate that conflicts with it is not a protocol error.
 OPENING_DIRECTION = (
-    '开篇三章内给出明确压力与第一个可见收益（脱困、打脸、拿到资源或关键线索），不开长篇设定铺垫。',
-    '主角有一条稀缺优势或可升级的金手指，升级有明确条件与代价，不靠忽然变强。',
-    '承诺读者看他怎么赢：每卷对手与舞台抬高一级（局部→势力→体系），冲突梯度能持续加码。',
-    '爽点与悬念交替：短线三到五章一个小兑现，长线留一个更大的目标；章末留钩，静章也要有信息或关系变化。',
-    '冲突落到具体利益与身份处境（资源、名额、地位、复仇、守护、真相），少写纯理念之争。',
-    '题材走男频主流落点：玄幻修真、都市异能或职场逆袭、历史权谋、科幻末世、悬疑探案及其混搭。',
-    '语感偏连载网文：短句推进、对白带信息、解释服从场景；不用纯文学式的氛围铺陈与心理长段。',
-    '体量按长篇连载预期起步，默认窗口落在标准到超长之间，需要短篇或微型时换组向下取。',
-    # opening/5: a bigger idea is not a louder one. These three say what "bigger" has to mean
-    # mechanically — the world keeps feeding the edge, escalation changes the rules, and the
-    # backstage stays backstage until a visible carrier can introduce it.
-    '脑洞要能供料：主角的优势、势力为什么争、等级怎么排都由那条新规则长出来；只给一个外挂名字不算。',
-    '格局从局部起步但必须可升格：每升一级换的是规则与收获类型，不只是地名；升格不能让上一卷的势力与地点作废。',
-    '设定分表层与底层：底层概设（纪元、真相、力量阶梯）可以后揭，但开篇三章必须至少用上两件看得见的东西。',
+    '默认面向起点/番茄长篇：先有足以改变社会运行的大脑洞，再找具体人物的切入口；作者已选题材与限制优先。',
+    '脑洞推演规则→日常后果→利益重组→长期冲突；奇名、外挂标签和境界数量不能替代这条因果链。',
+    '世界先看全貌：空间边界、历史断层、多方文明或制度、持续矛盾与终极谜题相互关联；世界不只为主角服务。',
+    '格局同时扩大行动能力、认知与责任：个人求生可以牵动秩序存亡，升级不靠反复换地图、加更强敌人。',
+    '开篇从可感知的危机或异常进入，早期兑现一次重要行动、发现或关系变化；宏大历史通过物件、制度和冲突逐步显影。',
+    '主角有可反复运用的稀缺优势，来源、条件、代价与上限由世界规则解释；旧人物、承诺和付出在后续阶段仍有作用。',
+    '情绪兑现服从题材：成长、智斗、探索、建设、守护均可，不强制每三五章打脸或每卷换敌；语感服从作者所选文风。',
+    '参考代表作品的构造方法，不复制专有体系、人物关系和标志性桥段；短篇只展开宏大世界的一个切面，现实题材不强加诸天与神明。',
 )
 # Per-gate emphasis. Every gate of the current gate set declares one, so the gate set cannot be
 # redesigned without saying what the default direction means for each gate (a guard test derives
 # that requirement from the gate table itself).
 OPENING_DIRECTION_GATES = {
-    'genre': '男频题材要连承诺一起给：爽点是什么、读者看谁赢谁、他在这个故事里想要什么。',
-    # opening/5: the one novelty question, asked before anything that has to grow out of it. A
-    # public setting (system, sequence, 克系+民俗, 无限流) is free to use and therefore worth
-    # nothing on its own; what the author is buying here is the rule the world gained.
-    'premise': '核心脑洞要写成一条世界规则，而不是一个外挂名字：它替这个世界新增了什么资源、什么分配方式、'
-               '什么代价；第一推动力是过去发生的哪件事、今天还在推什么；主角对这套规则是顺从、利用还是对抗；'
-               '世界的恶意是外部不可抗力还是人心与制度。四项都要能落到具体冲突上，不写气氛与设定百科。',
-    # opening/4: 魂穿/身穿/本土 is the first thing a male-channel reader infers from the premise, and
-    # it decides what the protagonist brings before anything else is chosen — so it is its own gate,
-    # right after the genre gate, and every later gate (edge, protagonist, world) reads it.
-    'origin': '来历决定主角开局手里有什么：魂穿带记忆与知识、身穿带随身之物与体质、本土没有穿越红利但扎根世界；'
-              '其他脑洞写法（重生/觉醒/召唤/借体/登陆/飞升）必须先说清机制与代价。三个方向都要能立刻兑现成'
-              '开篇三章的压力或机会，并写清这个世界谁会起疑、谁知道。',
-    'voice': '叙述先定人称与视角范围：贴住主角的限知视角便于持续给爽点与信息差；语感短句推进、对白带信息。',
-    'scale': '长篇连载体量：这一门只选档位，别在这里讨论剧情；相邻档的差别要落到节奏与线索数量上。',
-    'edge': '金手指或稀缺优势要能被反复使用并升级：说清它怎么来、分几层、每层的条件与代价、上限在哪；'
-            '世界里要有供料链（升级材料从哪来、谁在抢），不是一次性外挂。',
-    'protagonist': '主角处境要自带压力与上升通道，欲望具体可量化，底线会在关键选择上真的挡住他。',
-    'relationships': '关系要同时给出助力和背叛风险（兄弟、师徒、对手绑定、家族），感情线定分量与处理方式，不是围着主角转的配角团。',
-    'world': '世界设定要能被花掉：位阶阶梯给成结构化条目（每级名字、升级条件、得到什么、代价、天花板），'
-             '一种可记账的稀缺资源（名称、来源、分配者），一个有权分配它的组织；主角的优势必须在开篇三章的第一场'
-             '冲突里用上，并被规则承认（谁认它、谁抢它）。门里选的位阶与硬通货要逐字进世界模型（powers 与 economy 同名记录），'
-             '留好加层位置：敌人、地图、资源与等级都要能继续往上长。规则清楚、边界可验证，不做纯氛围设定。',
-    'opposition': '对抗要能逐卷抬高一级（局部→势力→体系）：第一卷对手挡着什么利益、每次胜利换来多强的对手、终局面对谁。',
-    # opening/5: 格局 is where "bigger" is either promised or paid for. The ladder is a list of
-    # stages the volumes will actually walk, so it has to be countable, monotone, and change
-    # something other than the place name. `unchanged` is the answer to "what survives every
-    # escalation" — the layer above the map that keeps the earlier volumes from being voided.
-    'ladder': '格局要写成可数、可升、不作废的一份阶梯：第一章读者能看见的边界写清（一条街/一座城/一界）；'
-              '每一级给舞台名（必须是世界里能落成一条记录的名字，不是「第一卷」）、空间尺度（局部→一城→一域→一界→'
-              '星海→诸天，只升不降）、这一级变大的是什么（地盘/势力/规则/认知/文明）、新增或改变的规则、以及升上去要付的新代价；'
-              '三级以上至少要有一级变大的是规则、认知或文明，否则只是换地图；终局面对的等级（局部/势力/体系/文明）必须与阶梯对得上；'
-              '跨卷不变的上层结构（纪元、真相层、恒定矛盾或规则性对手）要单独写一句，说明升格为什么不作废已写的卷。',
-    'payoff': '兑现方式写清楚（脱困、打脸、升级、资源、地位、基建、复仇、争霸），短线三五章一个小兑现，章末留钩，终局要兑现开篇承诺的那场胜利。'
-              '再给一个主题锚点：第 N 章前必须兑现的那件事（写清兑现什么、最迟第几章），它是「世界再大也要前期可验证」的落点。',
-    'title': '书名按男频搜索习惯给：关键词直接点出题材与金手指或身份优势，一眼能看懂看点，不用意象化短名。',
+    'genre': '男频题材要连承诺一起给：明确读者期待的情绪体验，别在第一门锁死主角职业与局部事件。',
+    'premise': '核心规则改变整个社会：给出普通人、组织与文明三种后果，及一条能贯穿全书的问题。',
+    'voice': '决定人称、视角与阅读质地；紧张、诙谐、厚重或诗性均可，场景展示所选声音。',
+    'scale': '体量决定本书展开多少世界层次，不等于世界本身有多大；本门只选档位。',
+    'world': '把空间、历史、文明、长期矛盾与谜题连接成世界架构，位阶和资源由其生长。',
+    'ladder': '从终局问题倒推抵达路径；每一级写清认知、责任与规则的变化，旧世界仍参与新冲突。',
+    'origin': '在已定世界中选择主角来历；说明他与历史、文明或异常规则的联系及最初可知边界。',
+    'edge': '优势是进入世界矛盾的方式；条件、供料和代价来自已定规则，不能单方面豁免规则。',
+    'protagonist': '私人欲望与世界问题相连，但开局保留真实局限、行动理由及会付出代价的底线。',
+    'relationships': '关系双方各有目标和所属秩序，能够协作也可能在同一危机中作出相反选择。',
+    'opposition': '个人对手、利益网络与根本矛盾相连；明确各方为何无法轻易退让，以及胜利如何改变局面。',
+    'payoff': '安排早期承诺、阶段回报与终局回应；真相揭开仍有行动代价，文明问题回到具体人的命运。',
+    'title': '提炼独特世界意象或清晰卖点，短名与搜索式长名均可，不按一种标题模板限制题材。',
 }
 SCALE_WINDOW = 3          # how many consecutive tiers one board shows
 # How the pipeline itself scales with the chosen size class. Gates, world domains and design
@@ -450,6 +434,10 @@ CONTRACT_FIELDS = (
     # opening/5's world gate: the reader-visible ladder and the hard currency, structured because
     # the world model has to keep them verbatim (`powers` / `economy` records of the same name).
     # Unstructured, they were prose in `world_premise` that the world dispatch re-invented.
+    # opening/6 adds the five-part architecture; the same table names its world destinations.
+    {'key': 'world_architecture', 'kind': 'map', 'default': '', 'alignment': True,
+     'optional': True, 'since': 6, 'shape': tuple(row[0] for row in WORLD_ARCHITECTURE),
+     'opening': ('world', 'architecture')},
     {'key': 'world_tiers', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True, 'since': 5,
      'shape': ('name', 'condition', 'gain', 'cost', 'limit'), 'exact': True, 'blank': False, 'count': 1,
      'opening': ('world', 'tiers')},
@@ -593,10 +581,10 @@ POLICY_NOTE = ('本块是当前生效的项目字面约定：只覆盖上方 sco
 # shapes how an option is found; it never appears in what the author reads.
 OPTION_CONTRACT = ('每个方案给 id、title 短标题（真正可用的名字，不是「待定」这类占位符）、pitch 一句能记住的话（≤40字，不得出现透镜名或方法词）、'
                    'scene 2～3 个可落笔的具体画面（谁、在哪、什么东西、正要做什么，每条≥12字）、'
-                   'premise 写清这一版的结果与收益（读者拿到什么、格局到哪一级：一条街、一座城还是一个秩序）、driver 这一版如何推进（只写故事动作）、'
+                   'premise 写清这一版的结果与收益（读者拿到什么、将触及什么规则、历史或文明问题）、driver 这一版如何推进（只写故事动作）、'
                    'tradeoff 写清两半：确定要付出的代价，与可能发生的风险（与同组另外两案相比）、'
                    'fit_reason 与已选方向的具体接口（承接哪条选择、因此改变了什么）、value 按本门字段。'
-                   ' 同组方案必须在格局与生态位上拉开差距，不能只是同一格局里的三种情节。'
+                   ' 同组方案在本门负责的规则、立场或体验上拉开差距；后门沿用已定世界，不靠推翻前门换方案。'
                    ' 方案里出现的数字必须前后自洽：次数、每次的量与总量要对得上（每次扣三岁、全书六次，总量就是十八年），'
                    ' 不要断言别的门才决定的数量，也不要让观感描述冒充算术。')
 

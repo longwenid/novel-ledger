@@ -66,7 +66,9 @@ class RuntimeTests(unittest.TestCase):
         owner = self.app.run(finish=True, source='工程夹具授权验证三章时间衔接。')['owner']
         word = self.app.advance(owner=owner)          # volume outline first
         self.assertEqual(word['task']['stage'], 'volume_outline')
-        self.app.submit(response(self.app))
+        volume_receipt = response(self.app)
+        volume_receipt['data']['volumes'][0]['clock'] = {'advance_days': 1, 'to': 1}
+        self.app.submit(volume_receipt)
         handoff = self.app.advance(owner=owner)
         self.assertEqual(handoff['task']['stage'], 'chapter_outline')
         prose = [
@@ -169,13 +171,19 @@ class RuntimeTests(unittest.TestCase):
         book = self.repo.load()
         self.assertEqual(book['draft']['prose'], '他走了。')
         self.assertEqual(book['rework']['1']['repairs'], 2)
-        # Accepting keeps the formal chapter and records the findings as open items.
-        accepted = self.app.answer('repair-stalled:chapter_repair', workflow.ACCEPT_OPEN, '这一处我承担。')
-        self.assertEqual(accepted['status'], 'running')
-        book = self.repo.load()
-        self.assertIsNone(book['draft'])
-        self.assertTrue(book['carry_findings'])
-        self.assertEqual(book['accepted_findings'][0]['scope'], 'chapter:1')
+        # Mechanical failures cannot be accepted into the chapter. Every offered path preserves
+        # the candidate; the granted round can produce a chapter that actually commits.
+        options = [row['label'] for row in status['author_decision']['options']]
+        self.assertNotIn(workflow.ACCEPT_OPEN, options)
+        self.assertCode('author_decision', self.app.answer,
+                        'repair-stalled:chapter_repair', workflow.ACCEPT_OPEN, '这一处我承担。')
+        self.assertEqual(self.repo.load()['draft']['prose'], '他走了。')
+        granted = self.app.answer('repair-stalled:chapter_repair', workflow.REPAIR_AGAIN, '再返修一轮。')
+        self.assertEqual(granted['status'], 'running')
+        self.assertEqual(self.app.advance()['task']['stage'], 'repair')
+        self.app.submit(response(self.app))
+        self.assertEqual(self.app.advance()['action'], 'await_author')
+        self.assertEqual(self.app.status()['formal_chapters'], 1)
 
 
     def test_answering_a_pending_author_decision_releases_the_halt(self):
@@ -775,7 +783,7 @@ class GuidedOpeningV5Tests(unittest.TestCase):
         handoff = drive(self.app)
         self.assertEqual(handoff['action'], 'outline_ready')
         book = self.repo.load()
-        self.assertEqual(creation.opening_version(book['creation']), 5)
+        self.assertEqual(creation.opening_version(book['creation']), creation.OPENING_VERSION)
         self.assertEqual(len(book['creation']['selections']), 13)
         self.assertEqual(book['creation']['phase'], 'ready')
         self.assertEqual(self.repo.headers('main'), [])

@@ -1,33 +1,15 @@
-"""Design-time drift: the chapter outline is the settlement contract, the engine does the checking.
+"""Validate outline state chains and reconcile prose deltas against projected facts.
 
-Two jobs, both mechanical, neither dispatching a worker of its own:
-
-* `validate_volume_outline` / `validate_chapter_outline` walk the declared increments of a volume
-  before a word is written: the chapter's `enter` must be the state the preceding chapters leave
-  behind (`simulate`), its `exit` must equal `enter` plus its own deltas, and the volume's last
-  chapter must land on the terminals the volume outline declared.
-* `reconcile` compares the writer's `drift_check` against the chapter outline and the projected
-  state, then hands `facts.settle` the same event shapes it has always accepted, so every existing
-  mechanical check (before-values, resource conservation, clock monotonicity, spatial custody,
-  knowledge boundaries, node coverage, deadline expiry) still runs — the reviewer's receipt is
-  replaced, not the checking.
-
-Declared here so the briefs, the result templates and the contract validator read one table instead
-of three copies: `VOLUME_FIELDS`, `CHAPTER_FIELDS`, `DELTA_KINDS`, `ENTER_KINDS`, `ITEM_KINDS`,
-`NODE_STATES`, `THREAD_STATES`, `REVEALS`.
-
-Findings are shaped for `workflow.route_repair` (`criterion/severity/target_chapter/repair_scope/
-reason`) and carry the drift evidence beside it (`chapter/kind/key/expect/got/why`). Every value
-that leaves this module is JSON-safe: `workflow` digests findings and stores deviations in the book
-record.
-"""
+Design and prose share event builders and reducers. Only facts.settle verifies prose
+evidence; scratch design projections never become canonical facts. Findings carry
+JSON-safe coordinates and repair scope for workflow.route_repair."""
 from __future__ import annotations
 
 import copy
 
-from .contracts import DEFAULTS, han_count, require, text
+from .contracts import Error, han_count, require, text
 from .entities import register as register_entity
-from . import ledger, narrative, spatial, world
+from . import facts, narrative, spatial, world
 
 # --------------------------------------------------------------- declarations
 VOLUME_FIELDS = ('id', 'purpose', 'stage', 'arc', 'turns', 'climax', 'nodes', 'threads', 'hooks',
@@ -59,14 +41,8 @@ VERDICTS = ('clean', 'deviated')
 NODE_STATES = narrative.STATUSES
 THREAD_STATES = ('active', 'dormant', 'resolved')
 REVEALS = narrative.REVEALS
-# How a declared reveal status becomes the knowledge projection's stance, and the other way round.
-# The projection is the canonical record; the outline speaks in reader-facing reveal stages.
-STANCES = {'hinted': 'suspects', 'suspected': 'suspects', 'misled': 'believes',
-           'confirmed': 'knows', 'retracted': 'disproved'}
-# The projection stores the stance facts.settle was given; a chapter outline speaks the reveal
-# stage. Reading a projection back needs the reverse direction, or the engine cannot recognise what
-# it wrote itself.
-STANCE_REVEALS = {stance: reveal for reveal, stance in STANCES.items()}
+STANCES = narrative.STANCES
+STANCE_REVEALS = narrative.STANCE_REVEALS
 # The two vocabularies are not one-to-one: `hinted` and `suspected` are the same stance, and
 # `misled`/`confirmed`/`retracted` each have exactly one. Comparing a declared stage with a settled
 # projection therefore compares canonical forms — otherwise a chapter that declared `hinted` would
@@ -133,7 +109,7 @@ def _window(value):
 
 
 def _kind_of(kind):
-    return KIND_ALIASES.get(kind, kind if isinstance(kind, str) else '')
+    return KIND_ALIASES.get(kind, kind) if isinstance(kind, str) else ''
 
 
 def _finding(chapter, kind, key, expect, got, why, criterion='drift', severity='blocker',
@@ -364,7 +340,7 @@ def _rows_of(chapter, field, findings):
         return []
     if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
         findings.append(_finding(chapter.get('chapter'), field, field, 'array', type(value).__name__,
-                                 '章纲的增量数组须为对象数组（空数组=本章该类无变化，不得省略）。',
+                                 '章纲的增量须为对象数组；空数组、缺省或 null 均表示本章该类无变化。',
                                  'drift_shape', 'blocker', 'outline'))
         return []
     return value
@@ -552,142 +528,65 @@ def _hook_registry(volume_outline):
     return rows
 
 
-def _apply(state, coord, chapter_no, model, nodes, threads, hooks, findings):
-    """Apply one normalized increment to the simulated state, with its own mechanical guards."""
+def _reduce(state, event, chapter, kind, key, findings, scope='chapter'):
+    """Apply the canonical reducer to scratch state; a refused event leaves no partial changes."""
+    candidate = copy.deepcopy(state)
+    try:
+        facts.apply_event(candidate, event, chapter)
+    except Error as exc:
+        criterion = {'resources': 'drift_resource', 'places': 'drift_place',
+                     'knowledge': 'drift_knowledge', 'characters': 'drift_character',
+                     'clock': 'drift_clock', 'node': 'drift_node', 'thread': 'drift_thread',
+                     'hook': 'chapter_hook', 'disclosure': 'drift_disclosure'}.get(kind, 'design_drift')
+        findings.append(_finding(chapter, kind, key, '可按正式规则结算', exc.code,
+                                 str(exc), criterion, 'blocker', scope))
+        return False
+    state.clear()
+    state.update(candidate)
+    return True
+
+
+def _apply(state, coord, chapter_no, model, nodes, hooks, findings):
+    """Design-only checks surround the same event builder and reducer used by prose."""
     kind, key = coord['kind'], coord['key']
     current = _project(state, kind, key)
-    if kind == 'resources':
-        before = _number(coord['from'])
-        if before is not None and not _same('resources', before, current):
-            findings.append(_finding(chapter_no, kind, key, before, current,
-                                     '资源增量的 from 与前序章节留下的状态不符。', 'drift_chain', 'blocker', 'volume'))
-        after = _number(coord['to'])
-        if after is not None and after < 0:
-            findings.append(_finding(chapter_no, kind, key, '≥0', after,
-                                     '资源不能为负：本章的消耗超过了账面。', 'drift_resource', 'blocker', 'volume'))
-        coordinate = _resource_coordinate(state, key, coord['detail'].get('asset'))
-        if coordinate is None:
-            findings.append(_finding(chapter_no, kind, key, '已登记资源坐标', None,
-                                     '资源 key 既不是投影坐标，也无法唯一对应既有资源。',
-                                     'drift_resource', 'blocker', 'volume'))
-        elif after is not None:
-            state.setdefault('resources', {})[coordinate] = str(after)
-    elif kind == 'places':
-        declared_from = _place_id(state, model, coord['from']) if coord['from'] is not None else None
-        if coord['from'] is not None and not _same('places', declared_from, current):
-            findings.append(_finding(chapter_no, kind, key, declared_from, current,
-                                     '位置增量的 from 与当前站位不符。', 'drift_chain', 'blocker', 'volume'))
-        target = _place_id(state, model, coord['to'])
-        if target not in _place_registry(state, model):
-            findings.append(_finding(chapter_no, kind, key, '已登记地点', target,
-                                     '位置变化指向未登记的地点。', 'drift_place', 'blocker', 'volume'))
-        else:
-            state.setdefault('placements', {})[key] = target
-    elif kind == 'knowledge':
-        if coord['from'] is not None and not _same(kind, coord['from'], current):
-            findings.append(_finding(chapter_no, kind, key, coord['from'], current,
-                                     '知情增量的 from 与当前知情档位不符。', 'drift_chain', 'blocker', 'volume'))
-        after, before = coord['to'], _canonical_reveal(current)
-        if current is not None and after != 'retracted' \
-                and REVEAL_RANK.get(_canonical_reveal(after), 0) < REVEAL_RANK.get(before, 0):
-            findings.append(_finding(chapter_no, kind, key, current, after,
-                                     '知情倒退：除 retracted 外不得从已知退回暗示。', 'drift_knowledge', 'blocker', 'volume'))
-        else:
-            state.setdefault('knowledge', {})[key] = {'status': after, 'reason': coord['reason']}
-    elif kind == 'characters':
-        declared_from = coord['from']
-        if declared_from is not None and not _same(kind, declared_from, current):
-            findings.append(_finding(chapter_no, kind, key, declared_from, current,
-                                     '人物增量的 from 与当前人物状态不符。', 'drift_chain', 'blocker', 'volume'))
-        if not text(coord['detail'].get('choice')) or not text(coord['detail'].get('cost')):
-            findings.append(_finding(chapter_no, kind, key, 'choice/cost', None,
-                                     '人物变化须有选择与代价，否则只是状态标签。', 'drift_character', 'blocker', 'volume'))
-        else:
-            state.setdefault('character_current', {})[key] = {'value': copy.deepcopy(coord['to'])}
-    elif kind == 'clock':
-        advance = coord['advance']
-        if advance < 0:
-            findings.append(_finding(chapter_no, kind, key, '≥0', advance, '时钟不能倒退。',
-                                     'drift_clock', 'blocker', 'volume'))
-        else:
-            state['clock'] = (state.get('clock') or 0) + advance
-    elif kind == 'node':
-        definition = nodes.get(key) or {}
-        after, before = coord['to'], current
-        if before == 'resolved':
-            findings.append(_finding(chapter_no, kind, key, '未兑现', before,
-                                     '已兑现节点不能再次推进。', 'drift_node', 'blocker', 'volume'))
-        elif after == before and after != 'seeded':
-            findings.append(_finding(chapter_no, kind, key, '推进', after,
-                                     '同一节点重复推进：本章没有产生新的节点状态。', 'drift_node', 'blocker', 'volume'))
-        elif before == 'advanced' and after == 'seeded':
-            findings.append(_finding(chapter_no, kind, key, 'advanced', after,
-                                     '节点状态不能倒退。', 'drift_node', 'blocker', 'volume'))
-        else:
-            missing = [d for d in definition.get('depends_on') or []
-                       if _project(state, 'node', d) != 'resolved']
-            if after != 'seeded' and missing:
-                findings.append(_finding(chapter_no, kind, key, 'depends_on 已兑现', missing,
-                                         '节点不能跳过尚未兑现的前置因果。', 'drift_node', 'blocker', 'volume'))
-            window = definition.get('window')
-            if isinstance(window, list) and len(window) == 2 and not window[0] <= (chapter_no or 0) <= window[1]:
-                findings.append(_finding(chapter_no, kind, key, window, chapter_no,
-                                         '节点安排超出了卷纲登记的章节窗口。', 'drift_node', 'blocker', 'volume'))
-            state.setdefault('story_nodes', {})[key] = {'status': after}
-            if text(definition.get('line')):
-                state.setdefault('thread_progress', {})[definition['line']] = {'status': 'active'}
-    elif kind == 'thread':
-        after, before = coord['to'], current
-        if before == 'resolved':
-            findings.append(_finding(chapter_no, kind, key, '未关闭', before,
-                                     '已关闭线路不能重用。', 'drift_thread', 'blocker', 'volume'))
-        else:
-            row = {'status': after}
-            if after == 'dormant':
-                row['return_by'] = coord['detail'].get('return_by')
-            state.setdefault('thread_progress', {})[key] = row
-    elif kind == 'hook':
-        action = coord['to']
-        entry = _item(state.get('hooks'), key)
-        declaration = hooks.get(key) or {}
-        if action == 'plant':
-            if entry:
-                findings.append(_finding(chapter_no, kind, key, '未埋设', entry.get('status'),
-                                         '该伏笔已存在：同一承诺只能 plant 一次（承接已埋的承诺用 hook_refs）。',
-                                         'chapter_hook', 'blocker', 'volume'))
-            else:
-                window = declaration.get('plant')
-                if _window(window) and not window[0] <= (chapter_no or 0) <= window[1]:
-                    findings.append(_finding(chapter_no, kind, key, window, chapter_no,
-                                             'plant 不在卷纲声明的埋设窗口内。', 'chapter_hook', 'blocker', 'volume'))
-                payoff = declaration.get('payoff')
-                due = payoff[1] if _window(payoff) else None
-                if type(due) is not int or due < (chapter_no or 0):
-                    findings.append(_finding(chapter_no, kind, key, 'payoff[1] ≥ 本章', _safe(payoff),
-                                             '卷纲没有给出可用的 payoff 窗口，承诺期限（due）无法确定。',
-                                             'chapter_hook', 'blocker', 'volume'))
-                else:
-                    state.setdefault('hooks', {})[key] = {'status': 'open', 'due': due,
-                                                          'text': declaration.get('text'),
-                                                          'plant': chapter_no}
-        elif action == 'payoff':
-            if not entry or entry.get('status') != 'open':
-                findings.append(_finding(chapter_no, kind, key, 'open', entry.get('status'),
-                                         '只有已埋设且未兑现的承诺才能 payoff：payoff 不能早于 plant，也不能重复兑现。',
-                                         'chapter_hook', 'blocker', 'volume'))
-            else:
-                window = declaration.get('payoff')
-                if _window(window) and not window[0] <= (chapter_no or 0) <= window[1]:
-                    findings.append(_finding(chapter_no, kind, key, window, chapter_no,
-                                             'payoff 不在卷纲声明的兑现窗口内。', 'chapter_hook', 'blocker', 'volume'))
-                state['hooks'][key] = {**entry, 'status': 'paid', 'paid': chapter_no}
-        else:
-            findings.append(_finding(chapter_no, kind, key, '|'.join(HOOK_ACTIONS), action,
-                                     '伏笔动作只有 plant 与 payoff 两种。', 'chapter_hook', 'blocker', 'volume'))
+    declared_from = coord.get('from')
+    if declared_from is not None and not _same(kind, _declared(kind, key, declared_from, state, model), current):
+        findings.append(_finding(chapter_no, kind, key, declared_from, current,
+                                 '增量的 from 与前序章节留下的状态不符。', 'drift_chain', 'blocker', 'volume'))
+        return findings
+    detail = coord.get('detail') or {}
+    after = coord.get('advance') if kind == 'clock' else _declared(kind, key, coord.get('to'), state, model)
+    coordinate = _resource_coordinate(state, key, detail.get('asset')) if kind == 'resources' else None
+    if kind == 'resources' and (coordinate is None or after is None or after < 0):
+        findings.append(_finding(chapter_no, kind, key, '已登记资源坐标与非负终值', after,
+                                 '资源坐标无法解析或消耗超过账面。', 'drift_resource', 'blocker', 'volume'))
+        return findings
+    definition = (nodes.get(key) or {}) if kind == 'node' else (hooks.get(key) or {}) if kind == 'hook' else {}
+    window = definition.get('window') if kind == 'node' else definition.get(coord.get('to')) if kind == 'hook' else None
+    if _window(window) and not window[0] <= chapter_no <= window[1]:
+        findings.append(_finding(chapter_no, kind, key, window, chapter_no,
+                                 '安排超出卷纲声明的章节窗口。',
+                                 'chapter_hook' if kind == 'hook' else 'drift_node', 'blocker', 'volume'))
+        return findings
+    if kind == 'node' and after == current and after != 'seeded':
+        findings.append(_finding(chapter_no, kind, key, '推进', after,
+                                 '同一节点重复推进。', 'drift_node', 'blocker', 'volume'))
+        return findings
+    planned = {'detail': detail, 'definition': definition,
+               'planned': {'advance_days': after} if kind == 'clock' else {}}
+    # There is no prose evidence in a design. Scratch projections never become canonical facts.
+    item = {'reason': coord.get('reason') or detail.get('change') or detail.get('choice'),
+            'evidence': None}
+    before_findings = len(findings)
+    event = _event_for(kind, key, item, planned, after, current, state, chapter_no, findings,
+                       coordinate=coordinate)
+    if event is not None and len(findings) == before_findings:
+        _reduce(state, event, chapter_no, kind, key, findings, 'volume')
     return findings
 
 
-def _closure(state, volume_outline, chapter_no, model, findings):
+def _closure(state, volume_outline, chapter_no, model, findings, clock_start=None):
     """The volume's declared terminals, at tolerance zero, against the simulated last chapter."""
     for row in (volume_outline or {}).get('hooks') or []:
         if not isinstance(row, dict) or not text(row.get('id')) or not row.get('required'):
@@ -724,11 +623,44 @@ def _closure(state, volume_outline, chapter_no, model, findings):
         if not isinstance(row, dict) or not text(row.get('entity')):
             continue
         got = _project(state, 'characters', row['entity'])
-        if got is None:
-            findings.append(_finding(chapter_no, 'characters', row['entity'], '卷末当前状态', None,
-                                     '卷纲声明了卷末人物状态，模拟结束时该人物没有当前状态。',
+        expect = row.get('to')
+        # Old accepted outlines used prose here. Keep their presence check; only a structured
+        # terminal is an equality the engine can honestly compute.
+        if (isinstance(expect, dict) and not _same('characters', expect, got)) or got is None:
+            findings.append(_finding(chapter_no, 'characters', row['entity'],
+                                     expect if isinstance(expect, dict) else '卷末当前状态', got,
+                                     '卷末人物当前状态与卷纲的可计算终值不符。',
+                                     'drift_closure', 'blocker', 'volume'))
+    clock = (volume_outline or {}).get('clock') or {}
+    # `to` is an absolute terminal so a remaining-tail replan can check it too. Its absence is
+    # the old persisted outline shape and must not retroactively invent a terminal for it.
+    if isinstance(clock, dict) and type(clock.get('to')) is int:
+        if state.get('clock') != clock['to']:
+            findings.append(_finding(chapter_no, 'clock', 'main', clock['to'], state.get('clock'),
+                                     '卷末主线时钟与卷纲 clock.to 不符。',
+                                     'drift_closure', 'blocker', 'volume'))
+        if clock_start is not None and state.get('clock', 0) - clock_start != clock.get('advance_days'):
+            findings.append(_finding(chapter_no, 'clock', 'main', clock.get('advance_days'),
+                                     state.get('clock', 0) - clock_start,
+                                     '整卷章纲推进天数与卷纲 clock.advance_days 不符。',
                                      'drift_closure', 'blocker', 'volume'))
     return findings
+
+
+def _registrations(row, state, chapter, findings):
+    events = []
+    for entity in row.get('new_entities') or []:
+        if not isinstance(entity, dict) or not text(entity.get('id')) or entity['id'] in state.get('entities', {}):
+            continue
+        event = {'op': 'entity', 'entity': copy.deepcopy(entity)}
+        if _reduce(state, event, chapter, 'entity', entity['id'], findings):
+            events.append(event)
+        if entity.get('kind') == 'place' and text(entity.get('name')):
+            event = {'op': 'place', 'place': {'id': entity['id'], 'name': entity['name'],
+                                              'parent': entity.get('parent')}}
+            if _reduce(state, event, chapter, 'places', entity['id'], findings):
+                events.append(event)
+    return events
 
 
 def simulate(chapters, state0, world, volume_row=None, volume_outline=None):
@@ -743,10 +675,11 @@ def simulate(chapters, state0, world, volume_row=None, volume_outline=None):
     state = copy.deepcopy(state0) if isinstance(state0, dict) else {}
     findings = []
     rows = [row for row in (chapters or []) if isinstance(row, dict)]
-    nodes, threads = _node_registry(volume_outline), _thread_registry(volume_outline)
+    nodes = _node_registry(volume_outline)
     hooks = _hook_registry(volume_outline)
     for chapter in rows:
         chapter_no = chapter.get('chapter')
+        _registrations(chapter, state, chapter_no, findings)
         coords = _deltas(chapter, findings)
         declared = _enter_rows(chapter, findings)
         # The declared entry condition must be the projection the previous chapter left behind.
@@ -770,7 +703,7 @@ def simulate(chapters, state0, world, volume_row=None, volume_outline=None):
                 continue
             projected.setdefault((coord['kind'], coord['key']), None)
         for coord in coords:
-            _apply(state, coord, chapter_no, world, nodes, threads, hooks, findings)
+            _apply(state, coord, chapter_no, world, nodes, hooks, findings)
         # Rule 4.4: the declared exit is the engine's own arithmetic, compared value by value.
         declared_exit = {}
         for item in declared:
@@ -796,10 +729,17 @@ def simulate(chapters, state0, world, volume_row=None, volume_outline=None):
                 findings.append(_finding(chapter_no, kind, key, 'enter 的坐标', declared_exit[(kind, key)],
                                          'exit 出现了 enter 与本章增量都没有的坐标。',
                                          'drift_chain', 'blocker', 'volume'))
+        try:
+            facts.check_deadlines(state, chapter_no)
+        except Error as exc:
+            findings.append(_finding(chapter_no, 'deadline', 'chapter', '到期事项已处理', exc.code,
+                                     str(exc), 'drift_deadline', 'blocker', 'volume'))
     last = rows[-1].get('chapter') if rows else None
     reach = volume_row.get('end') if isinstance(volume_row, dict) else None
     if volume_outline is not None and (reach is None or last == reach):
-        _closure(state, volume_outline, last, world, findings)
+        clock_start = ((state0 or {}).get('clock') if rows and isinstance(volume_row, dict)
+                       and rows[0].get('chapter') == volume_row.get('first') else None)
+        _closure(state, volume_outline, last, world, findings, clock_start)
     return state, findings
 
 
@@ -814,7 +754,7 @@ def _deep_han(value):
     return 0
 
 
-def _length_policy(policy, fallback_words, fallback_tolerance):
+def _length_policy(policy):
     if not isinstance(policy, dict) or not policy:
         return None
     words, tolerance = policy.get('words'), policy.get('tolerance')
@@ -837,7 +777,7 @@ def _ladder_stages(selected):
 
 
 def validate_volume_outline(data, contract, world, selected=None, existing=None, missing_ids=None,
-                            state=None):
+                            state=None, strict=True):
     """Check and normalize the volume outline batch; returns `{volume_id: row}`.
 
     One volume per contract row, in contract order, each within the policy's length band, with node
@@ -886,15 +826,18 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
             findings.append(_finding(chapter_no, 'volume', ident, 'purpose/arc/climax/exit_state', _safe(
                 {k: volume.get(k) for k in ('purpose', 'arc', 'climax', 'exit_state')}),
                 '卷纲需要职责、卷内弧线、卷末高潮与卷末状态各一句。', 'volume_shape', 'blocker', 'volume'))
+        volume_style = volume.get('style')
+        if strict and (not isinstance(volume_style, dict) or not text(volume_style.get('trend'))):
+            findings.append(_finding(chapter_no, 'style', ident, '{trend:非空文本}',
+                                     _safe(volume_style), '新卷纲须声明具体的 style.trend。',
+                                     'volume_style', 'blocker', 'volume'))
         # A v5 opening that chose a 格局 ladder names one rung per volume, verbatim; an opening that
         # never chose one leaves `stage` empty and nothing here changes for it.
         if ladder and volume.get('stage') not in rungs:
             findings.append(_finding(chapter_no, 'stage', ident, rungs, _safe(volume.get('stage')),
                                      '本卷的格局层级必须逐字取自已选阶梯里的一级。',
                                      'volume_stage', 'blocker', 'volume'))
-        fallback = DEFAULTS['volume_outline']
-        policy = _length_policy((contract.get('volume_outline') or {}),
-                                fallback['words'], fallback['tolerance'])
+        policy = _length_policy(contract.get('volume_outline'))
         if policy:
             words, tolerance = policy
             length = _deep_han({key: volume.get(key) for key in VOLUME_FIELDS})
@@ -913,9 +856,13 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
                 findings.append(_finding(chapter_no, 'volume', ident, '{at,turn}', _safe(turn),
                                          '每个转折需要位置与内容。', 'volume_shape', 'blocker', 'volume'))
         clock = volume.get('clock')
-        if not isinstance(clock, dict) or type(clock.get('advance_days')) is not int or clock['advance_days'] < 0:
-            findings.append(_finding(chapter_no, 'volume', ident, '{advance_days:非负整数}', _safe(clock),
-                                     '卷纲须声明本卷主线推进天数。', 'volume_shape', 'blocker', 'volume'))
+        if not isinstance(clock, dict) or type(clock.get('advance_days')) is not int \
+                or clock['advance_days'] < 0 \
+                or (strict and (type(clock.get('to')) is not int or clock['to'] < 0)):
+            findings.append(_finding(chapter_no, 'volume', ident,
+                                     '{advance_days:非负整数,to:卷末绝对天数}', _safe(clock),
+                                     '新卷纲须声明本卷推进天数与可计算的卷末绝对时钟 clock.to。',
+                                     'volume_shape', 'blocker', 'volume'))
         for row in volume.get('nodes') or []:
             node_id = row.get('id') if isinstance(row, dict) else None
             if not isinstance(row, dict) or not text(node_id) or not text(row.get('purpose')) \
@@ -1036,9 +983,15 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
                                          '卷纲知情引用了未登记的人物。', 'volume_reference', 'blocker', 'volume'))
         for row in volume.get('characters') or []:
             entity = row.get('entity') if isinstance(row, dict) else None
-            if not isinstance(row, dict) or not text(entity) or not text(row.get('to')) or not text(row.get('reason')):
-                findings.append(_finding(chapter_no, 'characters', entity, '{entity,from,to,reason}', _safe(row),
-                                         '卷纲人物需要 entity、to 与原因。', 'volume_reference', 'blocker', 'volume'))
+            after = row.get('to') if isinstance(row, dict) else None
+            structured = isinstance(after, dict) and all(text(after.get(k))
+                                                       for k in ('desire', 'stance', 'relationship_focus'))
+            if not isinstance(row, dict) or not text(entity) or not (structured or not strict and text(after)) \
+                    or not text(row.get('reason')):
+                findings.append(_finding(chapter_no, 'characters', entity,
+                                         '{entity,to:{desire,stance,relationship_focus},reason}', _safe(row),
+                                         '新卷纲人物终值须用三项当前状态对象声明，并给出原因。',
+                                         'volume_reference', 'blocker', 'volume'))
                 continue
             if entity not in entities:
                 findings.append(_finding(chapter_no, 'characters', entity, '已登记实体', None,
@@ -1053,6 +1006,8 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
         normalized['turns'] = [copy.deepcopy(turn) for turn in turns
                                if isinstance(turn, dict) and text(turn.get('at')) and text(turn.get('turn'))]
         normalized['clock'] = {'advance_days': (clock or {}).get('advance_days') or 0}
+        if isinstance(clock, dict) and type(clock.get('to')) is int:
+            normalized['clock']['to'] = clock['to']
         normalized['nodes'] = copy.deepcopy(volume.get('nodes') or [])
         normalized['threads'] = copy.deepcopy(volume.get('threads') or [])
         normalized['hooks'] = [dict(copy.deepcopy(row),
@@ -1085,7 +1040,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
     return report
 
 
-def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0):
+def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0, strict=True):
     """Check and normalize one volume's chapter outlines; returns the chapter rows.
 
     Every rule of §4: continuous coverage of the volume's chapter range, synopsis length inside the
@@ -1119,6 +1074,7 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     known_threads = _thread_registry(volume_row_outline)
     world_ids = _world_index(world)
     scratch = copy.deepcopy((state0 or {}).get('entities') or {})
+    anchor = _anchor(data, chapters, numbers, first, end, state0, world)
     for row in chapters:
         chapter_no = row['chapter']
         synopsis = row.get('synopsis')
@@ -1138,6 +1094,18 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
                                      'world_refs 须引用存在的 领域:id，且不重复。',
                                      'chapter_world', 'blocker', 'outline'))
         plot = row.get('plot')
+        chapter_style = row.get('style')
+        if strict and chapter_no >= anchor and (not isinstance(chapter_style, dict)
+                                     or not all(text(chapter_style.get(k)) for k in ('pov', 'rhythm'))):
+            findings.append(_finding(chapter_no, 'style', 'style', '{pov,rhythm:非空文本}',
+                                     _safe(chapter_style), '新章纲须声明非空的 style.pov 与 style.rhythm。',
+                                     'chapter_style', 'blocker', 'outline'))
+        if strict and chapter_no >= anchor and isinstance(chapter_style, dict) and 'dialogue_ratio' in chapter_style:
+            ratio = chapter_style['dialogue_ratio']
+            if isinstance(ratio, bool) or not isinstance(ratio, (int, float)) or not 0 <= ratio <= 1:
+                findings.append(_finding(chapter_no, 'style', 'dialogue_ratio', '0~1 数值', _safe(ratio),
+                                         'style.dialogue_ratio 要么省略，要么声明 0~1 的有限目标。',
+                                         'chapter_style', 'blocker', 'outline'))
         if isinstance(plot, dict) and not text(plot.get('beat')):
             findings.append(_finding(chapter_no, 'plot', 'beat', '一句话情节变化', None,
                                      '章纲须写清 plot.beat。', 'chapter_shape', 'blocker', 'outline'))
@@ -1176,7 +1144,6 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     # The anchor is computed first: a repair batch re-emits the volume's stale prefix, and judging
     # that prefix against the state the book is actually in would call every promise action it has
     # already settled a duplicate. Rows before the anchor are history; only the tail is new work.
-    anchor = _anchor(data, chapters, numbers, first, end, state0, world)
     known_hooks = _hook_registry(volume_row_outline)
     carried = {ident: entry for ident, entry in ((state0 or {}).get('hooks') or {}).items()
                if isinstance(entry, dict)}
@@ -1255,7 +1222,9 @@ def _anchor(data, chapters, numbers, first, end, state0, world):
     taken as given.
     """
     hint = data.get('from_chapter') if isinstance(data, dict) else None
-    if type(hint) is int and first < hint <= end and hint in numbers:
+    if hint is not None:
+        require(type(hint) is int and first <= hint <= end and hint in numbers,
+                'chapter_outline', 'from_chapter 须在当前回执的章号范围内。')
         return hint
     if numbers[0] == first and _enter_mismatch(chapters[0], state0, world):
         for row in chapters[1:]:
@@ -1341,11 +1310,6 @@ def _normalize_chapter(chapter, state, world, registry=None, hooks=None):
 
 
 # ------------------------------------------------------------- plan rows
-def _coordinate_row(item):
-    kind = _kind_of(item.get('kind'))
-    return kind, item.get('key')
-
-
 def _preconditions(chapter):
     """`enter` as the precondition rows the older consumers (narrative.unmet) already read.
 
@@ -1553,7 +1517,7 @@ def _amount_string(value):
     return str(number)
 
 
-def _resource_event(coordinate, state, before, after, reason, evidence, findings):
+def _resource_event(coordinate, before, after, reason, evidence, findings):
     """A conservation-checked flow event for one resource coordinate change."""
     holder, asset, unit = _resource_parts(coordinate, {}, {'holder': None, 'asset': None, 'unit': None})
     parts = _split_dump(coordinate)
@@ -1580,35 +1544,7 @@ def _resource_event(coordinate, state, before, after, reason, evidence, findings
     return event
 
 
-def _shadow_apply(shadow, kind, key, after, coordinate=None):
-    """Keep the running projection in step with the events being built, so later `before` fields
-    describe what `facts.settle` will actually see (a node activates its line first)."""
-    if kind == 'resources' and coordinate:
-        shadow.setdefault('resources', {})[coordinate] = str(after)
-    elif kind == 'places':
-        shadow.setdefault('placements', {})[key] = after
-    elif kind == 'knowledge':
-        shadow.setdefault('knowledge', {})[key] = {'status': after}
-    elif kind == 'characters':
-        shadow.setdefault('character_current', {})[key] = {'value': copy.deepcopy(after)}
-    elif kind == 'clock':
-        shadow['clock'] = after
-    elif kind == 'node':
-        shadow.setdefault('story_nodes', {})[key] = {'status': after}
-        line = (shadow.get('_lines') or {}).get(key)
-        if text(line):
-            shadow.setdefault('thread_progress', {})[line] = {'status': 'active'}
-    elif kind == 'thread':
-        shadow.setdefault('thread_progress', {})[key] = {'status': after}
-    elif kind == 'hook':
-        previous = _item(shadow.get('hooks'), key)
-        shadow.setdefault('hooks', {})[key] = {**previous, 'status': after}
-    elif kind == 'disclosure':
-        shadow.setdefault('reader_knowledge', {})[key] = {'status': after}
-    return shadow
-
-
-def _event_for(kind, key, item, planned, actual_to, actual_from, shadow, state, chapter, findings,
+def _event_for(kind, key, item, planned, actual_to, actual_from, state, chapter, findings,
                coordinate=None):
     evidence = item.get('evidence')
     detail = planned.get('detail') or {}
@@ -1619,7 +1555,7 @@ def _event_for(kind, key, item, planned, actual_to, actual_from, shadow, state, 
             findings.append(_finding(chapter, kind, key, 'reason', None,
                                      '资源变化须写明原因（章纲或自比行）。', 'drift_resource', 'blocker'))
             return None
-        return _resource_event(coordinate or key, state, actual_from, actual_to, reason, evidence, findings)
+        return _resource_event(coordinate or key, actual_from, actual_to, reason, evidence, findings)
     if kind == 'places':
         route = item.get('route') or detail.get('route') or reason
         if not text(route) or not text(reason):
@@ -1631,8 +1567,10 @@ def _event_for(kind, key, item, planned, actual_to, actual_from, shadow, state, 
             event = {'op': 'travel', 'entity': key, 'from': actual_from, 'to': actual_to,
                      'links': list(links), 'evidence': evidence}
             depart, arrive = item.get('depart', detail.get('depart')), item.get('arrive', detail.get('arrive'))
-            if type(depart) is int and type(arrive) is int:
-                event.update(depart=depart, arrive=arrive)
+            if depart is not None:
+                event['depart'] = depart
+            if arrive is not None:
+                event['arrive'] = arrive
             return event
         return {'op': 'move', 'entity': key, 'before': actual_from, 'after': actual_to,
                 'route': route, 'reason': reason, 'evidence': evidence}
@@ -1645,6 +1583,13 @@ def _event_for(kind, key, item, planned, actual_to, actual_from, shadow, state, 
         if not text(who) or not text(topic) or stance is None:
             findings.append(_finding(chapter, kind, key, 'who:topic 与 to 档位', _safe(item.get('actual')),
                                      '知情事件需要可还原的人物与披露档位。', 'drift_knowledge', 'blocker'))
+            return None
+        previous = _canonical_reveal(_project(state, kind, key))
+        if previous is not None and actual_to != 'retracted' \
+                and REVEAL_RANK.get(_canonical_reveal(actual_to), 0) < REVEAL_RANK.get(previous, 0):
+            findings.append(_finding(chapter, kind, key, previous, actual_to,
+                                     '知情倒退：除 retracted 外不得从已知退回暗示。',
+                                     'drift_knowledge', 'blocker'))
             return None
         claim = item.get('claim') or reason or (evidence or {}).get('quote')
         old = _item((state or {}).get('knowledge'), key)
@@ -1814,8 +1759,7 @@ def reconcile(drift_check, row, state, world):
                                      'drift_coverage', 'blocker'))
     # 2. Per-item reconciliation against the projected state.
     shadow = copy.deepcopy(state) if isinstance(state, dict) else {}
-    shadow['_lines'] = {entry['key']: (entry.get('definition') or {}).get('line')
-                        for entry in planned if entry['kind'] == 'node'}
+    registrations = _registrations(row, shadow, chapter, findings)
     ordered = [entry for entry in planned
                if _coverage_key(entry['kind'], entry['key'], entry.get('planned')) in seen_items]
     for entry in ordered:
@@ -1872,50 +1816,79 @@ def reconcile(drift_check, row, state, world):
             deviations.append({'chapter': chapter, 'kind': kind, 'key': key,
                                'planned': _safe(entry['planned']), 'actual': _safe(item.get('actual')),
                                'reason': item['reason']})
-        if kind == 'skipped':
+        if status == 'skipped':
             continue
         event = _event_for(kind, key, item, entry, actual_to, projected if kind != 'resources' else actual_from,
-                           shadow, shadow, chapter, findings,
+                           shadow, chapter, findings,
                            coordinate=coordinate)
         if event is not None:
             events.append(event)
-            # The shadow tracks projections, not declarations: a promise action becomes the status
-            # the event leaves behind, so a same-chapter payoff sees the plant that preceded it.
-            settled = HOOK_STATUS.get(actual_to, actual_to) if kind == 'hook' else actual_to
-            _shadow_apply(shadow, kind, key, settled, coordinate=coordinate)
-    # 3. Unplanned rows: the same before/to rules where they carry values, registered either way.
+            _reduce(shadow, event, chapter, kind, key, findings)
+    # 3. Unplanned factual deltas use the same event builders and reducers as planned deltas.
+    # A prose note alone cannot establish a state; refusing it is safer than accepting a receipt
+    # whose body and canonical state silently disagree. Narrative actions remain plan-bound.
     for entry in unplanned:
         kind = _kind_of(entry.get('kind'))
         key = entry.get('key')
-        if kind == 'disclosure':
-            kind, key = 'disclosure', key
-        if not text(key):
-            findings.append(_finding(chapter, kind, key, 'key', _safe(entry),
-                                     '计划外变化须说明坐标。', 'drift_unplanned', 'blocker'))
+        if kind not in ('resources', 'places', 'knowledge', 'characters') or not text(key):
+            findings.append(_finding(chapter, kind, key,
+                                     'resources|places|knowledge|characters 与非空 key', _safe(entry),
+                                     '该计划外状态种类未开放结算；情节、伏笔、披露与时钟须先按章纲契约处理。',
+                                     'drift_unplanned', 'blocker'))
             continue
         if not text(entry.get('reason')):
             findings.append(_finding(chapter, kind, key, 'reason', None,
                                      '计划外变化须写明原因，否则无法入账。', 'drift_unplanned', 'blocker'))
             continue
         actual = entry.get('actual')
-        recorded = {'chapter': chapter, 'kind': kind, 'key': key,
-                    'planned': _safe(entry.get('planned')), 'actual': _safe(actual),
-                    'reason': entry['reason']}
-        if isinstance(actual, dict) and 'to' in actual:
-            projected = _project(shadow, kind, key)
-            if 'from' in actual and not _same(kind, _declared(kind, key, actual['from'], shadow, world), projected):
-                findings.append(_finding(chapter, kind, key, projected, actual['from'],
-                                         '计划外变化的自报前态与引擎投影不符。', 'drift_before', 'blocker'))
-                continue
-            entry = {**entry, 'status': entry.get('status') or 'deviated'}
-            if not text(entry.get('reason')):
-                continue
-            recorded['actual'] = _safe(actual)
-        elif not text(entry.get('change')):
-            findings.append(_finding(chapter, kind, key, 'change/actual', _safe(entry),
-                                     '计划外变化须给出 change 说明或 actual 结果。', 'drift_unplanned', 'blocker'))
+        if not isinstance(actual, dict) or not {'from', 'to'} <= set(actual) or actual['to'] is None:
+            findings.append(_finding(chapter, kind, key, 'actual={from,to}', _safe(actual),
+                                     '计划外变化须给出可结算的 actual.from/to，不能只填 change 说明。',
+                                     'drift_unplanned', 'blocker'))
             continue
-        deviations.append(recorded)
+        if kind == 'knowledge' and (not isinstance(actual['to'], str) or actual['to'] not in REVEALS
+                                     or actual['from'] is not None and
+                                     (not isinstance(actual['from'], str) or actual['from'] not in REVEALS)):
+            findings.append(_finding(chapter, kind, key, 'from:null|知情档位,to:知情档位', _safe(actual),
+                                     '计划外知情值必须使用已声明的披露档位。', 'drift_unplanned', 'blocker'))
+            continue
+        if kind == 'places' and (not text(actual['to']) or actual['from'] is not None and not text(actual['from'])):
+            findings.append(_finding(chapter, kind, key, 'from:null|地点文本,to:地点文本', _safe(actual),
+                                     '计划外位置值必须是可解析的地点文本。', 'drift_unplanned', 'blocker'))
+            continue
+        evidence = _evidence_of(entry, chapter, findings)
+        if evidence is None:
+            continue
+        coordinate = _resource_coordinate(shadow, key) if kind == 'resources' else None
+        projected = _project(shadow, kind, key)
+        if kind == 'resources' and projected is None and _split_dump(key) is not None:
+            coordinate, projected = key, 0
+        declared_from = _declared(kind, key, actual['from'], shadow, world)
+        if not _same(kind, declared_from, projected):
+            findings.append(_finding(chapter, kind, key, projected, declared_from,
+                                     '计划外变化的自报前态与引擎投影不符。', 'drift_before', 'blocker'))
+            continue
+        after = _declared(kind, key, actual['to'], shadow, world)
+        if kind == 'resources' and (after is None or after < 0):
+            findings.append(_finding(chapter, kind, key, '非负有限资源数值', _safe(actual['to']),
+                                     '计划外资源终值必须是非负有限数值。', 'drift_resource', 'blocker'))
+            continue
+        if kind == 'places' and after not in _place_registry(shadow, world):
+            findings.append(_finding(chapter, kind, key, '已登记地点', _safe(after),
+                                     '计划外位置变化指向未登记地点。', 'drift_place', 'blocker'))
+            continue
+        item = {**entry, 'evidence': evidence, 'status': 'deviated'}
+        before_findings = len(findings)
+        event = _event_for(kind, key, item, {'detail': {}}, after, projected,
+                           shadow, chapter, findings, coordinate=coordinate)
+        if len(findings) != before_findings:
+            continue
+        if event is not None:
+            events.append(event)
+            _reduce(shadow, event, chapter, kind, key, findings)
+        deviations.append({'chapter': chapter, 'kind': kind, 'key': key,
+                           'planned': _safe(entry.get('planned')), 'actual': _safe(actual),
+                           'reason': entry['reason']})
     # 4. The verdict is a claim the engine can contradict.
     verdict = drift_check.get('verdict')
     if verdict not in VERDICTS:
@@ -1931,7 +1904,6 @@ def reconcile(drift_check, row, state, world):
                                  'drift_verdict', 'quality'))
     # 5. Planned disclosures: settled from the outline when the writer filed no explicit row for
     # them, and registered as a deviation so the ledger of what was not self-reported stays visible.
-    declared_disclosures = {(entry['kind'], entry['key']) for entry in []}
     reported = {}
     for item in items:
         if isinstance(item, dict) and _kind_of(item.get('kind')) == 'disclosure':
@@ -1969,22 +1941,11 @@ def reconcile(drift_check, row, state, world):
             events.append({'op': 'reader_knowledge', 'topic': topic, 'before': before, 'after': after,
                            'claim': item.get('claim') or disclosure.get('claim') or (evidence or {}).get('quote'),
                            'evidence': evidence})
-            _shadow_apply(shadow, 'disclosure', topic, after)
+            _reduce(shadow, events[-1], chapter, 'disclosure', topic, findings)
             if topic not in reported:
                 deviations.append({'chapter': chapter, 'kind': 'disclosure', 'key': topic,
                                    'planned': {'after': after}, 'actual': {'after': after},
                                    'reason': '执笔未逐条自报本章披露，引擎按章纲登记。'})
-    # 6. Entities declared inline are registered before the events that reference them.
-    registrations = []
-    for entity in row.get('new_entities') or []:
-        if not isinstance(entity, dict) or not text(entity.get('id')) or entity.get('id') in shadow.get('entities', {}):
-            continue
-        registrations.append({'op': 'entity', 'entity': copy.deepcopy(entity)})
-        shadow.setdefault('entities', {})[entity['id']] = copy.deepcopy(entity)
-        if entity.get('kind') == 'place' and text(entity.get('name')):
-            registrations.append({'op': 'place', 'place': {'id': entity['id'], 'name': entity['name'],
-                                                           'parent': entity.get('parent')}})
-            shadow.setdefault('places', {})[entity['id']] = {'id': entity['id'], 'name': entity['name']}
     return {'events': registrations + events, 'findings': findings, 'deviations': deviations}
 
 
@@ -2038,21 +1999,3 @@ def state_mismatch(state, row):
                                      'drift_chain', 'blocker', 'volume'))
         statuses[hook_id] = 'open' if action == 'plant' else 'paid'
     return findings
-
-
-def ledger_blocks(*blocks):
-    """Check the optional account blocks a volume or chapter outline may carry (single table)."""
-    for block in blocks:
-        ledger.check(block)
-
-
-def delta_table():
-    """The increment kinds with the projection field each one reads, for briefs and templates."""
-    return tuple({'kind': kind, 'field': FIELDS.get(kind, kind),
-                  'key': _delta_key_hint(kind)} for kind in DELTA_KINDS)
-
-
-def _delta_key_hint(kind):
-    return {'resources': '资源投影坐标（holder/asset/unit 的投影键）或世界模型里的资产 ID',
-            'places': '实体 ID', 'knowledge': 'who:topic', 'characters': '实体 ID',
-            'clock': 'clock'}.get(kind, '')

@@ -384,6 +384,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     # a worker is actively writing is already outside the dispatch protocol (wait for the
     # worker, then `advance --after`).
     prior_view = artifact('task.json')
+    prior = None
     if prior_view.exists():
         try:
             prior = json.loads(prior_view.read_text(encoding='utf-8'))
@@ -427,9 +428,13 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     # what it costs to read. Both are read off the artifacts themselves, so the read-only
     # delivery surface needs no new persistence capability.
     task_file = artifact('task.json')
-    previous = json.loads(task_file.read_text(encoding='utf-8')) if task_file.exists() else None
-    envelope['redispatch_count'] = (previous.get('redispatch_count', 0) + 1
-                                    if previous and previous.get('input_hash') == envelope['input_hash'] else 1)
+    # This view is disposable: malformed JSON (including a final symlink's target) must not
+    # prevent rebuilding the task from its immutable database input.
+    previous = prior
+    prior_count = previous.get('redispatch_count') if isinstance(previous, dict) else None
+    envelope['redispatch_count'] = (prior_count + 1
+                                    if type(prior_count) is int and prior_count >= 0
+                                    and previous.get('input_hash') == envelope['input_hash'] else 1)
     envelope['material_bytes'] = sum(path.stat().st_size for path in
                                      (artifact('input.json'), artifact('result.template.json'))
                                      if path.exists())

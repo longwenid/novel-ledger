@@ -1,14 +1,4 @@
-"""The current opening protocol: thirteen male-channel gates, one question each.
-
-These exercise opening/5 — the gate set a new book opens with: genre, premise, origin, voice, scale,
-world, ladder, edge, protagonist, relationships, opposition, payoff, title. The core-idea gate is
-asked right after the genre (what the world's rules add decides what every later gate reads), the
-origin follows it (what the protagonist brought), the world structure comes before the scale ladder
-(each rung has to step on the tiers, places and factions the world already declared), the structural
-length gate is answered by the engine from a proved ladder, every other gate by a cold worker, and
-the final contract must keep each decision verbatim. Older gate sets keep their own regression cover:
-`test_opening_v2.py` (opening/2) and `test_opening_legacy.py` (opening/1).
-"""
+"""Current opening decisions, versioned gate ownership and contract alignment."""
 import copy
 import sys
 import tempfile
@@ -87,6 +77,8 @@ VALUES = {
                           'deadline_chapter': '12'}},
     'title': {'title': '夜班退件：我能读出第二层笔迹'},
 }
+VALUES['world']['architecture'] = {'space': '旧大陆与海上城邦靠季节航路相连，远洋断航使各地无法独自存续。', 'history': '上个时代的资源战争留下互保契约，失效的旧承诺正在引发新的饥荒。', 'civilizations': '内陆联邦依赖海上供给，城邦依赖内陆技术，双方为旧契约的解释权冲突。', 'conflict': '各方只能转移灾害而不能消除灾害，越成功自保就越破坏共同生存条件。', 'mystery': '共同灾害来自先民维持航路的选择，揭开真相后仍要决定谁承担修复代价。'}
+
 # Which field each gate varies so its options are genuinely different, not relabelled. A dotted path
 # reaches into a structured answer (the ladder's own `scale.opening`) without breaking its shape.
 VARY = {'genre': 'reader_promise', 'premise': 'novelty', 'origin': 'arrival', 'voice': 'voice',
@@ -108,11 +100,12 @@ def _vary(value, path):
         target[leaf] += '（另一种落法）'
 
 
-def rows_for(gate):
+def rows_for(gate, version=OPENING_VERSION):
     """Two worker-shaped options for one gate, built from the fixture values."""
     rows = []
     for index, ident in enumerate(('A', 'B')):
-        value = copy.deepcopy(VALUES[gate])
+        owned = creation.value_fields(gate, version)
+        value = {key: copy.deepcopy(value) for key, value in VALUES[gate].items() if key in owned}
         field = VARY.get(gate)
         if index and field:
             _vary(value, field)
@@ -131,7 +124,7 @@ def shown(state):
     if state['board'] is not None:
         return state
     gate = creation.current(state)['id']
-    return creation.offer(state, {'gate': gate, 'options': rows_for(gate)})
+    return creation.offer(state, {'gate': gate, 'options': rows_for(gate, creation.opening_version(state))})
 
 
 def walk(state):
@@ -179,6 +172,8 @@ def contract_from(state, world_rules=('夜班退件必须登记负责人。',)):
                  allow_special_mechanism=choices['world']['allow_special_mechanism'], world_rules=list(world_rules),
                  world_tiers=copy.deepcopy(choices['world']['tiers']),
                  world_resource=copy.deepcopy(choices['world']['resource']))
+    if 'architecture' in choices['world']:
+        value['world_architecture'] = copy.deepcopy(choices['world']['architecture'])
     value.update(world_scale=copy.deepcopy(choices['ladder']['scale']),
                  world_ladder=copy.deepcopy(choices['ladder']['ladder']))
     value.update(opposition=choices['opposition']['opposition'], story_engine=choices['opposition']['story_engine'])
@@ -231,13 +226,35 @@ class CurrentOpeningTests(unittest.TestCase):
         self.assertIn('起点/番茄男频长篇网文', pending['brief'])
         self.assertIn('男频题材要连承诺一起给', pending['brief'])
 
-    def test_the_gate_order_asks_the_core_idea_then_the_origin(self):
-        """opening/5 puts the core idea first and the origin right behind it."""
+    def test_world_and_escalation_precede_protagonist_origin(self):
+        """The protagonist enters a world whose architecture is already decided."""
         gates = creation.gate_ids(OPENING_VERSION)
         self.assertEqual(len(gates), 13)
-        self.assertEqual(gates[:4], ('genre', 'premise', 'origin', 'voice'))
+        self.assertEqual(gates[:4], ('genre', 'premise', 'voice', 'scale'))
         self.assertEqual(creation.SYSTEM_GATES[OPENING_VERSION], ('scale',))
         self.assertEqual(gates.index('world') + 1, gates.index('ladder'))
+
+    def test_premise_and_origin_briefs_request_the_counts_the_receiver_accepts(self):
+        from novel_ledger import briefs
+        for version, gate in ((4, 'origin'), (5, 'premise'), (5, 'origin')):
+            with self.subTest(version=version, gate=gate):
+                state = walk_to(creation.begin(version=version), gate)
+                brief = briefs.opening_options(creation.current(state),
+                                               creation.lens_brief(0), version=version)
+                self.assertIn('2～3', creation.gate_note(version, gate))
+                self.assertNotIn('四个方向各给一个方案', brief)
+                options = rows_for(gate)
+                third = copy.deepcopy(options[0])
+                third.update(id='C', title='方案C', premise='第三种具体方案。',
+                             driver='另从旧账切入，追查责任转手的证据。')
+                options.append(third)
+                for count in (2, 3):
+                    board = creation.offer(state, {'gate': gate, 'options': options[:count]})['board']
+                    self.assertEqual(len(board['options']), count)
+                fourth = copy.deepcopy(third)
+                fourth['id'] = 'D'
+                self.assertCode('opening_options', creation.offer, state,
+                                {'gate': gate, 'options': options + [fourth]})
 
     def test_the_premise_gate_asks_the_four_questions_and_projects_them_verbatim(self):
         """The core idea is four answers, projected as one contract field (`core_premise`)."""
@@ -282,7 +299,7 @@ class CurrentOpeningTests(unittest.TestCase):
         from novel_ledger.contracts import CONTRACT_FIELDS, alignment_for, opening_source
         self.assertEqual(set(creation.value_fields('world', OPENING_VERSION)),
                          {'world_premise', 'mechanism', 'red_lines', 'allow_special_mechanism',
-                          'tiers', 'resource'})
+                          'tiers', 'resource', 'architecture'})
         for key, shape in (('world_tiers', ('name', 'condition', 'gain', 'cost', 'limit')),
                            ('world_resource', ('name', 'source', 'allocator'))):
             row = next(entry for entry in CONTRACT_FIELDS if entry['key'] == key)
@@ -488,6 +505,15 @@ class CurrentOpeningTests(unittest.TestCase):
         # An unknown class is refused with the real ladder rather than a guess (assertion folded
         # in from the retired version-2 twin of this test: the normalization is shared code).
         self.assertCode('opening_option', creation.intake, creation.begin('x'), {'scale': {'tier': 't9'}}, 'x')
+
+    def test_partial_intake_keeps_complete_simple_gates_without_inventing_other_decisions(self):
+        values = {'title': {'title': '作者已定书名'}, 'scale': {'tier': 't0'}}
+        state = creation.intake(creation.begin(), values, '作者已经决定书名与体量。')
+        selected = creation.selected(state)
+        self.assertEqual(set(selected), {'title', 'scale'})
+        self.assertEqual(selected['title'], values['title'])
+        self.assertEqual(selected['scale']['tier'], 't0')
+        self.assertEqual(creation.current(state)['id'], 'genre')
 
 
 if __name__ == '__main__':

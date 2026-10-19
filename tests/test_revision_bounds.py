@@ -72,6 +72,38 @@ class RevisionBoundsTests(unittest.TestCase):
         self.assertEqual(len(self.repo.headers('main')), 5)
         self.assertEqual(self.app.status()['revision_run']['first'], 5)
 
+    def test_unfinished_revision_cannot_replace_the_formal_branch(self):
+        self.written()
+        parent_rows = self.repo.headers('main')
+        self.assertCode('revision', self.app.promote, self.owner)
+        self.app.revise(5, '修改第五章表达。', self.owner, through=5, changes={'mode': 'expression'})
+        before = self.repo.load()
+        self.assertEqual(self.app.status()['formal_chapters'], 5)
+        self.assertCode('revision', self.app.promote, self.owner)
+        self.assertEqual(self.repo.load(), before)
+        self.assertEqual(self.repo.headers('main'), parent_rows)
+        self.assertEqual(self.app.status()['formal_branch'], 'main')
+        self.assertEqual(self.app.status()['formal_chapters'], 5)
+        # A frozen repair is not completion either.
+        self.app.advance(owner=self.owner)
+        self.assertCode('revision', self.app.promote, self.owner)
+        self.assertEqual(self.app.status()['formal_branch'], 'main')
+
+    def test_ready_revision_is_adopted_before_resuming_the_original_finish_goal(self):
+        self.written()
+        self.app.run(finish=True, owner=self.owner, source='作者授权续写并完本。')
+        self.app.revise(5, '先修第五章表达。', self.owner, through=5, changes={'mode': 'expression'})
+        handoff = drive(self.app, self.owner)
+        self.assertEqual(handoff['action'], 'revision_ready')
+        self.assertEqual(self.app.status()['formal_branch'], 'main')
+        self.assertCode('completion', self.app.complete, self.owner)
+        adopted = self.app.promote(self.owner)
+        self.assertIsNone(adopted['revision_run'])
+        self.assertEqual(adopted['target'], 6)
+        self.assertTrue(adopted['finish'])
+        self.assertEqual(drive(self.app, self.owner)['action'], 'ready_to_complete')
+        self.assertTrue(self.app.complete(self.owner)['completed'])
+
     def test_a_revision_older_than_the_window_is_saved_for_the_author(self):
         plan = self.blocked(2, {'mode': 'expression'}, 2)
         self.assertIn('outside_recent_window', plan['violations'])
@@ -160,7 +192,12 @@ class RevisionBoundsTests(unittest.TestCase):
             self.assertEqual(self.repo.chapter(branch, n)['prose'], parent[n])
         self.assertNotEqual(self.repo.chapter(branch, 2)['prose'], before)
         self.assertTrue(self.app.audit()['ok'])
-        self.assertEqual(drive(self.app, self.owner)['action'], 'target_reached')
+        self.assertEqual(drive(self.app, self.owner)['action'], 'revision_ready')
+        self.assertEqual(self.app.status()['formal_branch'], 'main')
+        adopted = self.app.promote(self.owner)
+        self.assertEqual(adopted['formal_branch'], branch)
+        self.assertIsNone(adopted['revision_run'])
+        self.assertEqual(self.app.advance(owner=self.owner)['action'], 'target_reached')
 
     def test_an_expression_revision_that_moves_a_fact_cannot_carry_its_suffix(self):
         plan = self.blocked(2, {'mode': 'expression'}, 2)

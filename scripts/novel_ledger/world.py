@@ -74,15 +74,20 @@ def _ordered(names):
 def declared_sections(choices):
     """What the opening declared the world must therefore carry.
 
-    The world gate's rank ladder lands in `powers`; a 格局 ladder that reaches a 界 or wider lands in
-    `cosmology`. An opening that declared neither asks for nothing extra, which is what keeps every
-    v1–v4 project's required set exactly what it was. A selection that is not the declared shape
-    yields nothing rather than raising: the gate owns that shape, the world model only reads it.
+    The world gate's currency lands in `economy` and its rank ladder in `powers`; a 格局 ladder that
+    reaches a 界 or wider lands in `cosmology`. An opening that declared none asks for nothing extra,
+    which keeps every v1–v4 project's required set exactly what it was. A selection that is not the
+    declared shape yields nothing rather than raising: the gate owns that shape, the world model
+    only reads it.
     """
     extra = []
     world_choice = choices.get('world') if isinstance(choices, dict) else None
+    if isinstance(world_choice, dict) and world_choice.get('resource'):
+        extra.append('economy')
     if isinstance(world_choice, dict) and world_choice.get('tiers'):
         extra.append('powers')
+    if isinstance(world_choice, dict) and world_choice.get('architecture'):
+        extra.extend(section for _key, _note, section, _field in contracts.WORLD_ARCHITECTURE)
     ladder_choice = choices.get('ladder') if isinstance(choices, dict) else None
     rows = ladder_choice.get('ladder') if isinstance(ladder_choice, dict) else None
     scopes = {row.get('scope') for row in rows or [] if isinstance(row, dict)}
@@ -102,7 +107,7 @@ def index(model):
 
 
 def _bindings(model, choices):
-    """The three verbatim bindings: a gate's decision must exist in the world, word for word.
+    """Declared opening decisions must exist in their world records, word for word.
 
     Each is checked only when the opening declared it, so a project written before opening/5 is not
     asked about decisions nobody made. Extra records are allowed — the world may be grander than the
@@ -142,8 +147,18 @@ def _bindings(model, choices):
         if not holders:
             complaints.append({'rule': 'world_ladder 每一级 stage 在 geography/cosmology/factions/powers 有同名 name 记录',
                                'expect': stage, 'got': []})
+    frame = world_choice.get('architecture')
+    if frame is not None:
+        fields = {row[0] for row in contracts.WORLD_ARCHITECTURE}
+        require(isinstance(frame, dict) and set(frame) == fields
+                and all(text(frame.get(key)) for key in fields), 'world_alignment',
+                '开书世界架构缺少完整声明。', {'expected_fields': sorted(fields)})
+        for key, _note, section, field in contracts.WORLD_ARCHITECTURE:
+            if not any(item.get(field) == frame[key] for item in model.get(section) or []):
+                complaints.append({'rule': 'world.architecture.' + key + '→' + section + '.' + field,
+                                   'expect': frame[key], 'got': '没有逐字承接的世界记录'})
     require(not complaints, 'world_alignment', '世界模型与门里声明的设定没有逐字对上。',
-            {'rule': '门里选的位阶表/硬通货/格局阶梯必须在世界模型里有同名记录',
+            {'rule': '位阶、硬通货、格局阶梯和已声明的世界架构必须按字段承接',
              'expect': 'powers 全字段等值；economy 同名 resource，且 allocator 出现在 distribution；'
                        '阶梯每级在 geography/cosmology/factions/powers 有同名 name',
              'got': complaints[:8], 'mismatches': len(complaints),

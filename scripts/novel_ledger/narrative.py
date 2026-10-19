@@ -6,8 +6,6 @@ from .contracts import require, text
 
 STATUSES = ('seeded', 'advanced', 'resolved')
 REVEALS = ('hinted', 'suspected', 'misled', 'confirmed', 'retracted')
-PACE_FIELDS = ('role', 'pressure_in', 'pressure_out', 'emotional_aftereffect', 'recovery_purpose')
-PACE_ROLES = ('setup', 'pressure', 'turn', 'climax', 'aftermath', 'recovery', 'relationship', 'discovery')
 
 
 # The coordinate names a chapter outline's `enter`/`exit` rows use, mapped to the projection field
@@ -47,26 +45,6 @@ def registry(book):
             if isinstance(thread, dict) and text(thread.get('id')):
                 threads.setdefault(thread['id'], copy.deepcopy(thread))
     return nodes, threads
-
-
-def validate_threads(data, nodes, known_threads=()):
-    threads = data.get('threads')
-    require(isinstance(threads, list), 'story_threads', '跟踪设计须声明 threads；卷沿用既有线路时可为空。')
-    ids = []
-    for item in threads:
-        require(isinstance(item, dict) and all(text(item.get(k)) for k in ('id', 'purpose', 'ending_condition'))
-                and item.get('kind') in ('main', 'side', 'hidden') and type(item.get('required')) is bool,
-                'story_threads', '线路需要 id/kind:main|side|hidden/purpose/ending_condition/required。')
-        ids.append(item['id'])
-    require(len(ids) == len(set(ids)) and not set(ids).intersection(known_threads), 'story_threads', '线路 ID 不能重复或覆盖。')
-    available = set(ids) | set(known_threads)
-    require(all(n['line'] in available for n in nodes), 'story_line', '节点须归属已登记线路。')
-    for node in nodes:
-        require(type(node.get('required')) is bool, 'story_node', '节点须声明 required，明确完本是否必须兑现。')
-        window = node.get('window')
-        require(isinstance(window, list) and len(window) == 2 and all(type(n) is int for n in window)
-                and 1 <= window[0] <= window[1], 'story_window', '节点须声明 window=[最早章,最晚章]，远期保留粗范围。')
-    return copy.deepcopy(threads)
 
 
 def progress(state, ident):
@@ -109,58 +87,6 @@ def same(kind, expect, got):
 
 def unmet(state, plan):
     return [p for p in plan.get('preconditions', []) if not same(p['kind'], p['expected'], value(state, p))]
-
-
-def validate_plan(plan, nodes, state):
-    actions = plan.get('node_actions')
-    require(isinstance(actions, list) and actions and all(isinstance(a, dict) and a.get('node') in plan['node_ids']
-            and a.get('after') in STATUSES for a in actions), 'story_actions', 'node_actions 需要 {node,after:seeded|advanced|resolved}。')
-    require(len(actions) == len({a['node'] for a in actions}) and {a['node'] for a in actions} == set(plan['node_ids']),
-            'story_actions', 'node_actions 须恰好覆盖本章节点，不得重复。')
-    require(isinstance(plan.get('preconditions'), list), 'plan_preconditions', '声明 preconditions=[{kind,key,expected}]，无额外前提用空数组。')
-    for item in plan['preconditions']:
-        require(isinstance(item, dict) and item.get('kind') in ('facts', 'knowledge', 'resources', 'relations', 'placements', 'character_current', 'node', 'clock')
-                and text(item.get('key')) and 'expected' in item, 'plan_preconditions', '计划前提坐标或 expected 缺失。')
-    require(not unmet(state, plan), 'plan_preconditions', '章计划的前提与当前/窗口模拟状态不符。',
-            {'unmet': unmet(state, plan), 'recover': '依据真实状态重排近期计划，不要改历史事实。'})
-    pace = plan.get('pacing')
-    require(isinstance(pace, dict) and all(text(pace.get(k)) for k in PACE_FIELDS) and pace['role'] in PACE_ROLES,
-            'pacing', 'pacing 需要 role/pressure_in/pressure_out/emotional_aftereffect/recovery_purpose，均用具体文字；不需恢复时说明原因。')
-    require(isinstance(plan.get('disclosures'), list) and all(isinstance(d, dict) and text(d.get('topic'))
-            and d.get('after') in REVEALS for d in plan['disclosures']), 'disclosure', 'disclosures=[{topic,after}] 声明本章允许的读者认知变化，无变化用空数组。')
-    require(len(plan['disclosures']) == len({d['topic'] for d in plan['disclosures']}), 'disclosure', '披露 topic 重复。')
-    for action in actions:
-        node = nodes[action['node']]
-        require(node['window'][0] <= plan['chapter'] <= node['window'][1], 'story_window', '节点安排超出了已核验的章节范围。')
-        require(progress(state, node['id']) != 'resolved', 'story_resolved', '已兑现节点不能反复安排推进。')
-        if action['after'] != 'seeded':
-            missing = [n for n in node['depends_on'] if progress(state, n) != 'resolved']
-            require(not missing, 'story_dependency', '前置因果尚未兑现，不能提前推进/兑现。', {'node': node['id'], 'unresolved': missing})
-        state.setdefault('story_nodes', {})[node['id']] = {'status': action['after']}
-    plan['node_contracts'] = {a['node']: copy.deepcopy(nodes[a['node']]) for a in actions}
-
-
-def prepare_events(events, plan):
-    """Normalize design coordinates only; the independent reviewer supplies outcomes and evidence."""
-    result = copy.deepcopy(events)
-    require(isinstance(result, list) and all(isinstance(e, dict) for e in result), 'story_coverage', 'events 须为事件对象数组。')
-    actions = {a['node']: a['after'] for a in plan['node_actions']}
-    seen, revealed = {}, {}
-    for event in result:
-        if event.get('op') == 'story_node':
-            ident = event.get('node')
-            require(text(ident) and ident in actions and ident not in seen and event.get('after') == actions[ident],
-                    'story_coverage', '正文节点事件须逐项匹配本章计划，不得漏报、重复或替换结果。')
-            definition = plan['node_contracts'][ident]
-            event['line'], event['depends_on'] = definition['line'], list(definition['depends_on'])
-            seen[ident] = event['after']
-        if event.get('op') == 'reader_knowledge':
-            topic = event.get('topic')
-            require(text(topic) and topic not in revealed, 'disclosure', '读者认知 topic 须为非空字符串，同章不重复。')
-            revealed[topic] = event.get('after')
-    require(seen == actions, 'story_coverage', '事实审稿遗漏了计划节点的正文实现。', {'expected': actions, 'actual': seen})
-    require(revealed == {d['topic']: d['after'] for d in plan['disclosures']}, 'disclosure', '读者披露与本章许可范围不一致。')
-    return result
 
 
 def settle_event(state, event, chapter):
@@ -217,7 +143,7 @@ def closure(book):
     missing = [ident for ident, node in nodes.items() if node.get('required') and progress(book['state'], ident) != 'resolved']
     open_lines = [ident for ident, thread in threads.items() if thread['required'] and book['state']['thread_progress'].get(ident, {}).get('status') != 'resolved']
     require(not missing and not open_lines, 'story_closure', '必要节点或线路尚未完成，不能宣告完本。',
-            {'nodes': missing, 'threads': open_lines, 'recover': '在正文中兑现并独立核验；改变终局要求须走作者改约。'})
+            {'nodes': missing, 'threads': open_lines, 'recover': '在正文中兑现并通过提交核账；改变终局要求须走作者改约。'})
 
 
 def budget_for(book, chapter, through=None):

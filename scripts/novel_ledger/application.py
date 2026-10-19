@@ -166,7 +166,7 @@ class Application:
                                for ident, hook in sorted(state['hooks'].items()) if hook['status'] == 'open'],
                 'candidate': {'chapter': book['draft']['chapter'], 'stage': book['draft']['stage']} if book['draft'] else None}
 
-    def advance(self, after=None, owner=None, compact=False):
+    def advance(self, after=None, owner=None, compact=False, wait_pending=False):
         boundary = None
         refresh_world = False
         with self.repo.transaction():
@@ -185,6 +185,11 @@ class Application:
                     self.repo.after_commit(lambda: self.presentation.revision(book['revision_directive']))
                     return {'action': 'revision_blocked', 'proposal': proposal, 'status': self.status()}
                 return {'action': book['status'], 'status': self.status()}
+            if task and wait_pending:
+                # Supervision is not a re-dispatch: leave the active worker's files untouched.
+                work = task['input']
+                return {'action': 'wait_for_submit',
+                        'task': {'task_id': task['id'], **{key: work[key] for key in ('stage', 'chapter', 'scope')}}}
             if not task:
                 choice = workflow.choose(book, self.repo.headers(book['branch']))
                 if isinstance(choice, dict) and choice['action'] == 'contract_ready':
@@ -775,9 +780,20 @@ class Application:
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self.repo.load()
-            require(self.repo.pending() is None and not book.get('revision_directive'), 'revision', '修订范围或授权尚未完成。')
+            revision = book.get('revision_run')
+            require(revision is not None, 'revision', '当前没有待采纳的修订。')
+            rows = self.repo.headers(book['branch'])
+            parent = self.repo.headers(revision['parent'])
+            required_end = min(parent[-1]['n'] if parent else 0,
+                               editorial.effective_contract(book)['volumes'][-1]['end'])
+            require(self.repo.pending() is None and not book.get('revision_directive')
+                    and not book.get('draft') and not book.get('author_block')
+                    and not revision.get('carry') and not revision.get('outline_task')
+                    and [row['n'] for row in rows] == list(range(1, (rows[-1]['n'] if rows else 0) + 1))
+                    and bool(rows) and rows[-1]['n'] >= max(required_end, revision['last'])
+                    and workflow.choose(book, rows) == {'action': 'revision_ready'},
+                    'revision', '修订正文、后缀或作者决定尚未完成，不能采纳候选。')
             self._audit(book)
-            revision = book['revision_run']
             self.repo.promote(book['branch'], revision['parent'])
             self.repo.put(store_keys.OFFICIAL_BRANCH, book['branch'])
             book.update(revision_run=None, target=revision['target'], finish=revision['finish'], revision=book['revision'] + 1)

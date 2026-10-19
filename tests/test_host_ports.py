@@ -23,7 +23,7 @@ class PublicApplication:
         self.released = []
         self.claims = []
 
-    def advance(self, after=None, owner=None, compact=False):
+    def advance(self, after=None, owner=None, compact=False, wait_pending=False):
         return {'action': 'task_ready', 'task': {
             'task_id': 'task', 'task_path': str(self.project / 'task.json'),
             'process': {'project_path': str(self.project), 'task_path': str(self.project / 'task.json'),

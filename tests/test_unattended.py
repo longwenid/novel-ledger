@@ -5,6 +5,7 @@ A real unattended run kept its controller loop in the host session: dispatch, sl
 for a worker that needed no supervision. watch owns that waiting, and returns to the caller
 exactly when the caller has something to do.
 """
+import json
 import sys
 import tempfile
 import unittest
@@ -17,7 +18,7 @@ from novel_ledger import unattended, workflow
 from novel_ledger.bootstrap import local_application as Application, open_local_runtime
 from novel_ledger.contracts import Error
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, response
+from support import contract, drive, response
 
 
 class FakeWatchApp:
@@ -31,7 +32,7 @@ class FakeWatchApp:
         self.reads = {}
         self.slept = []
 
-    def advance(self, after=None, owner=None, compact=False):
+    def advance(self, after=None, owner=None, compact=False, wait_pending=False):
         self.advance_owners.append(owner)
         return self.handoffs.pop(0)
 
@@ -104,6 +105,39 @@ class WatchIntegrationTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_waiting_preserves_an_active_receipt_with_or_without_a_claim(self):
+        for claimed in (False, True):
+            with self.subTest(claimed=claimed):
+                project = self.project / str(claimed)
+                repo = SQLiteRepository.initialize(project, workflow.new_book(contract()))
+                try:
+                    app = Application(repo)
+                    owner = app.run(through=1, source='作者授权试章。')['owner']
+                    task = drive(app, owner, until='write')['task']
+                    session = 'active-writer'
+                    claim = app.claim(task['task_id'], session)['token'] if claimed else None
+                    receipt = response(app, session=session, claim=claim)
+                    result_path = Path(task['result_path'])
+                    result_path.write_text(json.dumps(receipt, ensure_ascii=False), encoding='utf-8')
+                    before = result_path.read_bytes()
+                    submitted = []
+
+                    def finish_worker(_seconds):
+                        # This is the same frozen file commands.submit will open, after watch has
+                        # entered its wait. A re-dispatch here used to move the file away.
+                        self.assertEqual(result_path.read_bytes(), before)
+                        self.assertFalse(result_path.with_name('result.stale.json').exists())
+                        submitted.append(app.submit(json.loads(result_path.read_text(encoding='utf-8'))))
+
+                    result = unattended.watch(app, owner, steps=1, poll=0.01, idle_limit=1,
+                                              sleep=finish_worker)
+                    self.assertEqual(result['action'], 'await_author')
+                    self.assertEqual(len(submitted), 1)
+                    self.assertEqual(submitted[0]['committed_chapter'], 1)
+                    self.assertEqual(app.status()['formal_chapters'], 1)
+                finally:
+                    repo.close()
 
     def test_the_local_runtime_journals_dispatches_and_reports_idle(self):
         repo = SQLiteRepository.initialize(self.project, workflow.new_book(contract()))

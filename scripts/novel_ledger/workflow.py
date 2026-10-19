@@ -1,19 +1,11 @@
-"""Pure lifecycle decisions and stage transitions. No repository or host imports.
-
-The pipeline is five steps: the opening gates decide (their count belongs to the project's own
-opening version — the current gate set asks thirteen), one dispatch writes the world and the
-contract, one writes every volume's outline, one writes a volume's chapter outlines, and each
-chapter is drafted against its own outline. Step five is a comparison the writer files with its
-prose (`drift_check`) and the engine reconciles against the projected state — there is no reviewer
-dispatch anywhere in this file, and no branch waits for one.
-"""
+"""Pure lifecycle decisions, stage transitions and bounded draft repair."""
 from __future__ import annotations
 
 import copy
-from .contracts import (DEFAULTS, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY,
+from .contracts import (DEFAULTS, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, OUTLINE_CHECKS_CAPABILITY,
                         OPENING_VERSION, PIPELINE_SHAPES, REDESIGNS,
                         REPAIRS, UNDERSTANDING_CAPABILITY, Job, Outcome,
-                        capabilities_for, digest, han_count, policy_default, require, text, tier_of)
+                        capabilities_for, digest, han_count, require, text, tier_of)
 from . import creation, drift, facts, narrative, planning, world, craft, editorial, understanding, ledger, lint, style
 from .evidence import evidence
 
@@ -31,7 +23,7 @@ STOP_POINTS = {
 # What each channel means, for readers of the table and for the test that keeps it honest.
 AUTHOR_CHANNELS = {
     'answer': '问题已在等作者回答，answer 记录选择后流程才继续。',
-    'author_decision': '额度或未决导致停下：engine 生成三选（再一轮／接受并记为未解决项／重开或改约），answer 落库。',
+    'author_decision': '额度或未决导致停下：engine 提供再返修一轮或保留候选暂停，answer 落库；机械条件不可豁免。',
     'plan_authorization': '方案超出自动回改范围：作者用 revise --proposal-hash 绑定准确 plan_hash 授权。',
     'recontract': '改案额度已尽：改的是前提，走 recontract 并重新核验。',
 }
@@ -56,12 +48,12 @@ def merges_chapter_outline(book):
 
 def volume_policy(book):
     """The volume-outline policy of the live contract, defaults resolved by validation."""
-    return editorial.effective_contract(book).get('volume_outline') or policy_default('volume_outline')
+    return planning.resolve_outline_policy(editorial.effective_contract(book), 'volume_outline')
 
 
 def chapter_policy(book):
     """The chapter-outline policy of the live contract."""
-    return editorial.effective_contract(book).get('chapter_outline') or policy_default('chapter_outline')
+    return planning.resolve_outline_policy(editorial.effective_contract(book), 'chapter_outline')
 
 
 def new_book(contract, source=''):
@@ -120,11 +112,6 @@ def outline_receipt(book, volumes):
     """The coverage line the author reads when the outlines are done and prose is not authorized."""
     return [{'volume': v['id'], 'first': v['first'],
              'last': max([r['chapter'] for r in chapter_rows(book, v['id'])] or [v['first']])} for v in volumes]
-
-
-def repair_stage(budget):
-    """Compatibility name kept for the transition table's vocabulary (see draft_exhaustion_stage)."""
-    return draft_exhaustion_stage(budget)
 
 
 def next_volume_outline(book, contract, needed=None):
@@ -218,7 +205,7 @@ def replan_volume_outline(book, contract, chapter, drift_rows, reason):
     # own range starts there: handing the volume's first chapter to a batch that must re-derive the
     # chain from the state the book is actually in is how a re-plan used to be unanswerable.
     return Job('chapter_outline', chapter, 'volume:' + volume['id'], chapter, volume['end'],
-               payload={'volume': volume['id'], 'from_chapter': chapter, 'repair': True,
+               payload={'volume': volume['id'], 'from_chapter': chapter, 'repair': True, 'allow_retained_suffix': True,
                         'drift': copy.deepcopy(drift_rows or []), 'reason': reason})
 
 
@@ -228,9 +215,10 @@ def choose(book, headers):
         if opening['board']:
             return {'action': 'await_choice', **creation.view(opening)}
         gate = creation.current(opening)
+        method = creation.lens_index(gate['id'], opening['round'], creation.opening_version(opening))
         return Job('opening_options', 0, 'opening', payload={'gate': gate, 'round': opening['round'],
-            'creative_lens': creation.LENSES[opening['round'] % len(creation.LENSES)],
-            'lens_brief': creation.lens_brief(opening['round'])})
+            'creative_lens': creation.LENSES[method],
+            'lens_brief': creation.lens_brief(method)})
     if book['status'] != 'running':
         return {'action': book['status']}
     if book.get('pending_contract'):
@@ -243,6 +231,7 @@ def choose(book, headers):
     if opening and opening['phase'] == 'contract':
         return Job('opening_contract', 1, 'contract')
     contract = editorial.effective_contract(book)
+    planning.outline_policies(contract)
     volumes = contract['volumes']
     opening_only = bool(opening and opening['phase'] == 'ready' and book.get('opening_world_only')
                         and not book.get('run_authorized'))
@@ -276,22 +265,16 @@ def choose(book, headers):
         return replan_volume_outline(book, contract, chapter, revision.get('drift'),
                                      '修订改变了前文，本卷剩余章纲按真实状态重排。')
     if head >= book['target']:
+        if revision and not revision.get('carry'):
+            return {'action': 'revision_ready'}
         return {'action': 'ready_to_complete' if book['finish'] else 'target_reached'}
     chapter = head + 1
     volume = planning.volume_for(contract, chapter)
     require(volume is not None, 'chapter_limit', '到达约定章节边界，需作者改约。')
-    if volume['id'] not in (book.get('volumes_outline') or {}):
-        return Job('volume_outline', volume['first'], 'volume:' + volume['id'], volume['first'], volume['end'],
-                   payload={'volume_ids': [volume['id']]})
-    if volume['id'] not in (book.get('chapter_outlines') or {}):
-        return Job('chapter_outline', volume['first'], 'volume:' + volume['id'], volume['first'], volume['end'],
-                   payload={'volume': volume['id']})
     row = (book.get('plans') or {}).get(str(chapter))
     if row is None:
         return replan_volume_outline(book, contract, chapter, [], '本卷章纲缺少这一章，按真实状态补齐。')
-    # Step five's precondition: the chapter's declared entry state must be the state the book is
-    # actually in. A mismatch is not a hard refusal (the old chapter review's `unmet` was); the
-    # remaining outlines are re-derived from reality instead.
+    # Replan the remaining outlines when their entry state differs from settled facts.
     mismatches = drift.state_mismatch(book['state'], row)
     if mismatches:
         return replan_volume_outline(book, contract, chapter, mismatches, '真实状态与本章纲的进入条件不符，先重排章纲。')
@@ -419,15 +402,13 @@ EXHAUSTION_OPTIONS = (
     {'label': '再返修一轮（只按这几条改）',
      'impact': '给本章加一轮返修额度：只改被点名的记录，改完引擎重新核账。'
                '额度不是无限的，这一轮用尽后还会来问你。'},
-    {'label': '接受当前候选，把这几条记为未解决项继续',
-     'impact': '本章进入正文，这些发现不会被删掉，会记成未解决项，完本篇审计与全书视图都能看到。'
-               '这一步等于你以作者身份承担这处风险。'},
-    {'label': '重开本章或改约',
-     'impact': '按现有路径重做本章或改约定：已有正文时改约会在新分支自第 1 章重写全书，'
-               '代价随已写章数增长；没有正文时只是重新核验。'},
+    {'label': '保留候选并暂停，另行调整约定',
+     'impact': '保留当前正文和失败记录，不豁免机械入库条件，也不增加额度。'
+               '作者可以另行改约；已有正文时改约会在新分支自第 1 章重写全书。'},
 )
 
-# The author's answer to a spent chapter repair budget, by option position.
+# Keep the retired acceptance label recognizable for persisted author decisions; hard findings
+# cannot be waived into the official chapter by an answer.
 REPAIR_AGAIN = '再返修一轮（只按这几条改）'
 ACCEPT_OPEN = '接受当前候选，把这几条记为未解决项继续'
 
@@ -455,7 +436,7 @@ def hold_for_stalled_repeat(book, draft, stalled):
 
     The spent-budget stop catches loops that ran out of rounds; this one catches loops that are
     burning them without moving: the same findings, verbatim, after a repair that claimed to fix
-    them. The options are the spent-budget three, and one more granted round resets the counter
+    them. The options match the spent-budget stop, and one more granted round resets the counter
     for the findings named here, so an author who sees actual movement can keep going.
     """
     draft['stage'] = 'stalled'
@@ -482,15 +463,10 @@ def resolve_draft_exhaustion(book, option):
         draft.pop('recurrence', None)
         book['status'] = 'running'
     elif option == ACCEPT_OPEN:
-        findings = copy.deepcopy(draft.get('findings') or [])
-        book.setdefault('accepted_findings', []).append(
-            {'stage': 'chapter_repair', 'scope': 'chapter:%d' % chapter, 'findings': findings})
-        book['carry_findings'] = list(book.get('carry_findings') or []) + findings
-        # The formal chapter stays as it is; only the candidate goes away.
-        book['draft'] = None
-        book['status'] = 'running'
+        require(False, 'author_decision', '当前候选仍未通过机械入库条件，不能直接接受；请再返修一轮或保留候选并暂停。',
+                {'options': copy.deepcopy(list(EXHAUSTION_OPTIONS))})
     else:
-        book.update(status='paused', pause_reason='作者选择重开本章或改约。')
+        book.update(status='paused', pause_reason='作者选择保留候选并暂停，另行调整约定。')
     return book
 
 
@@ -503,6 +479,7 @@ def apply(book, task, data, actor, sources, priors=None):
     # Every capability is read through the declared table: a value this build does not know fails
     # here instead of quietly selecting the older protocol's interpretation of the same fields.
     caps = capabilities_for(task)
+    strict_outline = caps.get('outline_checks') == OUTLINE_CHECKS_CAPABILITY
     enhanced = bool(caps.get('editorial'))
     workbench = caps.get('understanding') == UNDERSTANDING_CAPABILITY
     # The opening gates run before any contract exists; every later stage has one.
@@ -543,7 +520,7 @@ def apply(book, task, data, actor, sources, priors=None):
         book['pending_contract'] = {'scope': 'contract', 'chapter': 1, 'data': contract, 'producer': actor,
                                     'source': '用户逐门选择；完整选择版本 ' + opening['selection_hash']}
     elif stage == 'volume_outline':
-        # Step three: one ~1000-character outline per volume. Validated against the world and the
+        # Step three: one outline per volume, sized by the contract. Validated against the world and the
         # contract, then installed — there is no candidate waiting for a verdict.
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         contract = editorial.effective_contract(book)
@@ -553,7 +530,8 @@ def apply(book, task, data, actor, sources, priors=None):
         # checks (speaker/intent shape, scene identity, reading dependencies); calling `drift`
         # directly here would leave a chapter's scenes unbound and quietly retire the workbench.
         outlines = planning.validate_volume_outline(data, contract, book.get('world'), selections(book),
-                                                    book.get('volumes_outline') or {}, wanted)
+                                                    book.get('volumes_outline') or {}, wanted,
+                                                    strict=strict_outline)
         old = book.get('volumes_outline') or {}
         if (task.get('payload') or {}).get('repair'):
             require_narrow_repair(old, outlines, (task.get('payload') or {}).get('drift') or [])
@@ -580,7 +558,7 @@ def apply(book, task, data, actor, sources, priors=None):
                         '合并派工缺少这一卷的章纲：' + volume_id)
                 validated = planning.validate_chapter_outline(
                     {'volume': volume_id, 'chapters': half[volume_id]}, chapter_policy(book),
-                    volume, outlines[volume_id], book.get('world'), simulated)
+                    volume, outlines[volume_id], book.get('world'), simulated, strict=strict_outline)
                 book.setdefault('chapter_outlines', {})[volume_id] = validated
                 for item in drift.plan_rows(validated):
                     book.setdefault('plans', {})[str(item['chapter'])] = item
@@ -598,10 +576,34 @@ def apply(book, task, data, actor, sources, priors=None):
         outline = (book.get('volumes_outline') or {}).get(volume_id)
         require(outline is not None, 'chapter_outline', '本卷尚无已登记的卷纲。')
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
+        first = payload.get('from_chapter') or volume['first']
+        if strict_outline or payload.get('allow_retained_suffix'):
+            require('from_chapter' not in data or type(data['from_chapter']) is int
+                    and data['from_chapter'] == first, 'chapter_outline',
+                    '章纲核算起点由冻结任务决定，不能通过回执跳过待修章节。')
+            data['from_chapter'] = first
+        retained = {}
+        if 'through_chapter' in data:
+            through = data['through_chapter']
+            require(payload.get('repair') and payload.get('allow_retained_suffix')
+                    and type(through) is int and first <= through <= volume['end'],
+                    'chapter_outline', 'through_chapter 仅用于允许保留后缀的重排任务，且须在本批范围内。')
+            submitted = data.get('chapters')
+            require(isinstance(submitted, list) and all(isinstance(r, dict) for r in submitted)
+                    and [r.get('chapter') for r in submitted] == list(range(first, through + 1)),
+                    'chapter_outline', '局部重排须连续覆盖 from_chapter 到 through_chapter。')
+            retained = {r['chapter']: r for r in chapter_rows(book, volume_id) if r['chapter'] > through}
+            require(set(retained) == set(range(through + 1, volume['end'] + 1)),
+                    'chapter_outline', '保留的后缀章纲缺失，须扩大重排范围。')
+            data['chapters'] = submitted + [copy.deepcopy(retained[n]) for n in sorted(retained)]
         chapters = planning.validate_chapter_outline(data, chapter_policy(book), volume, outline,
                                                     book.get('world'),
-                                                    design_anchor(book, contract, volume, payload))
-        first = payload.get('from_chapter') or volume['first']
+                                                    design_anchor(book, contract, volume, payload),
+                                                    strict=strict_outline)
+        for item in chapters:
+            if item['chapter'] in retained:
+                require(digest(item) == digest(retained[item['chapter']]), 'chapter_outline',
+                        '保留后缀的场景或阅读绑定发生变化，须扩大 through_chapter 后重新提交。')
         known = {r['chapter']: r for r in chapter_rows(book, volume_id) if r['chapter'] < first}
         replaced = {r['chapter']: r for r in chapters if r['chapter'] >= first}
         require(set(known) | set(replaced) == set(range(volume['first'], volume['end'] + 1)),

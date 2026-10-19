@@ -66,6 +66,56 @@ class RepairConvergenceTests(unittest.TestCase):
         with self.assertRaises(Error):
             self.app.resume()
 
+    def test_exhausted_hard_findings_keep_the_candidate_and_offer_a_real_repair_path(self):
+        drive(self.app, until='write')
+        for index, word in enumerate(('check', 'test', 'demo', 'hello')):
+            if index:
+                self.app.advance()
+            receipt = response(self.app)
+            receipt['data']['prose'] = receipt['data']['prose'].replace('要求先核对', '要求 ' + word + ' 核对')
+            self.app.submit(receipt)
+        book = self.repo.load()
+        self.assertEqual(book['draft']['stage'], 'exhausted')
+        prose = book['draft']['prose']
+        budget = book['rework']['1'].copy()
+        decision = self.app.resume()['author_decision']
+        labels = [option['label'] for option in decision['options']]
+        self.assertNotIn(workflow.ACCEPT_OPEN, labels)
+        self.assertEqual(self.repo.load()['draft']['prose'], prose)
+        paused = self.app.answer(decision['id'], labels[-1], '先保留候选，暂不改约。')
+        self.assertEqual(paused['status'], 'paused')
+        self.assertEqual(self.repo.load()['draft']['prose'], prose)
+        self.assertEqual(self.repo.load()['rework']['1'], budget)
+        self.assertEqual(paused['formal_chapters'], 0)
+        decision = self.app.resume()['author_decision']
+        self.app.answer(decision['id'], workflow.REPAIR_AGAIN, '明确再给一轮返修。')
+        self.assertEqual(self.app.advance()['task']['stage'], 'repair')
+        self.app.submit(response(self.app))
+        self.assertEqual(self.app.advance()['action'], 'await_author')
+        self.assertEqual(self.app.status()['formal_chapters'], 1)
+        self.assertIsNone(self.repo.load()['draft'])
+        self.assertTrue(self.repo.load()['rework']['1']['initial_used'])
+
+    def test_a_legacy_acceptance_choice_is_rejected_without_losing_its_candidate(self):
+        drive(self.app, until='write')
+        self.app.submit(self.draft_with_a_stray_word())
+        for _round in range(2):
+            self.app.advance()
+            self.app.submit(self.draft_with_a_stray_word())
+        # Persisted stop cards from older versions still contain the retired acceptance choice.
+        book = self.repo.load()
+        book['author_block']['options'].append({'label': workflow.ACCEPT_OPEN, 'impact': '旧版本选项。'})
+        self.repo.save(book)
+        before = self.repo.load()
+        with self.assertRaises(Error) as caught:
+            self.app.answer('repair-stalled:chapter_repair', workflow.ACCEPT_OPEN, '使用旧卡片接受。')
+        self.assertEqual(caught.exception.code, 'author_decision')
+        self.assertEqual(self.repo.load(), before)
+        self.app.answer('repair-stalled:chapter_repair', workflow.REPAIR_AGAIN, '改用明确返修。')
+        self.assertEqual(self.app.advance()['task']['stage'], 'repair')
+        self.app.submit(response(self.app))
+        self.assertEqual(self.app.status()['formal_chapters'], 1)
+
     def test_a_granted_round_resets_the_counter_and_the_chapter_can_still_finish(self):
         drive(self.app, until='write')
         self.app.submit(self.draft_with_a_stray_word())
