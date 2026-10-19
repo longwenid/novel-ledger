@@ -81,14 +81,14 @@ def _before(container, key, event):
             'precondition', '事实前值不匹配。', {'key': key, 'current': container.get(key), 'recover': '照抄 current 为 before；新值放 after。'})
 
 
-def prepare_hook_links(events, enabled):
-    """Freeze new optional semantics without reinterpreting old accepted event fields."""
+def prepare_hook_links(events):
+    """Stamp the hook-link protocol onto events that carry linked fields."""
     require(isinstance(events, list), 'events', '事实结算须提供 events 数组。')
     result = copy.deepcopy(events)
     for event in result:
         if isinstance(event, dict) and event.get('op') == 'hook':
-            require('hook_links_version' not in event, 'hook_reference', '承诺关联版本由引擎按冻结任务能力填写。')
-            if enabled and any(k in event for k in ('subjects', 'topics')):
+            require('hook_links_version' not in event, 'hook_reference', '承诺关联版本由引擎填写。')
+            if any(k in event for k in ('subjects', 'topics')):
                 event['hook_links_version'] = 1
     return result
 

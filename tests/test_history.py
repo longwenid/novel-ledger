@@ -217,7 +217,7 @@ class HookContextTests(unittest.TestCase):
         event = {'op': 'hook', 'id': 'promise', 'status': 'open', 'before': None, 'due': 180,
                  'text': '核查来源', 'subjects': ['shen'], 'topics': ['source'],
                  'evidence': {'chapter': 1, 'quote': prose}}
-        event = facts.prepare_hook_links([event], True)[0]
+        event = facts.prepare_hook_links([event])[0]
         after, normalized = facts.settle(state, [event], prose, 1)
         self.assertEqual(after['hooks']['promise']['subjects'], ['shen'])
         self.assertEqual(facts.settle(state, normalized, prose, 1)[0], after)

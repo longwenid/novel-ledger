@@ -80,33 +80,32 @@ class SceneTests(unittest.TestCase):
 
     def test_scene_can_move_chapters_without_changing_identity_or_story_time(self):
         scene = self.plan(1, 'warehouse-flashback')
-        story_memory.bind(scene, {}, 2)
+        story_memory.bind(scene, {})
         moved = copy.deepcopy(scene)
         moved['chapter'] = 5
-        story_memory.bind(moved, {}, 2)
+        story_memory.bind(moved, {})
         self.assertEqual(scene['scenes'], moved['scenes'])
         self.assertEqual(moved['scene_schema'], 'scene-identity/2')
         with self.assertRaises(Error):
-            story_memory.bind(moved, {'1': scene}, 2)
+            story_memory.bind(moved, {'1': scene})
 
-    def test_opaque_ids_use_available_sources_and_keep_legacy_identity_rules(self):
+    def test_opaque_ids_are_unique_across_the_book(self):
         first = self.plan(1, 'scene:旧码头')
-        story_memory.bind(first, {}, 2)
+        story_memory.bind(first, {})
         second = self.plan(2, 'scene:新办公室')
         second['scenes'][0]['depends_on'] = ['scene:旧码头']
-        story_memory.bind(second, {'1': first}, 2)
+        story_memory.bind(second, {'1': first})
+        clash = self.plan(3, 'scene:新办公室')
         with self.assertRaises(Error):
-            story_memory.bind(copy.deepcopy(second), {'1': first}, 1)
-        with self.assertRaises(Error):
-            story_memory.bind(dict(second, chapter=1), {}, 2)
+            story_memory.bind(clash, {'1': first, '2': second})
 
     def test_complete_reading_associations_cannot_omit_scene_declarations(self):
         plan = self.plan(1, 'scene:warehouse')
         plan['reading_coverage'] = 'complete'
         with self.assertRaises(Error):
-            story_memory.bind(copy.deepcopy(plan), {}, 2)
+            story_memory.bind(copy.deepcopy(plan), {})
         plan['scenes'][0]['reading_refs'] = [{'kind': 'relationship', 'key': 'shen>colleague'}]
-        story_memory.bind(plan, {}, 2)
+        story_memory.bind(plan, {})
         self.assertIn(('relationship', 'shen>colleague'), story_memory.reading_refs(plan))
 
 
@@ -197,25 +196,6 @@ class WorkbenchTests(unittest.TestCase):
         book['plans']['2']['scenes'][0]['depends_on'] = ['not-in-accepted-prose']
         with self.assertRaises(Error):
             context.build(self.repo, book, Job('repair', 2))
-
-    def test_existing_book_can_explicitly_enable_at_a_safe_boundary(self):
-        book = self.repo.load()
-        book.pop('understanding')
-        self.repo.save(book)
-        original = self.repo.get('book')
-        self.app.advance(owner=self.owner)
-        with self.assertRaises(Error) as caught:
-            self.app.enable_workbench('启用创作记忆。', self.owner)
-        self.assertEqual(caught.exception.code, 'workbench_boundary')
-        self.repo.cancel_pending('工程夹具：回到章节边界。')
-        enabled = self.app.enable_workbench('启用创作记忆。', self.owner)
-        self.assertTrue(enabled['enabled'])
-        root = self.repo.get('book')
-        for name in ('canon', 'settings'):
-            self.assertEqual(original['parts'][name], root['parts'][name])
-        self.assertEqual(self.repo.load()['plans'], book['plans'])
-        self.assertTrue(self.app.enable_workbench('同一要求。', self.owner)['already_enabled'])
-        self.assertEqual(root, self.repo.get('book'))
 
     def test_revision_memory_is_invalidated_and_restored_only_from_unchanged_sources(self):
         """A revision discards the memory built on the rewritten range; a discard restores it, and a

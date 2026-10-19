@@ -18,11 +18,6 @@ READING_KINDS = ('character', 'relationship', 'theme', 'voice', 'disclosure')
 READING_SCHEMA = 'reading-dependencies/1'
 
 
-def reading_enabled(plan):
-    """Interpret only the reading protocol frozen into this exact plan version."""
-    return plan.get('reading_schema') == READING_SCHEMA
-
-
 def reading_coordinate(value):
     require(isinstance(value, dict) and set(value) == {'kind', 'key'}
             and value.get('kind') in READING_KINDS and text(value.get('key')),
@@ -32,9 +27,8 @@ def reading_coordinate(value):
 
 def reading_refs(plan):
     refs = set()
-    if reading_enabled(plan):
-        refs.update(reading_coordinate(r) for r in plan.get('reading_refs', []))
-        refs.update(reading_coordinate(r) for scene in plan.get('scenes', []) for r in scene.get('reading_refs', []))
+    refs.update(reading_coordinate(r) for r in plan.get('reading_refs', []))
+    refs.update(reading_coordinate(r) for scene in plan.get('scenes', []) for r in scene.get('reading_refs', []))
     refs.update((kind, p) for p in plan.get('participants', []) for kind in ('character', 'voice'))
     refs.update(('disclosure', d['topic']) for d in plan.get('disclosures', []))
     return refs
@@ -53,13 +47,8 @@ def coordinate(value):
     return kind, key
 
 
-def bind(plan, previous, identity_version=1, reading_version=None):
-    """Freeze new plans; callers rechecking history must pass its stored reading version."""
-    if reading_version is None:
-        reading_version = 1 if identity_version == 2 else 0
-    require(type(reading_version) is int and reading_version in (0, 1),
-            'reading_dependency', '未知的冻结阅读关联协议。')
-    reading = reading_version == 1
+def bind(plan, previous):
+    """Freeze new plans under the one identity and reading protocol in force."""
     coverage = plan.get('dependency_coverage', 'partial')
     require(coverage in ('partial', 'complete'), 'story_dependency', 'dependency_coverage 为 partial 或 complete。')
     scenes = plan.get('scenes', [])
@@ -72,35 +61,27 @@ def bind(plan, previous, identity_version=1, reading_version=None):
              for s in p.get('scenes', []) if 'id' in s}
     occupied = {s['id'] for p in previous.values() if p['chapter'] != plan['chapter']
                 for s in p.get('scenes', []) if 'id' in s}
-    if identity_version == 2:
-        plan['scene_schema'] = 'scene-identity/2'
-    if reading:
-        require('reading_schema' not in plan or reading_enabled(plan),
-                'reading_dependency', '新计划使用 reading-dependencies/1 阅读关联协议。')
-        plan['reading_schema'] = READING_SCHEMA
-        require(plan.get('reading_coverage', 'partial') in ('partial', 'complete'),
-                'reading_dependency', 'reading_coverage 为 partial 或 complete。')
-        require(plan.get('reading_coverage') != 'complete' or scenes,
-                'reading_dependency', '完整阅读关联声明须有实际场景。')
-        for key in ('reading_refs', 'understanding_refs'):
-            require(isinstance(plan.get(key, []), list), 'reading_dependency', key + ' 须为数组。')
-        require(all(text(r) for r in plan.get('understanding_refs', [])),
-                'understanding_reference', 'understanding_refs 须为理解 ID 数组。')
+    plan['scene_schema'] = 'scene-identity/2'
+    plan['reading_schema'] = READING_SCHEMA
+    require(plan.get('reading_coverage', 'partial') in ('partial', 'complete'),
+            'reading_dependency', 'reading_coverage 为 partial 或 complete。')
+    require(plan.get('reading_coverage') != 'complete' or scenes,
+            'reading_dependency', '完整阅读关联声明须有实际场景。')
+    for key in ('reading_refs', 'understanding_refs'):
+        require(isinstance(plan.get(key, []), list), 'reading_dependency', key + ' 须为数组。')
+    require(all(text(r) for r in plan.get('understanding_refs', [])),
+            'understanding_reference', 'understanding_refs 须为理解 ID 数组。')
     for index, scene in enumerate(scenes, 1):
-        default = ('scene:' + digest([plan['chapter'], index, scene.get('label')])[:20]
-                   if identity_version == 2 else 'c%d:s%d' % (plan['chapter'], index))
+        default = 'scene:' + digest([plan['chapter'], index, scene.get('label')])[:20]
         ident = scene.setdefault('id', default)
-        prefix = 'c%d:' % plan['chapter']
-        require(text(ident) and ident not in occupied
-                and (identity_version == 2 or ident.startswith(prefix) and len(ident) > len(prefix)),
-                'scene_identity', '场景 ID 须唯一；新协议保留移动前的 id，旧冻结协议仍用本章 c章号: 前缀。')
+        require(text(ident) and ident not in occupied,
+                'scene_identity', '场景 ID 须唯一且保留移动前的 id。')
         occupied.add(ident)
-        if reading:
-            require('story_time' not in scene or text(scene['story_time']),
-                    'scene_time', 'story_time 为故事发生时间说明，独立于正文阅读顺序，不直接推进事实时钟。')
-            require(isinstance(scene.get('reading_refs', []), list), 'reading_dependency', '场景 reading_refs 须为数组。')
-            require(plan.get('reading_coverage') != 'complete' or 'reading_refs' in scene,
-                    'reading_dependency', '完整阅读关联声明须逐场列 reading_refs，无额外关联给空数组。')
+        require('story_time' not in scene or text(scene['story_time']),
+                'scene_time', 'story_time 为故事发生时间说明，独立于正文阅读顺序，不直接推进事实时钟。')
+        require(isinstance(scene.get('reading_refs', []), list), 'reading_dependency', '场景 reading_refs 须为数组。')
+        require(plan.get('reading_coverage') != 'complete' or 'reading_refs' in scene,
+                'reading_dependency', '完整阅读关联声明须逐场列 reading_refs，无额外关联给空数组。')
         require(coverage != 'complete' or 'reads' in scene and 'depends_on' in scene,
                 'story_dependency', '完整依赖声明须为每场列出 reads 和 depends_on，无依赖明确给空数组。')
         reads, links = scene.setdefault('reads', []), scene.setdefault('depends_on', [])
@@ -116,8 +97,7 @@ def bind(plan, previous, identity_version=1, reading_version=None):
                 'story_dependency', '依赖不得重复，只能引用已登记的前章或本章前场；禁止前向引用和环。',
                 {'scene': ident, 'unknown_scenes': sorted(set(links) - known)})
         known.add(ident)
-    if reading:
-        reading_refs(plan)
+    reading_refs(plan)
     return plan
 
 

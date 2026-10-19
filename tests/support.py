@@ -1183,7 +1183,7 @@ def plan_extras(plan):
         'disclosures': [], 'world_refs': [], 'new_entities': [],
         'hook_refs': [], 'reader_refs': [], 'history_refs': [],
         'hooks': [],
-        'scenes': [{'id': 'c%d:s1' % chapter, 'label': '值班室', 'intent': '核对退件来源。',
+        'scenes': [{'id': 'scene:fixture-%d-1' % chapter, 'label': '值班室', 'intent': '核对退件来源。',
                     'conflict': '主管以签字制度阻拦。', 'turn': '旧凭据暴露出签字矛盾。',
                     'reads': [], 'depends_on': [], 'present': [], 'speakers': [],
                     'dialogue_intents': [], 'reading_refs': [], 'story_time': '当夜',

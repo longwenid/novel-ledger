@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (DEFAULTS, HOOK_LINKS_CAPABILITY,
-                        OPENING_VERSION, PIPELINE_SHAPES, REDESIGNS,
-                        REPAIRS, UNDERSTANDING_CAPABILITY, Job, Outcome,
+from .contracts import (DEFAULTS, OPENING_VERSION, PIPELINE_SHAPES, REDESIGNS,
+                        REPAIRS, Job, Outcome,
                         capabilities_for, digest, han_count, require, text, tier_of)
 from . import creation, drift, facts, narrative, planning, world, craft, editorial, understanding, ledger, lint, style
 from .evidence import evidence
@@ -480,7 +479,6 @@ def apply(book, task, data, actor, sources, priors=None):
     # here instead of quietly selecting the older protocol's interpretation of the same fields.
     caps = capabilities_for(task)
     enhanced = bool(caps.get('editorial'))
-    workbench = caps.get('understanding') == UNDERSTANDING_CAPABILITY
     # The opening gates run before any contract exists; every later stage has one.
     contract = editorial.effective_contract(book) if book.get('contract') else None
     row = None
@@ -626,7 +624,6 @@ def apply(book, task, data, actor, sources, priors=None):
         require('events' not in data and 'candidate_events' not in data, 'writer_events',
                 '正文事件由章纲与 drift_check 核算产生，不由执笔另写一份。')
         base = book['draft']['prose'] if book['draft'] else (book.get('prior_candidate') or {}).get('prose')
-        require(enhanced or 'prose' in data, 'patch', '旧冻结任务仍提交完整 prose。')
         prose, patch = craft.compose(data, base if stage != 'write' else None)
         data = {**data, 'prose': prose}
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
@@ -667,7 +664,7 @@ def apply(book, task, data, actor, sources, priors=None):
         if findings:
             route_repair(book, draft, findings, after_repair=stage != 'write')
         else:
-            raw_events = facts.prepare_hook_links(settlement['events'], caps.get('hook_links') == HOOK_LINKS_CAPABILITY)
+            raw_events = facts.prepare_hook_links(settlement['events'])
             state, events = facts.settle(book['state'], raw_events, draft['prose'], chapter)
             if enhanced:
                 require(not settlement['deviations'] or all(text(d.get('reason')) for d in settlement['deviations']),
@@ -713,7 +710,7 @@ def apply(book, task, data, actor, sources, priors=None):
             book['written_han'] += row['han']
     else:
         require(False, 'stage', '未注册的任务阶段。')
-    if workbench and row is not None and data.get('understanding'):
+    if row is not None and data.get('understanding'):
         book['understanding'] = understanding.update(book.get('understanding'), data.get('understanding'),
                                                      sources, evidence, actor)
     book['revision'] += 1

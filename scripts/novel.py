@@ -11,7 +11,7 @@ from novel_ledger.contracts import CONTROLLER_STAGES, Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
-          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'workbench', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch'}
+          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
 WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check'}
 # Prose and frozen records belong to a dispatched task; the controller role never executes them.
@@ -70,7 +70,7 @@ def parser():
         if command == 'check':
             sub.add_argument('--file')
             sub.add_argument('--task')
-        if command in ('approve', 'recontract', 'opening', 'choose', 'lexical', 'intake', 'workbench'):
+        if command in ('approve', 'recontract', 'opening', 'choose', 'lexical', 'intake'):
             sub.add_argument('--source', required=True)
         if command == 'recontract':
             sub.add_argument('--patch', action='store_true',
@@ -228,8 +228,6 @@ def dispatch(args, open_runtime=open_local_runtime):
         app = runtime.app
         role_guard(args)
         worker_guard(app, args)
-        if args.command == 'workbench':
-            return app.enable_workbench(args.source, args.owner)
         if args.command in SEALED:
             app.content_guard()
         command, owner = args.command, args.owner

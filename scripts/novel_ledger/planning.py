@@ -258,6 +258,6 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     for row in rows:
         if row.get('scenes'):
             craft.scenes(row, entities)
-        story_memory.bind(row, previous, identity_version=2, reading_version=1)
+        story_memory.bind(row, previous)
         previous[str(row['chapter'])] = row
     return rows

@@ -510,8 +510,7 @@ def build(repo: ContextStore, book, job):
         add('complete_understanding', book['understanding'], False)
         if stage in memory_stages:
             topics = set((plan or {}).get('reader_refs', [])) | {d['topic'] for d in (plan or {}).get('disclosures', [])}
-            memory_refs = (set(plan.get('understanding_refs', []))
-                           if plan and story_memory.reading_enabled(plan) else set())
+            memory_refs = set(plan.get('understanding_refs', [])) if plan else set()
             available_refs = set(understanding.latest(book['understanding']))
             unavailable_refs = sorted(memory_refs - available_refs)
             selected_memory = understanding.select(book['understanding'], participants, topics, chapter,
@@ -697,9 +696,9 @@ def build(repo: ContextStore, book, job):
             # protocol version string must be reading the same constant, or a rename degrades into
             # "this project is old" instead of failing.
             'capabilities': {**({EDITORIAL: EDITORIAL_CAPABILITY} if enhanced else {}),
-                             **({UNDERSTANDING: UNDERSTANDING_CAPABILITY,
+                             **{UNDERSTANDING: UNDERSTANDING_CAPABILITY,
                                  SCENE_IDENTITY: SCENE_IDENTITY_CAPABILITY,
-                                 READING_DEPENDENCIES: story_memory.READING_SCHEMA} if 'understanding' in book else {}),
+                                 READING_DEPENDENCIES: story_memory.READING_SCHEMA},
                              **({VOLUME_OUTLINE: VOLUME_OUTLINE_CAPABILITY} if contract.get('volume_outline') else {}),
                              **({SCENE_MEMORY: SCENE_MEMORY_CAPABILITY} if scene_task else {}),
                              **({HOOK_LINKS: HOOK_LINKS_CAPABILITY} if tracking else {})},

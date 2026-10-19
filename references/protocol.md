@@ -47,7 +47,7 @@ task.json 给身份、路径和 commands。records 提供冻结哈希，required
 
 主干使用 advance --compact 获取精简 task；开书门任务（opening_options）由主干自执，其余阶段把 task_path 交给子 agent；磁盘 task.json 始终完整。新任务使用新会话：`requires_new_worker` 保留，一个会话只做一个任务（跨任务复用按 session_reuse 拒绝）；claim 只表示执行认领，须结合宿主中的子 agent 状态判断是否仍在执行，主干循环及动作分支见 [运行](runtime.md)。
 
-工作台能力 `understanding/1`、稳定场景身份 `scene-identity/2`、阅读关联 `reading-dependencies/1`、作品理解字段见 [叙事工作台](workbench.md)。能力及规范化计划的 reading_schema 按版本解释，不追补旧回执或重解释旧计划的同名字段。开书方案的篇幅上界是无条件的唯一规则，见 [逐门开书](opening.md)。
+工作台能力 `understanding/1`、稳定场景身份 `scene-identity/2`、阅读关联 `reading-dependencies/1`、作品理解字段见 [叙事工作台](workbench.md)。能力值与规范化计划的 reading_schema 由引擎统一冻结并按当前规则解释。开书方案的篇幅上界是无条件的唯一规则，见 [逐门开书](opening.md)。
 
 场景任务携带 capabilities.scene_memory=scene-memory/1；scene_context/scene_sources 为冻结的场景输入和已提交来源，字段及 dependency_coverage 见 [叙事推进](narrative.md#场景依赖与任务材料)。revision-impact 的输入、采用范围与保守扩展规则见 [运行](runtime.md)。
 

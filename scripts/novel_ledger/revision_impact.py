@@ -123,7 +123,7 @@ def analyze(chapters, first, change=None, through=None):
     for row in chapters:
         if row['n'] < first:
             continue
-        reading_complete = story_memory.reading_enabled(row['plan']) and row['plan'].get('reading_coverage') == 'complete'
+        reading_complete = row['plan'].get('reading_coverage') == 'complete'
         if row['n'] <= last:
             action = 'local' if change['mode'] != 'semantic' and row['n'] == first else 'rewrite'
             reason = '修改指定正文；合成后仍须完整独立章审。' if action == 'local' else '事实或因果影响进入连续重写区间。'
