@@ -16,7 +16,7 @@
 
 ## 工程检查
 
-先按下表选择受影响的行为回归。跨模块规则、持久化结构或公共协议的广泛变更使用全量测试；依赖、材料选择或历史传输变化时另做度量。仅调整文档时，核对链接、示例和相关图源；若改写了操作流程，再运行对应行为回归。
+日常默认运行 `python3 validation/run_tests.py`（快速组）；先按下表选择受影响的行为回归。跨模块规则、持久化结构或公共协议的广泛变更使用全量测试；依赖、材料选择或历史传输变化时另做度量。仅调整文档时，核对链接、示例和相关图源；若改写了操作流程，再运行对应行为回归。
 
 在技能仓库根目录执行，按本次改动选用：
 
@@ -38,8 +38,8 @@ python3 validation/measure.py --out /path/to/metrics.json
 |---|---|---|
 | 提交、约定与恢复 | 原子初始化、幂等、预检回滚、有限返修和准确版本认可；改约优先完成机械校验，字面规则跨激活与撤销保留；畸形回执与评测清单不留下部分提交。 | test_runtime、test_output_repairs |
 | 章纲与漂移核算 | 卷 id 与 volumes 对齐、字数区间；enter/exit 冗余一致；卷内状态链拒绝人为漂移（资源为负、时钟倒退、位置未知、知情倒退、人物缺 choice/cost、节点重复推进）；卷末核对结构化人物终值与 clock.to、整卷推进天数；drift_check 漏项/多项被拒、`actual.from` 取投影而不取自报值、偏差挂账并触发下一章纲重排。 | test_outlines、test_narrative、test_longform、test_architecture_repairs |
-| 伏笔账 | 卷纲 hooks 的 id 唯一/窗口合法/`text` 非空/跨卷必须 `continues:true` 且 `required:false`；章纲反例矩阵逐条被拒（未声明就 plant、payoff 早于 plant、同一 id plant 两次、payoff 两次、plant/payoff 越窗、卷末 required 未 paid、`hook_refs` 承接未埋的 hook）；`state.hooks` 非空、跨卷条目带入下一卷；`complete()` 因未兑现承诺拒绝，兑现后通过。 | test_outlines、test_longform、validation/ 的 `repro_hook_*.py` |
-| 文风代理指标 | 句长/段长/对白占比越界出 style finding 并进有界返修；`dialogue_ratio` 目标越界被核；`repetition` 绝对占比上限与视角标记一致性；锚点缺失时只跑重复度与视角两项。 | test_prose_lint、validation/ 的 `repro_style_*.py` |
+| 伏笔账 | 卷纲 hooks 的 id 唯一/窗口合法/`text` 非空/跨卷必须 `continues:true` 且 `required:false`；章纲反例矩阵逐条被拒（未声明就 plant、payoff 早于 plant、同一 id plant 两次、payoff 两次、plant/payoff 越窗、卷末 required 未 paid、`hook_refs` 承接未埋的 hook）；`state.hooks` 非空、跨卷条目带入下一卷；`complete()` 因未兑现承诺拒绝，兑现后通过。 | test_outlines、test_longform |
+| 文风代理指标 | 句长/段长/对白占比越界出 style finding 并进有界返修；`dialogue_ratio` 目标越界被核；`repetition` 绝对占比上限与视角标记一致性；锚点缺失时只跑重复度与视角两项。 | test_style、test_prose_lint |
 | 派工、身份与宿主 | compact 保留完整材料及已填表单；--after 拒绝未提交或旧回调；认领后故障释放租约，非文件交付在认领前拒绝。 | test_runtime、test_host_ports |
 | 模块依赖与端口 | 全作用域 import 白名单、无环与核心 I/O 禁令；用内存账本、替代交付、公开宿主能力和运行工厂实际完成用例。 | test_architecture、test_application_ports、test_domain_boundaries、test_presentation_boundaries、test_host_ports、test_cli_boundary |
 | 存储与组合根 | 同根快照、未变哈希复用、损坏及跨区字段拒绝；文件回收只在提交后执行，回滚保留材料；真实 SQLite、CLI 重开与冻结交付重试。 | test_storage_boundaries、test_bootstrap、test_history |
@@ -48,7 +48,7 @@ python3 validation/measure.py --out /path/to/metrics.json
 | 历史修订与影响 | 直接及传递依赖、连续区间输出、节点带动线路与保守扩大；表达/阅读不改事实，窄修核对后缀，扩大终点同步传播，重排章纲后重新写，重排与人物重核不重复消耗正文额度。 | test_longform、test_revision_repairs、test_workbench |
 | 自动回改与授权 | 创建分支前计算影响边界，超界保留原稿与额度；准确哈希授权、来源过期拒绝与预检回滚。 | test_revision_bounds |
 | 编辑、页面与交付 | 成长重核、补丁与重新核算、终审覆盖；模板随安装复制、异地运行、离线单文件及内容转义，准确快照交付。 | test_editorial、test_bookpage、test_bootstrap |
-| 旧项目与冻结版本 | 基础/叙事/编辑夹具分别验证；旧事件、阅读关联和旧章纲按原版本解释；v2 及更早库拒绝且原文件不变，旧已接受开书板仍可选择。 | test_runtime、test_opening_legacy、test_creation_bounds、test_workbench |
+| 协议边界 | 旧开书协议（creation/1~/5）读取即拒并给出重开指引；方案上限唯一规则无宽松解释，旧字段和旧任务能力不再接收；v3 及更早数据库拒绝且原文件不变。 | test_opening、test_creation_bounds、test_storage_boundaries |
 | 技能、文档与测试入口 | 元信息、链接锚点、命令示例及当前操作说明一致；架构图源与派生物一致；快速组无重复且为完整组的子集，保留关键边界。 | [技能指令与路由验收](#技能指令与路由验收)、test_architecture、test_validation_runner |
 
 表中的入口是定位起点，按实际调用关系补充关联回归；核验要求分别维护于 [运行](runtime.md)、[协议](protocol.md)、[叙事推进](narrative.md) 和 [编辑能力](editorial.md)。新增或改写后的用例名以 `tests/` 实际内容为准。验证观察提交、拒绝、保留、恢复和交付等结果，避免只匹配文档措辞或实现细节。真实模型历史隔离仍需宿主另验收。

@@ -256,9 +256,9 @@
 
 ## 场景依赖与任务材料
 
-新工作台任务采用 scene-identity/2：场景 ID 不绑定章号，跨章移动保留身份，独立的故事时间、作品理解与阅读关联见 [叙事工作台](workbench.md)。旧 `c章号:` 前缀是旧冻结身份协议；新任务未提供 ID 时引擎生成不透明 ID。
+新工作台任务采用 scene-identity/2：场景 ID 不绑定章号，跨章移动保留身份，独立的故事时间、作品理解与阅读关联见 [叙事工作台](workbench.md)。未提供 ID 时引擎生成不透明 ID，后续重排须保留这个身份。
 
-阅读关联由 reading-dependencies/1 能力及 `reading_schema` 标记冻结，旧任务中的同名字段不追补解释；没有标记时保守重读。相关字段、分级修订和创作记忆统一在工作台维护，不用事实 `dependency_coverage` 代替阅读关联覆盖。
+阅读关联统一由 reading-dependencies/1 能力及 `reading_schema` 标记冻结。相关字段、分级修订和创作记忆统一在工作台维护，不用事实 `dependency_coverage` 代替阅读关联覆盖。
 
 章纲可声明 `dependency_coverage=partial|complete`，默认 partial。每场的 id、`reads=[{kind,key}]` 与 `depends_on=[场景ID]` 只能指向已登记前章或本章前场，禁止环及前向引用。complete 要求每场显式提供两份数组，无依赖给空数组；引擎只核对声明形状与引用是否存在，语义遗漏需结合后续状态冲突或人工抽读发现。partial 在修订传播时保守扩大范围。
 
@@ -266,7 +266,7 @@
 
 ## 历史补读
 
-记忆检索可用 `recall --task ID --entity 人物ID`，或 `--node/--topic/--thread ID`：默认返回最近 5 个匹配章节的全部匹配证据；用 `--limit 1～20`、`--before 章号` 分页，再用 `--chapter N` 完整补读。新任务的可选 history_source 只冻结逐章不可变目录的入口及截至章号，查询由近到远读取所需页与事件，不每次重建全书摘要/事件索引。旧冻结任务仍读原 historical_index/memory_index；显式 `--record` 读取这两个旧名称时，新任务也能完整展开，但常规检索应使用 `recall`。后续新增章节和其他修订分支不会进入本任务的历史来源。
+记忆检索可用 `recall --task ID --entity 人物ID`，或 `--node/--topic/--thread ID`：默认返回最近 5 个匹配章节的全部匹配证据；用 `--limit 1～20`、`--before 章号` 分页，再用 `--chapter N` 完整补读。可选 history_source 只冻结逐章不可变目录的入口及截至章号，查询由近到远读取所需页与事件，不每次重建全书摘要/事件索引。历史原文与证据统一使用 `recall` 按冻结目录分页补读，不再提供旧全量索引别名。后续新增章节和其他修订分支不会进入本任务的历史来源。
 
 稀疏或无匹配查询仍可能遍历整个冻结历史，按章直接补读也可能遍历目录；页式复用减少重复构建与存储，不宣称所有查询都是常数时间。read/recall 返回的实际字符量均计入 usage，宿主包装、模型缓存与计费 token 由真实用量日志另算。
 

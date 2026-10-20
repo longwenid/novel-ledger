@@ -132,8 +132,6 @@ class MemoryRepository:
         require(task_id in self._tasks, 'task', 'Task does not exist.')
         task = deepcopy(self._tasks[task_id])
         require(digest(task['input']) == task['input_hash'], 'task_integrity', 'Frozen task hash differs.')
-        require(task['first_read'] is None or digest(task['first_read']) == task['first_read_hash'],
-                'first_read_integrity', 'Frozen first read hash differs.')
         return task
 
     def _next_id(self, prefix):
@@ -145,13 +143,9 @@ class MemoryRepository:
         ident = self._next_id('task-')
         self._tasks[ident] = {'id': ident, 'status': 'pending', 'input': deepcopy(work),
                               'input_hash': digest(work), 'result': None, 'result_hash': None,
-                              'first_read': None, 'first_read_hash': None, 'reviewer': None}
+                              'reviewer': None}
         return self.task(ident)
 
-    def seal(self, task_id, session, first_read):
-        self.task(task_id)
-        self._tasks[task_id].update(first_read=deepcopy(first_read),
-                                    first_read_hash=digest(first_read), reviewer=session)
 
     def finish_task(self, task_id, result):
         self.task(task_id)

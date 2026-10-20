@@ -34,10 +34,8 @@ LABELS = {'geography': '地理与通行', 'history': '历史与当下影响', 'r
           'mysteries': '隐秘信息与披露', 'mechanisms': '特殊机制与代价',
           'powers': '力量与位阶阶梯', 'cosmology': '空间与位面'}
 ALL_SECTIONS = tuple(SECTIONS)
-# The ten domains a world written before opening/5 carries. A tier's floor is drawn from these, never
-# from ALL_SECTIONS: a project already running has no `powers`/`cosmology` key, and requiring them in
-# its `_audit` re-check would fail a book that was written correctly under the old contract.
-LEGACY_SECTIONS = ('geography', 'history', 'rules', 'factions', 'economy', 'society', 'everyday',
+# Baseline domains; rank and plane records are required when the opening declares them.
+BASE_SECTIONS = ('geography', 'history', 'rules', 'factions', 'economy', 'society', 'everyday',
                    'characters', 'mysteries', 'mechanisms')
 GRAND_SECTIONS = ('powers', 'cosmology')
 # Deep fields a record may carry. None of them is required; a field that is written must say
@@ -59,9 +57,9 @@ TIER_SECTIONS = {
     't0': ('rules', 'society', 'everyday', 'characters', 'mysteries', 'mechanisms'),
     't1': ('geography', 'rules', 'society', 'everyday', 'characters', 'mysteries', 'mechanisms'),
     't2': ('geography', 'history', 'rules', 'society', 'everyday', 'characters', 'mysteries', 'mechanisms'),
-    't3': LEGACY_SECTIONS,
-    't4': LEGACY_SECTIONS,
-    't5': LEGACY_SECTIONS,
+    't3': BASE_SECTIONS,
+    't4': BASE_SECTIONS,
+    't5': BASE_SECTIONS,
 }
 
 
@@ -75,8 +73,7 @@ def declared_sections(choices):
     """What the opening declared the world must therefore carry.
 
     The world gate's currency lands in `economy` and its rank ladder in `powers`; a 格局 ladder that
-    reaches a 界 or wider lands in `cosmology`. An opening that declared none asks for nothing extra,
-    which keeps every v1–v4 project's required set exactly what it was. A selection that is not the
+    reaches a 界 or wider lands in `cosmology`. A direct import may declare none. A selection that is not the
     declared shape yields nothing rather than raising: the gate owns that shape, the world model
     only reads it.
     """
@@ -109,7 +106,7 @@ def index(model):
 def _bindings(model, choices):
     """Declared opening decisions must exist in their world records, word for word.
 
-    Each is checked only when the opening declared it, so a project written before opening/5 is not
+    Each is checked only when the opening declared it, so an imported setting is not
     asked about decisions nobody made. Extra records are allowed — the world may be grander than the
     ladder the gates chose.
     """
@@ -182,15 +179,10 @@ def validate(data, choices, selection_hash, sections=None):
     require(data['premise'] == choices['world']['world_premise'], 'world_alignment', '世界前提须与所选方案逐字一致。',
             {'rule': '逐字相等；不是包含、缩写或改写', 'expect': choices['world']['world_premise'],
              'got': data.get('premise'), 'source': 'opening_choices.world.world_premise'})
-    # A world written before a domain existed has no key for it; normalize the shape here so the same
-    # record can be re-audited under a contract that names the new domains.
     model = copy.deepcopy(data)
     all_ids = set()
     for section, fields in SECTIONS.items():
         rows = model.get(section)
-        if rows is None:
-            rows = []
-            model[section] = rows
         require(isinstance(rows, list), 'world_section', '世界缺少结构领域：' + section)
         require(bool(rows) or section in ('mechanisms',) or section not in required, 'world_section',
                 '本档位/本次选择要求填写的世界领域必须有实际内容：' + section,

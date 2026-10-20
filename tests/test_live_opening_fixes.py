@@ -101,27 +101,6 @@ class ArtifactTests(unittest.TestCase):
         # whatever the active worker has written (no prior view, no quarantine).
         self.assertTrue((base / 'result.template.json').exists())
 
-    def test_compact_advance_trims_the_board_echo_and_snapshots_the_full_view(self):
-        self.app.advance()
-        self.app.submit(gate_result(self.app, 'lead-main'))
-        full = self.app.advance()
-        self.assertEqual(full['action'], 'await_choice')
-        self.assertTrue(full['board']['options'])          # the non-compact return keeps the echo
-        compact = self.app.advance(compact=True)
-        self.assertEqual(compact['action'], 'await_choice')
-        board = compact['board']
-        self.assertEqual(sorted(board), ['gate', 'hash', 'option_ids', 'round', 'system'])
-        self.assertEqual(board['option_ids'], [row['id'] for row in full['board']['options']])
-        self.assertEqual(board['hash'], full['board']['hash'])
-        self.assertTrue(compact['board_card'].endswith('board.md'))
-        self.assertTrue(compact['question_card'].endswith('question.json'))
-        # The full view lives on disk, so trimming the echo loses nothing.
-        snapshot = json.loads(Path(compact['advance_snapshot']).read_text(encoding='utf-8'))
-        self.assertEqual(snapshot['board']['options'], full['board']['options'])
-        question = json.loads(Path(compact['question_card']).read_text(encoding='utf-8'))
-        self.assertEqual([row['label'] for row in question['questions'][0]['options'][:2]],
-                         ['A 方案A', 'B 方案B'])
-
     def test_the_question_payload_uses_engine_text_verbatim(self):
         state = shown(self.app.repo.load()['creation'])
         question = delivery.render_question(state['board'])
@@ -150,29 +129,6 @@ class ArtifactTests(unittest.TestCase):
         regrouped = dict(scale_board, round=1)
         self.assertIn('新一组', delivery.render_question(regrouped)['questions'][0]['header'])
 
-    def test_the_first_gate_materializes_the_whole_catalog_as_chat_text(self):
-        """A live controller offered 4 of the 12 categories as the whole first gate.
-
-        The spread is now an engine artifact the controller pastes; ask options never carry the
-        catalog. Only the genre gate's first round carries it.
-        """
-        handoff = self.app.advance(compact=True)
-        task = handoff['task']
-        self.assertIn('catalog_path', task)
-        catalog = Path(task['catalog_path']).read_text(encoding='utf-8')
-        for name, hook in __import__('novel_ledger.contracts', fromlist=['GENRE_CATALOG']).GENRE_CATALOG:
-            self.assertIn(name, catalog)
-            self.assertIn(hook[:12], catalog)
-        self.assertIn('题材方向', catalog)
-        # Not a question payload: the catalog travels as text, the ask only collects the answer.
-        self.assertNotIn('questions', catalog)
-        self.app.submit(gate_result(self.app, 'lead-main'))
-        self.app.opening_choice(self.repo.load()['creation']['board']['options'][0]['id'],
-                                self.repo.load()['creation']['board']['hash'], '作者选它。')
-        second = self.app.advance(compact=True)['task']
-        self.assertNotIn('catalog_path', second)
-        self.assertFalse((Path(second['task_path']).parent / 'catalog.md').exists())
-
     def test_read_hash_changes_with_new_choices_and_is_stable_for_rereads(self):
         self.app.advance()
         first = self.app.read(self.repo.pending()['id'])
@@ -186,78 +142,57 @@ class ArtifactTests(unittest.TestCase):
         reread = self.app.read(self.repo.pending()['id'])
         self.assertEqual(second['records_hash'], reread['records_hash'])
 
-    def test_status_tasks_lists_the_dispatch_lifecycle(self):
-        first = self.app.advance()['task']['task_id']
-        self.app.submit(gate_result(self.app, 'lead-main'))
-        listing = self.app.task_list()
-        self.assertEqual([row['id'] for row in listing['tasks'] if row['status'] == 'done'], [first])
-        self.assertEqual(listing['counts']['done'], 1)
-        board = self.repo.load()['creation']['board']
-        self.app.opening_choice(board['options'][0]['id'], board['hash'], '作者选它。')
-        self.app.advance()
-        listing = self.app.task_list()
-        self.assertEqual(listing['tasks'][-1]['status'], 'pending')
-        self.assertEqual(listing['tasks'][-1]['stage'], 'opening_options')
-
 
 class AlignmentMessageTests(unittest.TestCase):
     """Alignment rejections carry the expected string; the worker stops probing with scratch dirs."""
 
-    def assert_details(self, data, code, needle):
-        with self.assertRaises(Error) as caught:
-            world.validate(data, CHOICES, 'sel')
-        self.assertEqual(caught.exception.code, code)
-        self.assertIn(needle, caught.exception.details)
-
-    def test_world_premise_rejection_carries_expect_and_source(self):
-        data = minimal_world('一座完全不同的前提。')
-        with self.assertRaises(Error) as caught:
-            world.validate(data, CHOICES, 'sel')
-        self.assertEqual(caught.exception.code, 'world_alignment')
-        details = caught.exception.details
-        self.assertEqual(details['expect'], CHOICES['world']['world_premise'])
-        self.assertEqual(details['got'], '一座完全不同的前提。')
-        self.assertIn('逐字', details['rule'])
-        self.assertEqual(details['source'], 'opening_choices.world.world_premise')
-
-    def test_world_reference_rejection_names_the_missing_links(self):
-        data = minimal_world(CHOICES['world']['world_premise'])
-        data['rules'] = [{'id': 'r1', 'principle': '夜班退件必须登记负责人。', 'scope': '本仓库。',
-                          'limits': '不覆盖白班。', 'consequences': '漏登由当班负责。', 'links': ['rules:missing']}]
-        with self.assertRaises(Error) as caught:
-            world.validate(data, CHOICES, 'sel', sections=('rules',))
-        self.assertEqual(caught.exception.code, 'world_reference')
-        self.assertEqual(caught.exception.details['missing'], ['rules:missing'])
-        self.assertEqual(caught.exception.details['record'], 'rules:r1')
-
-    def test_protagonist_rejection_carries_the_expected_record(self):
-        data = minimal_world(CHOICES['world']['world_premise'])
-        data['rules'] = [{'id': 'r1', 'principle': '夜班退件必须登记负责人。', 'scope': '本仓库.',
-                          'limits': '不覆盖白班。', 'consequences': '漏登由当班负责。', 'links': []}]
-        data['characters'] = [{'id': 'other', 'name': '白班主任', 'role': '对手', 'desire': '压住退件。',
-                               'limit': '不当面撒谎。', 'knowledge_boundary': '不知道旧账。', 'links': []}]
-        with self.assertRaises(Error) as caught:
-            world.validate(data, CHOICES, 'sel', sections=('rules', 'characters', 'mechanisms'))
-        self.assertEqual(caught.exception.code, 'world_alignment')
-        self.assertEqual(caught.exception.details['expect'],
-                         {key: CHOICES['protagonist'][key] for key in ('id', 'name', 'desire', 'limit')})
-
-    def test_submit_hash_mismatch_names_the_expected_envelope(self):
-        temp = tempfile.TemporaryDirectory()
-        self.addCleanup(temp.cleanup)
-        project = Path(temp.name) / 'book'
-        repo = SQLiteRepository.initialize(project, workflow.preparing_book(guided=True))
-        self.addCleanup(repo.close)
-        app = Application(repo)
-        app.advance()
-        result = gate_result(app, 'lead-main')
-        result['input_hash'] = ''
-        with self.assertRaises(Error) as caught:
-            app.submit(result)
-        self.assertEqual(caught.exception.code, 'input_version')
-        self.assertEqual(caught.exception.details['got'], '')
-        self.assertTrue(caught.exception.details['expected'])
-        self.assertIn('result.template.json', caught.exception.details['recover'])
+    def test_rejections_name_what_the_engine_expected(self):
+        with self.subTest(rejection='world_premise'):
+            data = minimal_world('一座完全不同的前提。')
+            with self.assertRaises(Error) as caught:
+                world.validate(data, CHOICES, 'sel')
+            self.assertEqual(caught.exception.code, 'world_alignment')
+            details = caught.exception.details
+            self.assertEqual(details['expect'], CHOICES['world']['world_premise'])
+            self.assertEqual(details['got'], '一座完全不同的前提。')
+            self.assertIn('逐字', details['rule'])
+            self.assertEqual(details['source'], 'opening_choices.world.world_premise')
+        with self.subTest(rejection='world_reference'):
+            data = minimal_world(CHOICES['world']['world_premise'])
+            data['rules'] = [{'id': 'r1', 'principle': '夜班退件必须登记负责人。', 'scope': '本仓库。',
+                              'limits': '不覆盖白班。', 'consequences': '漏登由当班负责。', 'links': ['rules:missing']}]
+            with self.assertRaises(Error) as caught:
+                world.validate(data, CHOICES, 'sel', sections=('rules',))
+            self.assertEqual(caught.exception.code, 'world_reference')
+            self.assertEqual(caught.exception.details['missing'], ['rules:missing'])
+            self.assertEqual(caught.exception.details['record'], 'rules:r1')
+        with self.subTest(rejection='protagonist'):
+            data = minimal_world(CHOICES['world']['world_premise'])
+            data['rules'] = [{'id': 'r1', 'principle': '夜班退件必须登记负责人。', 'scope': '本仓库。',
+                              'limits': '不覆盖白班。', 'consequences': '漏登由当班负责。', 'links': []}]
+            data['characters'] = [{'id': 'other', 'name': '白班主任', 'role': '对手', 'desire': '压住退件。',
+                                   'limit': '不当面撒谎。', 'knowledge_boundary': '不知道旧账。', 'links': []}]
+            with self.assertRaises(Error) as caught:
+                world.validate(data, CHOICES, 'sel', sections=('rules', 'characters', 'mechanisms'))
+            self.assertEqual(caught.exception.code, 'world_alignment')
+            self.assertEqual(caught.exception.details['expect'],
+                             {key: CHOICES['protagonist'][key] for key in ('id', 'name', 'desire', 'limit')})
+        with self.subTest(rejection='submit_hash'):
+            temp = tempfile.TemporaryDirectory()
+            self.addCleanup(temp.cleanup)
+            project = Path(temp.name) / 'book'
+            repo = SQLiteRepository.initialize(project, workflow.preparing_book(guided=True))
+            self.addCleanup(repo.close)
+            app = Application(repo)
+            app.advance()
+            result = gate_result(app, 'lead-main')
+            result['input_hash'] = ''
+            with self.assertRaises(Error) as caught:
+                app.submit(result)
+            self.assertEqual(caught.exception.code, 'input_version')
+            self.assertEqual(caught.exception.details['got'], '')
+            self.assertTrue(caught.exception.details['expected'])
+            self.assertIn('result.template.json', caught.exception.details['recover'])
 
 
 class ClaimRoleTests(unittest.TestCase):
@@ -279,32 +214,32 @@ class RepairScopeTests(unittest.TestCase):
     the guard's job is narrower — an unnamed record must come back byte-identical.
     """
 
-    def test_a_local_repair_refuses_to_change_a_record_its_findings_never_named(self):
-        previous = {'chapters': [{'chapter': 1, 'synopsis': '旧第一章。'},
-                                 {'chapter': 2, 'synopsis': '旧第二章。'}]}
-        candidate = {'chapters': [{'chapter': 1, 'synopsis': '被悄悄改掉的第一章。'},
-                                  {'chapter': 2, 'synopsis': '新第二章。'}]}
-        findings = [{'criterion': 'chapter_quality', 'reason': '第 2 章的推进需要改写。',
-                     'evidence': [], 'target_chapter': 2, 'repair_scope': 'local'}]
-        with self.assertRaises(Error) as caught:
-            workflow.require_narrow_repair(previous, candidate, findings)
-        self.assertEqual(caught.exception.code, 'repair_scope')
-        self.assertEqual(caught.exception.details['changed_but_not_named'], ['chapter:1'])
-        # The guarded case is exactly the named one: a chapter-scope finding may move more.
-        workflow.require_narrow_repair(previous, candidate, [{**findings[0], 'repair_scope': 'chapter'}])
-
-    def test_repair_summary_counts_named_changed_and_untouched(self):
-        previous = {'rules': [{'id': 'r1', 'principle': '旧规则。'}, {'id': 'r2', 'principle': '稳定规则。'}]}
-        candidate = {'rules': [{'id': 'r1', 'principle': '新规则。'}, {'id': 'r2', 'principle': '稳定规则。'}],
-                     'everyday': [{'id': 'e1', 'practice': '新日常。'}]}
-        findings = [{'criterion': 'rule_quality', 'reason': 'r1 的规则不成句。', 'evidence': [],
-                     'target_chapter': 0, 'repair_scope': 'local'}]
-        summary = workflow.repair_summary(previous, candidate, findings)
-        self.assertEqual(summary['changed'], ['rules:r1'])
-        self.assertEqual(summary['unchanged'], ['rules:r2'])
-        self.assertEqual(summary['added'], ['everyday:e1'])
-        self.assertEqual(summary['removed'], [])
-        self.assertEqual(summary['changed_but_not_named'], [])
+    def test_a_local_repair_refuses_unnamed_records_and_the_summary_counts_the_moves(self):
+        with self.subTest(guard='a record the findings never named'):
+            previous = {'chapters': [{'chapter': 1, 'synopsis': '旧第一章。'},
+                                     {'chapter': 2, 'synopsis': '旧第二章。'}]}
+            candidate = {'chapters': [{'chapter': 1, 'synopsis': '被悄悄改掉的第一章。'},
+                                      {'chapter': 2, 'synopsis': '新第二章。'}]}
+            findings = [{'criterion': 'chapter_quality', 'reason': '第 2 章的推进需要改写。',
+                         'evidence': [], 'target_chapter': 2, 'repair_scope': 'local'}]
+            with self.assertRaises(Error) as caught:
+                workflow.require_narrow_repair(previous, candidate, findings)
+            self.assertEqual(caught.exception.code, 'repair_scope')
+            self.assertEqual(caught.exception.details['changed_but_not_named'], ['chapter:1'])
+            # The guarded case is exactly the named one: a chapter-scope finding may move more.
+            workflow.require_narrow_repair(previous, candidate, [{**findings[0], 'repair_scope': 'chapter'}])
+        with self.subTest(guard='the summary says what moved'):
+            previous = {'rules': [{'id': 'r1', 'principle': '旧规则。'}, {'id': 'r2', 'principle': '稳定规则。'}]}
+            candidate = {'rules': [{'id': 'r1', 'principle': '新规则。'}, {'id': 'r2', 'principle': '稳定规则。'}],
+                         'everyday': [{'id': 'e1', 'practice': '新日常。'}]}
+            findings = [{'criterion': 'rule_quality', 'reason': 'r1 的规则不成句。', 'evidence': [],
+                         'target_chapter': 0, 'repair_scope': 'local'}]
+            summary = workflow.repair_summary(previous, candidate, findings)
+            self.assertEqual(summary['changed'], ['rules:r1'])
+            self.assertEqual(summary['unchanged'], ['rules:r2'])
+            self.assertEqual(summary['added'], ['everyday:e1'])
+            self.assertEqual(summary['removed'], [])
+            self.assertEqual(summary['changed_but_not_named'], [])
 
 
 class ExampleAssetTests(unittest.TestCase):

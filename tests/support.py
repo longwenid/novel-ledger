@@ -19,7 +19,7 @@ import copy
 import uuid
 
 from novel_ledger import context, drift, facts, store_keys, workflow
-from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS, RESULT, digest, han_count,
+from novel_ledger.contracts import (CONTRACT_FIELDS, COSMOLOGY_SCOPES, DERIVED_FIELDS, RESULT, digest, han_count,
                                     opening_source, policy_default, require)
 from novel_ledger.result_templates import drift_items, template
 
@@ -44,7 +44,7 @@ def link_or_skip(case, link, target, target_is_directory=False):
 # --------------------------------------------------------------------------------------------------
 
 def contract(chapters=2, volumes=1, volume_words=None, chapter_words=None,
-             volume_tolerance=None, chapter_tolerance=None, v5_rows=False):
+             volume_tolerance=None, chapter_tolerance=None, structural_rows=False):
     """A small, complete author contract with the two v2 outline policies declared.
 
     `chapter_min`/`chapter_max` are deliberately tiny: these tests drive whole books, and the prose
@@ -53,11 +53,7 @@ def contract(chapters=2, volumes=1, volume_words=None, chapter_words=None,
     validator applies; a test may still shrink them explicitly to exercise the length check without
     writing a page of filler.
 
-    `v5_rows` adds the opening/5 structural rows (`world_tiers`, `world_ladder`). A contract written
-    before opening/5 has neither, and that is the default shape: a guided opening projects its own
-    choices over the base contract, so a hand-written v5 contract only needs the rows when the test
-    is about them. The stand-in rows below are exactly the declared shapes, no extra keys, because
-    the validator compares the row key set for equality.
+    `structural_rows` includes structured world rows for direct-import validation.
     """
     volume_policy = policy_default('volume_outline')
     chapter_policy = policy_default('chapter_outline')
@@ -91,10 +87,9 @@ def contract(chapters=2, volumes=1, volume_words=None, chapter_words=None,
            # Two places so a chapter outline can declare a position delta without inventing one.
            'places': [{'id': 'office', 'name': '值班室'}, {'id': 'yard', 'name': '仓库后院'}],
            'placements': {'shen': 'office'}}
-    if v5_rows:
+    if structural_rows:
         # opening/5's two structural rows, each exactly the declared shape (the validator compares
-        # the row's key set for equality). A contract written before opening/5 has neither; that
-        # compatibility path is exercised with `v5_rows=False`.
+        # the row's key set for equality). These fields are optional for direct imports.
         raw['world_tiers'] = [{'name': '一阶登记员', 'condition': '连续夜班满一年',
                                'gain': '可独立开箱核对', 'cost': '每次核对耗掉一夜精力',
                                'limit': '只对本仓库的退件有效'}]
@@ -144,7 +139,7 @@ def world_fixture(raw=None):
                         'links': ['rules:r1']}],
         'mysteries': [],
         'mechanisms': [],
-        # opening/5's two grand sections: declared empty here so a legacy world keeps its shape
+        # All domains are present; unused domains are explicit empty arrays.
         # (`world.index` and the section walk read every declared section).
         'powers': [],
         'cosmology': [],
@@ -163,7 +158,7 @@ def world_fixture(raw=None):
                                  'scarcity': '每班只放行固定份额。',
                                  'conflict': '谁拿到分配权谁定责任。', 'links': []})
     from novel_ledger import world as world_module
-    grand = _choose_attr(world_module, 'COSMOLOGY_SCOPES', _GRAND_SCOPES)
+    grand = COSMOLOGY_SCOPES
     for index, level in enumerate(raw.get('world_ladder') or [], 1):
         stage = level.get('stage', '')
         if not stage:
@@ -246,67 +241,20 @@ def _han(value):
 # Step three: one ~1000-character outline per volume
 # --------------------------------------------------------------------------------------------------
 
-def hooks_supported():
-    """Whether the engine this build loads has the v2.1 foreshadowing chain (spec §1).
-
-    The fixtures default their hook declarations on this probe instead of on a hard-coded flag, so
-    the whole suite keeps passing while the drift side is still landing the fields, and starts
-    exercising the chain the moment `VOLUME_FIELDS`/`CHAPTER_FIELDS`/`ITEM_KINDS` declare it. A test
-    that specifically probes hooks passes `hooks=True` and asserts the engine's own behaviour.
-    """
-    return ('hooks' in tuple(getattr(drift, 'VOLUME_FIELDS', ()))
-            and 'hooks' in tuple(getattr(drift, 'CHAPTER_FIELDS', ()))
-            and 'hook' in tuple(getattr(drift, 'ITEM_KINDS', ())))
 
 
-HOOKS_DEFAULT = None
 
 
-def set_hooks_default(value):
-    """Override the hook fixtures' default for the rest of the session (`None` = follow the engine).
-
-    Unittest style: call in a test and `self.addCleanup(set_hooks_default, None)`. Tests that only
-    probe hooks pass `hooks=True` directly instead of changing the default.
-    """
-    global HOOKS_DEFAULT
-    HOOKS_DEFAULT = None if value is None else bool(value)
-
-
-def hooks_ready():
-    """Whether the drift hook chain is complete enough to run end to end on this build.
-
-    The field tables can land before the validator's helper bodies do, and a `NameError` from a
-    half-landed validator would turn every unrelated flow test red. The probe therefore runs a real
-    hook-bearing volume outline through the validator: a structured rejection means the path works
-    (the fixture is valid, so it should pass, but a clean `design_drift` still proves the code ran);
-    a `NameError` means it has not landed yet.
-    """
-    if not hooks_supported():
-        return False
-    try:
-        book = seeded_book(contract())
-        rows = volume_rows(book, ['v1'], hooks=True)
-        drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
-                                      {}, {}, ['v1'], book['state'])
-    except NameError:
-        return False
-    except Exception:                       # a structured refusal still means the path executed
-        return True
-    return True
 
 
 def _hooks_on(value):
     """Whether a fixture row declares promises: explicit wins, else the session default.
 
-    The default follows the engine: once `drift` declares the v2.1 hook tables the fixtures start
-    exercising the chain on their own, and on a build without it they stay out of the way. A test
-    that wants one shape regardless passes `hooks=True`/`hooks=False`.
+    Hooks are on by default. A test may explicitly use `hooks=False`.
     """
     if value is not None:
         return bool(value)
-    if HOOKS_DEFAULT is not None:
-        return HOOKS_DEFAULT
-    return hooks_supported()
+    return True
 
 def volume_hooks(book, volume):
     """The volume's declared promises: one required in-volume hook plus one continuing one.
@@ -406,7 +354,7 @@ def volume_stage(book, volume):
 
     The engine requires a volume's `stage` to be one of the declared ladder stages, rising
     monotonically with the contract's volume order. A book opened before the ladder existed declares
-    none, and then the field stays empty — the same behaviour as every older protocol.
+    none, and then the field stays empty for this direct import.
     """
     from novel_ledger import creation
     opening = book.get('creation') or {}
@@ -729,7 +677,7 @@ def drift_check_fixture(app, work, prose, status='kept', deviations=None):
         elif kind == 'hook':
             actual = {'action': planned.get('action')}
         else:
-            actual = {'from': project(state, kind, item['key']), 'to': planned.get('to')}
+            actual = {'from': drift.project(state, kind, item['key']), 'to': planned.get('to')}
         items.append({'kind': kind, 'key': item['key'], 'planned': planned, 'actual': actual,
                       'status': status, 'reason': '正文中该变化有明确动作与后果。',
                       'evidence': {'chapter': chapter, 'quote': quote}})
@@ -748,33 +696,6 @@ def drift_check_fixture(app, work, prose, status='kept', deviations=None):
     return {'items': items, 'unplanned': list(deviations or []), 'verdict': 'clean'}
 
 
-def project(state, kind, key):
-    """What the engine's projection says this coordinate is right now.
-
-    Delegates to `drift.project`, the engine's own reader, so a fixture can never disagree with the
-    reconciliation about what the current value is: the writer files the value the engine already
-    knows. Falls back to a local reading with the same vocabulary if that export is absent.
-    """
-    from novel_ledger import drift
-    reader = getattr(drift, 'project', None)
-    if reader is not None:
-        return reader(state, kind, key)
-    if kind == 'clock':
-        return state.get('clock')
-    if kind == 'node':
-        return (state.get('story_nodes') or {}).get(key, {}).get('status')
-    if kind == 'thread':
-        return (state.get('thread_progress') or {}).get(key, {}).get('status')
-    if kind in ('characters', 'character'):
-        return (state.get('character_current') or {}).get(key, {}).get('value')
-    if kind == 'knowledge':
-        return _reveal(state, key)
-    if kind in ('places', 'place'):
-        return (state.get('placements') or {}).get(key)
-    if kind == 'resources':
-        value = (state.get('resources') or {}).get(key)
-        return None if value is None else _plain_number(_as_number(value))
-    return (state.get(kind) or {}).get(key)
 
 
 def _quote(prose):
@@ -792,12 +713,8 @@ def _quote(prose):
 # The scope enum's grand end: from these scales on, a world model needs a `cosmology` section
 # (opening/5 §2/§5). Read from the engine when it declares the table, with the spec's frozen values as
 # the fallback so the fixture works while the implementation is still landing.
-_GRAND_SCOPES = ('一界', '星海', '诸天')
 
 
-def _choose_attr(module, name, fallback):
-    value = getattr(module, name, None)
-    return tuple(value) if value else tuple(fallback)
 
 
 def _world_tiers(choices):
@@ -815,18 +732,6 @@ def _ladder_levels(choices):
             if isinstance(row, dict) and row.get('stage')]
 
 
-def required_sections_for(tier, choices):
-    """The sections this world must fill, from the engine's own declaration when it has one.
-
-    opening/5 makes the requirement depend on what the gates declared (`declared_sections`), so the
-    fixture must ask the engine rather than re-derive it; a build that still has the one-argument
-    signature falls back to the tier floor, which is what every older protocol used.
-    """
-    from novel_ledger import world as world_module
-    try:
-        return tuple(world_module.required_sections(tier, choices))
-    except TypeError:
-        return tuple(world_module.required_sections(tier))
 
 
 def _generic_record(section, index, tiers):
@@ -868,7 +773,7 @@ def _opening_model(book):
     tiers = _world_tiers(choices)
     resource = _world_resource(choices)
     levels = _ladder_levels(choices)
-    grand = _choose_attr(world_module, 'COSMOLOGY_SCOPES', _GRAND_SCOPES)
+    grand = COSMOLOGY_SCOPES
     model = {'selection_hash': opening.get('selection_hash') or '',
              'premise': premises,
              'story_capacity': '仓库、夜班与签字制度足以承载一次来源核对和一场责任追查。',
@@ -921,7 +826,7 @@ def _opening_model(book):
     # Whatever the engine still requires gets one concrete placeholder record, so the fixture is
     # accepted on every tier without pretending to be a full world.
     tier_id = ((choices.get('scale') or {}).get('tier')) or None
-    for section in required_sections_for(tier_id, choices):
+    for section in world_module.required_sections(tier_id, choices):
         if section == 'mechanisms' or model.get(section):
             continue
         model[section] = [_generic_record(section, 1, tiers)]
@@ -939,37 +844,20 @@ def _opening_contract(book, model):
     from novel_ledger import creation
     opening = book.get('creation') or {}
     choices = creation.selected(opening)
-    version = creation.opening_version(opening)
+    creation.opening_version(opening)
     scale = choices.get('scale') or {}
     total = scale.get('chapters') or (scale.get('chapter_window') or [12])[0]
     raw = contract(chapters=total, volumes=scale.get('volume_count') or 1)
     protagonist = choices.get('protagonist') or {}
     ident = protagonist.get('id') or 'shen'
-    if version >= 2:
-        for row in CONTRACT_FIELDS:
-            if row.get('since', 1) > version or row['key'] in DERIVED_FIELDS:
-                continue
-            source = opening_source(row, version)
-            if not source:
-                continue
-            gate, key = source
-            if gate not in choices:
-                continue
-            raw[row['key']] = copy.deepcopy(choices[gate] if key is None else choices[gate][key])
-    else:
-        for field in ('engine', 'world', 'ending', 'voice'):
-            value = choices.get(field) or {}
-            for key, entry in value.items():
-                if key not in ('mechanism', 'limits'):
-                    raw[key] = copy.deepcopy(entry)
-        raw.update(reader_promise=(choices.get('genre') or {}).get('reader_promise', ''),
-                   genre=(choices.get('genre') or {}).get('genre', ''),
-                   protagonist_setup=copy.deepcopy(choices.get('protagonist') or raw['protagonist_setup']),
-                   allow_special_mechanism=(choices.get('genre') or {}).get('allow_special_mechanism', False),
-                   relationships=copy.deepcopy((choices.get('relationships') or {}).get('relationships') or []))
-        for key in ('chapter_min', 'chapter_max', 'chapter_aim', 'volume_count'):
-            if key in (choices.get('scale') or {}):
-                raw[key] = choices['scale'][key]
+    for row in CONTRACT_FIELDS:
+        if row['key'] in DERIVED_FIELDS:
+            continue
+        source = opening_source(row)
+        if not source:
+            continue
+        gate, key = source
+        raw[row['key']] = copy.deepcopy(choices[gate] if key is None else choices[gate][key])
     raw.update(world_premise=(choices.get('world') or {}).get('world_premise') or raw['world_premise'],
                entities=[{'id': ident, 'name': protagonist.get('name') or '沈桐', 'kind': 'person'}],
                initial_resources=[{'holder': ident, 'asset': '车费', 'unit': '元', 'quantity': '4'}],
@@ -1017,7 +905,7 @@ def opening_gate_values(book):
     from novel_ledger import contracts, creation
     opening = book.get('creation') or {}
     choices = creation.selected(opening)
-    version = creation.opening_version(opening)
+    creation.opening_version(opening)
     scale = choices.get('scale') or {}
     tier = next((row for row in contracts.SCALE_TIERS if row['id'] == scale.get('tier')), None)
     floors = contracts.DEFAULTS['world_ladder']
@@ -1078,13 +966,12 @@ def opening_gate_values(book):
                               'deadline_chapter': str(min(6, limit))}},
         'title': {'title': '夜班退件：我能读出第二层笔迹'},
     }
-    if version >= 6:
-        values['world']['architecture'] = {'space': '旧大陆与海上城邦靠季节航路相连，远洋断航使各地无法独自存续。', 'history': '上个时代的资源战争留下互保契约，失效的旧承诺正在引发新的饥荒。', 'civilizations': '内陆联邦依赖海上供给，城邦依赖内陆技术，双方为旧契约的解释权冲突。', 'conflict': '各方只能转移灾害而不能消除灾害，越成功自保就越破坏共同生存条件。', 'mystery': '共同灾害来自先民维持航路的选择，揭开真相后仍要决定谁承担修复代价。'}
+    values['world']['architecture'] = {'space': '旧大陆与海上城邦靠季节航路相连，远洋断航使各地无法独自存续。', 'history': '上个时代的资源战争留下互保契约，失效的旧承诺正在引发新的饥荒。', 'civilizations': '内陆联邦依赖海上供给，城邦依赖内陆技术，双方为旧契约的解释权冲突。', 'conflict': '各方只能转移灾害而不能消除灾害，越成功自保就越破坏共同生存条件。', 'mystery': '共同灾害来自先民维持航路的选择，揭开真相后仍要决定谁承担修复代价。'}
     narrowed = {}
     for gate, value in values.items():
-        if gate not in creation.gate_ids(version):
+        if gate not in creation.gate_ids():
             continue
-        owned = set(creation.value_fields(gate, version))
+        owned = set(creation.value_fields(gate))
         narrowed[gate] = {key: copy.deepcopy(entry) for key, entry in value.items()
                           if key in owned}
     return narrowed
@@ -1189,27 +1076,6 @@ def tracked_contract(chapters=6, volumes=1):
     return raw
 
 
-def tracked_response(app, task_id=None, session=None, claim=None):
-    """A receipt for a tracked book. v2 has one receipt shape: the writer's drift_check carries the
-    node/thread items, so there is no separate tracked form to fill."""
-    return response(app, task_id, session, claim)
-
-
-def drive_tracked(app, owner=None, until=None, limit=300):
-    """`drive`, named for the tracked flows that used to need their own driver."""
-    return drive(app, owner=owner, until=until, limit=limit)
-
-
-def enhanced_response(app, task_id=None, session=None, claim=None):
-    """A receipt for an editorial-enabled book.
-
-    v2 has no separate enhanced result shape: the chapter outline owns the scene material and the
-    writer files the same drift_check as any other dispatch. The name survives because half the
-    editorial fixtures mean "the receipt for this project" and the difference disappeared.
-    """
-    return response(app, task_id, session, claim)
-
-
 def plan_extras(plan):
     """A chapter-row-shaped fixture carrying the optional scene/pacing blocks.
 
@@ -1227,7 +1093,7 @@ def plan_extras(plan):
         'disclosures': [], 'world_refs': [], 'new_entities': [],
         'hook_refs': [], 'reader_refs': [], 'history_refs': [],
         'hooks': [],
-        'scenes': [{'id': 'c%d:s1' % chapter, 'label': '值班室', 'intent': '核对退件来源。',
+        'scenes': [{'id': 'scene:fixture-%d-1' % chapter, 'label': '值班室', 'intent': '核对退件来源。',
                     'conflict': '主管以签字制度阻拦。', 'turn': '旧凭据暴露出签字矛盾。',
                     'reads': [], 'depends_on': [], 'present': [], 'speakers': [],
                     'dialogue_intents': [], 'reading_refs': [], 'story_time': '当夜',

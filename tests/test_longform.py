@@ -181,10 +181,10 @@ class SceneMemoryTests(unittest.TestCase):
 
     def test_scene_identity_is_frozen_per_version(self):
         row = plan_extras({'chapter': 2})
-        story_memory.bind(row, {}, 2)
+        story_memory.bind(row, {})
         self.assertEqual(row['scene_schema'], 'scene-identity/2')
         frozen = dict(row)
-        story_memory.bind(row, {}, 2)
+        story_memory.bind(row, {})
         self.assertEqual(row['scene_schema'], frozen['scene_schema'])
 
 

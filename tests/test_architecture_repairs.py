@@ -28,14 +28,14 @@ class PolicyTests(unittest.TestCase):
                     with self.assertRaises(Error):
                         (workflow.volume_policy if key == 'volume_outline' else workflow.chapter_policy)(book)
 
-    def test_missing_policies_default_and_current_means_rolling(self):
+    def test_missing_policies_default_and_rolling_selects_the_entering_volume(self):
         raw = contract(4, 2)
         for key in ('volume_outline', 'chapter_outline'):
             del raw[key]
         validated = planning.validate_contract(raw)
         for key in ('volume_outline', 'chapter_outline'):
             self.assertEqual(validated[key], policy_default(key))
-        validated['volume_outline']['scope'] = 'current'
+        validated['volume_outline']['scope'] = 'rolling'
         book = seeded_book(validated)
         job = workflow.next_volume_outline(book, book['contract'])
         self.assertEqual(job.payload['volume_ids'], ['v1'])
@@ -205,19 +205,20 @@ class NarrowReplanTests(unittest.TestCase):
         self.assertEqual(digest(self.repo.load()), before)
         self.assertIsNotNone(self.repo.pending())
 
-    def test_receipt_cannot_skip_the_repair_anchor(self):
-        result = self.repair()
-        result['data']['from_chapter'] = 3
-        with self.assertRaises(Error):
-            self.app.submit(result)
-
-    def test_invalid_repair_ranges_do_not_override_the_frozen_range(self):
-        for end in (True, 1, 5):
+    def test_repair_receipts_cannot_move_the_frozen_range(self):
+        """A repair answers the frozen anchor range exactly: skipping the anchor or naming a
+        different end is refused, and the book is never mutated by the attempt."""
+        skipped = self.repair()
+        skipped['data']['from_chapter'] = 3
+        for end in (None, True, 1, 5):
             with self.subTest(end=end):
-                result = self.repair()
-                result['data']['through_chapter'] = end
+                payload = copy.deepcopy(skipped)
+                if end is not None:
+                    payload['data']['through_chapter'] = end
+                before = digest(self.repo.load())
                 with self.assertRaises(Error):
-                    self.app.submit(result)
+                    self.app.submit(payload)
+                self.assertEqual(digest(self.repo.load()), before)
 
 
 class VolumeMaterialTests(unittest.TestCase):

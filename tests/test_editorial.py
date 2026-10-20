@@ -43,7 +43,9 @@ class EditorialTests(unittest.TestCase):
             fn(*args, **kwargs)
         self.assertEqual(caught.exception.code, code)
 
-    def test_complete_snapshot_and_recover_delivery_use_frozen_version(self):
+    def test_completion_delivery_is_frozen_and_survives_a_write_failure(self):
+        """The completion snapshot is delivered under a frozen version: a later projection change
+        does not alter it, and a failed write leaves the content complete for a same-snapshot retry."""
         owner = self.app.run(finish=True)['owner']
         self.assertEqual(drive(self.app, owner)['action'], 'ready_to_complete')
         complete = self.app.complete(owner)
@@ -58,7 +60,8 @@ class EditorialTests(unittest.TestCase):
         self.assertEqual(result['chapters'], repeated['chapters'])
         self.assertEqual(result['files'], repeated['files'])
 
-    def test_delivery_failure_keeps_content_complete_and_retry_uses_same_snapshot(self):
+        self.tearDown()
+        self.setUp()
         owner = self.app.run(finish=True)['owner']
         drive(self.app, owner)
         complete = self.app.complete(owner)
@@ -204,16 +207,16 @@ class EditorialTests(unittest.TestCase):
         self.assertEqual(accepted.get('scene_schema'), 'scene-identity/2')
 
     def test_partial_intake_skips_only_already_decided_gates(self):
-        state = creation.begin(version=2)
-        value = {'ending': '退件来源公开，承担后果。', 'theme': '责任怎样在人之间传递。'}
-        state = creation.intake(state, {'ending': value, 'title': {'title': '夜班退件'}}, '作者已给结局、母题和书名。')
+        state = creation.begin()
+        voice = {'pov': '第三人称限知，只跟沈桐的所见与所知。', 'voice': '具体动作与有立场的对白。',
+                 'style_traits': ['少重复解释。']}
+        state = creation.intake(state, {'voice': voice, 'title': {'title': '夜班退件'}}, '作者已给文风和书名。')
         self.assertEqual(creation.current(state)['id'], 'genre')
-        self.assertEqual(creation.selected(state)['ending'], value)
+        self.assertEqual(creation.selected(state)['voice'], voice)
         self.assertEqual(creation.selected(state)['title'], {'title': '夜班退件'})
-        self.assertCode('intake', creation.intake, state,
-                        {'ending': {'ending': '改结局。', 'theme': '改母题。'}}, '冲突')
-        reopened = creation.back(state, 'ending', '重开结局。')
-        self.assertNotIn('ending', creation.selected(reopened))
+        self.assertCode('intake', creation.intake, state, {'title': {'title': '改名。'}}, '冲突')
+        reopened = creation.back(state, 'voice', '重开文风。')
+        self.assertNotIn('voice', creation.selected(reopened))
         self.assertNotIn('title', creation.selected(reopened))
 
     def test_usage_counts_actual_reads_without_inventing_billed_tokens(self):
@@ -224,7 +227,9 @@ class EditorialTests(unittest.TestCase):
         self.assertGreater(usage['supplemental_read_chars'], 0)
         self.assertIsNone(usage['billed_tokens'])
 
-    def test_fixed_anchor_path_channels_and_custody_are_distinct(self):
+    def test_anchor_paths_and_custody_rules_are_distinct_and_enforced(self):
+        """A fixed anchor refuses contradiction, a path demands its own arrival time, and custody
+        (holder-bound location) is its own rule: a plain placement cannot teleport a held entity."""
         raw = tracked_contract()
         raw.update(editorial_features=True, places=[{'id': 'a', 'name': '仓库'}, {'id': 'b', 'name': '办公室'}],
                    placements={'shen': 'a'}, anchors=[{'entity': 'shen', 'key': 'hand', 'value': '右', 'policy': 'fixed'}],
@@ -242,7 +247,7 @@ class EditorialTests(unittest.TestCase):
         teleport = {'op': 'placement', 'entity': 'shen', 'before': {'place': 'a'}, 'after': {'place': 'b'}, 'evidence': {'chapter': 1, 'quote': '次日'}}
         self.assertCode('custody', facts.settle, state, [teleport], '次日', 1)
 
-    def test_custody_preserves_arrival_bound_and_path_does_not_grant_sight(self):
+        # Custody preserves the arrival bound, and a path grants movement, not sight.
         raw = tracked_contract()
         raw.update(editorial_features=True, entities=[{'id': e, 'name': e, 'kind': 'person' if e != 'box' else 'object'} for e in ('shen', 'other', 'box')],
                    places=[{'id': 'a', 'name': '仓库'}, {'id': 'b', 'name': '办公室'}], placements={'shen': 'a', 'other': 'b', 'box': 'a'},

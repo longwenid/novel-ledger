@@ -229,14 +229,6 @@ class RuntimeTests(unittest.TestCase):
         self.app.approve(handoff['prose_hash'], '作者认可这版。')
         self.assertEqual(self.app.advance()['action'], 'target_reached')
 
-    def test_new_workers_cannot_reuse_session_or_self_review(self):
-        self.app.advance()
-        result = response(self.app, session='same-session')
-        self.app.submit(result)
-        self.app.advance()
-        other = response(self.app, session='same-session')
-        self.assertCode('session_reuse', self.app.submit, other)
-
     def test_restart_rebuilds_same_pending_material(self):
         task = self.app.advance()['task']
         Path(task['task_path']).unlink()
@@ -290,7 +282,6 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn('input_path', compact)
         self.assertNotIn('records', compact)
         self.assertNotIn('commands', compact)
-        self.assertTrue(all(Path(p['path']).is_file() for p in compact.get('prose_files', [])))
 
         claim = self.app.claim(handle['task_id'], 'worker-for-current-task')
         compact = self.app.advance(compact=True)['task']
@@ -411,13 +402,25 @@ class RuntimeTests(unittest.TestCase):
         self.repo.db.execute('UPDATE documents SET value=? WHERE hash=?', (dump('被篡改的正文。'), row['prose']))
         self.assertCode('source_integrity', self.app.audit)
 
-    def test_completion_reads_the_derived_band_not_a_hand_entered_total(self):
-        """The author decides chapters and the per-chapter range; the total cannot gate completion."""
+    def test_the_total_band_is_derived_and_cannot_gate_completion(self):
+        """The author decides chapters and the per-chapter range; the total is a projection of those
+        two decisions — an incoming hand-entered band is ignored, and completion reads the projection."""
+        raw = contract(2, 1)
+        raw['volumes'] = [{'id': 'v1', 'purpose': '查明来源并面对后果。', 'end': 47}]
+        raw['chapter_min'], raw['chapter_max'], raw['chapter_aim'] = 2000, 2600, 2300
+        # An incoming band is ignored rather than argued with: the projection is the authority.
+        raw['word_range'] = [90000, 110000]
+        self.assertEqual(planning.validate_contract(raw)['word_range'], [47 * 2000, 47 * 2600])
+        raw['chapter_max'] = 2500
+        self.assertEqual(planning.validate_contract(raw)['word_range'], [47 * 2000, 47 * 2500])
+        # A contract that names no band at all is still complete: it is derived, not required.
+        raw.pop('word_range')
+        self.assertEqual(planning.validate_contract(raw)['word_range'], [94000, 117500])
+        # Completion is judged against the derived band, never a hand-entered total.
         raw = contract(2, 1)
         raw['word_range'] = [200, 300]
         raw['chapter_min'], raw['chapter_max'], raw['chapter_aim'] = 71, 150, 90
         self.repo.save(workflow.new_book(raw))
-        # the hand-entered band is replaced by the projection of the two real decisions
         self.assertEqual(self.repo.load()['contract']['word_range'], [2 * 71, 2 * 150])
         owner = self.finish()
         self.assertTrue(self.app.complete(owner)['completed'])
@@ -468,8 +471,14 @@ class RuntimeTests(unittest.TestCase):
         fields = {row['field'] for row in caught.exception.details['violations']['forbidden_terms']}
         self.assertIn('options.premise', fields)
 
-    def test_export_cannot_overwrite_database(self):
-        self.assertCode('output', delivery.export_book, self.repo, self.project / 'novel.sqlite3', workspace=local_workspace(self.repo))
+    def test_export_cannot_overwrite_the_database_or_the_book_view(self):
+        self.assertCode('output', delivery.export_book, self.repo, self.project / 'novel.sqlite3',
+                        workspace=local_workspace(self.repo))
+        with self.assertRaises(Error) as caught:
+            delivery.export_book(self.repo, workspace=local_workspace(self.repo))
+        self.assertEqual(caught.exception.code, 'output')
+        allowed = delivery.export_book(self.repo, output=Path(self.temp.name) / 'plain.html', workspace=local_workspace(self.repo))
+        self.assertEqual(Path(allowed['path']).name, 'plain.html')
 
 
     def test_atomic_initialize_never_overwrites_existing_book(self):
@@ -513,12 +522,13 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(result['submitted'])
         self.assertIsNotNone(self.repo.pending())
 
-    def test_host_reports_launch_failure_and_releases_claim(self):
+    def test_host_failures_always_release_the_claim(self):
+        """A bad binary, an unopenable log and a failing owner renewal each end the step with the
+        lease released, so a broken host never strands the worker's task."""
         result = host.step(self.app, ['/nonexistent-host'])
         self.assertEqual(result['action'], 'host_launch_failed')
         self.assertIsNone(self.repo.get('claim:' + result['task_id']))
 
-    def test_host_releases_claim_when_log_cannot_be_opened(self):
         def open_log(path, *args, **kwargs):
             if path.name == 'host.log':
                 raise OSError('工程夹具：日志目录不可写。')
@@ -529,7 +539,6 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result['action'], 'host_launch_failed')
         self.assertIsNone(self.repo.get('claim:' + result['task_id']))
 
-    def test_host_releases_claim_when_owner_renewal_fails(self):
         owner = self.app.run(through=1, source='工程夹具授权。')['owner']
         with patch.object(self.app, 'renew', side_effect=Error('lease', '工程夹具续租失败。')):
             self.assertCode('lease', host.step, self.app, [sys.executable, '-c', 'pass'], owner)
@@ -585,35 +594,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn('NOVEL_TASK_ID', caught.exception.details['recover'])
         self.assertEqual(caught.exception.details['identity']['task_id'], task['task_id'])
 
-    def test_legacy_database_is_refused_after_the_schema_change(self):
-        older = Path(self.temp.name) / 'v1'
-        older.mkdir()
-        (older / 'novel.sqlite3').write_text('schema 声明为旧版的库', encoding='utf-8')
-        with self.assertRaises(Error) as caught:
-            SQLiteRepository(older)
-        self.assertEqual(caught.exception.code, 'schema')
 
-
-    def test_export_refuses_to_clobber_the_book_view(self):
-        with self.assertRaises(Error) as caught:
-            delivery.export_book(self.repo, workspace=local_workspace(self.repo))
-        self.assertEqual(caught.exception.code, 'output')
-        allowed = delivery.export_book(self.repo, output=Path(self.temp.name) / 'plain.html', workspace=local_workspace(self.repo))
-        self.assertEqual(Path(allowed['path']).name, 'plain.html')
-
-    def test_contract_derives_its_total_band_from_chapters_and_the_per_chapter_range(self):
-        """The author decides the chapter count and the per-chapter range; the total follows."""
-        raw = contract(2, 1)
-        raw['volumes'] = [{'id': 'v1', 'purpose': '查明来源并面对后果。', 'end': 47}]
-        raw['chapter_min'], raw['chapter_max'], raw['chapter_aim'] = 2000, 2600, 2300
-        # An incoming band is ignored rather than argued with: the projection is the authority.
-        raw['word_range'] = [90000, 110000]
-        self.assertEqual(planning.validate_contract(raw)['word_range'], [47 * 2000, 47 * 2600])
-        raw['chapter_max'] = 2500
-        self.assertEqual(planning.validate_contract(raw)['word_range'], [47 * 2000, 47 * 2500])
-        # A contract that names no band at all is still complete: it is derived, not required.
-        raw.pop('word_range')
-        self.assertEqual(planning.validate_contract(raw)['word_range'], [94000, 117500])
 
     def test_dispatch_material_carries_its_own_path_self_check(self):
         self.repo.save(workflow.preparing_book(guided=True))
@@ -716,11 +697,15 @@ class DomainTests(unittest.TestCase):
             planning.check_contract_names(raw, planning.resolve_policy({'forbidden_name_chars': ['砚']}))
         self.assertEqual(caught.exception.code, 'literal_policy')
         self.assertIn('砚', json.dumps(caught.exception.details, ensure_ascii=False))
-        raw['unknown_field'] = '旧版本残留字段'
-        with self.assertRaises(Error) as caught:
-            workflow.new_book(raw)
-        self.assertEqual(caught.exception.code, 'contract')
-        self.assertIn('未知约定字段', caught.exception.message)
+        for field in ('unknown_field', 'planning_window', 'review_interval', 'review_chunk',
+                      'review_fanout', 'verification'):
+            with self.subTest(field=field):
+                raw = contract()
+                raw[field] = 3
+                with self.assertRaises(Error) as caught:
+                    workflow.new_book(raw)
+                self.assertEqual(caught.exception.code, 'contract')
+                self.assertIn('未知约定字段', caught.exception.message)
 
     def test_architecture_diagram_products_match_their_source(self):
         def block(text):
@@ -746,7 +731,7 @@ class DomainTests(unittest.TestCase):
 
 
 
-class GuidedOpeningV5Tests(unittest.TestCase):
+class GuidedOpeningTests(unittest.TestCase):
     """A new project opens on the thirteen-gate setting protocol and writes through it.
 
     The gates themselves are covered in test_opening; what this class pins is the hand-off: thirteen
@@ -778,8 +763,9 @@ class GuidedOpeningV5Tests(unittest.TestCase):
 
     def test_the_thirteen_gates_end_at_the_design_boundary_without_prose(self):
         from novel_ledger import creation
-        self.assertEqual(creation.gate_ids(5), tuple(gate for gate, _title in creation.GATES_V5))
-        self.assertEqual(len(creation.GATES_V5), 13)
+        self.assertEqual(creation.gate_ids(creation.OPENING_VERSION),
+                         tuple(gate for gate, _title in creation.GATES))
+        self.assertEqual(len(creation.GATES), 13)
         handoff = drive(self.app)
         self.assertEqual(handoff['action'], 'outline_ready')
         book = self.repo.load()
@@ -798,7 +784,7 @@ class GuidedOpeningV5Tests(unittest.TestCase):
         self.assertEqual(book['chapter_outlines'], {})
         self.assertTrue(self.app.audit()['ok'])
 
-    def test_an_authorized_chapter_is_written_through_the_v5_opening(self):
+    def test_an_authorized_chapter_is_written_through_the_current_opening(self):
         drive(self.app)
         run = self.app.run(through=1, source='作者授权试写一章。')
         handoff = drive(self.app, run['owner'], until='write')

@@ -46,7 +46,7 @@ def test_ids(suite):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='运行快速边界检查或完整工程回归。')
-    parser.add_argument('suite', choices=('fast', 'full'))
+    parser.add_argument('suite', choices=('fast', 'full'), nargs='?', default='fast')
     parser.add_argument('--list', action='store_true', help='只列出测试，不执行。')
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args(argv)

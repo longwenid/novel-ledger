@@ -63,6 +63,15 @@ class BookPageTests(unittest.TestCase):
             self.assertIn(control, page)
         self.assertIn('class="chapter" id="read-' + str(row['n']) + '"', page)
         self.assertIn('第' + str(row['n']) + ' 章 ' + row['title'], page)
+        # #view-settings must close before #view-read opens, or the reader swallows the settings;
+        # every div opened in the body is closed.
+        settings = page.index('<div id="view-settings">')
+        reader = page.index('<div id="view-read"')
+        self.assertLess(settings, reader)
+        body = page[page.index('<body>'):]
+        self.assertEqual(body.count('<div'), body.count('</div>'))
+        self.assertEqual(body.count('<section class="chapter"'), page.count('</section>'))
+        self.assertLess(reader, page.index('id="ch-index"'))
 
     def test_empty_project_renders_without_crashing(self):
         self.repo.save(new_book(contract(2, 1)))
@@ -72,8 +81,9 @@ class BookPageTests(unittest.TestCase):
         self.assertIn('尚无卷纲与章纲', page)
         self.assertIn('尚无章纲结算行', page)
 
-    def test_contract_page_omits_fields_a_contract_never_carried(self):
-        """A contract written before a field existed must not render as a decision left blank."""
+    def test_contract_fields_render_with_their_own_labels(self):
+        """A contract written before a field existed must not render as a decision left blank, and
+        the six opening/5 fields are decisions, so the page names them, not raw keys."""
         book = self.repo.load()
         self.assertNotIn('叙述视角', bookpage.render(self.repo))
         book['contract'].update(tone='冷硬的夜班底色。', theme='责任怎样在人之间传递。',
@@ -84,8 +94,6 @@ class BookPageTests(unittest.TestCase):
             self.assertIn(label, page)
         self.assertIn('第三人称限知，只跟沈桐的所见与所知。', page)
 
-    def test_the_v5_contract_fields_render_with_their_own_labels(self):
-        """The six opening/5 contract fields are decisions, so the page names them, not raw keys."""
         book = self.repo.load()
         book['contract'].update(
             core_premise={'novelty': '登记制度本身会记住每一个签字的人。',
@@ -153,15 +161,21 @@ class BookPageTests(unittest.TestCase):
                              'fit_reason': '承接夜班题材，把推进压在一件具体物件上。', 'value': entry})
             return {'gate': gate, 'options': rows}
 
-        state = creation.begin('工程夹具。', version=2)
-        state = creation.offer(state, offered('genre', {'genre': '都市生活', 'reader_promise': '在退件里查清责任。',
+        state = creation.begin('工程夹具。')
+        state = creation.offer(state, offered('genre', {'genre': '都市生活', 'reader_promise': '在夜班退件里查清责任。',
                                                        'tone': '冷硬的夜班底色。'}, 'reader_promise'))
         state = creation.pick(state, 'A', state['board']['hash'], 'A')
-        state = creation.offer(state, offered('pov', {'pov': '第三人称限知，只跟沈桐的所见与所知。'}, 'pov'))
+        premise = {'novelty': '登记制度本身会记住每一个签字的人。', 'first_cause': '旧登记制度在一次退件事故后自我封闭。',
+                   'stance': '利用', 'dark_side': '制度'}
+        state = creation.offer(state, offered('premise', premise, 'novelty'))
+        state = creation.pick(state, 'A', state['board']['hash'], 'A')
+        voice = {'pov': '第三人称限知，只跟沈桐的所见与所知。', 'voice': '具体动作与有立场的对白。',
+                 'style_traits': ['少重复解释。']}
+        state = creation.offer(state, offered('voice', voice, 'voice'))
         state = creation.pick(state, 'A', state['board']['hash'], 'A')
         board = state['board']                                     # the structural gate answered itself
         state = creation.pick(state, board['options'][0]['id'], board['hash'], '选它。')
-        book = workflow.preparing_book(guided=True, opening_version=2)
+        book = workflow.preparing_book(guided=True)
         book['creation'] = state
         self.repo.save(book)
         page = bookpage.render(self.repo)
@@ -245,13 +259,21 @@ class BookPageTests(unittest.TestCase):
         bookpage.render(self.repo)
         self.assertEqual(before, (self.project / 'novel.sqlite3').read_bytes())
 
-    def test_escaping_neutralises_markup_in_prose_and_names(self):
+    def test_escaping_neutralises_markup_and_template_values_once(self):
+        """Markup in prose and names is escaped, template placeholders pass through inertly, and no
+        reinterpreted value ever re-enters the page as live markup."""
         book = self.repo.load()
         book['contract']['title'] = '标题 <b>粗体</b> & "引号"'
         self.repo.save(book)
         page = bookpage.render(self.repo)
         self.assertIn('标题 &lt;b&gt;粗体&lt;/b&gt; &amp; &quot;引号&quot;', page)
         self.assertNotIn('<b>粗体</b>', page)
+        book = self.repo.load()
+        book['contract']['title'] = '$script ${reader} <b>书名</b> & "引号"'
+        self.repo.save(book)
+        page = bookpage.render(self.repo)
+        self.assertIn('$script ${reader} &lt;b&gt;书名&lt;/b&gt; &amp; &quot;引号&quot;', page)
+        self.assertEqual(page.count('<script>'), 1)
 
     def test_copied_installation_renders_offline_from_an_unrelated_directory(self):
         install = Path(self.temp.name) / 'installed'
@@ -267,26 +289,6 @@ class BookPageTests(unittest.TestCase):
         self.assertNotIn('<link', page)
         self.assertNotIn(' src=', page)
         self.assertNotIn('$settings', page)
-
-    def test_template_values_are_escaped_once_and_never_reinterpreted(self):
-        book = self.repo.load()
-        book['contract']['title'] = '$script ${reader} <b>书名</b> & "引号"'
-        self.repo.save(book)
-        page = bookpage.render(self.repo)
-        self.assertIn('$script ${reader} &lt;b&gt;书名&lt;/b&gt; &amp; &quot;引号&quot;', page)
-        self.assertEqual(page.count('<script>'), 1)
-
-    def test_view_containers_nest_correctly(self):
-        """#view-settings must close before #view-read opens, or the reader swallows the settings."""
-        page = self.written()
-        settings = page.index('<div id="view-settings">')
-        reader = page.index('<div id="view-read"')
-        self.assertLess(settings, reader)
-        # every div opened in the body is closed: count balance over the rendered document
-        body = page[page.index('<body>'):]
-        self.assertEqual(body.count('<div'), body.count('</div>'))
-        self.assertEqual(body.count('<section class="chapter"'), page.count('</section>'))
-        self.assertLess(reader, page.index('id="ch-index"'))
 
     def test_html_command_writes_a_file_and_is_repeatable(self):
         self.written()

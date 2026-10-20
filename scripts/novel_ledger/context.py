@@ -4,8 +4,8 @@ from __future__ import annotations
 import copy
 import json
 from .contracts import (SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, require, tier_of)
-from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY,
-                        OUTLINE_CHECKS_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
+from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY,
+                        SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
 from . import briefs, creation, narrative, style, world, editorial, story_memory, understanding
 from .planning import policy_material, resolve_outline_policy, volume_for
@@ -17,7 +17,6 @@ EDITORIAL = 'editorial'
 UNDERSTANDING = 'understanding'
 SCENE_IDENTITY = 'scene_identity'
 READING_DEPENDENCIES = 'reading_dependencies'
-OPENING_BOUNDS = 'opening_bounds'
 VOLUME_OUTLINE = 'volume_outline'
 SCENE_MEMORY = 'scene_memory'
 HOOK_LINKS = 'hook_links'
@@ -109,11 +108,7 @@ def thin_required(records, required):
 
 
 def _planned_nodes(plan):
-    """The node ids a row advances, from either shape the engine has used.
-
-    v2 chapter outlines declare nodes under `plot.nodes`; the older plan shape used `node_ids`. The
-    projection reads both so a state slice is never narrowed to nothing by a rename.
-    """
+    """Nodes from chapter declarations and their materialized settlement projection."""
     ids = set(plan.get('node_ids') or ())
     for row in (plan.get('plot') or {}).get('nodes') or ():
         if isinstance(row, dict) and row.get('node'):
@@ -473,7 +468,7 @@ def _batch_range(job, volume, payload):
 
 
 def build(repo: ContextStore, book, job):
-    records, required, prose = {}, [], []
+    records, required = {}, []
 
     def add(name, value, needed=True):
         records[name] = repo.document(value)
@@ -503,7 +498,7 @@ def build(repo: ContextStore, book, job):
     # contract and the world — so the (still nearly empty) state stays available on demand there.
     # A merged dispatch also answers chapter outlines, whose enter/exit chain is read off that same
     # state, so there it is required.
-    add('state', scoped_state(book['state'], participants, plan, anchor, contract.get('planning_window', 3)),
+    add('state', scoped_state(book['state'], participants, plan, anchor),
         not opening_stage and (stage != 'volume_outline' or merged_outline))
     add('complete_state', book['state'], False)
     memory_stages = ('volume_outline', 'chapter_outline', 'write', 'repair', 'redesign')
@@ -511,8 +506,7 @@ def build(repo: ContextStore, book, job):
         add('complete_understanding', book['understanding'], False)
         if stage in memory_stages:
             topics = set((plan or {}).get('reader_refs', [])) | {d['topic'] for d in (plan or {}).get('disclosures', [])}
-            memory_refs = (set(plan.get('understanding_refs', []))
-                           if plan and story_memory.reading_enabled(plan) else set())
+            memory_refs = set(plan.get('understanding_refs', [])) if plan else set()
             available_refs = set(understanding.latest(book['understanding']))
             unavailable_refs = sorted(memory_refs - available_refs)
             selected_memory = understanding.select(book['understanding'], participants, topics, chapter,
@@ -541,7 +535,7 @@ def build(repo: ContextStore, book, job):
         # architecture and other long decisions survive without being reconstructed from snippets.
         chosen = stage in ('world_model', 'opening_contract', 'volume_outline')
         add('opening_basis', {'selection_hash': book['creation'].get('selection_hash'), 'source': book['creation']['source']}, chosen)
-        choices_required = chosen or (stage == 'opening_options' and creation.opening_version(book['creation']) >= 6)
+        choices_required = chosen or stage == 'opening_options'
         add('opening_choices', creation.selected(book['creation']), choices_required)
         if stage == 'opening_options':
             add('opening_rejections', [r for r in book['creation']['rejections'] if r['gate'] == job.payload['gate']['id']])
@@ -638,8 +632,7 @@ def build(repo: ContextStore, book, job):
     if stage == 'volume_outline':
         # The batch policy: which volumes answer, where each one starts and ends, and the per-volume
         # word target. `volume_outline` is the policy map here; on a draft dispatch the same key
-        # carries this volume's approved row instead. The defaults mirror the contract's own, so a
-        # project loaded from before v2 still gets a stated target rather than an empty one.
+        # carries this volume's approved row instead. Defaults come from the contract policy.
         policy = resolve_outline_policy(contract, 'volume_outline')
         ids = payload.get('volume_ids') or [v['id'] for v in contract.get('volumes') or []]
         chosen = [v for v in contract.get('volumes') or [] if v['id'] in set(ids)]
@@ -698,20 +691,15 @@ def build(repo: ContextStore, book, job):
             # protocol version string must be reading the same constant, or a rename degrades into
             # "this project is old" instead of failing.
             'capabilities': {**({EDITORIAL: EDITORIAL_CAPABILITY} if enhanced else {}),
-                             'outline_checks': OUTLINE_CHECKS_CAPABILITY,
-                             **({UNDERSTANDING: UNDERSTANDING_CAPABILITY,
+                             **{UNDERSTANDING: UNDERSTANDING_CAPABILITY,
                                  SCENE_IDENTITY: SCENE_IDENTITY_CAPABILITY,
-                                 READING_DEPENDENCIES: story_memory.READING_SCHEMA} if 'understanding' in book else {}),
-                             **({OPENING_BOUNDS: OPENING_BOUNDS_CAPABILITY} if stage == 'opening_options' else {}),
+                                 READING_DEPENDENCIES: story_memory.READING_SCHEMA},
                              **({VOLUME_OUTLINE: VOLUME_OUTLINE_CAPABILITY} if contract.get('volume_outline') else {}),
                              **({SCENE_MEMORY: SCENE_MEMORY_CAPABILITY} if scene_task else {}),
                              **({HOOK_LINKS: HOOK_LINKS_CAPABILITY} if tracking else {})},
             # The active lexical policy travels with the task material, together with the fields
             # this dispatch actually inspects, so a worker never has to guess either one.
-            'policy': policy_material(book.get('lexical_policy'), [stage, *tuple(payload.get('also', ()))]),
-            # No v2 stage is a blind review: the prose field stays declared so the envelope keeps
-            # rejecting unknown keys, and every dispatch now hands out formal material.
-            'prose': prose}
+            'policy': policy_material(book.get('lexical_policy'), [stage, *tuple(payload.get('also', ()))])}
     if brief:
         task['brief'] = brief
     return validate_work(task)

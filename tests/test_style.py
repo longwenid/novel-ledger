@@ -75,19 +75,15 @@ def by_metric(findings, prefix):
 
 
 class MetricsTests(unittest.TestCase):
-    def test_short_sentences_are_measured_and_shared(self):
+    def test_sentence_length_and_short_share_are_measured_with_a_pinned_threshold(self):
         short, long = metrics_of(sentences(4, 10)), metrics_of(sentences(30, 10))
         self.assertLess(short['sentence_mean'], 8)
         self.assertGreater(long['sentence_mean'], 25)
         self.assertGreater(short['sentence_short_share'], 0.8)
         self.assertLess(long['sentence_short_share'], 0.2)
-
-    def test_the_short_sentence_threshold_is_pinned(self):
-        """Ten 汉字 counts as short and eleven does not: the threshold is a decision, not a drift."""
+        # Ten 汉字 counts as short and eleven does not: the threshold is a decision, not a drift.
         self.assertEqual(metrics_of(sentences(10, 6))['sentence_short_share'], 1.0)
         self.assertEqual(metrics_of(sentences(11, 6))['sentence_short_share'], 0.0)
-
-    def test_short_sentence_share_is_a_share_not_a_count(self):
         mixed = metrics_of(sentences(4, 6) + sentences(40, 4, start=0x6000))
         self.assertEqual(mixed['sentences'], 10)
         self.assertAlmostEqual(mixed['sentence_short_share'], 0.6, places=2)
@@ -120,14 +116,12 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(silent['dialogue_share'], 0.0)
         self.assertAlmostEqual(mixed['dialogue_share'], 0.5, places=2)
 
-    def test_repetition_share_rises_when_the_chapter_repeats_itself(self):
+    def test_repetition_share_rises_with_real_repetition_and_stays_quiet_below_the_ngram_floor(self):
         repeated = metrics_of('他把责任栏推到主管面前，要求先核对名字。' * 8)
         varied = metrics_of(sentences(12, 8))
         self.assertGreater(repeated['repetition_share'], 0.5)
         self.assertEqual(varied['repetition_share'], 0.0)
-
-    def test_repetition_is_not_judged_below_the_ngram_floor(self):
-        """Too few four-grams to mean anything: the value stays finite and `compare` skips it."""
+        # Too few four-grams to mean anything: the value stays finite and `compare` skips it.
         thin = metrics_of(sentences(4, 3))
         self.assertEqual(thin['repetition_share'], 0.0)
         self.assertLess(thin['repetition_grams'], style.MIN_NGRAMS)
@@ -138,19 +132,15 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(metrics_of('他走进值班室。他翻开登记册。他核对了名字。')['person'], 'third')
         self.assertEqual(metrics_of('我走进值班室，他抬头看我。我核对名字，他把封条推过来。')['person'], 'mixed')
         self.assertEqual(metrics_of('箱子放在桌上。登记册翻到那一页。')['person'], 'unknown')
-
-    def test_person_reads_narration_only_never_dialogue(self):
-        """A first-person line spoken by a character says nothing about the narration's person."""
+        # A first-person line spoken by a character says nothing about the narration's person.
         self.assertEqual(metrics_of('「我走了。」他说完便走。「我不留字据。」')['person'], 'third')
 
-    def test_empty_prose_is_zero_and_never_divides_by_zero(self):
+    def test_every_declared_metric_is_present_finite_and_empty_prose_is_zero(self):
         empty = metrics_of('')
         for key in METRIC_KEYS[:-1]:
             self.assertEqual(empty[key], 0, key)
         self.assertEqual(empty['repetition_grams'], 0)
         self.assertEqual(empty['person'], 'unknown')
-
-    def test_every_declared_metric_is_present_and_finite(self):
         for sample in (sentences(4, 6), '他走了。', '「一句话。」'):
             with self.subTest(sample=sample[:8]):
                 value = metrics_of(sample)
@@ -163,10 +153,8 @@ class MetricsTests(unittest.TestCase):
 
 
 class WindowTests(unittest.TestCase):
-    def test_a_contract_without_a_window_gets_the_defaults(self):
+    def test_window_reading_takes_known_non_negative_fields_and_fills_the_defaults(self):
         self.assertEqual(style.window_of({}), style.DEFAULT_WINDOW)
-
-    def test_only_known_non_negative_numbers_are_read_from_a_contract(self):
         window = style.window_of({'style_window': {'sentence': 0.5, 'repetition': -1, 'bogus': 2}})
         self.assertEqual(window['sentence'], 0.5)
         self.assertEqual(window['repetition'], style.DEFAULT_WINDOW['repetition'])
@@ -205,14 +193,11 @@ class BaselineTests(unittest.TestCase):
         book = {'style_anchor': {'prose_hash': 'h', 'sample': sample, 'source': '作者认可。'}}
         self.assertEqual(style.baseline(book), style.metrics(sample))
 
-    def test_no_anchor_is_none(self):
+    def test_a_sample_too_short_to_measure_is_not_a_baseline(self):
+        self.assertIsNone(style.baseline({'style_anchor': {'sample': '他走了。'}}))
         self.assertIsNone(style.baseline({}))
         self.assertIsNone(style.baseline({'style_anchor': None}))
         self.assertIsNone(style.baseline({'style_anchor': {'sample': ''}}))
-
-    def test_a_sample_too_short_to_measure_is_not_a_baseline(self):
-        book = {'style_anchor': {'sample': '他走了。'}}
-        self.assertIsNone(style.baseline(book))
 
 
 class CompareTests(unittest.TestCase):
@@ -230,28 +215,25 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(row['expect'], WINDOW['repetition'])
         self.assertGreater(row['got'], WINDOW['repetition'])
 
-    def test_sentence_length_beyond_the_anchor_tolerance_is_reported(self):
-        anchor = metrics_of(sentences(30, 8))
-        findings = style.compare(sentences(6, 20, start=0x6000), {}, anchor, WINDOW, chapter=3)
-        self.assertTrue(by_metric(findings, 'sentence'), findings)
-        for row in by_metric(findings, 'sentence'):
+    def test_anchor_tolerances_report_their_own_metric_family(self):
+        """Sentence, paragraph and dialogue drift each raise their own metric, not a neighbour's."""
+        sentence = style.compare(sentences(6, 20, start=0x6000), {},
+                                 metrics_of(sentences(30, 8)), WINDOW, chapter=3)
+        self.assertTrue(by_metric(sentence, 'sentence'), sentence)
+        for row in by_metric(sentence, 'sentence'):
             self.assertEqual(row['target_chapter'], 3)
             self.assertEqual(row['criterion'], 'style_' + row['metric'])
-
-    def test_a_paragraph_shape_beyond_the_anchor_tolerance_is_reported(self):
-        anchor = metrics_of(paragraphs(10, 6, per_paragraph=1))
+        paragraph_anchor = metrics_of(paragraphs(10, 6, per_paragraph=1))
         blocked = sentences(10, 6, start=0x5000)        # one long paragraph instead of six
-        findings = style.compare(blocked, {}, anchor, WINDOW, chapter=1)
-        self.assertTrue(by_metric(findings, 'paragraph'), findings)
-        self.assertFalse(by_metric(findings, 'dialogue'), findings)
-        self.assertFalse(by_metric(findings, 'sentence'), findings)
-
-    def test_dialogue_share_beyond_the_anchor_tolerance_is_reported(self):
-        anchor = metrics_of(sentences(12, 4) + sentences(12, 4, start=0x6000, quoted=True))
+        paragraph = style.compare(blocked, {}, paragraph_anchor, WINDOW, chapter=1)
+        self.assertTrue(by_metric(paragraph, 'paragraph'), paragraph)
+        self.assertFalse(by_metric(paragraph, 'dialogue'), paragraph)
+        self.assertFalse(by_metric(paragraph, 'sentence'), paragraph)
+        dialogue_anchor = metrics_of(sentences(12, 4) + sentences(12, 4, start=0x6000, quoted=True))
         talky = sentences(12, 8, start=0x7000, quoted=True)
-        findings = style.compare(talky, {}, anchor, WINDOW, chapter=1)
-        self.assertTrue(by_metric(findings, 'dialogue'), findings)
-        self.assertEqual(by_metric(findings, 'dialogue')[0]['criterion'], 'style_dialogue_share')
+        dialogue = style.compare(talky, {}, dialogue_anchor, WINDOW, chapter=1)
+        self.assertTrue(by_metric(dialogue, 'dialogue'), dialogue)
+        self.assertEqual(by_metric(dialogue, 'dialogue')[0]['criterion'], 'style_dialogue_share')
 
     def test_the_declared_dialogue_ratio_is_checked_without_an_anchor(self):
         silent = sentences(12, 8)
@@ -285,11 +267,6 @@ class CompareTests(unittest.TestCase):
         spoken = sentences(12, 8, start=0x6000, quoted=True)
         self.assertEqual(style.compare(spoken, declared, None, WINDOW), [])
 
-    def test_repetition_over_the_cap_is_reported_without_an_anchor(self):
-        findings = style.compare('他把责任栏推到主管面前，要求先核对名字。' * 8, {}, None, WINDOW)
-        self.assertTrue(by_metric(findings, 'repetition'), findings)
-        self.assertEqual(style.compare(sentences(12, 8), {}, None, WINDOW), [])
-
     def test_the_repetition_cap_is_calibrated_above_ordinary_prose(self):
         """0.12 sits above ordinary prose and below a repeated template; the author can tighten it.
 
@@ -304,12 +281,14 @@ class CompareTests(unittest.TestCase):
         # An author who wants no echoing at all tightens the window, and then it does fire.
         tight = {**WINDOW, 'repetition': 0.04}
         self.assertTrue(by_metric(style.compare(mild, {}, None, tight, chapter=1), 'repetition'))
-        # A chapter that keeps returning to the same sentence is still caught by the default.
+        # A chapter that keeps returning to the same sentence is still caught by the default,
+        # and ordinary varied prose stays quiet without an anchor.
         heavy = repeated_sentences(8)
         self.assertGreater(metrics_of(heavy)['repetition_share'], style.DEFAULT_WINDOW['repetition'])
         findings = style.compare(heavy, {}, None, WINDOW, chapter=1)
         self.assertTrue(by_metric(findings, 'repetition'), findings)
         self.assertIn('style_window.repetition', findings[0]['reason'])
+        self.assertEqual(style.compare(sentences(12, 8), {}, None, WINDOW), [])
 
     def test_the_person_must_match_the_declared_view(self):
         first = ('我走进值班室。我翻开登记册。我核对了名字。我一直站到天亮。'
@@ -323,6 +302,11 @@ class CompareTests(unittest.TestCase):
         self.assertFalse(by_metric(style.compare(third, {'pov': THIRD_POV}, None, WINDOW, chapter=4), 'person'))
         # A mixed voice is not silently accepted as either declared person.
         self.assertTrue(by_metric(style.compare(mixed, {'pov': THIRD_POV}, None, WINDOW, chapter=4), 'person'))
+        # Narration with no marker at all is not evidence of the wrong view.
+        unmarked = sentences(12, 8, marker='')
+        self.assertEqual(metrics_of(unmarked)['person'], 'unknown')
+        self.assertFalse(by_metric(style.compare(unmarked, {'pov': THIRD_POV}, None, WINDOW, chapter=1),
+                                   'person'))
 
     def test_the_contract_view_is_read_when_the_chapter_declares_none(self):
         first = ('我走进值班室。我翻开登记册。我核对了名字。我一直站到天亮。'
@@ -339,13 +323,11 @@ class CompareTests(unittest.TestCase):
         self.assertFalse(by_metric(style.compare(unmarked, {'pov': THIRD_POV}, None, WINDOW, chapter=1),
                                    'person'))
 
-    def test_without_an_anchor_sentence_and_paragraph_style_is_not_judged(self):
-        """The degradation the spec requires: no anchor, no baseline, no length verdicts."""
+    def test_degradation_without_an_anchor_or_below_the_floor_is_not_judged(self):
+        """No anchor means no baseline and no length verdicts; too short means no verdicts at all."""
         wild = sentences(4, 12, start=0x5000)
         findings = style.compare(wild, {'pov': THIRD_POV}, None, WINDOW, chapter=1)
         self.assertEqual(findings, [])
-
-    def test_a_chapter_below_the_measurable_floor_is_not_judged_at_all(self):
         short = sentences(4, 5)                          # 20 汉字: below the floor the proxies need
         self.assertLess(metrics_of(short)['han'], style.MIN_HAN)
         self.assertEqual(style.compare(short, {'pov': '第一人称'}, None, WINDOW, chapter=1), [])

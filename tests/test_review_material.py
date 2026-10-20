@@ -28,12 +28,10 @@ DELETED_STAGES = frozenset({
 
 
 class MaterialDeclarationTests(unittest.TestCase):
-    def test_no_deleted_stage_declares_material(self):
+    def test_the_material_table_declares_only_registered_live_stages(self):
+        from novel_ledger import stages
         self.assertFalse(set(context.STAGE_MATERIAL) & DELETED_STAGES,
                          '已删除阶段仍在材料表里：' + ','.join(sorted(set(context.STAGE_MATERIAL) & DELETED_STAGES)))
-
-    def test_every_declared_stage_is_a_registered_stage(self):
-        from novel_ledger import stages
         self.assertEqual(set(context.STAGE_MATERIAL) - set(stages.STAGES), set())
 
     def test_the_writer_reads_the_two_outline_rows_it_settles_against(self):
@@ -157,20 +155,18 @@ class OutlineMaterialTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_the_volume_row_is_the_chapter_outlines_first_material(self):
+    def test_outline_rows_carry_their_own_identities_and_point_back_at_their_volume(self):
         rows = volume_rows(self.book, ['v1'])
         normalized = dict(rows[0])
         self.assertEqual(normalized['id'], 'v1')
         self.assertEqual([node['id'] for node in normalized['nodes']], ['n1', 'n2'])
         self.assertEqual(normalized['exit_state'], rows[0]['exit_state'])
         self.assertTrue(normalized['exit_state'])
-
-    def test_the_chapter_rows_point_back_at_the_volume_they_belong_to(self):
         volume = self.contract['volumes'][0]
-        rows = chapter_rows(self.book, volume, self.book['state'])
-        self.assertEqual([row['chapter'] for row in rows], [1, 2])
-        self.assertTrue(all(row['synopsis'] for row in rows))
-        self.assertTrue(all(row['world_refs'] for row in rows))
+        chapters = chapter_rows(self.book, volume, self.book['state'])
+        self.assertEqual([row['chapter'] for row in chapters], [1, 2])
+        self.assertTrue(all(row['synopsis'] for row in chapters))
+        self.assertTrue(all(row['world_refs'] for row in chapters))
 
 
 if __name__ == '__main__':

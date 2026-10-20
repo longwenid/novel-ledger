@@ -21,13 +21,13 @@
 
 新人物不再有独立档案派工：首次登场时在章纲 `new_entities` 内联给出 `id`/`kind`/`name`/`role`/`desire`/`limit`/`knowledge_boundary`，落地后按 id 引用。已有角色的事实变化由章纲 `characters` 和正文自比提交；人物解释与样本按作品理解协议维护。
 
-旧冻结任务里的档案字段（tier / biography / speech / relationship_modes 等）按各自协议解释，新任务模板以当前契约为准。档案解释行动和表达，不能自行确立经历、资源或知情；当前动机与成长事实仍由正文的漂移项与引擎结算确立。档案整份按参与人交付，不额外派昂贵索引任务。
+档案字段（tier / biography / speech / relationship_modes 等）按当前模板统一解释，没有按旧协议分别解读的路径。档案解释行动和表达，不能自行确立经历、资源或知情；当前动机与成长事实仍由正文的漂移项与引擎结算确立。档案整份按参与人交付，不额外派昂贵索引任务。
 
 ### 场景计划
 
 章纲每章可选 `scenes` 非空数组，每场 label/intent/conflict/turn/present/speakers/dialogue_intents。present 属于本章 participants；speakers 为实际拟发言者，静默场景显式空数组。对白意图恰好覆盖 speakers，每项 entity/seeks/withholds/pressure/tactic/knowledge_topics；没有相关话题用空数组，不需隐瞒或没有压力时在对应文字中说明实际情况。
 
-场景还可携带稳定 id、reads 和 depends_on，章纲以 dependency_coverage 声明依赖是否完整；字段和保守扩大规则见 [叙事推进](narrative.md#场景依赖与任务材料)。执笔以 `scene_context` 读取本章章纲与场景，`scene_sources` 冻结前置场景版本。旧章纲行里的 `expansion_units` 等字段按原语义保留，新任务以当前模板为准。
+场景还可携带稳定 id、reads 和 depends_on，章纲以 dependency_coverage 声明依赖是否完整；字段和保守扩大规则见 [叙事推进](narrative.md#场景依赖与任务材料)。执笔以 `scene_context` 读取本章章纲与场景，`scene_sources` 冻结前置场景版本。章纲行外的多余字段（如历史上的 `expansion_units`）一律按结构校验拒绝。
 
 短稿补实这些作用，避免同义扩写。静章不强加危机，持续高潮不强插休息。
 
@@ -69,7 +69,7 @@ prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符�
 
 ## 按题材使用空间能力
 
-作者约定可选 anchors=[{entity,key,value,policy:fixed|eventful}]、links=[{id,a,b,kind,path属性…}]。锚点可指已存在实体或地点；地点的楼层/房号按 fixed anchor 保存，用途绑定用 eventful anchor；已成立地点父关系保持稳定。空间结算仍由引擎按下面字段机械执行（`spatial.settle` 保留），触发来自章纲的 `places` 增量与执笔漂移项，证据是正文原文引文；具体提交形状以当前任务模板为准，旧任务按原协议解释：
+作者约定可选 anchors=[{entity,key,value,policy:fixed|eventful}]、links=[{id,a,b,kind,path属性…}]。锚点可指已存在实体或地点；地点的楼层/房号按 fixed anchor 保存，用途绑定用 eventful anchor；已成立地点父关系保持稳定。空间结算仍由引擎按下面字段机械执行（`spatial.settle` 保留），触发来自章纲的 `places` 增量与执笔漂移项，证据是正文原文引文；具体提交形状以当前任务模板为准：
 
 | op | 业务字段 |
 |---|---|

@@ -70,9 +70,7 @@ class RevisionService:
                 revision['outline_task'] = row['n']
                 return
             try:
-                story_memory.bind(copy.deepcopy(plan), accepted_plans,
-                                  2 if plan.get('scene_schema') == 'scene-identity/2' else 1,
-                                  1 if story_memory.reading_enabled(plan) else 0)
+                story_memory.bind(copy.deepcopy(plan), accepted_plans)
                 if book['contract'].get('narrative_tracking'):
                     require(not narrative.unmet(state, plan), 'plan_preconditions', '被携带章节的实际前提已被修订改变。',
                             {'unmet': narrative.unmet(state, plan)})

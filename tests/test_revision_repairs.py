@@ -29,32 +29,34 @@ class RevisionRepairTests(unittest.TestCase):
         self.assertEqual((plan_budget['fixed_suffix_chapters'], plan_budget['remaining_chapters']), (1, 2))
         self.assertEqual(plan_budget['fixed_suffix_han'], 60)
 
-    def test_expanded_reading_interval_propagates_new_scene_bridges(self):
-        rows = []
-        for n in range(1, 5):
-            plan = {'chapter': n, 'participants': [], 'dependency_coverage': 'complete',
-                    'reading_schema': story_memory.READING_SCHEMA, 'reading_coverage': 'complete',
-                    'scenes': [{'id': 's' + str(n), 'reads': [], 'reading_refs': [], 'depends_on': []}]}
-            rows.append(dict(n=n, chain=str(n), plan=plan, events=[], plan_hash=str(n), events_hash=str(n)))
-        rows[3]['plan']['scenes'][0]['depends_on'] = ['s3']
-        changes = {'mode': 'reading', 'reading_changes': [{'kind': 'theme', 'key': 'responsibility'}]}
-        initial = revision_impact.analyze(rows, 2, changes)
+    def test_expanded_intervals_propagate_new_reading_and_fact_dependencies(self):
+        def plain_rows(reading):
+            rows = []
+            for n in range(1, 5):
+                plan = {'chapter': n, 'participants': [], 'dependency_coverage': 'complete',
+                        'scenes': [{'id': 's' + str(n), 'reads': [], 'depends_on': []}]}
+                if reading:
+                    plan.update(reading_schema=story_memory.READING_SCHEMA, reading_coverage='complete')
+                    plan['scenes'][0]['reading_refs'] = []
+                rows.append(dict(n=n, chain=str(n), plan=plan, events=[], plan_hash=str(n),
+                                 events_hash=str(n)))
+            return rows
+
+        reading_rows = plain_rows(reading=True)
+        reading_rows[3]['plan']['scenes'][0]['depends_on'] = ['s3']
+        reading_changes = {'mode': 'reading', 'reading_changes': [{'kind': 'theme', 'key': 'responsibility'}]}
+        initial = revision_impact.analyze(reading_rows, 2, reading_changes)
         self.assertEqual(initial['chapter_actions'][-1]['action'], 'keep')
-        expanded = revision_impact.analyze(rows, 2, changes, through=3)
+        expanded = revision_impact.analyze(reading_rows, 2, reading_changes, through=3)
         self.assertEqual([a['action'] for a in expanded['chapter_actions']], ['local', 'rewrite', 'review'])
         self.assertIn('s3', expanded['affected_scenes'])
 
-    def test_expanded_semantic_interval_propagates_new_fact_outputs(self):
-        rows = []
-        for n in range(1, 5):
-            plan = {'chapter': n, 'participants': [], 'dependency_coverage': 'complete',
-                    'scenes': [{'id': 's' + str(n), 'reads': [], 'depends_on': []}]}
-            rows.append(dict(n=n, chain=str(n), plan=plan, events=[], plan_hash=str(n), events_hash=str(n)))
-        rows[2]['events'] = [{'op': 'knowledge', 'entity': 'other', 'topic': 'source'}]
-        rows[3]['plan']['scenes'][0]['reads'] = [{'kind': 'knowledge', 'key': 'other:source'}]
-        changes = {'mode': 'semantic', 'changes': [{'kind': 'facts', 'key': 'shen:secret'}]}
-        self.assertEqual(revision_impact.analyze(rows, 2, changes)['last'], 2)
-        self.assertEqual(revision_impact.analyze(rows, 2, changes, through=3)['last'], 4)
+        semantic_rows = plain_rows(reading=False)
+        semantic_rows[2]['events'] = [{'op': 'knowledge', 'entity': 'other', 'topic': 'source'}]
+        semantic_rows[3]['plan']['scenes'][0]['reads'] = [{'kind': 'knowledge', 'key': 'other:source'}]
+        semantic_changes = {'mode': 'semantic', 'changes': [{'kind': 'facts', 'key': 'shen:secret'}]}
+        self.assertEqual(revision_impact.analyze(semantic_rows, 2, semantic_changes)['last'], 2)
+        self.assertEqual(revision_impact.analyze(semantic_rows, 2, semantic_changes, through=3)['last'], 4)
 
     def book(self, chapters=5):
         """Five chapters of a two-volume book: volume one closed, volume two still open."""
@@ -89,8 +91,9 @@ class RevisionRepairTests(unittest.TestCase):
         self.assertEqual(repo.load()['revision_run']['first'], 4)
         self.assertEqual(repo.load()['revision_run']['last'], 5)
 
-    def test_a_wider_endpoint_widens_the_applied_actions(self):
+    def test_a_wider_endpoint_widens_the_applied_actions_and_the_rewrite_leaves_the_parent_intact(self):
         repo, app, owner = self.book()
+        parent = {n: repo.chapter('main', n)['prose'] for n in (1, 2, 3, 4, 5)}
         changes = {'mode': 'reading', 'reading_changes': [{'kind': 'character', 'key': 'shen'}]}
         self.assertEqual(app.revision_impact(4, changes)['last'], 4)
         app.revise(4, '明确修改到第五章。', owner, through=5, changes=changes)
@@ -98,12 +101,6 @@ class RevisionRepairTests(unittest.TestCase):
         self.assertEqual((impact['analyzed_last'], impact['last']), (5, 5))
         self.assertEqual(impact['rewrite_chapters'], [4, 5])
         self.assertEqual(impact['chapter_actions'][0]['action'], 'local')
-
-    def test_the_revision_rewrites_its_range_and_leaves_the_parent_intact(self):
-        repo, app, owner = self.book()
-        parent = {n: repo.chapter('main', n)['prose'] for n in (1, 2, 3, 4, 5)}
-        changes = {'mode': 'reading', 'reading_changes': [{'kind': 'character', 'key': 'shen'}]}
-        app.revise(4, '明确修改到第五章。', owner, through=5, changes=changes)
         for _chapter in (4, 5):
             task = app.advance(owner=owner)['task']
             self.assertEqual(task['stage'], 'repair')

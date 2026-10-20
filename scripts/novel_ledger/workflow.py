@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (DEFAULTS, HOOK_LINKS_CAPABILITY, OPENING_BOUNDS_CAPABILITY, OUTLINE_CHECKS_CAPABILITY,
-                        OPENING_VERSION, PIPELINE_SHAPES, REDESIGNS,
-                        REPAIRS, UNDERSTANDING_CAPABILITY, Job, Outcome,
+from .contracts import (DEFAULTS, OPENING_VERSION, PIPELINE_SHAPES, REDESIGNS,
+                        REPAIRS, Job, Outcome,
                         capabilities_for, digest, han_count, require, text, tier_of)
 from . import creation, drift, facts, narrative, planning, world, craft, editorial, understanding, ledger, lint, style
 from .evidence import evidence
@@ -479,16 +478,13 @@ def apply(book, task, data, actor, sources, priors=None):
     # Every capability is read through the declared table: a value this build does not know fails
     # here instead of quietly selecting the older protocol's interpretation of the same fields.
     caps = capabilities_for(task)
-    strict_outline = caps.get('outline_checks') == OUTLINE_CHECKS_CAPABILITY
     enhanced = bool(caps.get('editorial'))
-    workbench = caps.get('understanding') == UNDERSTANDING_CAPABILITY
     # The opening gates run before any contract exists; every later stage has one.
     contract = editorial.effective_contract(book) if book.get('contract') else None
     row = None
     if stage == 'opening_options':
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
-        book['creation'] = creation.offer(book['creation'], data,
-                                         strict_bounds=caps.get('opening_bounds') == OPENING_BOUNDS_CAPABILITY)
+        book['creation'] = creation.offer(book['creation'], data)
     elif stage == 'world_model':
         opening = book['creation']
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
@@ -530,8 +526,7 @@ def apply(book, task, data, actor, sources, priors=None):
         # checks (speaker/intent shape, scene identity, reading dependencies); calling `drift`
         # directly here would leave a chapter's scenes unbound and quietly retire the workbench.
         outlines = planning.validate_volume_outline(data, contract, book.get('world'), selections(book),
-                                                    book.get('volumes_outline') or {}, wanted,
-                                                    strict=strict_outline)
+                                                    book.get('volumes_outline') or {}, wanted)
         old = book.get('volumes_outline') or {}
         if (task.get('payload') or {}).get('repair'):
             require_narrow_repair(old, outlines, (task.get('payload') or {}).get('drift') or [])
@@ -558,7 +553,7 @@ def apply(book, task, data, actor, sources, priors=None):
                         '合并派工缺少这一卷的章纲：' + volume_id)
                 validated = planning.validate_chapter_outline(
                     {'volume': volume_id, 'chapters': half[volume_id]}, chapter_policy(book),
-                    volume, outlines[volume_id], book.get('world'), simulated, strict=strict_outline)
+                    volume, outlines[volume_id], book.get('world'), simulated)
                 book.setdefault('chapter_outlines', {})[volume_id] = validated
                 for item in drift.plan_rows(validated):
                     book.setdefault('plans', {})[str(item['chapter'])] = item
@@ -577,11 +572,10 @@ def apply(book, task, data, actor, sources, priors=None):
         require(outline is not None, 'chapter_outline', '本卷尚无已登记的卷纲。')
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         first = payload.get('from_chapter') or volume['first']
-        if strict_outline or payload.get('allow_retained_suffix'):
-            require('from_chapter' not in data or type(data['from_chapter']) is int
-                    and data['from_chapter'] == first, 'chapter_outline',
-                    '章纲核算起点由冻结任务决定，不能通过回执跳过待修章节。')
-            data['from_chapter'] = first
+        require('from_chapter' not in data or type(data['from_chapter']) is int
+                and data['from_chapter'] == first, 'chapter_outline',
+                '章纲核算起点由冻结任务决定，不能通过回执跳过待修章节。')
+        data['from_chapter'] = first
         retained = {}
         if 'through_chapter' in data:
             through = data['through_chapter']
@@ -598,8 +592,7 @@ def apply(book, task, data, actor, sources, priors=None):
             data['chapters'] = submitted + [copy.deepcopy(retained[n]) for n in sorted(retained)]
         chapters = planning.validate_chapter_outline(data, chapter_policy(book), volume, outline,
                                                     book.get('world'),
-                                                    design_anchor(book, contract, volume, payload),
-                                                    strict=strict_outline)
+                                                    design_anchor(book, contract, volume, payload))
         for item in chapters:
             if item['chapter'] in retained:
                 require(digest(item) == digest(retained[item['chapter']]), 'chapter_outline',
@@ -630,7 +623,6 @@ def apply(book, task, data, actor, sources, priors=None):
         require('events' not in data and 'candidate_events' not in data, 'writer_events',
                 '正文事件由章纲与 drift_check 核算产生，不由执笔另写一份。')
         base = book['draft']['prose'] if book['draft'] else (book.get('prior_candidate') or {}).get('prose')
-        require(enhanced or 'prose' in data, 'patch', '旧冻结任务仍提交完整 prose。')
         prose, patch = craft.compose(data, base if stage != 'write' else None)
         data = {**data, 'prose': prose}
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
@@ -671,7 +663,7 @@ def apply(book, task, data, actor, sources, priors=None):
         if findings:
             route_repair(book, draft, findings, after_repair=stage != 'write')
         else:
-            raw_events = facts.prepare_hook_links(settlement['events'], caps.get('hook_links') == HOOK_LINKS_CAPABILITY)
+            raw_events = facts.prepare_hook_links(settlement['events'])
             state, events = facts.settle(book['state'], raw_events, draft['prose'], chapter)
             if enhanced:
                 require(not settlement['deviations'] or all(text(d.get('reason')) for d in settlement['deviations']),
@@ -717,7 +709,7 @@ def apply(book, task, data, actor, sources, priors=None):
             book['written_han'] += row['han']
     else:
         require(False, 'stage', '未注册的任务阶段。')
-    if workbench and row is not None and data.get('understanding'):
+    if row is not None and data.get('understanding'):
         book['understanding'] = understanding.update(book.get('understanding'), data.get('understanding'),
                                                      sources, evidence, actor)
     book['revision'] += 1

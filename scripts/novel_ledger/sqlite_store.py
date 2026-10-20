@@ -23,7 +23,7 @@ DDL = '''
 CREATE TABLE kv(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE documents(hash TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE tasks(id TEXT PRIMARY KEY, status TEXT NOT NULL, input TEXT NOT NULL, input_hash TEXT NOT NULL,
-    result TEXT, result_hash TEXT, first_read TEXT, first_read_hash TEXT, reviewer TEXT);
+    result TEXT, result_hash TEXT, reviewer TEXT);
 CREATE UNIQUE INDEX one_pending ON tasks(status) WHERE status='pending';
 CREATE TABLE sessions(id TEXT PRIMARY KEY, task TEXT NOT NULL);
 CREATE TABLE branches(id TEXT PRIMARY KEY, parent TEXT, first INTEGER NOT NULL, status TEXT NOT NULL);
@@ -226,10 +226,9 @@ class SQLiteRepository:
         row = self.db.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
         require(row is not None, 'task', '任务不存在。')
         result = dict(row)
-        for key in ('input', 'result', 'first_read'):
+        for key in ('input', 'result'):
             result[key] = json.loads(result[key]) if result[key] else None
         require(digest(result['input']) == result['input_hash'], 'task_integrity', '冻结任务被修改。')
-        require(result['first_read'] is None or digest(result['first_read']) == result['first_read_hash'], 'first_read_integrity', '冻结首读记录被修改。')
         return result
 
     def add_task(self, work):
@@ -237,8 +236,6 @@ class SQLiteRepository:
         self.db.execute('INSERT INTO tasks(id,status,input,input_hash) VALUES (?,\'pending\',?,?)', (ident, dump(work), digest(work)))
         return self.task(ident)
 
-    # The `seal` write path is gone with the blind first read; the columns stay declared because a
-    # project written under v1 still carries them and must keep loading.
     def finish_task(self, task_id, result):
         self.db.execute("UPDATE tasks SET status='done',result=?,result_hash=? WHERE id=?", (dump(result), digest(result), task_id))
 

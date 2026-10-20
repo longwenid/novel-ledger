@@ -41,7 +41,7 @@
 
 ## 场景身份与时间
 
-scene-identity/2 的场景 ID 在整本当前版本中唯一，是不透明字符串，不从中解析章号。未提供时引擎为当前场景位置生成 ID；生成后移动场景、拆章或合章必须携带该 ID。移动须从原位置移除，不能让同一场景在两处同时登记。旧 `c章号:` 名称 ID 可原样保留；没有新能力的旧冻结章纲仍按原前缀规则校验。
+scene-identity/2 的场景 ID 在整本中唯一，是不透明字符串，不从中解析章号。未提供时引擎为当前场景位置生成 ID；生成后移动场景、拆章或合章必须携带该 ID。移动须从原位置移除，不能让同一场景在两处同时登记。这是唯一规则，不再接受 `c章号:` 前缀的历史 ID。
 
 本版本的 scene.story_time 可说明实际发生时间，例如“三年前冬夜”，不直接改变事实时钟。阅读顺序由章号和 scenes 数组顺序决定；披露顺序由章纲 `disclosures` 与 `knowledge` 增量记录，不再有独立阅读任务另记一份。depends_on 只引用已可用的前章或本章前场材料，不能用未来正文作为已取得的来源；倒叙的发生时间早，不表示必须先披露。自由重排仍要重新过章纲的卷内状态链，确认人物知情、因果与披露自洽。
 
@@ -61,7 +61,7 @@ revision-impact / revise 的 changes-file 支持 reading 模式及可选 reading
 
 mode=expression 或 reading 保持事实投影不变；reading 必须给非空 reading_changes。mode=semantic 继续沿事实和因果依赖保守扩大连续重写范围，也可同时给 reading_changes。reading_changes/reading_refs 的 kind 为 character / relationship / theme / voice / disclosure，key 是稳定关联 ID。人物及声线由 participants 自动关联，披露由 disclosures 关联；其他关联在章纲或每场 reading_refs 中明确声明。
 
-新任务冻结 capabilities.reading_dependencies=reading-dependencies/1，规范化章纲由引擎保存 reading_schema=reading-dependencies/1，Worker 不手填标记。只有该标记的章纲才解释 reading_refs、reading_coverage、understanding_refs 和 story_time；旧章纲中同名字段原样保留，不因升级取得新语义。对没有标记的历史章纲，阅读影响按覆盖未核清处理，保守扩大修改范围，不能用旧同名 complete 声明缩小范围。
+任务冻结 capabilities.reading_dependencies=reading-dependencies/1，规范化章纲由引擎保存 reading_schema=reading-dependencies/1，Worker 不手填标记。所有章纲统一按该协议解释 reading_refs、reading_coverage、understanding_refs 和 story_time；没有标记的历史章纲不再有保守解释，重绑与修订核算直接按当前规则拒绝。
 
 reading_coverage 默认 partial。声明 complete 须有实际场景，且每场都有 reading_refs（无额外关联给空数组）；**v2 没有独立读者核对遗漏与错误**，引擎只核对声明形状，语义是否完整只能靠作者抽读。阅读关联未核清时，对候选后文保守安排重写；已声明完整时沿匹配关联及受影响场景的依赖桥梁传播。
 
@@ -81,6 +81,6 @@ reading_coverage 默认 partial。声明 complete 须有实际场景，且每场
 
 修订中若重排后的章纲改变了下一待携带章的计划，停止原样携带，保留新章纲并进入返修；旧章纲不能覆盖重排后的新意图。重排清理的后续计划重新规划，已指定重写的章即使新章纲与原章纲相同，也须重新写。返修前补齐新参与人物或重核成长后的档案（由章纲 `new_entities` 承载），保留候选正文及原修复额度；篇幅预算只预留当前修改章或重排窗口之后的固定后缀。后续仍按处理动作、事实重放和机械核算推进。
 
-## 已有项目
+## 项目边界
 
-2.0.0 新项目默认启用工作台。存储 schema 保持 novel-ledger/3，没有新增表或隐式迁移；已有 v3 项目无 understanding 时，直接续写沿原材料和身份协议运行。需要启用时，在无在途任务、草稿或修订的章节边界执行 `workbench --source 作者要求原话`，新增空作品理解并更新运行版本及启用来源，不改正文、事实、章纲或旧回执。另一路径是 recontract 的新约定经机械校验激活后，按新项目规则默认启用工作台并重新规划。两条路径均不追补旧冻结任务或重解释旧章纲。v2 及更早数据库仍明确拒绝，不自动转换。
+所有项目自带工作台数据结构（init 即建立 understanding），无需事后单独启用。存储 schema 为 novel-ledger/4，已删除旧任务的首读字段；v3 及更早数据库明确拒绝，不自动转换。旧开书协议（creation/1~/5）与旧任务能力形状同样读取即拒，见 [协议](protocol.md)。

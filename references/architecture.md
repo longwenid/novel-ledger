@@ -21,7 +21,7 @@
 
 作者约定提供作品方向；卷纲与章纲在设计期声明资源、位置、知情、时钟、人物、情节与伏笔增量，以及本卷/本章的文风要求，引擎用卷内状态链逐章模拟；执笔后由 `drift_check` 逐项自比、`drift.reconcile` 机械核算（并产出 hook 事件），再由事实、叙事与空间的既有判据入账，同时用 `style` 的代理指标核对文风是否走样。理解记录与创作记忆仍按版本保存，实际事件才写入 canon。context 将方向、当前事实、相关理解、文风规格与原文编译为冻结任务，workflow 负责交接，SQLite 事务、不可变文档和章节分支作为可靠底座。
 
-understanding 是 intent 内独立的版本对象，不把解释与未来方案混成事实；原文证据失效时撤下对应版本，未改后文携带后恢复其有效记录。稳定场景身份与阅读位置分离，故事时间和披露另行记录。revision_impact 给出事实重写范围与阅读影响动作；v2 没有独立阅读任务，受影响章的章纲由 `chapter_outline` 重排。协议和已有项目显式启用见 [叙事工作台](workbench.md)。
+understanding 是 intent 内独立的版本对象，不把解释与未来方案混成事实；原文证据失效时撤下对应版本，未改后文携带后恢复其有效记录。稳定场景身份与阅读位置分离，故事时间和披露另行记录。revision_impact 给出事实重写范围与阅读影响动作；v2 没有独立阅读任务，受影响章的章纲由 `chapter_outline` 重排。协议与项目边界见 [叙事工作台](workbench.md)。
 
 ## 主干循环与子 agent
 
@@ -89,9 +89,9 @@ flowchart TD
 
 | 文件 | 权威职责 |
 |---|---|
-| contracts | 协议标识、约定字段表与按版本过滤的对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、开书枚举与共享数值默认（`DEFAULTS`，含 `world_ladder` 的位阶/阶梯条数下限与主题锚点上限）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
+| contracts | 协议标识、约定字段表与当前开书对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、开书枚举与共享数值默认（`DEFAULTS`，含 `world_ladder` 的位阶/阶梯条数下限与主题锚点上限）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
 | ports | 持久化、只读查询、冻结编译、交付与宿主用例的能力契约；只依赖 contracts，不持有具体资源 |
-| creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；门序按协议版本冻结（creation/1 八门、creation/2 十门、creation/3 十门男频方向、creation/4 十一门含来历门、creation/5 十三门含核心脑洞门与格局升格门、creation/6 十三门先定世界与格局），结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
+| creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；只有当前门序（creation/6，13 门先定世界与格局），更早协议读取即拒；结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
 | world | 世界记录（支持 12 个领域，按档位要求填写）、关联、选择一致性，以及已声明的位阶、资源、格局与世界架构逐字绑定；保持设计与事实分离 |
 | planning | 作者约定、卷纲与章纲的落库校验、`new_entities` 与场景形状 |
 | drift | 卷纲/章纲的机械校验（含 v5 卷 `stage` 逐字取阶梯一级且只升不降）、卷内状态链模拟（`simulate`，含伏笔 `plant`/`payoff` 状态机）与执笔漂移核算（`reconcile`，产出 hook 事件）；依赖 facts/contracts/entities/narrative/spatial/ledger/world/evidence |
@@ -118,7 +118,7 @@ flowchart TD
 | lint | 正文机械判据（跨章逐字重复、对白引号体例、西文残留），在提交与 preflight 同套执行；只依赖 contracts |
 | ledger | 可选结构化账目行的形状与四则关系验算、跨工件同键同值；只依赖 contracts |
 | book_state | 项目分区的字段所有权与事务内组装；只依赖 contracts |
-| story_memory | 不绑定章号的场景身份、事实/阅读关联及带来源的场景材料；旧任务按冻结身份协议；只依赖 contracts |
+| story_memory | 不绑定章号的场景身份、事实/阅读关联及带来源的场景材料；只依赖 contracts |
 | revision_impact | 根据已提交章纲、事件与版本指纹保守传播事实和阅读影响；只依赖 contracts/story_memory |
 | understanding | 可修订解释、原文与反证、版本选择、适用范围及随正文版本失效/恢复；只依赖 contracts |
 | bootstrap | 唯一的本地组合根，将具体存储、查询、交付、时钟和 ID 提供方接到应用端口 |
@@ -128,22 +128,22 @@ flowchart TD
 
 ### 作者决定与开书结构
 
-- 约定形状只有一处定义：contracts.CONTRACT_FIELDS（字段、类型、占位、可选性、是否参与对齐、自哪个开书版本起生效）。交付模板（result_templates.template → contracts.contract_skeleton）、结构校验（planning.validate_contract → contracts.contract_errors）和对齐核验（creation.validate_contract）全部由它派生；新增约定字段只改这张表，对齐表与字段表不一致时报 alignment_schema。对齐字段按开书版本过滤（contracts.alignment_for）：后来新增的字段不会变成旧约定没做过、却被追溯追责的决定。
+- 约定形状只有一处定义：contracts.CONTRACT_FIELDS（字段、类型、占位、可选性、是否参与对齐、自哪个开书版本起生效）。交付模板（result_templates.template → contracts.contract_skeleton）、结构校验（planning.validate_contract → contracts.contract_errors）和对齐核验（creation.validate_contract）全部由它派生；新增约定字段只改这张表，对齐表与字段表不一致时报 alignment_schema。对齐字段由 contracts.CONTRACT_ALIGNMENT 派生，只使用当前门序与字段归属；自备约定可省略非必填的开书决定。
 - 逐门开书中，直接选择字段的唯一来源也声明在 CONTRACT_FIELDS.opening：`(门 ID, value 字段)`，主角整份选择通过字段的 shape 声明；`None` 表示该门的 value 整份投影到约定字段（来历门即 `opening: ('origin', None)` → `protagonist_origin`，shape 为 `family/arrival/cost`）。creation 从同一声明派生各门允许的输入字段和约定对齐值；世界与体量的推导输入单列在 creation.DERIVATION_INPUTS。方案提交、intake 和闭合选择的约定核验均拒绝跨门及未知字段，错误带 allowed_fields/unknown_fields。对齐值逐字段读取，禁止整份 value 合并覆盖其他门的决定。
-- 开书协议版本随项目文档冻结：creation 状态的 `schema`（novel-ledger.creation/N）决定门序、value 规则与对齐范围，方案篇幅上界由新任务的 opening-bounds/1 能力冻结，不重验旧已接受方案板。新项目使用 `creation/6`（`opening/6`，13 门先定世界与格局）；旧项目保留自己的门序（creation/5 十三门、creation/4 十一门、creation/3 十门、creation/2、creation/1），不迁移、不按新门重读旧选择。存储 schema 为 novel-ledger/3，因项目真源改为不可变分区而升级；已有 v3 可继续使用，v2 及更早库明确拒绝，不提供隐式迁移。
+- 开书协议只有当前版本：creation 状态声明 `novel-ledger.creation/6`（`opening/6`，13 门先定世界与格局），更早的 creation/N 在读取时被明确拒绝（以当前协议重开），方案篇幅上界是无条件的唯一规则。存储 schema 为 novel-ledger/4，已删除任务首读列；v3 及更早库明确拒绝，不提供隐式迁移。
 - 作者可见的方案板有两类来源：创意门的板子由主干自执（未内联时派新空历史 Worker）生成；结构门（体量与分卷）的档位板由引擎按 contracts.SCALE_TIERS 当次给出，不派工、不等待，Worker 回执按 opening_system 拒绝。引擎只给经证明写得完的档位，选择仍由作者做出，程序不替作者决定。
 - 体量窗口只决定展示哪些档位；相邻档位与最大档由完整 SCALE_TIERS 决定。同一档位在不同窗口的说明与数值一致，窗口最后一项不因此成为最大档。
 
 ### 派工文件与角色
 
-- `work/<task>/` 里两类文件分属不同作者：task.json、input.json、identity.json、dispatch.md（Worker 自举卡）、brief.md（简报全文）、chapter-*.txt 由主控生成且可重建；result.template.json（表单）与 result.json（回执）由 Worker 写。主控只在表单缺失或属于其他任务时才生成它，重跑 advance 绝不覆盖 Worker 已填内容；取消任务是唯一回收表单的事件。重派未提交任务时，引擎把上次遗留的 result.json 草稿隔离为 `result.stale.json` 并在派工卡注明——账本才是回执的记录源。
+- `work/<task>/` 里两类文件分属不同作者：task.json、input.json、identity.json、dispatch.md（Worker 自举卡）、brief.md（简报全文） 由主控生成且可重建；result.template.json（表单）与 result.json（回执）由 Worker 写。主控只在表单缺失或属于其他任务时才生成它，重跑 advance 绝不覆盖 Worker 已填内容；取消任务是唯一回收表单的事件。重派未提交任务时，引擎把上次遗留的 result.json 草稿隔离为 `result.stale.json` 并在派工卡注明——账本才是回执的记录源。
 - 角色由身份而非称呼区分：read/recall 只在携带 NOVEL_TASK_ID 的派工身份下开放，主控调用按 role_boundary 拒绝；audit/export/html 是验收与交付命令，主控可用。身份本身随派工一起留档（identity.json：task_id、input_hash、阶段、worker_env），供核对与解释失败，但权限只看宿主注入的凭据——可核对的数据不是许可证，也不由 Worker 写回。
 
 ### 字面策略与材料选择
 
 - 字面约定是项目级版本记录（book.lexical_policy），不属于约定快照；默认值在开书阶段即生效，作者改规则用 lexical 命令留档，改规则取消在途任务并作废其视图。约定里出现 lexical_policy 属于未知字段，直接拒绝。
 - 字面约定的**执行范围**只声明一处：contracts.ENFORCEMENT 按阶段列出被检查的字段（terms 查禁词、names 查禁字），检查循环（planning.enforce）与交给任务的 `policy.scope` 都由它生成。因此派工说明不可能承诺程序不做的检查；新增阶段或字段只改这张表。
-- 派工材料按"这一任务需要什么"投递，而不是按"这一阶段有什么"：`brief` 由 `briefs.py` 现生成（本门规则 + 本轮方法（简报里的"创意透镜"）+ 交付契约），整篇 guides 只作可选参考；必读记录只留本阶段真正要用的（v6 开书方案必读完整已选记录与拒绝记录，旧任务按冻结 required 执行）；记录哈希只在 task.json 出现一次，不复制到视图。取舍标准是"作者为这次派工付出的上下文"，不是文档是否完整。因果邻域按同一口径收窄：追踪项目只读目标与其直接前置，基础项目在固定深度与节点上限内做有界遍历，因此派工材料不随因果链长度增长，也不在长链上耗尽解释器栈。
+- 派工材料按"这一任务需要什么"投递，而不是按"这一阶段有什么"：`brief` 由 `briefs.py` 现生成（本门规则 + 本轮方法（简报里的"创意透镜"）+ 交付契约），整篇 guides 只作可选参考；必读记录只留本阶段真正要用的（开书方案必读完整已选记录与拒绝记录）；记录哈希只在 task.json 出现一次，不复制到视图。取舍标准是"作者为这次派工付出的上下文"，不是文档是否完整。因果邻域按同一口径收窄：追踪项目只读目标与其直接前置，基础项目在固定深度与节点上限内做有界遍历，因此派工材料不随因果链长度增长，也不在长链上耗尽解释器栈。
 - 改约与导入的约定激活记录 producer（主控 owner）与来源原话；promote 与 complete 的验收会复查作者决定记录，防止绕过作者边界。
 
 ## 不变量
@@ -213,13 +213,13 @@ revision_blocked 表示超界方案已经原子保存，正式稿和章节额度
 | 场景身份 | 新协议的 ID 不绑定章号，移动仍核对唯一性与已提交来源；阅读顺序、故事时间、披露分开 |
 | 修订传播 | revision_impact 沿事实读取、阅读关联与场景桥梁给出处理动作；覆盖不足或未声明变更时保守扩大范围，语义完整性无人独立核验 |
 | 长篇运行 | 宿主主干调度子 agent，引擎保留主控/Worker 租约、提交核实与可选进程适配器；真实模型历史隔离另验收 |
-| 存储版本 | 当前为 novel-ledger/3，四分区根目录是实际结构变化；已有 v3 可继续使用，v2 及更早库明确拒绝，不提供仅改版本号或隐式迁移 |
+| 存储版本 | 当前为 novel-ledger/4，已删除旧审稿首读存储列；v3 及更早库明确拒绝，不提供隐式迁移 |
 
 源码精简不证明文学质量或全程费用改善。分别衡量依赖、必读材料、派工、实际用量和返工，不以行数替代功能覆盖。
 
 ## 叙事与材料边界
 
-新约定默认启用叙事跟踪，关闭跟踪时章纲的节点与线路可空，但资源/位置/知情/时钟/人物变化仍须核算，见 [叙事推进](narrative.md)。narrative 只依赖 contracts，facts 组合其有据结算；drift 通过 facts.apply_event 复用事实、叙事与空间状态转移，并调用世界规则做设计检查；账目验算与证据核验由流程层组合。实际进度、读者认知、当前动机均可重放，不由设计直接初始化；当前记录投影与完整可选来源分开，正文不删除、不截断。阅读关联另按 reading-dependencies/1 及章纲标记解释，不因同名字段追改旧章纲语义。
+新约定默认启用叙事跟踪，关闭跟踪时章纲的节点与线路可空，但资源/位置/知情/时钟/人物变化仍须核算，见 [叙事推进](narrative.md)。narrative 只依赖 contracts，facts 组合其有据结算；drift 通过 facts.apply_event 复用事实、叙事与空间状态转移，并调用世界规则做设计检查；账目验算与证据核验由流程层组合。实际进度、读者认知、当前动机均可重放，不由设计直接初始化；当前记录投影与完整可选来源分开，正文不删除、不截断。阅读关联按 reading-dependencies/1 统一解释，章纲由引擎统一冻结标记。
 
 编辑能力冻结为 editorial/1，开关与字段见协议，专用字段见 [编辑能力](editorial.md)。craft/spatial/editorial 均是纯值规则，不传 Repository。章纲重排与正文重绑定由 workflow 返回，应用层单一事务保存；预检一并回滚。
 
@@ -231,7 +231,7 @@ revision_blocked 表示超界方案已经原子保存，正式稿和章节额度
 
 设计模拟、执笔核算的影子投影与正式提交共用 `facts.apply_event`。该函数只作用于调用者持有的临时投影；`facts.settle` 负责正文引文与时间表达检查，整章到期规则由 facts.check_deadlines 供模拟和正式结算共享，正式事实仍只由提交事务写入。卷纲窗口、章纲 enter/exit 和卷末闭合继续由 drift 检查。设计没有正文证据，模拟通过不能代替正文提交。路径拓扑的开放、方向、通行条件、携带关系与显式出发/抵达时间在设计期也按正式规则检查。
 
-卷纲与章纲为必选阶段，策略解析统一由 planning.resolve_outline_policy 负责。缺省使用默认值；显式空对象、null 和不完整策略不能悄悄恢复成默认值。旧约定中的 current 按 rolling 解释；已经保存的空策略须明确改约修正。
+卷纲与章纲为必选阶段，策略解析统一由 planning.resolve_outline_policy 负责。缺省使用默认值；显式空对象、null 和不完整策略不能悄悄恢复成默认值。卷纲 scope 只接受 all/rolling，章纲只接受 volume/all；其余值明确拒绝。
 
 执笔材料筛选与局部重排保持完整冻结来源；保留的后缀仍通过状态链、卷末与阅读绑定核验，细节见 [有界材料与局部重排](narrative.md#有界材料与局部重排)。
 

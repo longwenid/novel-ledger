@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 import copy
-from .contracts import digest
+from .contracts import DEFAULTS, digest
 
 REVISION_BOUNDS = 'revision-bounds/1'
-# A revision that reaches further back than the caller's contract allows is an author decision, not
-# an engine one; the default matches the contract's own legacy window when a project declares none.
-REVISION_LIMIT_DEFAULT = 3
 
 
 def enabled(book):
@@ -27,7 +24,7 @@ def effective_contract(book):
 def revision_policy(book, head):
     """Recent revision window and volumes whose chapters are all written."""
     contract = effective_contract(book)
-    limit = book['contract'].get('planning_window') or REVISION_LIMIT_DEFAULT
+    limit = book['contract'].get('revision_limit', DEFAULTS['revision_limit'])
     return {'schema': REVISION_BOUNDS, 'head': head, 'limit': limit,
             'earliest': max(1, head - limit + 1),
             'closed_volumes': [{'id': v['id'], 'first': v['first'], 'last': v['end']}

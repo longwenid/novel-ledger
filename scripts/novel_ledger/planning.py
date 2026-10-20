@@ -31,7 +31,7 @@ def active_policy(versions):
 
 
 def policy_of(book):
-    """Compatibility query for callers holding a transaction aggregate."""
+    """The active lexical policy of a transaction aggregate."""
     return active_policy(book.get('lexical_policy'))
 
 
@@ -132,7 +132,7 @@ def check_contract_names(contract, policy):
 
 def resolve_outline_policy(contract, key):
     """Required pipeline policies: absence defaults, explicit invalid values never do."""
-    scopes = ('all', 'rolling', 'current') if key == 'volume_outline' else ('volume', 'all')
+    scopes = ('all', 'rolling') if key == 'volume_outline' else ('volume', 'all')
     policy = contract[key] if key in contract else contracts.policy_default(key)
     require(isinstance(policy, dict) and set(policy) == {'scope', 'words', 'tolerance'}
             and policy.get('scope') in scopes and type(policy.get('words')) is int and policy['words'] > 0
@@ -141,10 +141,7 @@ def resolve_outline_policy(contract, key):
             + ',words:正整数,tolerance:非负整数且小于 words}。',
             {'recover': '通过明确改约填写完整策略；缺省字段可使用默认值。',
              'default': contracts.policy_default(key)})
-    resolved = copy.deepcopy(policy)
-    if resolved['scope'] == 'current':
-        resolved['scope'] = 'rolling'
-    return resolved
+    return copy.deepcopy(policy)
 
 
 def outline_policies(contract):
@@ -181,23 +178,12 @@ def validate_contract(raw):
     require(not complaints, 'contract', '约定结构不成立：' + '；'.join(complaints[:6]))
     contract.setdefault('chapter_aim', min(contract['chapter_max'], max(contract['chapter_min'], 3500)))
     require(all(type(contract[k]) is int and contract[k] > 0
-                for k in ('chapter_min', 'chapter_max', 'chapter_aim', 'review_interval', 'review_chunk')),
-            'contract', '篇幅与复审间隔须为正整数。')
-    # `planning_window` is a legacy field: v2 never plans a window, but a project that already
-    # declares one keeps loading (and the revision bound still reads it).
-    require('planning_window' not in contract or contract['planning_window'] is None
-            or type(contract['planning_window']) is int and contract['planning_window'] > 0,
-            'contract', 'planning_window 为 legacy 字段，若保留须为正整数。')
-    require(contract.get('verification') in ('full', 'fast'), 'contract',
-            'verification 须为 full（默认全档）或 fast（快速档）。')
+                for k in ('chapter_min', 'chapter_max', 'chapter_aim', 'revision_limit')),
+            'contract', '章幅与修订窗口须为正整数。')
     require(contract['chapter_min'] <= contract['chapter_aim'] <= contract['chapter_max'], 'contract', '章目标须在上下限之间。')
-    require(type(contract['narrative_tracking']) is bool and type(contract['review_fanout']) is int and 2 <= contract['review_fanout'] <= 8,
-            'contract', 'narrative_tracking 须为布尔值；review_fanout 须为 2～8，限制单次综合材料。')
+    require(type(contract['narrative_tracking']) is bool, 'contract', 'narrative_tracking 须为布尔值。')
     require(type(contract['editorial_features']) is bool and (not contract['editorial_features'] or contract['narrative_tracking']),
             'contract', 'editorial_features 需要 narrative_tracking；基础模式可明确设 false。')
-    # v2's two outline policies: the volume outline (whole book or one volume at a time) and the
-    # chapter outline (one volume at a time, or ahead for every volume). `current` is the v1
-    # spelling of rolling and is still loadable.
     contract.update(outline_policies(contract))
     volumes = contract['volumes']
     seen, last = set(), 0
@@ -239,13 +225,12 @@ def chapter_policy(contract, volume, model=None):
 
 
 def validate_volume_outline(data, contract, world, selected=None, existing=None, missing_ids=None,
-                            state=None, strict=True):
+                            state=None):
     """Delegate the volume outline's mechanical checks to `drift` (single implementation)."""
-    return drift.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state,
-                                         strict=strict)
+    return drift.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state)
 
 
-def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0, strict=True):
+def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0):
     """Delegate the chapter outline's chain checks, then freeze the scenes it declares.
 
     `drift` owns the state chain; this entry point adds the one piece that needs the scene protocol
@@ -253,13 +238,12 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     pure drift core. Rows without scenes are bound too: the binding is what records that the row
     declared no dependency, which a revision later reads as "conservatively expand".
     """
-    rows = drift.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0,
-                                         strict=strict)
+    rows = drift.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0)
     entities = copy.deepcopy((state0 or {}).get('entities') or {})
     previous = {}
     for row in rows:
         if row.get('scenes'):
             craft.scenes(row, entities)
-        story_memory.bind(row, previous, identity_version=2, reading_version=1)
+        story_memory.bind(row, previous)
         previous[str(row['chapter'])] = row
     return rows

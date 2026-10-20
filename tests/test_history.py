@@ -1,5 +1,4 @@
 """Synthetic storage and context fixtures, never literary or complete-book acceptance."""
-import copy
 import sys
 import tempfile
 import unittest
@@ -100,7 +99,7 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(self.app.recall(task['id'], kind='entity', key='shen')['matches'], [])
         self.assertCode('recall', self.app.recall, task['id'], chapter=1)
 
-    def test_recent_query_reads_only_the_requested_page_and_one_lookahead(self):
+    def test_recent_and_sparse_queries_page_without_duplicates_or_extra_reads(self):
         self.populate(500)
         task = self.task()
         with patch.object(self.repo, 'memory_rows', wraps=self.repo.memory_rows) as reads:
@@ -111,7 +110,8 @@ class HistoryTests(unittest.TestCase):
         second = self.app.recall(task['id'], kind='topic', key='source', limit=2, before=496)
         self.assertEqual([r['chapter'] for r in second['matches']], [495, 494])
 
-    def test_sparse_pagination_keeps_all_matching_events_and_has_no_duplicate_chapters(self):
+        self.tearDown()
+        self.setUp()
         self.populate(8)
         for n in range(1, 9):
             row = self.repo.chapter('main', n)
@@ -138,9 +138,15 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(self.repo.history_snapshot('main'), original)
         self.assertCode('source', self.repo.read_document, preview['head'])
 
-    def test_supplemental_sources_are_frozen_even_after_append_and_branch_row_change(self):
+    def test_supplemental_sources_are_frozen_and_reads_are_open_from_the_start(self):
+        """v2 has no blind first read, so recall and the index are readable on the first dispatch,
+        and the sources a frozen task saw stay frozen through later appends and branch row changes."""
         self.populate(3)
         task = self.task()
+        self.assertEqual(self.app.recall(task['id'], chapter=1)['chapter'], 1)
+        self.assertIn('history_source', self.app.read(task['id'], 'history_source')['records'])
+        self.assertEqual([r['chapter'] for r in self.app.recall(task['id'], kind='entity', key='shen')['matches']],
+                         [3, 2, 1])
         expected = self.app.recall(task['id'], chapter=2)
         self.repo.db.execute('UPDATE chapters SET prose=? WHERE branch=? AND n=2', (self.repo.document('替换正文'), 'main'))
         with self.repo.transaction():
@@ -149,43 +155,6 @@ class HistoryTests(unittest.TestCase):
         self.assertCode('recall', self.app.recall, task['id'], chapter=4)
         self.assertEqual(self.app.recall(task['id'], kind='node', key='missing')['matches'], [])
 
-    def test_supplemental_reads_are_open_from_the_start_without_a_first_read_seal(self):
-        """v2 has no blind first read, so recall and the index are readable on the first dispatch.
-
-        The retired protocol sealed every supplemental read until a frozen first read was filed; the
-        seal went with the reviewer stages, and what is left is that a frozen task may only read its
-        own frozen sources.
-        """
-        self.populate(2)
-        task = self.task()
-        self.assertEqual(self.app.recall(task['id'], chapter=1)['chapter'], 1)
-        self.assertIn('historical_index', self.app.read(task['id'], 'historical_index')['records'])
-        self.assertEqual([r['chapter'] for r in self.app.recall(task['id'], kind='entity', key='shen')['matches']], [2, 1])
-
-    def test_old_frozen_catalog_and_event_index_remain_readable(self):
-        self.populate(3)
-        task = self.task()
-        snapshot = self.repo.read_document(task['input']['records']['history_source'])
-        pages = [p for _, p in self.repo.history_pages(snapshot)]
-        work = copy.deepcopy(task['input'])
-        del work['records']['history_source']
-        work['records']['historical_index'] = self.repo.document([{'chapter': p['n'], 'prose_hash': p['prose'], 'summary': p['summary']} for p in pages])
-        work['records']['memory_index'] = self.repo.document([r for p in pages for r in self.repo.memory_rows(p)])
-        self.repo.cancel_pending('模拟旧在途协议')
-        legacy = self.repo.add_task(work)
-        self.assertEqual(self.app.recall(legacy['id'], chapter=2)['chapter'], 2)
-        self.assertEqual([r['chapter'] for r in self.app.recall(legacy['id'], kind='entity', key='shen', limit=2)['matches']], [3, 2])
-
-    def test_explicit_full_index_read_remains_available_without_entering_default_input(self):
-        self.populate(3)
-        task = self.task()
-        material = self.app.read(task['id'])
-        self.assertNotIn('history_source', material['records'])
-        self.assertIn('history_source', material['on_demand'])
-        for name in ('historical_index', 'memory_index'):
-            value = self.app.read(task['id'], name)['records'][name]
-            self.assertEqual(value['hash'], digest(value['value']))
-            self.assertEqual([r['chapter'] for r in value['value']], [1, 2, 3])
 
     def test_recall_output_is_observed_once_and_rejected_reads_are_not_counted(self):
         self.populate(2)
@@ -238,7 +207,7 @@ class HookContextTests(unittest.TestCase):
         event = {'op': 'hook', 'id': 'promise', 'status': 'open', 'before': None, 'due': 180,
                  'text': '核查来源', 'subjects': ['shen'], 'topics': ['source'],
                  'evidence': {'chapter': 1, 'quote': prose}}
-        event = facts.prepare_hook_links([event], True)[0]
+        event = facts.prepare_hook_links([event])[0]
         after, normalized = facts.settle(state, [event], prose, 1)
         self.assertEqual(after['hooks']['promise']['subjects'], ['shen'])
         self.assertEqual(facts.settle(state, normalized, prose, 1)[0], after)
@@ -250,27 +219,6 @@ class HookContextTests(unittest.TestCase):
             facts.settle(after, [{**event, 'before': 'open', 'topics': [], 'evidence': {'chapter': 2, 'quote': prose}}], prose, 2)
         changed = {**event, 'before': 'open', 'topics': [], 'reason': '正文交代了核查话题的变化。', 'evidence': {'chapter': 2, 'quote': prose}}
         self.assertEqual(facts.settle(after, [changed], prose, 2)[0]['hooks']['promise']['topics'], [])
-
-    def test_legacy_hooks_replay_without_new_fields_and_due_check_is_preserved(self):
-        state = workflow.new_book(tracked_contract(200))['state']
-        event = {'op': 'hook', 'id': 'old', 'status': 'open', 'before': None, 'due': 2,
-                 'text': '旧承诺', 'evidence': {'chapter': 1, 'quote': '工程承诺'}}
-        after, _ = facts.settle(state, [event], '工程承诺', 1)
-        self.assertNotIn('subjects', after['hooks']['old'])
-        with self.assertRaises(Error) as caught:
-            facts.settle(after, [], '工程后文', 2)
-        self.assertEqual(caught.exception.code, 'hook_due')
-
-    def test_old_uninterpreted_hook_fields_do_not_change_historical_projection(self):
-        state = workflow.new_book(tracked_contract(200))['state']
-        event = {'op': 'hook', 'id': 'old', 'status': 'open', 'before': None, 'due': 180,
-                 'text': '旧承诺', 'subjects': ['shen'], 'topics': '过去未解释的扩展值',
-                 'evidence': {'chapter': 1, 'quote': '工程承诺'}}
-        legacy = facts.prepare_hook_links([event], False)
-        self.assertEqual(legacy, [event])
-        after, _ = facts.settle(state, legacy, '工程承诺', 1)
-        self.assertNotIn('subjects', after['hooks']['old'])
-        self.assertNotIn('topics', after['hooks']['old'])
 
     def test_dispatch_baseline_uses_frozen_selected_state(self):
         with tempfile.TemporaryDirectory() as temporary:

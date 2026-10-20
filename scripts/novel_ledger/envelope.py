@@ -9,13 +9,10 @@ from __future__ import annotations
 
 from .contracts import require
 
-# Fields the freeze compiler always produces. A worker's access token and the dispatch brief are
-# added by other owners, so they are declared optional rather than required. `prose` remains declared
-# because the compiler still emits it: no v2 stage is a blind review, so it is always empty, but the
-# key keeps the envelope rejecting an undeclared field instead of silently accepting one.
+# Fields the freeze compiler always produces. The brief is optional.
 WORK_FIELDS = ('schema', 'stage', 'chapter', 'scope', 'first', 'last', 'payload', 'branch',
                'revision', 'records', 'required', 'narrative_tracking',
-               'capabilities', 'policy', 'prose')
+               'capabilities', 'policy')
 WORK_OPTIONAL = ('brief',)
 # `payload` is the one work field whose contents a stage decides on, so its keys are declared as
 # well. Without this, "an undeclared field is rejected" held for the envelope but not for the
@@ -42,7 +39,7 @@ WORK_PAYLOAD_FIELDS = (
 # Fields the local delivery adapter renders for one dispatch. Guides are attached
 # per stage, so a stage without reference documents legitimately omits them.
 TASK_FIELDS = ('schema', 'task_id', 'input_hash', 'stage', 'chapter', 'scope', 'delivery_phase',
-               'prose_files', 'task_path', 'result_path', 'project_path', 'host_log_path',
+               'task_path', 'result_path', 'project_path', 'host_log_path',
                'process', 'requires_new_worker', 'review_session', 'version', 'claim', 'baseline',
                'commands', 'stages', 'note', 'redispatch_count', 'material_bytes', 'identity_path')
 # A dispatch carries the formal material; the locked first-read form is gone with the review

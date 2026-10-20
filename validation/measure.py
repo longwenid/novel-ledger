@@ -44,7 +44,7 @@ from support import (chapter_outline_fixture, contract, drive, response, seeded_
 def tracked_contract(chapters):
     """A contract with narrative tracking on; kept local so this tool never imports test modules."""
     raw = contract(chapters)
-    raw.update(narrative_tracking=True, review_chunk=2, review_interval=3, planning_window=3)
+    raw.update(narrative_tracking=True)
     return raw
 
 

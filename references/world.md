@@ -10,7 +10,7 @@
 
 模型包含 premise/story_capacity/selection_hash 和完整记录数组。领域及记录字段以 `world.SECTIONS` 和当前任务模板为准；**必填集合由 `world.required_sections(tier, choices)` 合并档位基础域与门中声明后决定（微型档的基础域是规则、社会、日常、人物、隐秘与机制），最终列表之外的领域保留为空数组，不要为凑数写进来**——世界被之后每一次派工读取，它的规模是持续成本而不是一次性成本。
 
-**v5 起还要叠加门里声明的要求**：`world.required_sections(tier, choices)` = 档位基础域 ∪ `world.declared_sections(choices)`——`world` 门声明了 `resource` 就把 `economy` 加进来（包括原本不要求该域的 t0/t1/t2），声明了 `tiers` 就把 `powers` 加进来，`ladder` 里有 `一界`/`星海`/`诸天` 级别的 `scope` 就把 `cosmology` 加进来。简报与提交校验共用这个集合，已声明的硬通货不会再被要求留空。**t3–t5 的档位基础域是 `LEGACY_SECTIONS`（原有 10 域），不含新增两域**：在跑项目的世界没有 `powers`/`cosmology` 键，拿全领域表去要求会让它们的一致性复检直接失败；新领域只在门里声明时才要求。v6 声明 `architecture` 时，还要求 geography/history/factions/rules/mysteries 承接五项架构；不强制增加宇宙位面。mechanisms 按所选机制方向为空或实写。
+`world.required_sections(tier, choices)` 合并档位基础域与已声明内容：`resource` 要求 `economy`，`tiers` 要求 `powers`，格局包含 `一界`/`星海`/`诸天` 要求 `cosmology`。t3–t5 的基础域由 `BASE_SECTIONS` 声明；世界架构还要求 geography/history/factions/rules/mysteries 承接五项决定。简报与校验共用这个集合，不强制所有项目增加宇宙位面。模型始终包含全部领域键，不使用的领域显式给空数组；mechanisms 按所选机制方向为空或实写。
 
 | 领域 | 说明 |
 |---|---|
@@ -29,7 +29,7 @@
 
 ### 可选深字段
 
-`world.OPTIONAL_FIELDS` 给旧领域加了可选深字段（**写了就必须非空文本，不要求写**）：
+`world.OPTIONAL_FIELDS` 声明可选深字段（**写了就必须非空文本，不要求写**）：
 
 | 领域 | 可选深字段 |
 |---|---|
@@ -58,7 +58,7 @@
 
 ## 三条逐字绑定
 
-门里选完不是结束：`world`/`ladder` 门声明的东西必须在世界模型里有**同名记录**，提交时机械核对（错误码沿用 `world_alignment`，details 写清 rule/expect/got）。只在 `choices` 声明了才检查，旧开书（v1–v4）行为不变：
+门里选完不是结束：`world`/`ladder` 门声明的东西必须在世界模型里有**同名记录**，提交时机械核对（错误码沿用 `world_alignment`，details 写清 rule/expect/got）。按 `choices` 中的声明逐项检查；自备约定按实际声明核验：
 
 | 门里声明 | 世界模型里必须有 |
 |---|---|

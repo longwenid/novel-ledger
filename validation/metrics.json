@@ -1,10 +1,10 @@
 {
   "metadata": {
     "schema": "novel-ledger.measurements/1",
-    "generated_at": "2026-10-19T12:23:04+00:00",
-    "source_commit": "30a56e131a755b093caef5df97abaf09c3a65117",
-    "source_sha256": "6342e7a9e1b9d07664c277d576947676d0bb85b3bd738a85ea07c6cacc2b146a",
-    "source_files": 113
+    "generated_at": "2026-10-20T00:45:44+00:00",
+    "source_commit": "2d3b3ff144a6cc39336be1766768b41b3f805582",
+    "source_sha256": "0ba633d4a9a2bb60d72f4c89a683193ad5b856dcad2b365e633a6f7f48e62814",
+    "source_files": 105
   },
   "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
   "pipeline": "five steps: opening gates / world_model / volume_outline / chapter_outline / write",
@@ -12,7 +12,7 @@
     "status": "ok",
     "value": {
       "modules": 40,
-      "runtime_lines_including_cli": 12171,
+      "runtime_lines_including_cli": 11670,
       "cycles_including_deferred_imports": [],
       "dependency_edges": 137
     }
@@ -241,8 +241,8 @@
         ],
         "required_records": 4,
         "declared_records": 9,
-        "required_bytes": 5045,
-        "envelope_bytes": 7093
+        "required_bytes": 4966,
+        "envelope_bytes": 7046
       },
       "chapter_outline": {
         "required_names": [
@@ -256,8 +256,8 @@
         ],
         "required_records": 7,
         "declared_records": 11,
-        "required_bytes": 14303,
-        "envelope_bytes": 6740
+        "required_bytes": 14224,
+        "envelope_bytes": 6693
       },
       "write": {
         "without_future_volume": {
@@ -275,8 +275,8 @@
           ],
           "required_records": 10,
           "declared_records": 15,
-          "required_bytes": 16462,
-          "envelope_bytes": 18145
+          "required_bytes": 16383,
+          "envelope_bytes": 18098
         },
         "with_future_volume": {
           "required_names": [
@@ -293,8 +293,8 @@
           ],
           "required_records": 10,
           "declared_records": 15,
-          "required_bytes": 16462,
-          "envelope_bytes": 18145
+          "required_bytes": 16383,
+          "envelope_bytes": 18098
         },
         "growth_bytes": 0,
         "bounded_selection": true
@@ -323,8 +323,8 @@
         "state_record_bytes": 609,
         "volume_outline_bytes": 7891,
         "complete_volume_outline_bytes": 10504,
-        "envelope_bytes": 17893,
-        "required_bytes": 15778
+        "envelope_bytes": 17846,
+        "required_bytes": 15700
       },
       {
         "volume_chapters": 100,
@@ -336,8 +336,8 @@
         "state_record_bytes": 609,
         "volume_outline_bytes": 4016,
         "complete_volume_outline_bytes": 18473,
-        "envelope_bytes": 14018,
-        "required_bytes": 11910
+        "envelope_bytes": 13971,
+        "required_bytes": 11832
       },
       {
         "volume_chapters": 500,
@@ -349,8 +349,8 @@
         "state_record_bytes": 609,
         "volume_outline_bytes": 1283,
         "complete_volume_outline_bytes": 76540,
-        "envelope_bytes": 11285,
-        "required_bytes": 9178
+        "envelope_bytes": 11238,
+        "required_bytes": 9100
       }
     ]
   },
@@ -360,19 +360,19 @@
       {
         "interpretations": 20,
         "selected_interpretations": 3,
-        "required_record_bytes": 20125,
+        "required_record_bytes": 20029,
         "complete_optional_source_preserved": true
       },
       {
         "interpretations": 100,
         "selected_interpretations": 3,
-        "required_record_bytes": 20125,
+        "required_record_bytes": 20029,
         "complete_optional_source_preserved": true
       },
       {
         "interpretations": 500,
         "selected_interpretations": 3,
-        "required_record_bytes": 20125,
+        "required_record_bytes": 20029,
         "complete_optional_source_preserved": true
       }
     ]
@@ -385,13 +385,13 @@
         "synthetic_prose_han_at_least": 60000,
         "history_source_bytes": 197,
         "previous_full_catalog_and_event_index_bytes": 5846,
-        "first_build_ms": 0.208,
-        "six_repeated_snapshot_ms": 0.273,
+        "first_build_ms": 0.218,
+        "six_repeated_snapshot_ms": 0.249,
         "six_repeated_snapshot_document_reads": 6,
         "repeated_snapshot_new_documents": 0,
         "recent_five_match_event_pages_read": 6,
         "missing_match_event_pages_read": 20,
-        "missing_match_ms": 1.065,
+        "missing_match_ms": 1.041,
         "oldest_prose_complete": true,
         "observed_read_chars": 4237
       },
@@ -400,13 +400,13 @@
         "synthetic_prose_han_at_least": 300000,
         "history_source_bytes": 198,
         "previous_full_catalog_and_event_index_bytes": 29370,
-        "first_build_ms": 0.972,
-        "six_repeated_snapshot_ms": 0.25,
+        "first_build_ms": 0.91,
+        "six_repeated_snapshot_ms": 0.232,
         "six_repeated_snapshot_document_reads": 6,
         "repeated_snapshot_new_documents": 0,
         "recent_five_match_event_pages_read": 6,
         "missing_match_event_pages_read": 100,
-        "missing_match_ms": 3.37,
+        "missing_match_ms": 4.233,
         "oldest_prose_complete": true,
         "observed_read_chars": 4240
       },
@@ -415,13 +415,13 @@
         "synthetic_prose_han_at_least": 1500000,
         "history_source_bytes": 198,
         "previous_full_catalog_and_event_index_bytes": 148570,
-        "first_build_ms": 4.874,
-        "six_repeated_snapshot_ms": 0.278,
+        "first_build_ms": 4.593,
+        "six_repeated_snapshot_ms": 0.282,
         "six_repeated_snapshot_document_reads": 6,
         "repeated_snapshot_new_documents": 0,
         "recent_five_match_event_pages_read": 6,
         "missing_match_event_pages_read": 500,
-        "missing_match_ms": 14.92,
+        "missing_match_ms": 14.625,
         "oldest_prose_complete": true,
         "observed_read_chars": 4253
       }

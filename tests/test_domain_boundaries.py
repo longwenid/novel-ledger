@@ -239,8 +239,7 @@ class DomainBoundaryTests(unittest.TestCase):
             envelope.validate_identity(dict(identity, credential='forge-me'))
         with self.assertRaises(Error):
             envelope.validate_identity({k: v for k, v in identity.items() if k != 'worker_env'})
-
-    def test_unknown_task_stage_is_rejected_instead_of_degrading(self):
+        # An unknown stage is refused for the same reason: never degrade into a guessed shape.
         from novel_ledger import stages
         with self.assertRaises(Error):
             stages.require_stage('not_a_stage')
@@ -248,36 +247,23 @@ class DomainBoundaryTests(unittest.TestCase):
             result_templates.template('not_a_stage', 1, {})
         self.assertEqual(stages.require_stage('write'), 'write')
 
-    def test_every_version_renders_a_rule_and_a_direction_for_each_of_its_gates(self):
-        """Every gate set still in flight must hand its gates a deliverable rule and a direction.
+    def test_every_gate_renders_a_rule_and_a_direction(self):
+        """The one gate set in force hands each gate a deliverable rule and a direction.
 
-        `OPENING_DIRECTION_GATES` is a flat table keyed by gate id, not partitioned by version: when
-        a newer gate set adds a gate the table becomes a superset of the older sets that share its
-        gate names (the direction text belongs to the redesign; opening/1 and /2 predate it and keep
-        their own briefs). `VALUE_RULES` and `GATE_NOTES` are partitioned by version, and a version
-        whose rule block was folded into a newer one must not KeyError when a project opened under it
-        asks (opening/1 has no per-gate notes, which is normal: that protocol never carried them).
+        `OPENING_DIRECTION_GATES` is a flat table keyed by gate id; `VALUE_RULES` and `GATE_NOTES`
+        are single current tables, so a gate added without its rule or note fails here instead of
+        surfacing as an empty brief in a dispatch.
         """
         from novel_ledger import creation
         from novel_ledger.contracts import OPENING_DIRECTION_GATES, OPENING_VERSION
-        for version in (1, 2, 3, 4, 5, OPENING_VERSION):
-            with self.subTest(version=version):
-                self.assertIn(version, creation.VALUE_RULES, '每版必须有规则块')
-                gates = creation.gate_ids(version)
-                for gate in gates:
-                    self.assertTrue(creation.value_rules(version, gate).strip())
-                notes = creation.GATE_NOTES.get(version) or {}
-                self.assertLessEqual(set(notes), set(gates), '门内说明只能属于本版已有的门')
-                for gate, note in notes.items():
-                    self.assertTrue(note.strip())
-        # The direction table was introduced with the male-channel redesign (v3) and grew with each
-        # later gate set; the two earliest protocols keep their own briefs instead.
-        for version in (3, 4, OPENING_VERSION):
-            with self.subTest(direction_for=version):
-                self.assertLessEqual(set(creation.gate_ids(version)), set(OPENING_DIRECTION_GATES),
-                                     '重设计后的每一门必须有方向口径')
-        self.assertEqual(set(creation.gate_ids(OPENING_VERSION)), set(OPENING_DIRECTION_GATES),
-                         '当前版本的门与方向表必须一一对应')
+        gates = creation.gate_ids(OPENING_VERSION)
+        for gate in gates:
+            with self.subTest(gate=gate):
+                self.assertTrue(creation.value_rules(OPENING_VERSION, gate).strip())
+                note = creation.GATE_NOTES.get(gate)
+                self.assertTrue(not note or note.strip(), '门内说明若存在必须是非空文本')
+        self.assertLessEqual(set(gates), set(OPENING_DIRECTION_GATES), '每一门必须有方向口径')
+        self.assertEqual(set(gates), set(OPENING_DIRECTION_GATES), '当前版本的门与方向表必须一一对应')
 
     def test_the_current_gate_set_owns_every_alignment_field_it_claims(self):
         """The male-channel redesign is a gate set, so its ownership must close without a project.
@@ -289,28 +275,27 @@ class DomainBoundaryTests(unittest.TestCase):
         from novel_ledger import creation
         from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS,
                                             OPENING_VERSION, alignment_for, opening_source)
-        for version, size in ((3, 10), (4, 11), (OPENING_VERSION, 13)):
-            gates = [ident for ident, _title in creation.GATE_SETS[version]]
-            with self.subTest(version=version):
-                self.assertEqual(len(gates), size)
-                self.assertEqual(creation.SYSTEM_GATES[version], ('scale',))
-                for gate in gates:
-                    self.assertTrue(creation.value_fields(gate, version),
-                                    'a gate must own at least one field')
-                owned = {row['key'] for row in CONTRACT_FIELDS
-                         if row.get('since', 1) <= version and opening_source(row, version)
-                         and row['key'] not in DERIVED_FIELDS}
-                derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}
-                self.assertEqual(owned | derived, set(alignment_for(version)))
-                self.assertEqual(owned & derived, set())
+        version = OPENING_VERSION
+        gates = [ident for ident, _title in creation.GATES]
+        self.assertEqual(len(gates), 13)
+        self.assertEqual(creation.SYSTEM_GATES[version], ('scale',))
+        for gate in gates:
+            self.assertTrue(creation.value_fields(gate, version),
+                            'a gate must own at least one field')
+        owned = {row['key'] for row in CONTRACT_FIELDS
+                 if opening_source(row, version)
+                 and row['key'] not in DERIVED_FIELDS}
+        derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}
+        self.assertEqual(owned | derived, set(alignment_for(version)))
+        self.assertEqual(owned & derived, set())
         sources = {row['key'] for row in CONTRACT_FIELDS
-                   if row.get('since', 1) <= OPENING_VERSION and opening_source(row, OPENING_VERSION)}
+                   if opening_source(row, OPENING_VERSION)}
         for key in ('protagonist_origin', 'core_premise', 'world_tiers', 'world_resource',
                     'world_scale', 'world_ladder', 'promise_anchor'):
             self.assertIn(key, sources)
         # The v5 order: the core idea right after the genre, the origin behind it, and the world
         # structure before the scale ladder that steps on it.
-        gates = [ident for ident, _title in creation.GATE_SETS[OPENING_VERSION]]
+        gates = [ident for ident, _title in creation.GATES]
         self.assertEqual(gates[:4], ['genre', 'premise', 'voice', 'scale'])
         self.assertEqual(gates.index('world') + 1, gates.index('ladder'))
         self.assertEqual(creation.value_fields('premise', OPENING_VERSION),
@@ -321,7 +306,7 @@ class DomainBoundaryTests(unittest.TestCase):
 
         A tier's floor is the world its line walks through. The two structural sections are required
         only when the opening declared something that lives there (`world.tiers`/`world.resource`/
-        a grand scale on the ladder), which is what keeps a legacy ten-section world valid.
+        a grand scale on the ladder); imported settings only require what they declare.
         """
         from novel_ledger import world
         self.assertEqual(len(world.ALL_SECTIONS), 12)
@@ -335,49 +320,35 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertIn('powers', sections, 'declared tiers must be mirrored in the world')
         self.assertIn('cosmology', sections, 'a grand scale needs the cosmology section')
         self.assertLessEqual(set(world.required_sections('t3')), set(sections))
-        # A legacy choice set declares neither, and its floor stays the ten original domains.
+        # An import without extra declarations uses only its tier floor.
         self.assertEqual(tuple(world.declared_sections({})), ())
         self.assertEqual(set(world.required_sections('t3', {})),
                          set(world.required_sections('t3')))
 
-    def test_every_protocol_derives_its_alignment_fields_from_gates_it_has(self):
-        """A gate set that re-sources or renames a gate must still resolve every alignment field.
+    def test_the_gate_set_derives_every_alignment_field_from_gates_it_has(self):
+        """A gate that re-sources a field must still resolve it, and own the keys alignment reads.
 
-        `opening_source` inherits forward from the newest declared mapping at or below the asked
-        version, so adding a gate set does not silently fall back to a gate that no longer exists.
-        The value keys the alignment reads must also be owned by that gate, or `_v2_groups` would ask
-        a gate for a key its own validator refuses. opening/1 predates this ownership table: its
-        contract is projected by hand (`_v1_groups`, with `title` authored by the author), so its only
-        permitted mismatch is that documented authored field.
+        `opening_source` picks the declared mapping, so a field may not silently fall back to a gate
+        that no longer exists; and the value keys the alignment reads must be owned by that gate, or
+        `_field_groups` would ask a gate for a key its own validator refuses.
         """
         from novel_ledger import creation
         from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS, alignment_for,
                                             opening_source)
-        for version in (2, 3, 4, 5, 6):
-            for row in CONTRACT_FIELDS:
-                if row.get('since', 1) > version or row['key'] in DERIVED_FIELDS \
-                        or row['key'] not in alignment_for(version):
-                    continue
-                source = opening_source(row, version)
-                if not source:
-                    continue
-                gate, key = source
-                with self.subTest(field=row['key'], version=version):
-                    self.assertIn(gate, creation.gate_ids(version),
-                                  'a version may only source fields from gates it actually has')
-                    reads = set(row.get('shape') or ()) if key is None else {key}
-                    self.assertTrue(reads <= set(creation.value_fields(gate, version)),
-                                    'the gate must own the keys alignment reads: %s' % sorted(reads))
-        # v1's hand projection: the only *sourced* field its table cannot resolve is the authored title.
-        unresolvable = []
+        version = creation.OPENING_VERSION
         for row in CONTRACT_FIELDS:
-            if row.get('since', 1) > 1 or row['key'] not in alignment_for(1) \
-                    or row['key'] in DERIVED_FIELDS:
+            if row['key'] in DERIVED_FIELDS                     or row['key'] not in alignment_for(version):
                 continue
-            source = opening_source(row, 1)
-            if source and source[0] not in creation.gate_ids(1):
-                unresolvable.append(row['key'])
-        self.assertEqual(unresolvable, ['title'])
+            source = opening_source(row, version)
+            if not source:
+                continue
+            gate, key = source
+            with self.subTest(field=row['key']):
+                self.assertIn(gate, creation.gate_ids(version),
+                              'a gate set may only source fields from gates it actually has')
+                reads = set(row.get('shape') or ()) if key is None else {key}
+                self.assertTrue(reads <= set(creation.value_fields(gate, version)),
+                                'the gate must own the keys alignment reads: %s' % sorted(reads))
 
     def test_required_material_never_charges_twice_for_one_fact(self):
         """The thinning pass is a declared relationship, not an accident of two similar payloads.
@@ -422,18 +393,18 @@ class DomainBoundaryTests(unittest.TestCase):
     def test_frozen_capability_values_are_checked_instead_of_degrading(self):
         """A task frozen with an unknown protocol version must fail, not read as an older project."""
         from novel_ledger import contracts
-        task = {'capabilities': {'reading_dependencies': contracts.READING_DEPENDENCIES_CAPABILITY}}
-        self.assertEqual(contracts.capabilities_for(task)['reading_dependencies'],
-                         contracts.READING_DEPENDENCIES_CAPABILITY)
-        # A dispatch that predates the capability map declared nothing, and that is not an error.
-        self.assertEqual(contracts.capabilities_for({'capabilities': {}}), {})
+        current = {'understanding': contracts.UNDERSTANDING_CAPABILITY,
+                   'scene_identity': contracts.SCENE_IDENTITY_CAPABILITY,
+                   'reading_dependencies': contracts.READING_DEPENDENCIES_CAPABILITY}
+        self.assertEqual(contracts.capabilities_for({'capabilities': current}), current)
+        for invalid in (None, {}, [], {**current, 'scene_identity': 'scene-identity/1'},
+                        {key: value for key, value in current.items() if key != 'understanding'}):
+            with self.subTest(capabilities=invalid):
+                self.assertCode('capability', contracts.capabilities_for, {'capabilities': invalid})
         with self.assertRaises(Error) as caught:
-            contracts.capabilities_for({'capabilities': {'scene_identity': 'scene-idenity/2'}})
+            contracts.capabilities_for({'capabilities': {**current, 'scene_identity': 'scene-idenity/2'}})
         self.assertEqual(caught.exception.code, 'capability')
         self.assertEqual(caught.exception.details['unknown'], ['scene_identity=scene-idenity/2'])
-        # Every version still in flight stays readable, so the guard cannot lock out frozen work.
-        contracts.capabilities_for({'capabilities': {'scene_identity': contracts.SCENE_IDENTITY_V1}})
-        contracts.capabilities_for({'capabilities': {'scene_identity': contracts.SCENE_IDENTITY_CAPABILITY}})
         # The producer builds the same strings the consumer compares against.
         source = (ROOT / 'scripts' / 'novel_ledger' / 'context.py').read_text(encoding='utf-8')
         for literal in ("'editorial/1'", "'understanding/1'", "'scene-identity/2'", "'reading-dependencies/1'",
@@ -461,15 +432,12 @@ class DomainBoundaryTests(unittest.TestCase):
 class HookDeclarationTests(unittest.TestCase):
     """The promise ledger's field tables are one declaration, read by templates and checks alike."""
 
-    def test_the_hook_fields_are_declared_in_the_drift_tables(self):
+    def test_the_hook_fields_are_declared_and_a_missing_array_is_a_shape_error(self):
         from novel_ledger import drift
         self.assertIn('hooks', drift.VOLUME_FIELDS)
         self.assertIn('hooks', drift.CHAPTER_FIELDS)
         self.assertIn('hook', drift.ITEM_KINDS)
         self.assertTrue(drift.HOOK_ACTIONS)
-
-    def test_a_volume_outline_without_the_hook_array_is_a_shape_error(self):
-        from novel_ledger import drift
         book = seeded_book(contract(chapters=2, volumes=1))
         rows = volume_rows(book, ['v1'])
         rows[0].pop('hooks')
@@ -527,15 +495,13 @@ class WebnovelSettingMethodTests(unittest.TestCase):
     def test_the_world_and_edge_gate_notes_state_their_constraints(self):
         from novel_ledger import creation
         from novel_ledger.contracts import OPENING_DIRECTION_GATES
-        note = creation.gate_note(3, 'world')
+        note = creation.gate_note(creation.OPENING_VERSION, 'world')
         self.assertTrue(note.strip())
-        for word in ('等级', '资源', '三章'):
+        for word in ('architecture', '资源', '切面'):
             self.assertIn(word, note)
         for word in ('历史', '文明', '矛盾', '资源'):
             self.assertIn(word, OPENING_DIRECTION_GATES['world'])
         self.assertIn('供料', OPENING_DIRECTION_GATES['edge'])
-        # The world gate note belongs to opening/3; the earlier gate set never carried one.
-        self.assertEqual(creation.gate_note(2, 'world'), '')
 
     def test_the_legacy_literary_labels_are_gone(self):
         labels = {label for label, _point, _structure in self.lenses()}

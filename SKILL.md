@@ -18,7 +18,7 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 
 | 当前任务 | 首先读取 | 何时补读 |
 |---|---|---|
-| 从零开书、导入已有设定 | [逐门开书](references/opening.md) | 构思或换组读 [创意工具箱](references/hatch.md)；世界任务读 [世界模型](references/world.md)。已有项目按原版本门序继续。 |
+| 从零开书、导入已有设定 | [逐门开书](references/opening.md) | 构思或换组读 [创意工具箱](references/hatch.md)；世界任务读 [世界模型](references/world.md)。旧开书协议读取即拒。 |
 | 续写、恢复、暂停、改变作者约定 | [运行与恢复](references/runtime.md) | 沿当前状态和原授权接续，不重新创建项目或重问已定事项。 |
 | 写卷纲、写章纲、执笔或返修 | [创作与自比](references/craft.md) | 字段、状态链、伏笔和文风核算读 [叙事推进](references/narrative.md)。 |
 | 历史修订、影响分析、候选采纳或撤销 | [修订影响分析](references/runtime.md#修订影响分析) | 阅读关联与理解版本读 [叙事工作台](references/workbench.md)；补丁与人物/场景字段读 [编辑能力](references/editorial.md)。 |
@@ -58,4 +58,4 @@ Worker 提交后结束（`worker_boundary=finished`），不自行 advance。命
 
 交付实际完成范围及文件绝对路径；开书范围以实际交付的卷纲为准——`scope=rolling` 时只交进入中的那一卷，不能称全书卷纲。`ready_to_complete` 仍须 `complete` 验收，再从准确快照 `deliver`；导出失败只恢复交付。
 
-在授权目标完成、作者暂停或无法自行解决的阻碍处停止，保留任务、候选和失败原因。已有明确授权与准确版本决定时直接执行，不重复确认。未知来源数据库及旧版本不自动转换；已有项目的能力与版本边界见运行指南和 [已有项目](references/workbench.md#已有项目)。
+在授权目标完成、作者暂停或无法自行解决的阻碍处停止，保留任务、候选和失败原因。已有明确授权与准确版本决定时直接执行，不重复确认。未知来源数据库及旧版本不自动转换；项目能力与协议边界见运行指南和 [项目边界](references/workbench.md#项目边界)。

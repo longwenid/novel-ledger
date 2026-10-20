@@ -126,7 +126,7 @@ target_reached 表示授权章节目标完成；ready_to_complete 仍须 complet
 
 **卷末不是审查阶段**：卷末闭合核对卷纲的结构化资源/位置/知情/人物终值、主线时钟 `clock.to` 与必要伏笔；自然语言 `exit_state` 只作说明，不宣称语义已被机械证明，不再有卷末范围审与根问题裁决。完本仍须 `complete` 验收：章数、每章篇幅区间、required 节点与线路解清、首章认可；之后执行 `deliver`，得到 book.md/book.html/delivery.json；交付失败重试该快照的 deliver，不重新写书。`usage` 查看实际记录字符，宿主 token 用独立 observe.py 导入观测，不从字符估算。
 
-工作台新能力与旧 v3 项目的显式启用见 [叙事工作台](workbench.md)。阅读变化在新流程里不再派独立重读任务：受影响的章纲由 `chapter_outline`（payload 带 `repair=True` 与偏差清单）重排，正文按实际需要重写或原样携带。
+工作台随项目初始化，协议与边界见 [叙事工作台](workbench.md)。阅读变化在新流程里不再派独立重读任务：受影响的章纲由 `chapter_outline`（payload 带 `repair=True` 与偏差清单）重排，正文按实际需要重写或原样携带。
 
 ## 修订影响分析
 
@@ -152,7 +152,7 @@ kind 使用事实投影坐标（如 facts/knowledge/resources/relations/placemen
 
 历史修订由作者明确请求发起。程序从最早 `target_chapter` 开始，先计算事实与阅读影响，按原样携带、局部修改或按重排章纲重写安排后续处理；请求区间不自动扩到范围末尾。表达或阅读修订保持事实投影，语义依赖未知时仍保守扩大，不能为缩小范围谎报 expression。
 
-程序把本次请求与当前允许范围比较（边界来自 `editorial.revision_policy`）：自动回改限于**最近 limit 章**（`limit = contract.planning_window`，缺省 `REVISION_LIMIT_DEFAULT`；起章下限 `max(1, 末章-limit+1)`），单次重写章数超过 limit 记 `rewrite_limit`，修订区间与任一**已写满的整卷**（`end <= 末章`）相交记 `closed_volume`。超界时本次请求正常保存，原分支、正文和章节返修额度保持；完整修复方案保存在 execution.revision_directive，等待作者按准确 plan_hash 授权。
+程序把本次请求与当前允许范围比较（边界来自 `editorial.revision_policy`）：自动回改限于**最近 limit 章**（`limit = contract.revision_limit`，缺省 `DEFAULTS['revision_limit']`；起章下限 `max(1, 末章-limit+1)`），单次重写章数超过 limit 记 `rewrite_limit`，修订区间与任一**已写满的整卷**（`end <= 末章`）相交记 `closed_volume`。超界时本次请求正常保存，原分支、正文和章节返修额度保持；完整修复方案保存在 execution.revision_directive，等待作者按准确 plan_hash 授权。
 
 advance 返回 revision_blocked 时，顶层 proposal 为摘要，并将完整方案写到 proposal.plan_path；status 对应字段是 revision_proposal，无阻断方案时为 null。status 只提供路径，不保证文件已经生成；文件缺失时由 advance --compact 重建。两处摘要字段相同：
 

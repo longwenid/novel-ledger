@@ -2,7 +2,7 @@
 
 长篇小说的写作流程与事实账本：保存作者决定、设计、正文和事实状态，支持连续创作、暂停恢复与历史修订。
 
-运行仅依赖 Python 3.9+ 标准库；模型调用由宿主提供。当前 CLI 版本为 `2.0.0`，数据库为 `novel-ledger/3`，兼容边界见 [协议](references/protocol.md#适用范围与字段来源)。
+运行仅依赖 Python 3.9+ 标准库；模型调用由宿主提供。当前 CLI 版本为 `2.0.0`，数据库为 `novel-ledger/4`，兼容边界见 [协议](references/protocol.md#适用范围与字段来源)。
 
 入口：[SKILL.md](SKILL.md) 提供任务路由与执行边界；[运行指南](references/runtime.md) 提供命令动作与恢复方法；[架构](references/architecture.md) 维护模块职责；[返工与成本](references/rework.md) 说明工程原则。
 
@@ -164,7 +164,7 @@ python scripts/novel.py --project "$P" run --through 3 --source '作者授权先
 
 章节、卷纲边界与卷末都继续循环；修订就绪按授权 `promote` 后接续，完本依次 `complete`、`deliver`。首章认可和开书选择仍按准确版本保存作者决定。`--compact` 只精简返回主干的派工信息，磁盘 `task.json` 与冻结材料保持完整；`status --tasks` 列出全部派工任务的生命周期视图。完整动作分支见 [运行与恢复](references/runtime.md)；`host-step/host-loop` 保留为可选子进程适配器。
 
-历史修订由作者明确要求发起：先分析实际影响，局部修改后携带无影响原文，语义变化沿依赖传播，受影响的章由章纲重排后重写。自动允许范围之外的请求保存完整方案并返回 `revision_blocked`，等待作者对准确 `plan_hash` 的明确认可。边界由 `editorial.revision_policy` 决定：自动回改限于最近 `limit` 章（`limit = contract.planning_window`，缺省 `REVISION_LIMIT_DEFAULT`），单次重写章数超过 limit 记 `rewrite_limit`，与已写满的整卷相交记 `closed_volume`。详见运行指南。
+历史修订由作者明确要求发起：先分析实际影响，局部修改后携带无影响原文，语义变化沿依赖传播，受影响的章由章纲重排后重写。自动允许范围之外的请求保存完整方案并返回 `revision_blocked`，等待作者对准确 `plan_hash` 的明确认可。边界由 `editorial.revision_policy` 决定：自动回改限于最近 `limit` 章（`limit = contract.revision_limit`，缺省 `DEFAULTS['revision_limit']`），单次重写章数超过 limit 记 `rewrite_limit`，与已写满的整卷相交记 `closed_volume`。详见运行指南。
 
 ---
 
@@ -234,13 +234,13 @@ pwsh tools/install-dsh.ps1 -Remove
 ## 六、开发与验证
 
 ```bash
-python3 validation/run_tests.py fast          # 快速边界与关键业务链路
+python3 validation/run_tests.py               # 默认快速边界与关键业务链路
 python3 validation/run_tests.py full          # 自动发现全部工程测试（串行）
 python -m pytest tests/ -n auto               # 全量并行（需安装 pytest-xdist）
 python3 validation/measure.py --out validation/metrics.json          # 依赖图与必读材料度量
 ```
 
-快速组覆盖关键边界，完整组自动收集全部工程测试；两者可从其他目录运行，失败返回非零状态。未安装 pytest-xdist 时使用串行入口。页面模板随技能安装，导出为离线单文件。
+默认运行快速组，覆盖关键边界与主流程；需要完整回归时显式使用 full，自动收集全部工程测试；两者可从其他目录运行，失败返回非零状态。未安装 pytest-xdist 时使用串行入口。页面模板随技能安装，导出为离线单文件。
 
 测试使用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。全量项数以本机运行为准（`python3 validation/run_tests.py full`），详细记录见 [验收记录](validation/results.md)。当前工程度量见 [metrics.json](validation/metrics.json)，内含 UTC 生成时间、源码提交及覆盖本地修改的 Python 源码指纹；历史快照按其原始条件解释。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
 
@@ -252,7 +252,7 @@ Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与
 
 - **字数**按汉字计数；`word_range` 与章幅区间由作者约定，系统不会为了让指标好看而降低目标。
 - **默认字面规则**：正文与标题不出现系统词汇「账本、入账、回执」；**人名禁字默认为空**——起名是作者的决定，需要限制时用 `lexical` 命令按书设定。规则随任务材料的 `policy` 块交付，覆盖范围与版本可查，覆盖内容逐版留档、开书阶段即生效。
-- **数据库版本**：`novel-ledger/3`，已有 v3 可继续使用，v2 及更早库显式拒绝。
+- **数据库版本**：`novel-ledger/4`，仅支持当前库，v3 及更早库显式拒绝。
 - **不做的事**：不自动打开或转换未知来源数据库；不代作者做选择。主干生命周期由宿主提供。
 - **未验证的部分**：真实子 agent 的历史隔离、计费用量控制与文学质量；验收方法见 [验证](references/validation.md)。
 

@@ -80,33 +80,32 @@ class SceneTests(unittest.TestCase):
 
     def test_scene_can_move_chapters_without_changing_identity_or_story_time(self):
         scene = self.plan(1, 'warehouse-flashback')
-        story_memory.bind(scene, {}, 2)
+        story_memory.bind(scene, {})
         moved = copy.deepcopy(scene)
         moved['chapter'] = 5
-        story_memory.bind(moved, {}, 2)
+        story_memory.bind(moved, {})
         self.assertEqual(scene['scenes'], moved['scenes'])
         self.assertEqual(moved['scene_schema'], 'scene-identity/2')
         with self.assertRaises(Error):
-            story_memory.bind(moved, {'1': scene}, 2)
+            story_memory.bind(moved, {'1': scene})
 
-    def test_opaque_ids_use_available_sources_and_keep_legacy_identity_rules(self):
+    def test_opaque_ids_are_unique_across_the_book(self):
         first = self.plan(1, 'scene:旧码头')
-        story_memory.bind(first, {}, 2)
+        story_memory.bind(first, {})
         second = self.plan(2, 'scene:新办公室')
         second['scenes'][0]['depends_on'] = ['scene:旧码头']
-        story_memory.bind(second, {'1': first}, 2)
+        story_memory.bind(second, {'1': first})
+        clash = self.plan(3, 'scene:新办公室')
         with self.assertRaises(Error):
-            story_memory.bind(copy.deepcopy(second), {'1': first}, 1)
-        with self.assertRaises(Error):
-            story_memory.bind(dict(second, chapter=1), {}, 2)
+            story_memory.bind(clash, {'1': first, '2': second})
 
     def test_complete_reading_associations_cannot_omit_scene_declarations(self):
         plan = self.plan(1, 'scene:warehouse')
         plan['reading_coverage'] = 'complete'
         with self.assertRaises(Error):
-            story_memory.bind(copy.deepcopy(plan), {}, 2)
+            story_memory.bind(copy.deepcopy(plan), {})
         plan['scenes'][0]['reading_refs'] = [{'kind': 'relationship', 'key': 'shen>colleague'}]
-        story_memory.bind(plan, {}, 2)
+        story_memory.bind(plan, {})
         self.assertIn(('relationship', 'shen>colleague'), story_memory.reading_refs(plan))
 
 
@@ -155,7 +154,7 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(memory['interpretations']['fear']['evidence'][0]['quote'], '要求先核对退件人的名字再开箱。')
         self.assertIn('作品理解', bookpage.render(self.repo))
 
-    def test_a_malformed_memory_candidate_is_refused_at_submission(self):
+    def test_a_malformed_memory_candidate_is_refused_and_rolls_the_submission_back(self):
         drive(self.app, self.owner, until='write')
         candidate = response(self.app)
         candidate['data']['understanding'] = [{'id': 'fear', 'kind': 'character'}]
@@ -164,6 +163,22 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'understanding')
         self.assertEqual(self.repo.headers('main'), [])
         self.assertIsNone(self.repo.load()['draft'])
+        # A founded candidate whose quote is forged is refused the same way, atomically.
+        first = response(self.app)
+        first['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]
+        self.app.submit(first)
+        drive(self.app, self.owner, until='write')
+        self.app.revise(1, '改写第一章。', self.owner, changes={'mode': 'expression'})
+        self.app.advance(owner=self.owner)
+        candidate = response(self.app)
+        candidate['data']['understanding'] = [interpretation(quote='伪造的原文。')]
+        root = self.repo.get('book')
+        rows = self.repo.headers(self.repo.load()['branch'])
+        with self.assertRaises(Error):
+            self.app.submit(candidate)
+        self.assertEqual(self.repo.get('book'), root)
+        self.assertEqual(self.repo.headers(self.repo.load()['branch']), rows)
+        self.assertEqual(self.repo.pending()['id'], candidate['task_id'])
 
     def test_context_resolves_opaque_scene_ids_from_accepted_versions(self):
         handoff = drive(self.app, self.owner, until='chapter_outline')
@@ -182,40 +197,9 @@ class WorkbenchTests(unittest.TestCase):
         with self.assertRaises(Error):
             context.build(self.repo, book, Job('repair', 2))
 
-    def test_old_frozen_task_does_not_acquire_new_memory_capability(self):
-        drive(self.app, self.owner, until='write')
-        task = self.repo.pending()
-        # A persisted pre-upgrade envelope has no capability: the same receipt must not gain the
-        # memory the newer protocol reads out of it.
-        work = copy.deepcopy(task['input'])
-        work['capabilities'].pop('understanding')
-        candidate = response(self.app)
-        candidate['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]
-        before = self.repo.load()['understanding']
-        outcome = workflow.apply(self.repo.load(), work, candidate['data'], candidate['session'],
-                                 self.app._sources(work))
-        self.assertEqual(outcome.book['understanding'], before)
-
-    def test_existing_book_can_explicitly_enable_at_a_safe_boundary(self):
-        book = self.repo.load()
-        book.pop('understanding')
-        self.repo.save(book)
-        original = self.repo.get('book')
-        self.app.advance(owner=self.owner)
-        with self.assertRaises(Error) as caught:
-            self.app.enable_workbench('启用创作记忆。', self.owner)
-        self.assertEqual(caught.exception.code, 'workbench_boundary')
-        self.repo.cancel_pending('工程夹具：回到章节边界。')
-        enabled = self.app.enable_workbench('启用创作记忆。', self.owner)
-        self.assertTrue(enabled['enabled'])
-        root = self.repo.get('book')
-        for name in ('canon', 'settings'):
-            self.assertEqual(original['parts'][name], root['parts'][name])
-        self.assertEqual(self.repo.load()['plans'], book['plans'])
-        self.assertTrue(self.app.enable_workbench('同一要求。', self.owner)['already_enabled'])
-        self.assertEqual(root, self.repo.get('book'))
-
-    def test_revision_memory_is_invalidated_and_discard_restores_it(self):
+    def test_revision_memory_is_invalidated_and_restored_only_from_unchanged_sources(self):
+        """A revision discards the memory built on the rewritten range; a discard restores it, and a
+        rewritten chapter's memory stays gone while the untouched chapter's memory survives."""
         drive(self.app, self.owner, until='write')
         candidate = response(self.app)
         candidate['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]
@@ -227,25 +211,6 @@ class WorkbenchTests(unittest.TestCase):
         self.app.discard(self.owner)
         self.assertEqual(self.repo.load()['understanding'], memory)
 
-    def test_a_rejected_memory_candidate_rolls_the_submission_back(self):
-        drive(self.app, self.owner, until='write')
-        first = response(self.app)
-        first['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]
-        self.app.submit(first)
-        drive(self.app, self.owner, until='write')
-        self.app.revise(1, '改写第一章。', self.owner, changes={'mode': 'expression'})
-        self.app.advance(owner=self.owner)
-        candidate = response(self.app)
-        candidate['data']['understanding'] = [interpretation(quote='伪造的原文。')]
-        root = self.repo.get('book')
-        rows = self.repo.headers(self.repo.load()['branch'])
-        with self.assertRaises(Error):
-            self.app.submit(candidate)
-        self.assertEqual(self.repo.get('book'), root)
-        self.assertEqual(self.repo.headers(self.repo.load()['branch']), rows)
-        self.assertEqual(self.repo.pending()['id'], candidate['task_id'])
-
-    def test_unchanged_suffix_restores_memory_but_changed_source_does_not(self):
         drive(self.app, self.owner, until='write')
         first = response(self.app)
         first['data']['understanding'] = [interpretation(quote='要求先核对退件人的名字再开箱。')]
@@ -307,7 +272,7 @@ class ReadingImpactTests(unittest.TestCase):
                          'reading_changes': [{'kind': 'character', 'key': 'shen'}]})['chapter_actions'][-1]['action'], 'review')
 
 
-class GuidedV5WorkbenchTests(unittest.TestCase):
+class GuidedWorkbenchTests(unittest.TestCase):
     """A thirteen-gate opening still files its memory with the chapter that produced it.
 
     The workbench is on for every new book, so the guided path and the memory path are one flow: the

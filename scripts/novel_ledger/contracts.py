@@ -9,14 +9,12 @@ from typing import Any, Dict, Optional
 
 # The five-step pipeline is a protocol generation change: v2 removed every reviewer dispatch, so a
 # task frozen by v1 (checks_version, obligations, blind first read, plan/book_plan stages) can no
-# longer be executed by this build. Projects keep their storage schema; what changed is the
-# pipeline, and the version says so.
+# longer be executed by this build. The pipeline and storage carry independent version identifiers.
 VERSION = '2.0.0'
-SCHEMA = 'novel-ledger/3'
+SCHEMA = 'novel-ledger/4'
 # The guided opening has its own protocol version, carried by the creation state itself. It is not the
 # database schema: a new gate set only changes a JSON document inside the book record, so raising the
-# storage version would lock every existing project out for no benefit. A project whose creation state
-# is version 1 keeps the gate set it was opened with.
+# storage version is independent; only the current guided-opening protocol is accepted.
 OPENING_VERSION = 6
 TASK = 'novel-ledger.task/1'
 RESULT = 'novel-ledger.result/1'
@@ -65,6 +63,7 @@ DEFAULTS = {
     'repairs': 2,
     'redesigns': 1,
     'stall_after_rounds': 2,
+    'revision_limit': 3,
     # opening/5's two new gates are the ones a web serial lives on, so their floors are numbers, not
     # prose: how many rungs the reader-visible ladder must show at each size class, how many stages
     # the 格局 ladder must walk, and how late the theme anchor may land. `anchor_max_chapter` is the
@@ -121,35 +120,25 @@ SETTING_CLICHES = ('序列', '途径', '克苏鲁', '克系', '系统', '幕后�
                    '诸天', '无限流', '模拟器', '签到', '存档重开')
 
 
-# Frozen task capabilities: which version of a protocol a dispatch was planned under. A consumer reads
-# them to keep interpreting a field the way that task was written. Each capability declares every
-# version this build understands, so an undeclared value is an error instead of a silent downgrade to
-# "old project" — a misspelled reading protocol would otherwise stop reading_refs being interpreted
-# without anyone noticing.
+# Frozen task capabilities declare the current protocol used by each component.
+# Unknown values fail rather than silently changing how a field is interpreted.
 EDITORIAL_CAPABILITY = 'editorial/1'
 UNDERSTANDING_CAPABILITY = 'understanding/1'
-SCENE_IDENTITY_V1 = 'scene-identity/1'
 SCENE_IDENTITY_CAPABILITY = 'scene-identity/2'
 READING_DEPENDENCIES_CAPABILITY = 'reading-dependencies/1'
-OPENING_BOUNDS_CAPABILITY = 'opening-bounds/1'
 # The volume outline protocol changed shape in v2: a volume is now one outline per volume, complete
 # in a single receipt, carrying its own nodes/threads and state boundaries, and the per-chapter rows
 # live in the chapter outline that follows it. A task frozen under volume-outline/1 describes a batch
 # of chapters instead, so this build refuses it rather than reinterpreting its fields.
 VOLUME_OUTLINE_CAPABILITY = 'volume-outline/2'
-# New tasks require explicit style and computable volume terminals. Old frozen tasks keep their
-# original interpretation; upgrading the engine does not add fields to an existing dispatch.
-OUTLINE_CHECKS_CAPABILITY = 'outline-checks/1'
 SCENE_MEMORY_CAPABILITY = 'scene-memory/1'
 HOOK_LINKS_CAPABILITY = 'hook-links/1'
 CAPABILITIES = {
     'editorial': (EDITORIAL_CAPABILITY,),
     'understanding': (UNDERSTANDING_CAPABILITY,),
-    'scene_identity': (SCENE_IDENTITY_V1, SCENE_IDENTITY_CAPABILITY),
+    'scene_identity': (SCENE_IDENTITY_CAPABILITY,),
     'reading_dependencies': (READING_DEPENDENCIES_CAPABILITY,),
-    'opening_bounds': (OPENING_BOUNDS_CAPABILITY,),
     'volume_outline': (VOLUME_OUTLINE_CAPABILITY,),
-    'outline_checks': (OUTLINE_CHECKS_CAPABILITY,),
     'scene_memory': (SCENE_MEMORY_CAPABILITY,),
     'hook_links': (HOOK_LINKS_CAPABILITY,),
 }
@@ -158,17 +147,18 @@ CAPABILITIES = {
 def capabilities_for(task):
     """A frozen task's capabilities, with every value checked against this build.
 
-    Absent means the dispatch predates that capability; a present but undeclared value means the task
-    was frozen by a version that knows a protocol this build does not, which is a dispatch error
-    rather than an invitation to reuse the older interpretation.
+    An absent optional capability is disabled. Every declared value must match the current protocol.
     """
-    frozen = (task or {}).get('capabilities') or {}
+    frozen = (task or {}).get('capabilities')
     require(isinstance(frozen, dict), 'capability', '任务 capabilities 须为对象。')
     unknown = sorted(str(key) + '=' + str(value) for key, value in frozen.items()
                      if value not in CAPABILITIES.get(key, ()))
     require(not unknown, 'capability', '任务冻结了本版本无法解释的能力值。',
             {'unknown': unknown, 'known': {key: list(values) for key, values in CAPABILITIES.items()},
-             'recover': '该任务由不识别这些协议的版本冻结；用原版本继续执行，或取消后按当前协议重新派工。'})
+             'recover': '该任务由不识别这些协议的版本冻结；取消后按当前协议重新派工。'})
+    required = ('understanding', 'scene_identity', 'reading_dependencies')
+    missing = sorted(set(required) - set(frozen))
+    require(not missing, 'capability', '任务缺少当前协议的必需能力，须重新派工。', {'missing': missing})
     return frozen
 # Findings the engine itself raises when a receipt cannot be reconciled (drift, lint, budget).
 # 'author' means no rewrite can settle it — the premise itself must be decided, so it is routed to
@@ -208,10 +198,6 @@ CLICHE_GIVEN = '辰尘轩言夜寒渊冥烬煜珩枫炎离砚'
 # in DEFAULTS with every other shared number, and aliased here because the workflow reads them by name.
 REPAIRS = DEFAULTS['repairs']
 REDESIGNS = DEFAULTS['redesigns']
-# Fast verification merges block reviews by design: a basic project's fast mode sets the review block
-# to exactly this size instead of reading the author's review_chunk, so one review task never covers
-# more than this many chapters and a whole volume never lands in a single worker.
-FAST_REVIEW_BLOCK = 12
 TIME_MARKERS = tuple('日天夜晨早晚午时年月春夏秋冬晓暮昏宵旬翌昨今明') + ('星期', '分钟', '秒钟')
 DEFAULT_TERMS = ['账本', '入账', '回执']
 # No character is banned by default: naming is the author's decision, so the name rule starts empty
@@ -407,28 +393,28 @@ CONTRACT_FIELDS = (
     {'key': 'title', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('title', 'title')},
     {'key': 'reader_promise', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('genre', 'reader_promise')},
     {'key': 'ending', 'kind': 'text', 'default': '', 'alignment': True,
-     'opening': {'*': ('ending', 'ending'), 3: ('payoff', 'ending')}},
+     'opening': ('payoff', 'ending')},
     {'key': 'genre', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('genre', 'genre')},
     {'key': 'story_engine', 'kind': 'text', 'default': '', 'alignment': True,
-     'opening': {'*': ('engine', 'story_engine'), 3: ('opposition', 'story_engine')}},
+     'opening': ('opposition', 'story_engine')},
     {'key': 'opposition', 'kind': 'text', 'default': '', 'alignment': True,
-     'opening': {'*': ('engine', 'opposition'), 3: ('opposition', 'opposition')}},
+     'opening': ('opposition', 'opposition')},
     # opening/3 makes the two decisions male-channel serials live on first-class contract terms: what
     # the protagonist's edge is and how it grows, and how the reader's payoff is scheduled. Optional
-    # like every later field, so contracts written before opening/3 stay loadable.
-    {'key': 'core_edge', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 3,
+    # for direct imports; guided openings must align them with their selected gates.
+    {'key': 'core_edge', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
      'shape': ('advantage', 'origin', 'growth', 'cost', 'ceiling'), 'opening': ('edge', None)},
-    {'key': 'payoff_plan', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 3,
+    {'key': 'payoff_plan', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
      'shape': ('ways', 'cadence', 'hooks'), 'opening': ('payoff', 'plan')},
     # opening/5's core-idea gate. Four keys rather than one paragraph because each is checked: the
     # novelty is what the world gained, the first cause is what keeps pushing it, the stance is how
     # the protagonist stands to the rule system, and the dark side names where the world's malice
     # comes from. A public setting can be reused for free; the novelty is the part that is owned.
-    {'key': 'core_premise', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 5,
+    {'key': 'core_premise', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
      'shape': ('novelty', 'first_cause', 'stance', 'dark_side'), 'opening': ('premise', None)},
     # opening/5's payoff anchor: what must be delivered by which chapter, so a grand world still
     # proves itself inside the window the platforms actually measure.
-    {'key': 'promise_anchor', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 5,
+    {'key': 'promise_anchor', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
      'shape': ('deliverable', 'deadline_chapter'), 'opening': ('payoff', 'anchor')},
     {'key': 'world_premise', 'kind': 'text', 'default': '', 'alignment': True},
     # opening/5's world gate: the reader-visible ladder and the hard currency, structured because
@@ -436,29 +422,27 @@ CONTRACT_FIELDS = (
     # Unstructured, they were prose in `world_premise` that the world dispatch re-invented.
     # opening/6 adds the five-part architecture; the same table names its world destinations.
     {'key': 'world_architecture', 'kind': 'map', 'default': '', 'alignment': True,
-     'optional': True, 'since': 6, 'shape': tuple(row[0] for row in WORLD_ARCHITECTURE),
+     'optional': True, 'shape': tuple(row[0] for row in WORLD_ARCHITECTURE),
      'opening': ('world', 'architecture')},
-    {'key': 'world_tiers', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True, 'since': 5,
+    {'key': 'world_tiers', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True,
      'shape': ('name', 'condition', 'gain', 'cost', 'limit'), 'exact': True, 'blank': False, 'count': 1,
      'opening': ('world', 'tiers')},
-    {'key': 'world_resource', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 5,
+    {'key': 'world_resource', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
      'shape': ('name', 'source', 'allocator'), 'opening': ('world', 'resource')},
     # opening/5's 格局 gate: the opening's visible boundary, the grade the ending faces, the layer
     # that survives every escalation, and the ladder the volumes are required to walk in order.
-    {'key': 'world_scale', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True, 'since': 5,
+    {'key': 'world_scale', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
      'shape': ('opening', 'terminal', 'unchanged'), 'opening': ('ladder', 'scale')},
-    {'key': 'world_ladder', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True, 'since': 5,
+    {'key': 'world_ladder', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True,
      'shape': ('stage', 'scope', 'growth', 'new_rule', 'cost'), 'exact': True, 'blank': False, 'count': 1,
      'opening': ('ladder', 'ladder')},
     {'key': 'voice', 'kind': 'text', 'default': '', 'alignment': True, 'opening': ('voice', 'voice')},
-    # Decided by the author at the opening gates since opening/2. Optional keeps a hand-written
-    # `init --contract` file and every contract written before opening/2 loadable; a guided opening of
-    # version 2 still has to carry them, because its gates chose them.
-    {'key': 'tone', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2, 'opening': ('genre', 'tone')},
-    {'key': 'theme', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2,
-     'opening': {'*': ('ending', 'theme'), 3: ('payoff', 'theme')}},
-    {'key': 'pov', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'since': 2,
-     'opening': {'*': ('pov', 'pov'), 3: ('voice', 'pov')}},
+    # Direct imports may omit these fields; guided openings must carry the decisions their gates made.
+    {'key': 'tone', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True, 'opening': ('genre', 'tone')},
+    {'key': 'theme', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True,
+     'opening': ('payoff', 'theme')},
+    {'key': 'pov', 'kind': 'text', 'default': '', 'alignment': True, 'optional': True,
+     'opening': ('voice', 'pov')},
     {'key': 'allow_special_mechanism', 'kind': 'bool', 'default': None, 'alignment': True, 'opening': ('world', 'allow_special_mechanism')},
     {'key': 'red_lines', 'kind': 'rows', 'default': [], 'alignment': True, 'optional': True},
     {'key': 'style_traits', 'kind': 'rows', 'default': [], 'alignment': True, 'opening': ('voice', 'style_traits')},
@@ -468,9 +452,9 @@ CONTRACT_FIELDS = (
      'shape': ('id', 'name', 'identity', 'desire', 'limit'), 'opening': ('protagonist', None)},
     # opening/4's origin gate: what the protagonist brings into the story (魂穿/身穿/本土/其他) and what
     # it costs him. A field of its own rather than a key inside `protagonist_setup`, because adding a
-    # key to that shape would reject every contract written before this version.
+    # key to that shape would make a direct contract import invent a decision.
     {'key': 'protagonist_origin', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
-     'since': 4, 'shape': ('family', 'arrival', 'cost'), 'opening': ('origin', None)},
+     'shape': ('family', 'arrival', 'cost'), 'opening': ('origin', None)},
     {'key': 'entities', 'kind': 'rows', 'default': [], 'alignment': True},
     {'key': 'initial_resources', 'kind': 'rows', 'default': [], 'alignment': False},
     {'key': 'volumes', 'kind': 'rows', 'default': [], 'alignment': True,
@@ -479,17 +463,10 @@ CONTRACT_FIELDS = (
     {'key': 'chapter_min', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_min')},
     {'key': 'chapter_max', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_max')},
     {'key': 'chapter_aim', 'kind': 'int', 'default': None, 'alignment': True, 'opening': ('scale', 'chapter_aim')},
-    # Legacy review-pipeline knobs. v2 has no reviewer dispatches, so nothing reads them any
-    # more; they stay declared because a project written under the old pipeline still carries
-    # them and must keep loading. See references/protocol.md for the retirement note.
-    {'key': 'planning_window', 'kind': 'int', 'default': 3, 'alignment': False, 'legacy': True},
-    {'key': 'review_interval', 'kind': 'int', 'default': 10, 'alignment': False, 'legacy': True},
-    {'key': 'review_chunk', 'kind': 'int', 'default': 3, 'alignment': False, 'legacy': True},
-    {'key': 'verification', 'kind': 'text', 'default': 'full', 'alignment': False, 'legacy': True},
     {'key': 'narrative_tracking', 'kind': 'bool', 'default': True, 'alignment': False},
-    {'key': 'review_fanout', 'kind': 'int', 'default': 3, 'alignment': False, 'legacy': True},
     {'key': 'editorial_features', 'kind': 'bool', 'default': True, 'alignment': False},
     {'key': 'scope_append_limit', 'kind': 'int', 'default': 3, 'alignment': False},
+    {'key': 'revision_limit', 'kind': 'int', 'default': DEFAULTS['revision_limit'], 'alignment': False},
     # Step three of the five-step pipeline: one outline per volume, written from the world model and
     # the opening choices, and delivered complete in a single receipt. The band is [2000, 3000]
     # 汉字: the author's floor is 2000, 2500 is the target, and the ceiling keeps a volume's outline
@@ -523,40 +500,20 @@ CONTRACT_FIELDS = (
 # projection against the decision it was projected from is how a derived field becomes a conflict.
 DERIVED_FIELDS = ('word_range',)
 CONTRACT_KEYS = tuple(row['key'] for row in CONTRACT_FIELDS)
-# Every field declared as an alignment decision, regardless of opening version.
-# The version-aware view is alignment_for(version); this one answers "which fields
-# ever participate", which the opening tests assert the template covers.
+# The fields compared with the current guided opening's closed choices.
 CONTRACT_ALIGNMENT = tuple(row['key'] for row in CONTRACT_FIELDS if row['alignment'])
 
 
-def opening_source(row, version):
-    """Which gate and value key decide a contract field for one opening version.
-
-    A tuple means every version. A dict keys by version, and **falls forward**: the newest numeric
-    entry at or below this version wins, and `'*'` covers anything older than the first redesign.
-
-    The falling-forward rule is what keeps a new gate set from becoming five hand-edited copies.
-    opening/4 only inserted a gate in the middle of the order — every field it did not re-source must
-    keep reading the gate that opening/3 gave it (pov ← voice, ending/theme ← payoff, story_engine and
-    opposition ← opposition). Resolving `4` straight to `'*'` silently re-pointed those five fields at
-    v1's gate ids, which no longer exist, and the mismatch only surfaced later as a KeyError while
-    building a contract. Returns None when this version does not decide the field at all.
-    """
-    source = row.get('opening')
-    if isinstance(source, dict):
-        declared = [(key, value) for key, value in source.items() if type(key) is int and key <= version]
-        source = max(declared, key=lambda pair: pair[0])[1] if declared else source.get('*')
-    return source
+def opening_source(row, version=OPENING_VERSION):
+    """The current gate and value key that decide this contract field."""
+    require(version == OPENING_VERSION, 'creation', '仅支持当前开书协议。')
+    return row.get('opening')
 
 
-def alignment_for(version):
-    """The alignment fields an opening of this version actually decides.
-
-    A contract written before opening/2 never chose a tone, theme or view, so those fields must not be
-    read back as author decisions it failed to keep.
-    """
-    return tuple(row['key'] for row in CONTRACT_FIELDS
-                 if row['alignment'] and row.get('since', 1) <= version)
+def alignment_for(version=OPENING_VERSION):
+    """Fields decided by the current guided opening."""
+    require(version == OPENING_VERSION, 'creation', '仅支持当前开书协议。')
+    return CONTRACT_ALIGNMENT
 CHARACTERS = ('name', 'role', 'desire', 'limit', 'knowledge_boundary')
 POLICY_FIELDS = ('forbidden_terms', 'forbidden_name_chars')
 # Where the author's lexical rules are enforced, declared per task stage. One table, used both to
@@ -642,8 +599,7 @@ def contract_errors(raw):
                 complaints.append(key + ' 须为数组。')
             elif not value and row.get('optional'):
                 # An empty array in an optional rows field means "not declared here" — the same thing
-                # its absence means. A template that carries the field blank (a pre-open... a project
-                # opened under an older protocol, or an imported contract) must not be refused for it;
+                # its absence means. A direct import may carry the field blank;
                 # a guided opening still requires it through the alignment check, not through shape.
                 pass
             elif row.get('blank') is False and len(value) < row.get('count', 1):
