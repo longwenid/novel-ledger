@@ -1,5 +1,7 @@
 # 架构与工程目标
 
+当前执行仅以本技能入口、[任务协议](protocol.md)、[运行流程](runtime.md) 及其专项指南为准。`validation/` 中的历史规格、实验和报告只保存当轮证据，不作为执行规范或兼容承诺。
+
 何时读：修改引擎、扩展命令或判断能力边界。
 
 工程目标：百万字长篇的开书、世界模型、分卷卷纲、逐章章纲、逐章执笔自比、机械核账、历史修订、断点恢复与最终交付。协议和代码为独立实现，不与其他小说工程互通数据库或命令行为。
@@ -98,9 +100,9 @@ flowchart TD
 | style | 文风代理指标的纯核心：`metrics`（句长/段长/对白占比/本章重复度/视角标记）、`baseline`（首章锚点）与 `compare`（按契约 `style_window` 产出 style findings）；零派工，只依赖 contracts |
 | narrative | 线路、节点、知情、人物当前状态与动态篇幅的纯规则 |
 | entities / evidence / design_queries | 实体注册、原文证据与设计节点查询的纯共享规则，领域模块直接复用 |
-| craft | 人物解释与成长签名、场景意图与展开、版本补丁合成；只依赖 contracts |
+| craft | 场景与对白意图校验、出场人物选择、版本补丁定位与合成；只依赖 contracts |
 | spatial | 稳定锚点、路径与视听连接、持有链和到达下限；只依赖 contracts |
-| editorial | 编辑能力字段与辅助判定（enabled/effective_contract/context_hash/scenes 等）、人物成长与声线锚点、补丁相关的纯规则；只依赖 contracts |
+| editorial | 编辑能力开关、有效约定、创作上下文哈希及自动回改策略与越界判定；只依赖 contracts |
 | facts | 原文定位、事件前值、资源、时钟、站位与历史断言的纯结算 |
 | workflow | 下一任务和状态转换，内容与篇幅共享修复额度；窄返修守卫、返修复发计数与 repair-stalled 停止点；按 PIPELINE_SHAPES 安装档位流程形状（当前只有 `merge_chapter_outline`：t0/t1 把本卷卷纲与章纲合成一次派工，两个契约各自校验同一份回执） |
 | briefs / result_templates | 按阶段生成任务说明与交付模板；不承担回执核验 |
@@ -128,7 +130,7 @@ flowchart TD
 
 ### 作者决定与开书结构
 
-- 约定形状只有一处定义：contracts.CONTRACT_FIELDS（字段、类型、占位、可选性、是否参与对齐、自哪个开书版本起生效）。交付模板（result_templates.template → contracts.contract_skeleton）、结构校验（planning.validate_contract → contracts.contract_errors）和对齐核验（creation.validate_contract）全部由它派生；新增约定字段只改这张表，对齐表与字段表不一致时报 alignment_schema。对齐字段由 contracts.CONTRACT_ALIGNMENT 派生，只使用当前门序与字段归属；自备约定可省略非必填的开书决定。
+- 约定形状只有一处定义：contracts.CONTRACT_FIELDS（字段、类型、占位、可选性、是否参与对齐）。交付模板（result_templates.template → contracts.contract_skeleton）、结构校验（planning.validate_contract → contracts.contract_errors）和对齐核验（creation.validate_contract）全部由它派生；新增约定字段只改这张表，对齐表与字段表不一致时报 alignment_schema。对齐字段由 contracts.CONTRACT_ALIGNMENT 派生，只使用当前门序与字段归属；自备约定可省略非必填的开书决定。
 - 逐门开书中，直接选择字段的唯一来源也声明在 CONTRACT_FIELDS.opening：`(门 ID, value 字段)`，主角整份选择通过字段的 shape 声明；`None` 表示该门的 value 整份投影到约定字段（来历门即 `opening: ('origin', None)` → `protagonist_origin`，shape 为 `family/arrival/cost`）。creation 从同一声明派生各门允许的输入字段和约定对齐值；世界与体量的推导输入单列在 creation.DERIVATION_INPUTS。方案提交、intake 和闭合选择的约定核验均拒绝跨门及未知字段，错误带 allowed_fields/unknown_fields。对齐值逐字段读取，禁止整份 value 合并覆盖其他门的决定。
 - 开书协议只有当前版本：creation 状态声明 `novel-ledger.creation/6`（`opening/6`，13 门先定世界与格局），更早的 creation/N 在读取时被明确拒绝（以当前协议重开），方案篇幅上界是无条件的唯一规则。存储 schema 为 novel-ledger/4，已删除任务首读列；v3 及更早库明确拒绝，不提供隐式迁移。
 - 作者可见的方案板有两类来源：创意门的板子由主干自执（未内联时派新空历史 Worker）生成；结构门（体量与分卷）的档位板由引擎按 contracts.SCALE_TIERS 当次给出，不派工、不等待，Worker 回执按 opening_system 拒绝。引擎只给经证明写得完的档位，选择仍由作者做出，程序不替作者决定。
@@ -137,7 +139,7 @@ flowchart TD
 ### 派工文件与角色
 
 - `work/<task>/` 里两类文件分属不同作者：task.json、input.json、identity.json、dispatch.md（Worker 自举卡）、brief.md（简报全文） 由主控生成且可重建；result.template.json（表单）与 result.json（回执）由 Worker 写。主控只在表单缺失或属于其他任务时才生成它，重跑 advance 绝不覆盖 Worker 已填内容；取消任务是唯一回收表单的事件。重派未提交任务时，引擎把上次遗留的 result.json 草稿隔离为 `result.stale.json` 并在派工卡注明——账本才是回执的记录源。
-- 角色由身份而非称呼区分：read/recall 只在携带 NOVEL_TASK_ID 的派工身份下开放，主控调用按 role_boundary 拒绝；audit/export/html 是验收与交付命令，主控可用。身份本身随派工一起留档（identity.json：task_id、input_hash、阶段、worker_env），供核对与解释失败，但权限只看宿主注入的凭据——可核对的数据不是许可证，也不由 Worker 写回。
+- 角色由身份而非称呼区分：opening_options 属 `contracts.CONTROLLER_STAGES`，主干可读取该门的 read/recall 材料；其他阶段只对携带 NOVEL_TASK_ID 的派工身份开放，主控代读按 role_boundary 拒绝；audit/export/html 是验收与交付命令，主控可用。身份本身随派工一起留档（identity.json：task_id、input_hash、阶段、worker_env），供核对与解释失败，但权限只看宿主注入的凭据——可核对的数据不是许可证，也不由 Worker 写回。
 
 ### 字面策略与材料选择
 
@@ -154,11 +156,11 @@ flowchart TD
 - 领域判断、章节证据、事件结算、任务完成和状态转换全部成功才 commit；一个阶段只由一个事务入口提交。取消只更新持久状态并返回任务 ID，文件回收通过 after_commit 在提交后执行；预检与异常回滚丢弃回调。回调失败会报告交付失败，已提交的数据仍然保留。
 - 章节只能在章纲存在、漂移核算通过（items 覆盖完整、`actual.from` 等于引擎投影）、字数区间、`lint`、字面规则与机械事件核验通过后入库；文风代理指标的越界项与 `lint` 命中一样按名进入有界返修。章纲本身必须先通过卷内状态链模拟（含 enter/exit 一致性、伏笔 `plant`/`payoff` 状态机与卷末闭合）。
 - 作品理解不直接结算事件、替代作者约定或强制修稿；理解记录按其冻结版本读取，v2 由执笔回执提交增量（`understanding.update`），没有独立阅读任务。
-- read/recall 只对携带派工身份的进程开放，主控不得代读正文；未派工的任务不生成正式材料。
+- 除主干自执 opening_options 的 read/recall 外，材料读取只对携带派工身份的进程开放，主控不得代读正文；未派工的任务不生成正式材料。
 - 程序核对真实宿主声明的会话身份，不证明宿主实际提供了空模型历史。
 - 每章内容与篇幅消耗同一个有限预算；预检、非法字段、暂停、换 Worker、修订或改约不能增加额度。
 - 未来设计、人物小传和章纲不直接产生事实。过去断言不重结算当前资源与时间。
-- 候选修订保留旧正式稿；实际修改区间按重排后的章纲重写并重新过全部机械判据，窄范围修订（--through）终点外的后缀按动作先重放或原样携带并对新状态重结算（事实受影响即拒绝）。显式扩大终点时更新实际动作及传播；discard 恢复父版本及原目标。
+- 候选修订保留旧正式稿；事实与阅读依赖先共同确定完整连续修改区间，区间内按重排后的章纲重写并重新过全部机械判据，窄范围修订（--through）终点外的后缀按动作先重放或原样携带并对新状态重结算（事实受影响即拒绝）。显式扩大终点时更新实际动作及传播；discard 恢复父版本及原目标。
 - 历史修订由作者明确请求发起，在创建分支前分析实际影响；超界方案原子保存到 execution.revision_directive，保持原稿与章节额度，主干只获得摘要和完整方案路径。扩大执行须绑定当前 plan_hash、作者原话、准确范围及未变化的章节与创作来源；恢复和换会话不放宽边界。
 - 完本必须覆盖末章、实际总篇幅区间、作者首章决定和全部关闭条件（required 节点与线路），不自动降低目标。
 
@@ -176,7 +178,7 @@ documents 保存不可变完整值；chapters 引用正文、事件、章纲与�
 
 历史来源采用不可变逐章页：页保存正文/事件哈希、章号、摘要、章节链与前页哈希；任务冻结 history_source 的入口、截至章号和链指纹。适配器在 kv 保存每个分支的可重建目录头，首次为既有章节建页，此后只追加新章；相同历史在不同角色派工间复用，修订分支共享未改前缀。缓存头只服务派工构建，补读沿任务冻结页读取，不用当前分支查询结果替换任务来源，也不将缓存当事实真源。页与头使用现有 documents/kv，不增加表或隐式升级数据库。
 
-历史查询默认从近到远按所需页读取事件，收齐请求的匹配章节再查一章匹配以决定分页；页数有界的常见查询不解析整本事件。稀疏/无命中查询仍可遍历全部历史，任意指定章也可能遍历目录，不宣称最坏查询复杂度不随篇幅增长。实测无命中查询在 20/100/500 章为 13.9/46.3/209.6 ms（逐页扫描，返回字符不随篇幅变化），线性但尚不构成瓶颈，因此不设默认预算：事实查询以查全优先，省时不能换成漏查。全量旧索引名称的显式读取保留，但不进入默认必读。目录优化不改变 complete_state、章节重放或携带核对的覆盖要求，也不证明整个派工流程为常数成本。
+历史查询默认从近到远按所需页读取事件，收齐请求的匹配章节再查一章匹配以决定分页；页数有界的常见查询不解析整本事件。稀疏/无命中查询仍可遍历全部历史，任意指定章也可能遍历目录，不宣称最坏查询复杂度不随篇幅增长。实测无命中查询在 20/100/500 章为 13.9/46.3/209.6 ms（逐页扫描，返回字符不随篇幅变化），线性但尚不构成瓶颈，因此不设默认预算：事实查询以查全优先，省时不能换成漏查。历史补读只使用当前 history_source 逐章来源，不提供旧全量索引名称入口。目录优化不改变 complete_state、章节重放或携带核对的覆盖要求，也不证明整个派工流程为常数成本。
 
 文档按内容寻址并按提交写入，因此每次提交都会留下上一版分区的不可达副本。`compact`（适配器 `prune`）从根引分、章节行、任务与日志出发做可达性遍历，只删除任何活动记录都到不了的文档并回收空间，不改写任何活动状态；它是一次显式的主控操作，不是自动后台清理。回收只解决磁盘累积，不改变单次提交仍要序列化整个分区的写入成本：同一夹具实测 140 章单次提交
 27.9 ms，回收后 28.4 ms，写入成本基本由分区大小决定而非库体积。要把它降下来需要把增长集合拆成

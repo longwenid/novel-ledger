@@ -169,7 +169,7 @@ def _world_piece_lines(sections):
         lines.append('- **%s**' % layer)
         for name, text in rows:
             lines.append('  - %s（%s）：%s' % (name, world.LABELS.get(name, name), text))
-    lines.append('- 若 world 门声明 architecture，以下对应字段须逐字保留（无声明的旧项目不补填）：')
+    lines.append('- 若 world 门声明 architecture，以下对应字段须逐字保留（直接导入约定按实际声明核验）：')
     lines.extend('  - architecture.%s → %s.%s：%s' % (key, section, field, note)
                  for key, note, section, field in WORLD_ARCHITECTURE)
     return lines
@@ -269,7 +269,7 @@ def self_check_block():
 VOLUME_CHECK_HINTS = (
     'volumes 的 id 与顺序和 payload.volume_ids / contract.volumes 一一对应，不多不少。',
     '每卷汉字数落在 words±tolerance；purpose、arc、climax、exit_state、style.trend 都不能空。',
-    'stage 取已选格局阶梯里的一级并逐字一致，按卷序只升不降（旧开书没有阶梯时允许留空）。',
+    'stage 取已选格局阶梯里的一级并逐字一致，按卷序只升不降（直接导入约定未声明阶梯时允许留空）。',
     'node/thread/hook 的 id 全书唯一，不覆盖已批准的 id；node/thread window 落在本卷章号区间内。',
     'hooks 每条 plant 必须落在本卷章号区间；payoff[0] >= plant[1]；越过卷末的必须 continues=true 且 required=false。',
     'resources/places/knowledge/characters 引用的 key/entity 必须已存在于世界模型或既有状态。',
@@ -353,7 +353,7 @@ def stage(name, payload=None):
                            'rhythm 用具体文字写本章句法与节奏、dialogue_ratio 给 0~1 的目标（可选）、'
                            'notes 写本章例外（如对峙段允许长句）。'
                            'hook_refs/reader_refs/history_refs 声明要承接的旧资料；'
-                           'scenes/pacing 可选，保留工作台兼容。不写正文。',
+                           'scenes/pacing 为当前章纲的可选字段。不写正文。',
         'write': '交 title/完整 prose/summary/具体 self_check 与逐条 drift_check。'
                  '本章纲（chapter_outline）与卷纲材料（volume_outline）都是必读；卷纲节点已按本章及前置依赖筛选，完整卷纲可从 complete_volume_outline 补读：按章纲的场景与增量落笔，'
                  '不添章纲没有的重大变化，也不漏掉章纲声明要发生的。'

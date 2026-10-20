@@ -1059,6 +1059,12 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     require(isinstance(chapters, list) and chapters
             and all(isinstance(row, dict) and type(row.get('chapter')) is int for row in chapters),
             'chapter_outline', '章纲须按章号顺序交出 chapters 数组。')
+    for row in chapters:
+        # Retained current rows include derived hook contracts; they are rebuilt from the
+        # volume registry below, never trusted as author input.
+        unknown = sorted(set(row) - set(CHAPTER_FIELDS) - set(PROTOCOL_FIELDS) - {'hook_contracts'})
+        require(not unknown, 'chapter_outline', '章纲含当前协议之外的字段，请按当前模板重交。',
+                {'chapter': row['chapter'], 'unknown_fields': unknown})
     first, end = volume_row['first'], volume_row['end']
     numbers = [row['chapter'] for row in chapters]
     require(numbers == list(range(numbers[0], end + 1)), 'chapter_outline',

@@ -1,22 +1,8 @@
-"""Read-only: which drift findings keep coming back, and which of them the engine already judges.
+"""Read-only recurrence analysis of current engine findings and writer comparisons.
 
-v1 asked this of review receipts ("rework.md 机制 4：发现回流成判据"): every finding a reviewer filed
-was kept in `tasks.result` and aggregated by 阶段 × 检查项. v2 has no reviewer, so the sources are
-different — and the question is the same one:
-
-* **引擎核算意见** — what the engine refused a draft for (`book['draft']['findings']`, written by
-  `drift.reconcile` / `lint` / the word band), and the deviations it did book
-  (`design_drift`, `carry_findings`, `accepted_findings`).
-* **执笔自比** — the writer's own `drift_check` rows under `tasks.result` with
-  `status ∈ deviated|skipped`, plus every `unplanned` row: a coordinate the chapter outline did not
-  declare. A row that keeps being filed as deviated is the same signal a repeated review finding
-  was: the criterion is not mechanical yet, or the outline is being written ahead of the prose.
-
-Either way the money question is unchanged: a finding that appears twice, in the same shape, is a
-candidate for the engine to compute once instead of a writer having to notice it every chapter.
-
-Legacy databases still hold v1 review receipts; they are counted in their own section and labelled
-`v1`, never mixed into the v2 numbers.
+Sources are draft.findings, design_drift, carry_findings and accepted_findings, plus deviated,
+skipped and unplanned rows in accepted write/repair/redesign receipts. Report repeated coordinates
+and the mechanical rules already responsible for them; no review-stage or old-database adapters.
 
     用法：python validation/reflux_probe.py /path/to/project
 """
@@ -27,14 +13,15 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from novel_ledger.contracts import SCHEMA
+
 project = Path(sys.argv[1])
 db = sqlite3.connect('file:' + (project / 'novel.sqlite3').as_posix() + '?mode=ro', uri=True)
 db.row_factory = sqlite3.Row
-
-# The v1 review stages, kept only so an old project still reports: nothing in v2 writes these.
-LEGACY_REVIEW_STAGES = ('chapter_review', 'scope_review', 'scope_synthesis', 'revision_review',
-                        'design_review', 'world_review', 'outline_review', 'contract_review',
-                        'alignment_review')
+version = db.execute("SELECT value FROM kv WHERE key='schema'").fetchone()
+if version is None or json.loads(version['value']) != SCHEMA:
+    raise SystemExit('只支持当前数据库协议：' + SCHEMA)
 
 # What the engine already settles mechanically, per drift coordinate. A repeated finding in one of
 # these kinds means the *engine* let it through, not that the criterion is missing from the table.
@@ -125,29 +112,6 @@ def drift_rows():
     return rows
 
 
-def legacy_rows():
-    """v1 review receipts, so an old project still reports where its findings came from."""
-    rows = []
-    for task in db.execute("SELECT input, result FROM tasks WHERE status='done' AND result IS NOT NULL").fetchall():
-        work = json.loads(task['input'])
-        stage = work.get('stage')
-        if stage not in LEGACY_REVIEW_STAGES:
-            continue
-        result = json.loads(task['result'])
-        data = result.get('data') if isinstance(result, dict) else None
-        groups = []
-        if isinstance(data, dict):
-            for key in ('facts', 'reader'):
-                if isinstance(data.get(key), dict):
-                    groups.append(data[key].get('findings'))
-            groups.append(data.get('findings'))
-        for findings in groups:
-            for finding in findings or []:
-                if isinstance(finding, dict) and finding.get('severity') not in (None, 'note'):
-                    rows.append((stage, str(finding.get('criterion') or '?'), 'v1', finding))
-    return rows
-
-
 def aggregate(rows, key_of):
     table = defaultdict(lambda: {'count': 0, 'digests': set(), 'again': 0, 'sample': None})
     for row in rows:
@@ -181,9 +145,8 @@ def report(title, rows, key_of, mechanical_by):
 book = book_document()
 engine = engine_findings(book)
 writer = drift_rows()
-legacy = legacy_rows()
 print('项目：%s' % project.resolve())
-print('引擎核算意见 %d 条；执笔自比偏离 %d 条；v1 审稿 findings %d 条' % (len(engine), len(writer), len(legacy)))
+print('引擎核算意见 %d 条；执笔自比偏离 %d 条' % (len(engine), len(writer)))
 print()
 
 candidates = report('引擎核算与已入账偏差', engine,
@@ -191,10 +154,6 @@ candidates = report('引擎核算与已入账偏差', engine,
 candidates += report('执笔自比：deviated / skipped / unplanned', writer,
                      lambda row: (row[0], row[1], row[2]),
                      lambda key: MECHANICAL.get(key[1], '') if key[2] != 'unplanned' else '计划外变化：需在下一章章纲里补登记')
-if legacy:
-    print()
-    candidates += report('v1 审稿 findings（仅历史项目，v2 不再产生）', legacy,
-                         lambda row: (row[0], row[1]), lambda key: MECHANICAL.get(key[1], ''))
 
 print()
 if candidates:

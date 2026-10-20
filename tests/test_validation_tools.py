@@ -60,5 +60,35 @@ class MeasurementSnapshotTests(unittest.TestCase):
             self.assertTrue(after['generated_at'])
 
 
+class CurrentAnalysisToolsTests(unittest.TestCase):
+    def test_reports_run_on_current_projects_and_refuse_old_schemas_without_writes(self):
+        sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
+        from novel_ledger.bootstrap import local_application
+        from novel_ledger.sqlite_store import SQLiteRepository
+        from support import contract, drive, seeded_book
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / 'book'
+            repo = SQLiteRepository.initialize(project, seeded_book(contract(3)))
+            try:
+                app = local_application(repo)
+                owner = app.run(through=2, source='当前分析工具工程验证。')['owner']
+                drive(app, owner)
+                for name in ('run_analysis.py', 'reflux_probe.py'):
+                    result = subprocess.run([sys.executable, str(ROOT / 'validation' / name), str(project)],
+                                            capture_output=True, text=True, encoding='utf-8')
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn('write' if name == 'run_analysis.py' else '执笔自比', result.stdout)
+                repo.put('schema', 'novel-ledger/3')
+                before = (project / 'novel.sqlite3').read_bytes()
+                for name in ('run_analysis.py', 'reflux_probe.py'):
+                    result = subprocess.run([sys.executable, str(ROOT / 'validation' / name), str(project)],
+                                            capture_output=True, text=True, encoding='utf-8')
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('只支持当前数据库协议', result.stderr)
+                    self.assertEqual((project / 'novel.sqlite3').read_bytes(), before)
+            finally:
+                repo.close()
+
+
 if __name__ == '__main__':
     unittest.main()

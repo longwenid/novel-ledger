@@ -6,15 +6,15 @@
 
 本页说明字段与机械核验，创作判断见 [创作与自比](craft.md)。填写时以当前任务的 capabilities、brief 和 result.template.json 为准，不自行增删字段或预填结论；格式不确定用 `check`，处理入口见 [运行](runtime.md)。
 
-约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威，模板与结构校验均由它派生。未知字段按 contract 拒绝，标为 optional 的数组/映射缺省时补空值；有 default 的字段采用表中默认值，其余按表检查必填。当前存储为 novel-ledger/4，任务不再保存首读列，仅支持当前库，v3 及更早数据库拒绝打开。协议版本为 `2.0.0`：v2 与 v1 是流水线换代，v1 的冻结任务（回执带 `checks_version`/`obligations`、要求首读，或阶段名为 `plan`/`book_plan` 等已删阶段的）在本版本不能执行，需按新协议重新派工。开书协议版本为 `opening/6`（`novel-ledger.creation/6`，13 门，世界与格局先于主角来历），是唯一支持的协议：声明更早 creation 版本的项目在读取时被明确拒绝，以当前协议重开；自备约定不经门序核验，缺省的结构化开书字段不追溯补选。
+约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威，模板与结构校验均由它派生。未知字段按 contract 拒绝，标为 optional 的数组/映射缺省时补空值；有 default 的字段采用表中默认值，其余按表检查必填。当前存储为 novel-ledger/4，任务不再保存首读列，仅支持当前库，v3 及更早数据库拒绝打开。CLI 版本为 `2.0.0`，只运行当前阶段与任务能力；旧门序、旧字段及独立审查阶段的任务直接拒绝，须以当前模板重新派工。开书协议版本为 `opening/6`（`novel-ledger.creation/6`，13 门，世界与格局先于主角来历），是唯一支持的协议：声明更早 creation 版本的项目在读取时被明确拒绝，以当前协议重开；自备约定不经门序核验，缺省的结构化开书字段不追溯补选。
 
 ## 作者约定
 
-核心字段包括 title/reader_promise/ending/genre、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism，完整必填项按模板检查；`protagonist_origin`（主角来历）自 `opening/4` 起由来历门产生，`core_premise`/`world_scale`/`world_ladder`/`world_tiers`/`world_resource`/`promise_anchor` 六个自 `opening/5` 起由对应门产生；`world_architecture` 自 `opening/6` 起由世界门产生，见下表。`tone`/`theme`/`pov` 在 opening/2 中由作者选择并逐字保留；自备约定可缺省，不追溯要求补选。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。总字数区间 word_range 是派生字段：由章数与每章区间算出，作者与派工材料都不填，也不参与开书对齐。
+核心字段包括 title/reader_promise/ending/genre、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism，完整必填项按模板检查；`protagonist_origin` 由来历门产生，`core_premise`/`world_scale`/`world_ladder`/`world_tiers`/`world_resource`/`promise_anchor` 由对应门产生，`world_architecture` 由世界门产生，见下表。`tone`/`theme`/`pov` 由文风门选择并逐字保留；直接导入完整约定时，非必填的开书决定可缺省。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。总字数区间 word_range 是派生字段：由章数与每章区间算出，作者与派工材料都不填，也不参与开书对齐。
 
 | 设置 | 默认与作用 |
 |---|---|
-| protagonist_origin | `{family, arrival, cost}`（**optional、参与对齐**）：`family` 只能是"魂穿"/"身穿"/"本土"/"其他"之一，`arrival` 是"怎么来、带来了什么"，`cost` 是代价或麻烦；来历门的 value 整份投影到本字段（`opening: ('origin', None)`）。旧约定没有这个字段，不追溯要求补选 |
+| protagonist_origin | `{family, arrival, cost}`（**optional、参与对齐**）：`family` 只能是"魂穿"/"身穿"/"本土"/"其他"之一，`arrival` 是"怎么来、带来了什么"，`cost` 是代价或麻烦；来历门的 value 整份投影到本字段（`opening: ('origin', None)`）。直接导入完整约定时可缺省 |
 | core_premise | `{novelty, first_cause, stance, dark_side}`（**optional、参与对齐**）：核心脑洞四问。`novelty`/`first_cause` 各 ≥12 字符；`stance` ∈ 顺从/利用/对抗；`dark_side` ∈ 外神/天灾/系统/上层剥削/制度/人心。脑洞门的 value 整份投影（`opening: ('premise', None)`） |
 | world_scale | `{opening, terminal, unchanged}`（**optional、参与对齐**）：`opening` 第一章读者能看见的边界（≥8 字符）、`terminal` ∈ 局部/势力/体系/文明、`unchanged` 跨卷不变的上层结构（≥8 字符）；格局门的 `scale` 投影（`opening: ('ladder', 'scale')`） |
 | world_ladder | rows（`blank: False, count: 1`；**optional、参与对齐**）：行 `stage`/`scope`/`growth`/`new_rule`/`cost`。`scope` ∈ 局部/一城/一域/一界/星海/诸天 且按此序单调不减；`growth` ∈ 地盘/势力/规则/认知/文明，≥3 条时至少一条是规则/认知/文明；条数 ≥ `DEFAULTS['world_ladder']['stage_min'][tier]`（t0/t1 2、t2 3、t3–t5 4）。格局门的 `ladder` 投影（`opening: ('ladder', 'ladder')`） |
@@ -43,9 +43,9 @@ protagonist_setup={id,name,identity,desire,limit} 保存主角身份、欲望和
 
 ## 冻结任务与资料读取
 
-task.json 给身份、路径和 commands。records 提供冻结哈希，required 给必读名称，prose 给出本任务正文来源。brief 说明当前任务规则，任务目录同时物化 `brief.md`（同一简报的 markdown 全文，直接读它，不解析 input.json）与 `dispatch.md`（Worker 自举卡：环境自举、步骤、认领状态、命令与常见坑）；重派未提交任务时，上次遗留的回执草稿由引擎隔离为 `result.stale.json`（派工卡会注明）——它不是进度也不是判断依据，从模板起稿。guides 作为相关章节的参考，不重复通读全部文档。
+task.json 给身份、路径和 commands，其中 records 提供冻结哈希，required 给必读名称；input.json 保存任务材料视图，记录哈希不重复写入。正文来源按本阶段冻结为 previous_chapters、base_draft 等记录，历史正文经 recall 补读；本章理解证据绑定全文、补丁或复用方式最终合成的完整正文。brief 说明当前任务规则，任务目录同时物化 `brief.md`（同一简报的 markdown 全文，直接读它，不解析 input.json）与 `dispatch.md`（Worker 自举卡：环境自举、步骤、认领状态、命令与常见坑）；重派未提交任务时，上次遗留的回执草稿由引擎隔离为 `result.stale.json`（派工卡会注明）——它不是进度也不是判断依据，从模板起稿。guides 作为相关章节的参考，不重复通读全部文档。
 
-主干使用 advance --compact 获取精简 task；开书门任务（opening_options）由主干自执，其余阶段把 task_path 交给子 agent；磁盘 task.json 始终完整。新任务使用新会话：`requires_new_worker` 保留，一个会话只做一个任务（跨任务复用按 session_reuse 拒绝）；claim 只表示执行认领，须结合宿主中的子 agent 状态判断是否仍在执行，主干循环及动作分支见 [运行](runtime.md)。
+主干使用 advance --compact 获取精简 task；开书门任务（opening_options）由主干自执，其余阶段把 task_path 交给子 agent；磁盘 task.json 始终完整。除 `contracts.CONTROLLER_STAGES` 中由主干自执的 opening_options 外，新任务使用新 Worker 会话，`requires_new_worker` 要求一个会话只做一个任务（跨任务复用按 session_reuse 拒绝）；开书门不绑定主干会话，可连续执行。claim 只表示执行认领，须结合宿主中的子 agent 状态判断是否仍在执行，主干循环及动作分支见 [运行](runtime.md)。
 
 工作台能力 `understanding/1`、稳定场景身份 `scene-identity/2`、阅读关联 `reading-dependencies/1`、作品理解字段见 [叙事工作台](workbench.md)。能力值与规范化计划的 reading_schema 由引擎统一冻结并按当前规则解释。开书方案的篇幅上界是无条件的唯一规则，见 [逐门开书](opening.md)。
 
@@ -53,7 +53,7 @@ task.json 给身份、路径和 commands。records 提供冻结哈希，required
 
 每个任务材料的 `policy` 块是当前生效的项目字面约定：`version`/`source` 说明版本与来源（作者原话或内置默认），`forbidden_terms`/`forbidden_name_chars` 给出规则，`scope` 说明**本阶段实际检查哪些字段**。该块与执行检查共用 `contracts.ENFORCEMENT` 一张表，所以声明与校验不会脱节；越出 scope 的字段不检查，违反 scope 内字段以 `literal_policy` 拒绝并在 details 里列出命中字段与命中词。改规则用 `lexical` 命令。
 
-`read --task ID` 只返回本任务**尚未拿到过**的必读记录（跳过的名字列在 already_read，需要原文用 `--record 名称` 或 `--all` 取回）；返回里的 `records_hash` 是本任务全部可见记录哈希的一并摘要——主干同一会话连跑多个任务时，与前一次相同且必读名单未变即可跳过本次 read；`--record 名称` 读单个完整记录。`recall --task ID --chapter N` 读冻结目录中的完整历史章，`--state` 读完整前态。可选 history_source 以哈希冻结逐章目录；分页检索与承诺关联见 [叙事推进](narrative.md#历史补读)。必读 state 按参与人和相关开放承诺选择，派工 baseline 也取该冻结视图，complete_state 永远可补读。结构选择不证明其他事实语义无关；执笔材料包含本章章纲和相关卷纲，完整卷纲保留补读入口，见 [材料范围](narrative.md#有界材料与局部重排)。当前 state 是视图，不冒充全部资料。
+`read --task ID` 只返回本任务**尚未拿到过**的必读记录（跳过的名字列在 already_read，需要原文用 `--record 名称` 或 `--all` 取回）；返回里的 `records_hash` 是本任务 required 对应名称及哈希的摘要；仅主干连续自执 opening_options 时，与前一次相同且必读名单未变可跳过本次 read；其他任务由各自 Worker 完整读取必读记录；`--record 名称` 读单个完整记录。`recall --task ID --chapter N` 读冻结目录中的完整历史章，`--state` 读完整前态。可选 history_source 以哈希冻结逐章目录；分页检索与承诺关联见 [叙事推进](narrative.md#历史补读)。必读 state 按参与人和相关开放承诺选择，派工 baseline 也取该冻结视图，complete_state 永远可补读。结构选择不证明其他事实语义无关；执笔材料包含本章章纲和相关卷纲，完整卷纲保留补读入口，见 [材料范围](narrative.md#有界材料与局部重排)。当前 state 是视图，不冒充全部资料。
 
 hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、紧凑分隔符、allow_nan=False。正文哈希也基于 JSON 字符串值，不是裸文件字节。来源完整性不证明阅读理解。
 
@@ -84,9 +84,9 @@ submit 的 accepted=true 表示回执已接受，不等于正文已入库。正�
 | world_model | 完整世界记录；默认同时起草 data.contract（payload.also），提交时由引擎机械校验引用、领域与选择一致性 |
 | volume_outline | `volumes[]`，字段、长度与卷末终值见 [卷纲](narrative.md#卷纲)；选择绑定见 [世界规则](world.md#三条逐字绑定) |
 | chapter_outline | `volume` + `chapters[]`，字段与状态链见 [章纲](narrative.md#章纲)；重排范围以冻结 payload 为准 |
-| write / repair / redesign | title/完整 prose/summary/drift_check/具体 self_check；工作台模式下可带顶层 `understanding` 增量（引擎在入库时更新作品理解）；提交时机械判定字数区间、跨章逐字重复（≥25 字）、对白引号体例、西文残留，核算漂移，并跑文风代理指标（见 [文风](narrative.md#文风)） |
+| write / repair / redesign | title/summary/drift_check/具体 self_check；write 交完整 prose，repair/redesign 从 prose/patches/reuse_original 中三选一，补丁或复用另附准确 base_hash 与 repair_note（见 [版本补丁](editorial.md#版本补丁)）；工作台模式下可带顶层 `understanding` 增量（引擎在入库时更新作品理解）；提交时机械判定字数区间、跨章逐字重复（≥25 字）、对白引号体例、西文残留，核算漂移，并跑文风代理指标（见 [文风](narrative.md#文风)） |
 
-有世界模型时，章纲须声明 world_refs=[领域:id]，引用须存在，所选关联记录完整保留。返修必须逐项回应引擎拒绝的具体项（漏项、前态不符、体例或字数命中），不重交原样候选。
+有世界模型时，章纲须声明 world_refs=[领域:id]，引用须存在，所选关联记录完整保留。返修必须逐项解决引擎拒绝的具体项（漏项、前态不符、体例或字数命中）。若修正的是回执漏项且原文仍成立，可按版本补丁协议复用原文并说明依据；完整合成稿仍须重新通过全部机械判据，不能用复用忽略正文缺陷。
 
 卷纲与章纲校验（文风必填、可计算卷末终值）对所有提交统一执行；重排使用当前任务模板，历史前缀不再按旧形状解释。
 

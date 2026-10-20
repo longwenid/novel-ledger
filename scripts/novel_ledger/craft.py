@@ -60,17 +60,6 @@ def scenes(plan, entities):
             require(all(text(intent.get(k)) for k in ('seeks', 'withholds', 'pressure', 'tactic'))
                     and isinstance(intent.get('knowledge_topics'), list) and all(text(t) for t in intent['knowledge_topics']),
                     'dialogue', '对白意图需 seeks/withholds/pressure/tactic/knowledge_topics。')
-    units = plan.get('expansion_units')
-    if not units:
-        return
-    require(isinstance(units, list) and all(isinstance(u, dict) for u in units), 'development', 'expansion_units 须为对象数组。')
-    ids = []
-    for unit in units:
-        require(all(text(unit.get(k)) for k in ('id', 'focus', 'development', 'expected_change'))
-                and type(unit.get('scene')) is int and 1 <= unit['scene'] <= len(rows),
-                'development', '展开单元需 id/scene/focus/development/expected_change，scene 从 1 起。')
-        ids.append(unit['id'])
-    require(len(ids) == len(set(ids)), 'development', '展开单元 ID 不重复。')
 
 
 def compose(data, base=None):
@@ -82,7 +71,7 @@ def compose(data, base=None):
     require(base is not None and data.get('base_hash') == digest(base), 'patch_base', '补丁须绑定本任务准确基稿哈希。')
     require(text(data.get('repair_note')), 'patch', '补丁或复用须给 repair_note。')
     if modes == ['reuse_original']:
-        require(data['reuse_original'] is True, 'patch', 'reuse_original 只能为 true，仍需独立重审。')
+        require(data['reuse_original'] is True, 'patch', 'reuse_original 只能为 true，仍须通过完整机械核算。')
         return base, {'base_hash': digest(base), 'reuse_original': True, 'repair_note': data['repair_note']}
     patches = data['patches']
     require(isinstance(patches, list) and patches and all(isinstance(p, dict) for p in patches), 'patch', 'patches 须非空。')

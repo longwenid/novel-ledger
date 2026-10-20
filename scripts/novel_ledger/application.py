@@ -85,7 +85,7 @@ class Application:
         return {'plan_hash': plan['plan_hash'], 'first': plan['first'], 'requested_through': plan['through'],
                 'required_through': plan['impact']['last'], 'reason': plan['reason'],
                 'violations': plan['violations'], 'policy': plan['policy'],
-                'action_counts': {name: sum(a['action'] == name for a in actions) for name in ('keep', 'review', 'local', 'rewrite')},
+                'action_counts': {name: sum(a['action'] == name for a in actions) for name in ('keep', 'local', 'rewrite')},
                 'plan_path': self.presentation.revision_path(plan['plan_hash'])}
 
     def task_status(self, task_id):
@@ -134,15 +134,13 @@ class Application:
                      'recover': '先执行 claim --task ' + task['id'] + ' --session <你的会话> 取得新 token，'
                                 '再在回执顶层 execution_claim 填该 token（裸字符串）后重新提交；回执内容本身不用改。'})
 
-    def _sources(self, work, candidate=None):
-        """Evidence sources are the submitted candidate and its frozen recent chapters."""
+    def _sources(self, work):
+        """Frozen recent chapters; workflow adds the composed current draft as its own evidence."""
         sources = {}
         record = (work.get('records') or {}).get('previous_chapters')
         if record:
             for row in self.repo.read_document(record):
                 sources.setdefault(row['chapter'], row['prose'])
-        if isinstance(candidate, str) and candidate:
-            sources[work['chapter']] = candidate
         return sources
 
     def _priors(self, book, chapter):
@@ -327,9 +325,8 @@ class Application:
             # whether the chapter commits; the producer sees the finding without spending a review
             # round, and preflight runs the same code.
             priors = self._priors(book, work['chapter']) if work['stage'] in ('write', 'repair', 'redesign') else None
-            candidate = (result.get('data') or {}).get('prose') if work['stage'] in ('write', 'repair', 'redesign') else None
             outcome = workflow.apply(book, work, result.get('data'), result['session'],
-                                     self._sources(work, candidate), priors)
+                                     self._sources(work), priors)
             updated = outcome.book
             updated['last_task'] = task['id']
             if outcome.chapter:
@@ -355,7 +352,7 @@ class Application:
                 self._revisions.refresh_understanding(updated)
             if updated.get('revision_directive'):
                 directive = updated['revision_directive']
-                updated = self._revisions.start_review(updated, directive)
+                updated = self._revisions.start_revision(updated, directive)
             self.repo.save(updated)
             self.repo.record('submit', {'task': task['id'], 'stage': work['stage'], 'committed_chapter': outcome.chapter is not None})
             response = {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
@@ -390,7 +387,7 @@ class Application:
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self.repo.load()
-            require(book['contract'] is not None, 'creation', '开书约定尚未激活，先完成 opening 的独立核验。')
+            require(book['contract'] is not None, 'creation', '开书约定尚未激活，先完成世界与约定的机械校验。')
             end = editorial.effective_contract(book)['volumes'][-1]['end']
             target = end if finish else through
             require(type(target) is int and 1 <= target <= end, 'target', '运行目标须为约定范围内的章号。')
@@ -572,8 +569,8 @@ class Application:
             labels = [row['label'] for row in block.get('options') or []]
             require(option in labels, 'author_decision', '答复须是已展示的选项之一；作者另有第三条路时走改约或重新提案。',
                     {'options': labels, 'got': option,
-                     'recover': '把第三条路整理成完整候选后执行 recontract --file 并附作者原话，经独立核验回答本问题；'
-                                '注意已有正文的改约会在新分支自第 1 章重写重审全书（父分支保留，可 discard 恢复），'
+                     'recover': '把第三条路整理成完整候选后执行 recontract --file 并附作者原话，经机械校验激活后回答本问题；'
+                                '注意已有正文的改约会在新分支自第 1 章重写全书并重新机械核算（父分支保留，可 discard 恢复），'
                                 '先向作者说明该代价再动手。'})
             book.setdefault('author_decision_history', []).append(
                 {'question': copy.deepcopy(block),
@@ -723,7 +720,7 @@ class Application:
                 # radius exceeds the automatic range is saved as a complete proposal and waits for
                 # the author's own authorization (revise --proposal-hash), instead of silently
                 # rewriting half the book.
-                book = self._revisions.start_review(book, {
+                book = self._revisions.start_revision(book, {
                     'first': first, 'through': through, 'reason': reason,
                     'changes': changes if changes is not None else {'mode': 'semantic', 'changes': []},
                     'case_ids': []})

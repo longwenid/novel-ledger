@@ -1,5 +1,7 @@
 # novel-ledger 质检修复验收 2026 10 19
 
+> 历史归档：本文件保留当轮版本、设计或实验条件，不是当前执行规范。旧门序、兼容条款、独立审查阶段及命令均不用于当前流程；当前唯一执行依据见 [任务协议](../references/protocol.md) 与 [运行流程](../references/runtime.md)。
+
 [修复前质检](quality-run-2026-10-19.md)中的 Q01–Q13、D01–D04 已逐项处理，原始快照与结论保留。当前全量回归 **572 passed、1355 subtests passed、0 failed**；11 个专项脚本全部通过，pyflakes 无发现，技能基础校验和活跃文档链接检查通过。
 
 修复基于 `9a2a5bb40be72c0d2d02c2bacc2bcf4fe7c0acf8` 的工作树，未提交或推送。当前源码以 [metrics.json](metrics.json) 的提交号与源码指纹共同定位；提交号表示基线，指纹包含本地修改。时间按 Asia/Shanghai 记录，度量生成时间使用明确标注的 UTC。

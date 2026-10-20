@@ -6,6 +6,8 @@ description: >-
 
 # novel-ledger
 
+当前执行仅以本技能入口、[任务协议](references/protocol.md)、[运行流程](references/runtime.md) 及其专项指南为准。`validation/` 中的历史规格、实验和报告只保存当轮证据，不作为执行规范或兼容承诺。
+
 沿用作者已有设定和决定，缺什么才补什么；只推进已授权目标。讨论小说、技能或引擎本身不表示启动创作。
 
 ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径。入口为 `python3 ROOT/scripts/novel.py --project PROJECT 命令`（Windows 用 `python`），运行仅依赖 Python 3.9+ 标准库；项目数据和产物存入 PROJECT。宿主可能用目录联接（junction/symlink）把同一份安装映射到第二个路径：注入的基目录与任务 commands 里渲染的路径实为同一安装，不要当成两份技能核实。

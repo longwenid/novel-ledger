@@ -33,7 +33,8 @@
 {"volumes": [{
   "id": "v1",
   "purpose": "卷职责，≤60 汉字",
-  "arc": "开局处境→关键转折→卷末局面，约 250 汉字",
+  "stage": "逐字取已选格局阶梯中的一级",
+  "arc": "展开开局处境、关键转折与卷末局面；整卷字段合计须满足 words±tolerance 汉字",
   "turns": [{"at": "卷中|卷尾|第N章附近", "turn": "转折内容"}],
   "climax": "卷末高潮与兑现物",
   "nodes": [{"id":"n1","kind":"main|side|hidden","purpose":"…","ending_condition":"…","required":true,"window":[1,25]}],
@@ -52,6 +53,7 @@
 ```
 
 - `id` 与 `contract.volumes` 一一对应且顺序一致；`purpose` 是卷职责。
+- 已声明 `world_ladder` 时，`stage` 必须逐字取其中一级，并按卷序只升不降；直接导入约定未声明阶梯时可留空。
 - `nodes`/`threads` **按卷登记**，id 全书唯一、不覆盖已批准 id；跨卷线路用 `continues: true` 标记。
 - `hooks` **必填数组，可为空**：本卷伏笔账，规则见 [伏笔账](#伏笔账卷纲声明章纲执行)。
 - `style.trend` **必填**（具体文字，说明本卷文风怎么走、相对首章定调有何变化）；`style.window` 可选，逐项覆盖契约 `style_window`。见 [文风](#文风)。
@@ -67,7 +69,7 @@
 
 ### 参数与范围
 
-`chapter_outline={scope:'volume',words:150,tolerance:60}`：`words` 是**每章 synopsis** 的汉字数，`scope` 为 volume（本卷）或 all。每卷 1 次，在进入该卷前派。
+`chapter_outline={scope:'volume',words:150,tolerance:60}`：`words` 是**每章 synopsis** 的汉字数，`scope` 为 volume（进卷前交本卷）或 all（正文开始前覆盖全部卷）。引擎仍按卷派发章纲任务，按实际 scope 完成所需覆盖。
 
 ### 回执形状
 
@@ -101,7 +103,7 @@
 - **必需**：`chapter` `synopsis` `plot.beat` `enter` `exit` `world_refs`。模板显式列出四个增量数组（`resources` `places` `knowledge` `characters`），便于逐类核对；空数组、缺字段和 null 均表示本章没有这类变化。写入的变化仍须通过完整形状与状态校验。
 - `hooks` **必填数组，可为空**：本卷伏笔的执行，`action` 只有 `plant` 与 `payoff` 两个值；中途“再提一次”用 `hook_refs`，不新增动作。见 [伏笔账](#伏笔账卷纲声明章纲执行)。
 - `style`：`pov` 与 `rhythm` 必填，`dialogue_ratio`（0~1）与 `notes` 可选。见 [文风](#文风)。
-- `scenes`/`pacing` 可选，保留工作台兼容；`hook_refs`/`reader_refs`/`history_refs` 指出本章要承接的旧承诺、旧认知与历史断言。
+- `scenes`/`pacing` 是当前章纲的可选字段；`hook_refs`/`reader_refs`/`history_refs` 指出本章要承接的旧承诺、旧认知与历史断言。
 - `new_entities` 取代原人物档案派工：新人物/地点/物品首次出现时，在本章内联给出档案字段；落地后按 id 引用，不再单独派一次档案任务。
 - 每章 synopsis 写清行动、阻力、选择、代价、结果与对下一章的推动；引用真实世界记录与卷纲已登记的节点/线路/伏笔。
 

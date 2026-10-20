@@ -190,7 +190,7 @@ def design_anchor(book, contract, volume, payload):
     return state
 
 
-def replan_volume_outline(book, contract, chapter, drift_rows, reason):
+def replan_volume_outline(book, contract, chapter, drift_rows, reason, through=None):
     """Re-plan the rest of a volume's chapter outlines after reality moved under them.
 
     This is where the old alignment stages went: a chapter that deviated from its outline, or a
@@ -203,7 +203,8 @@ def replan_volume_outline(book, contract, chapter, drift_rows, reason):
     # The re-plan answers the chapters from `chapter` to the end of its volume, so the dispatch's
     # own range starts there: handing the volume's first chapter to a batch that must re-derive the
     # chain from the state the book is actually in is how a re-plan used to be unanswerable.
-    return Job('chapter_outline', chapter, 'volume:' + volume['id'], chapter, volume['end'],
+    last = volume['end'] if through is None else min(through, volume['end'])
+    return Job('chapter_outline', chapter, 'volume:' + volume['id'], chapter, last,
                payload={'volume': volume['id'], 'from_chapter': chapter, 'repair': True, 'allow_retained_suffix': True,
                         'drift': copy.deepcopy(drift_rows or []), 'reason': reason})
 
@@ -256,13 +257,19 @@ def choose(book, headers):
                 'coverage': outline_receipt(book, volumes)}
     if head and (not book['pilot'] or book['pilot']['prose'] != headers[0]['prose']):
         return {'action': 'await_author', 'chapter': 1, 'prose_hash': headers[0]['prose']}
-    if book['draft']:
-        return Job(book['draft']['stage'], book['draft']['chapter'])
     revision = book.get('revision_run')
+    chapter = head + 1
+    reading_revision = revision and (revision.get('impact') or {}).get('reading_changes')
+    if reading_revision and chapter <= revision['last'] and revision.get('outlined_through', 0) < chapter:
+        return replan_volume_outline(book, contract, chapter, [],
+                                     '阅读关联发生变化，先重排受影响章纲，再按新章纲修改正文。',
+                                     through=revision['last'])
     if revision and revision.get('outline_task'):
         chapter = revision['outline_task']
         return replan_volume_outline(book, contract, chapter, revision.get('drift'),
                                      '修订改变了前文，本卷剩余章纲按真实状态重排。')
+    if book['draft']:
+        return Job(book['draft']['stage'], book['draft']['chapter'])
     if head >= book['target']:
         if revision and not revision.get('carry'):
             return {'action': 'revision_ready'}
@@ -553,7 +560,7 @@ def apply(book, task, data, actor, sources, priors=None):
                         '合并派工缺少这一卷的章纲：' + volume_id)
                 validated = planning.validate_chapter_outline(
                     {'volume': volume_id, 'chapters': half[volume_id]}, chapter_policy(book),
-                    volume, outlines[volume_id], book.get('world'), simulated)
+                    volume, outlines[volume_id], book.get('world'), simulated, book.get('plans'))
                 book.setdefault('chapter_outlines', {})[volume_id] = validated
                 for item in drift.plan_rows(validated):
                     book.setdefault('plans', {})[str(item['chapter'])] = item
@@ -576,11 +583,14 @@ def apply(book, task, data, actor, sources, priors=None):
                 and data['from_chapter'] == first, 'chapter_outline',
                 '章纲核算起点由冻结任务决定，不能通过回执跳过待修章节。')
         data['from_chapter'] = first
+        last = (payload.get('chapter_outline') or {}).get('last', volume['end'])
+        if payload.get('repair') and last < volume['end']:
+            data.setdefault('through_chapter', last)
         retained = {}
         if 'through_chapter' in data:
             through = data['through_chapter']
             require(payload.get('repair') and payload.get('allow_retained_suffix')
-                    and type(through) is int and first <= through <= volume['end'],
+                    and type(through) is int and first <= through <= last,
                     'chapter_outline', 'through_chapter 仅用于允许保留后缀的重排任务，且须在本批范围内。')
             submitted = data.get('chapters')
             require(isinstance(submitted, list) and all(isinstance(r, dict) for r in submitted)
@@ -592,7 +602,7 @@ def apply(book, task, data, actor, sources, priors=None):
             data['chapters'] = submitted + [copy.deepcopy(retained[n]) for n in sorted(retained)]
         chapters = planning.validate_chapter_outline(data, chapter_policy(book), volume, outline,
                                                     book.get('world'),
-                                                    design_anchor(book, contract, volume, payload))
+                                                    design_anchor(book, contract, volume, payload), book.get('plans'))
         for item in chapters:
             if item['chapter'] in retained:
                 require(digest(item) == digest(retained[item['chapter']]), 'chapter_outline',
@@ -612,6 +622,12 @@ def apply(book, task, data, actor, sources, priors=None):
             for item in book.get('design_drift') or []:
                 if item.get('chapter', 0) < first:
                     item['absorbed_by'] = {'volume': volume_id, 'from_chapter': first}
+        revision = book.get('revision_run')
+        if revision:
+            if revision.get('outline_task') == first:
+                revision.pop('outline_task')
+            if (revision.get('impact') or {}).get('reading_changes'):
+                revision['outlined_through'] = data.get('through_chapter', last)
         ledger.check(data.get('ledger'))
     elif stage in ('write', 'repair', 'redesign'):
         # Step five. The writer drafts from the chapter outline and submits its own item-by-item
@@ -622,9 +638,15 @@ def apply(book, task, data, actor, sources, priors=None):
                 '执笔需要 title/summary/self_check。')
         require('events' not in data and 'candidate_events' not in data, 'writer_events',
                 '正文事件由章纲与 drift_check 核算产生，不由执笔另写一份。')
+        revision = book.get('revision_run')
+        if revision and (revision.get('impact') or {}).get('reading_changes') and chapter <= revision['last']:
+            require(revision.get('outlined_through', 0) >= chapter, 'revision_outline',
+                    '阅读修订必须先提交当前章纲重排，再修改正文。',
+                    {'recover': '未经过章纲重排的旧修订任务不能继续；撤销候选后按当前流程重新发起修订。'})
         base = book['draft']['prose'] if book['draft'] else (book.get('prior_candidate') or {}).get('prose')
         prose, patch = craft.compose(data, base if stage != 'write' else None)
         data = {**data, 'prose': prose}
+        sources = {**sources, chapter: prose}
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         spend(book, chapter, stage)
         old = book['draft'] or {}

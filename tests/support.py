@@ -441,12 +441,14 @@ def chapter_outline_fixture(app, work, resources=True, places=True, knowledge=Tr
     volume_id = payload.get('volume')
     volume = next(row for row in contract['volumes'] if row['id'] == volume_id)
     first = payload.get('from_chapter') or volume['first']
+    last = policy.get('last', volume['end'])
+    rows = chapter_rows(book, volume, anchor_state(app, book, payload, volume),
+                        first=first, words=words,
+                        resources=resources, places=places, knowledge=knowledge,
+                        characters=characters, nodes=nodes, clock_days=clock_days, hooks=hooks)
     return {'volume': volume['id'],
-            'chapters': chapter_rows(book, volume, anchor_state(app, book, payload, volume),
-                                     first=first, words=words,
-                                     resources=resources, places=places, knowledge=knowledge,
-                                     characters=characters, nodes=nodes, clock_days=clock_days,
-                                     hooks=hooks)}
+            **({'through_chapter': last} if payload.get('allow_retained_suffix') else {}),
+            'chapters': [row for row in rows if row['chapter'] <= last]}
 
 
 def chapter_rows(book, volume, state, first=None, words=None, resources=True, places=True,

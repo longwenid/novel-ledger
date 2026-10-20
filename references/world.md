@@ -66,7 +66,7 @@
 | `world_resource`（`name`/`source`/`allocator`） | `economy` 里有一条记录，其 `resource` 与声明的 `name` 逐字相同，且该条记录的 `distribution` 字段文本里出现声明的 `allocator`（分配者必须写在分配方式里；在别的字段出现不算） |
 | `world_ladder` 的每级 `stage` | `geography`/`cosmology`/`factions`/`powers` 里有一条 `name` 与它**逐字相同**的记录 |
 
-另外，`data` 里缺的领域会先规范化为 `[]`（在返回的深拷贝里补上），只有**本档位或本次声明要求**的领域才要求至少一条实写记录（`mechanisms` 的既有例外保留）——所以在跑项目（10 域、没有新键）仍能通过一致性复检。
+模型必须显式包含全部 12 个领域数组，缺键直接拒绝。只有本档位或本次声明要求的领域才须至少一条实写记录；其他领域给空数组。已选无机制时，`mechanisms` 必须为空。
 
 ## 世界架构绑定
 
@@ -80,7 +80,7 @@
 | conflict | 持续恶化的贯穿矛盾 | `rules.consequences` |
 | mystery | 终极真相与揭开后仍需解决的问题 | `mysteries.truth` |
 
-声明与绑定目标共用 `contracts.WORLD_ARCHITECTURE`；旧项目未声明时不追溯补填。存进 `truth` 的作者设定不自动成为人物知识，披露须经卷纲窗口与章纲知情链安排。
+声明与绑定目标共用 `contracts.WORLD_ARCHITECTURE`；逐门开书必须声明五项架构，直接导入完整约定时按实际声明核验。存进 `truth` 的作者设定不自动成为人物知识，披露须经卷纲窗口与章纲知情链安排。
 
 ## 机械校验与采纳
 

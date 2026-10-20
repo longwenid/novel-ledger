@@ -230,7 +230,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
     return drift.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state)
 
 
-def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0):
+def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0, previous=None):
     """Delegate the chapter outline's chain checks, then freeze the scenes it declares.
 
     `drift` owns the state chain; this entry point adds the one piece that needs the scene protocol
@@ -240,7 +240,9 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     """
     rows = drift.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0)
     entities = copy.deepcopy((state0 or {}).get('entities') or {})
-    previous = {}
+    replaced = {row['chapter'] for row in rows}
+    previous = {key: value for key, value in (previous or {}).items()
+                if value['chapter'] not in replaced}
     for row in rows:
         if row.get('scenes'):
             craft.scenes(row, entities)

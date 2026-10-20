@@ -79,9 +79,9 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 
 advance --compact 的 task 只含任务身份、阶段、task_path、identity_path、brief_path、dispatch_path、claim 等派工信息；完整 task.json 仍按原协议写入 task_path，作者选择板与非派工动作保持完整（--compact 下板面回显压缩为哈希与 option_ids，全文在 board.md 与 work/last-advance.json）。主干把 task_path 交给子 agent，由它完整读取本任务。commands 为 argv 数组，按数组执行，不拼 shell 字符串。
 
-每个任务目录另写 identity.json 与 dispatch.md：identity.json 是该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、入口与版本，以及 worker_env 里应注入的变量名）；dispatch.md 是引擎从冻结任务渲染的 **Worker 自举卡**（环境自举命令、执行步骤、认领状态、argv 命令行、常见坑）。identity 供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：read/recall/patch 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示本次由新会话自行命名。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
+每个任务目录另写 identity.json 与 dispatch.md：identity.json 是该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、入口与版本，以及 worker_env 里应注入的变量名）；dispatch.md 是引擎从冻结任务渲染的 **Worker 自举卡**（环境自举命令、执行步骤、认领状态、argv 命令行、常见坑）。identity 供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：除 opening_options 对主干放行 read/recall 外，read/recall/patch 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示本次由新会话自行命名。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
 
-新任务派真实新 Worker，填真实 session（一个会话只做一个任务：`requires_new_worker` 保留，跨任务复用按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**认领由主干进程执行**：需要租约时主干调用 `claim --task ID --session ID` 并把返回 token 转给该 Worker 填入回执顶层 execution_claim，提交时附带；Worker 进程执行 claim 会被 worker_boundary 拒绝，claim=null 表示无需认领。
+除主干自执的 opening_options 外，新任务派真实新 Worker，填真实 session（一个会话只做一个任务：`requires_new_worker` 保留，跨任务复用按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**认领由主干进程执行**：需要租约时主干调用 `claim --task ID --session ID` 并把返回 token 转给该 Worker 填入回执顶层 execution_claim，提交时附带；Worker 进程执行 claim 会被 worker_boundary 拒绝，claim=null 表示无需认领。
 
 主干已派出的子 agent 仍在运行，或 claim.expired=false 时继续等待，不重派；claim=null 只表示没有执行认领，不证明没有运行中的子 agent。expired=true 表示提交前须重新认领，也不证明旧执行者已停止。已写好 result.json 但租约过期时，由主干沿允许的会话重新 claim，Worker 只更新 execution_claim 后重提，保留已填回执。恢复任务先 status、再 advance --compact，以当前任务为准，不手改库；要看全部派工的生命周期用 `status --tasks`（id/状态/阶段/会话，取代直接查库）。
 
@@ -126,27 +126,27 @@ target_reached 表示授权章节目标完成；ready_to_complete 仍须 complet
 
 **卷末不是审查阶段**：卷末闭合核对卷纲的结构化资源/位置/知情/人物终值、主线时钟 `clock.to` 与必要伏笔；自然语言 `exit_state` 只作说明，不宣称语义已被机械证明，不再有卷末范围审与根问题裁决。完本仍须 `complete` 验收：章数、每章篇幅区间、required 节点与线路解清、首章认可；之后执行 `deliver`，得到 book.md/book.html/delivery.json；交付失败重试该快照的 deliver，不重新写书。`usage` 查看实际记录字符，宿主 token 用独立 observe.py 导入观测，不从字符估算。
 
-工作台随项目初始化，协议与边界见 [叙事工作台](workbench.md)。阅读变化在新流程里不再派独立重读任务：受影响的章纲由 `chapter_outline`（payload 带 `repair=True` 与偏差清单）重排，正文按实际需要重写或原样携带。
+工作台随项目初始化，协议与边界见 [叙事工作台](workbench.md)。阅读变化在新流程里不再派独立重读任务：受影响的章纲先由 `chapter_outline`（payload 带 `repair=True`，并提供修订影响与原因）按卷重排，冻结的 last 限制本批终点，区间外章纲由引擎保留并核对；纳入影响区间的正文重写，区间外后缀仅在显式前态与事实重放均通过时原样携带。
 
 ## 修订影响分析
 
 `revision-impact --from-chapter N --changes-file 变更.json` 只读取已提交章纲、事件和哈希，不改项目、不返回正文。Worker 不能调用。变更说明由作者要求形成（例如抽读后发现的历史缺陷）：
 
 ```json
-{"mode":"semantic","changes":[{"kind":"knowledge","key":"shen:source"}],"scenes":["c2:s1"]}
+{"mode":"semantic","changes":[{"kind":"knowledge","key":"shen:source"}],"scenes":["scene:warehouse-confrontation"]}
 ```
 
 | 变更类型 | changes-file 的声明 | 后文处理原则 |
 |---|---|---|
 | expression | 不带 changes，只改表达。 | 保持事实投影不变，仍核对后文前态。 |
-| reading | 非空 reading_changes，声明人物、关系、母题、声线或披露关联。 | 受影响章的章纲重排，正文按新章纲重写或原样携带；v2 不再有独立重读任务。 |
+| reading | 非空 reading_changes，声明人物、关系、母题、声线或披露关联。 | 受影响章及连续区间内的章纲重排后重写；无独立重读动作，区间外才可原样携带。 |
 | semantic | changes 列实际变更坐标，可附 reading_changes。 | 沿事实与场景依赖分析，不完整时保守扩大。 |
 
 kind 使用事实投影坐标（如 facts/knowledge/resources/relations/placements/hooks/reader_knowledge/node）；scenes 可省略，提供时必须是修订起章的实际场景。expression/reading 事实投影变化时按 revision_carry 拒绝，保留 pending 与旧稿。阅读坐标、版本标记和处理动作统一见 [叙事工作台](workbench.md#分级修订)。
 
-语义分析沿显式 reads 与 depends_on 传播，受影响章节的已提交事件继续扩大影响；连续修订区间内的中间章节也会重写，其输出和场景依赖同样继续传播。story_node 同时更新节点与所属线路状态，两者均计入影响。缺少完整依赖、没有明确变更坐标或事件无法解释时保守扩展；move/placement/travel 涉及持有链、站位或到达时间的派生影响，目前也保守扩展。`last` 为建议终点，rewrite_chapters 是连续初始修改区间；区间后动作另看 chapter_actions。source_hash/sources 绑定分析的准确章节版本。**依赖声明的语义完整性不再有独立判断**：引擎只按显式 reads/depends_on 传播，空数组不证明故事没有联系，因此这里保守扩大。分析结果另给出 `coverage` 与 `expansion`：后者写明保守扩大的原因（`undeclared_dependencies` 或 `unexplained_events`）、起点、终点与章数，并随 `status` 的 revision_run 暴露给主控与作者。
+语义分析沿显式 reads 与 depends_on 传播，受影响章节的已提交事件继续扩大影响；连续修订区间内的中间章节也会重写，其输出和场景依赖同样继续传播。story_node 同时更新节点与所属线路状态，两者均计入影响。缺少完整依赖、没有明确变更坐标或事件无法解释时保守扩展；move/placement/travel 涉及持有链、站位或到达时间的派生影响，目前也保守扩展。`last` 是事实与阅读依赖传播后的完整建议终点，rewrite_chapters 是连续修改区间；chapter_actions 只列 keep/local/rewrite，区间外为 keep。source_hash/sources 绑定分析的准确章节版本。**依赖声明的语义完整性不再有独立判断**：引擎只按显式 reads/depends_on 传播，空数组不证明故事没有联系，声明不完整时保守扩大；即使标为 complete，语义遗漏仍需作者抽读发现。分析结果另给出 `coverage` 与 `expansion`：后者写明保守扩大的原因（`undeclared_dependencies` 或 `unexplained_events`）、起点、终点与章数，并随 `status` 的 revision_run 暴露给主控与作者。
 
-执行 `revise --from-chapter N --reason 原因 --changes-file 变更.json` 时会在创建候选分支的同一事务中重新分析，默认采用计算终点；显式 --through 不能小于该终点。扩大终点时，实际初始修改区间及 chapter_actions 同步扩大，新增修改章的事实输出与场景桥梁继续传播；分析命令的原建议不能冒充实际采用范围。不提供 changes-file 时保留手动修订入口，但必须显式选一边：`--through M` 收窄到受影响章，或 `--to-end` 确认改到当前末章——命令不会再把"改第 N 章"默认解释为"重写其后全部"。修改章仍须新执笔并按修正后的章纲重写；后缀章按动作重放或原样携带，机械核算通过后才能 promote。任务材料 revision_impact 携带实际采用的分析，表达及阅读修订不得改变事实。无论是否启用叙事跟踪、是否提供 changes-file，原样携带后文都核对显式输入与原版本前态，拒绝漏报变更造成的失配；已由重排章纲改变计划的待携带章转入返修。
+执行 `revise --from-chapter N --reason 原因 --changes-file 变更.json` 时会在创建候选分支的同一事务中重新分析，默认采用计算终点；显式 --through 不能小于该终点。扩大终点时，实际完整修改区间及 chapter_actions 同步扩大，新增修改章的事实输出与场景桥梁继续传播；分析命令的原建议不能冒充实际采用范围。不提供 changes-file 时保留手动修订入口，但必须显式选一边：`--through M` 收窄到受影响章，或 `--to-end` 确认改到当前末章——命令不会再把"改第 N 章"默认解释为"重写其后全部"。修改章仍须新执笔并按修正后的章纲重写；后缀章按动作重放或原样携带，机械核算通过后才能 promote。任务材料 revision_impact 携带实际采用的分析，表达及阅读修订不得改变事实。无论是否启用叙事跟踪、是否提供 changes-file，原样携带后文都核对显式输入与原版本前态，拒绝漏报变更造成的失配；已由重排章纲改变计划的待携带章转入返修。
 
 ### 自动回改边界
 

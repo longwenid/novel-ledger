@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import copy
-from .contracts import digest, require, text
+from .contracts import (READING_DEPENDENCIES_CAPABILITY, SCENE_IDENTITY_CAPABILITY,
+                        digest, require, text)
 
 KINDS = ('entities', 'facts', 'knowledge', 'resources', 'relations', 'placements', 'places',
          'character_current', 'reader_knowledge', 'hooks', 'node', 'clock', 'clock_threads',
@@ -15,7 +16,15 @@ COORDINATE_ALIASES = {'character': 'character_current', 'characters': 'character
                       'threads': 'thread_progress', 'places': 'placements', 'place': 'placements',
                       'resources': 'resources', 'node': 'node', 'clock': 'clock', 'knowledge': 'knowledge'}
 READING_KINDS = ('character', 'relationship', 'theme', 'voice', 'disclosure')
-READING_SCHEMA = 'reading-dependencies/1'
+READING_SCHEMA = READING_DEPENDENCIES_CAPABILITY
+PLAN_PROTOCOLS = (('scene_schema', SCENE_IDENTITY_CAPABILITY), ('reading_schema', READING_SCHEMA))
+
+
+def require_current(plan):
+    for field, expected in PLAN_PROTOCOLS:
+        require(plan.get(field) == expected, 'story_protocol',
+                '已提交章纲必须使用当前场景与阅读协议；旧章纲须按当前流程重新规划。',
+                {'field': field, 'expected': expected, 'got': plan.get(field)})
 
 
 def reading_coordinate(value):
@@ -49,6 +58,12 @@ def coordinate(value):
 
 def bind(plan, previous):
     """Freeze new plans under the one identity and reading protocol in force."""
+    for field, expected in PLAN_PROTOCOLS:
+        require(field not in plan or plan[field] == expected, 'story_protocol',
+                '章纲声明的协议已失效，须按当前模板重新规划。',
+                {'field': field, 'expected': expected, 'got': plan.get(field)})
+    for accepted in previous.values():
+        require_current(accepted)
     coverage = plan.get('dependency_coverage', 'partial')
     require(coverage in ('partial', 'complete'), 'story_dependency', 'dependency_coverage 为 partial 或 complete。')
     scenes = plan.get('scenes', [])
@@ -61,7 +76,7 @@ def bind(plan, previous):
              for s in p.get('scenes', []) if 'id' in s}
     occupied = {s['id'] for p in previous.values() if p['chapter'] != plan['chapter']
                 for s in p.get('scenes', []) if 'id' in s}
-    plan['scene_schema'] = 'scene-identity/2'
+    plan['scene_schema'] = SCENE_IDENTITY_CAPABILITY
     plan['reading_schema'] = READING_SCHEMA
     require(plan.get('reading_coverage', 'partial') in ('partial', 'complete'),
             'reading_dependency', 'reading_coverage 为 partial 或 complete。')
