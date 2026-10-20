@@ -29,9 +29,7 @@
     {"id": "v1", "purpose": "从师父遗物中发现禁戏名录的出入，找到残页。", "end": 200},
     {"id": "v2", "purpose": "把残页排成一场戏，公开师门旧事并承担后果。", "end": 500}
   ],
-  "planning_window": 3,
-  "review_interval": 10,
-  "review_chunk": 3,
+  "revision_limit": 3,
   "entities": [
     {"id": "shen", "name": "沈桐", "kind": "person", "aliases": ["小桐"]},
     {"id": "bai", "name": "白鹭", "kind": "person"},

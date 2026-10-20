@@ -1,5 +1,7 @@
 # opening/5 验证报告（V 验证位 · task-24）
 
+> 历史归档：本文件保留当轮版本、设计或实验条件，不是当前执行规范。旧门序、兼容条款、独立审查阶段及命令均不用于当前流程；当前唯一执行依据见 [任务协议](../references/protocol.md) 与 [运行流程](../references/runtime.md)。
+
 时间：2026-10-19 01:33–02:02（Asia/Shanghai）｜Lead 广播「核心已落地，树已绿」后的全量复跑：01:56–02:01
 写域：`validation/**`（未改 scripts/、tests/、文档；既有历史报告的结论未动）
 规格：`validation/opening5-spec.md`（冻结，§4 门校验 / §5 世界绑定 / §6 卷 stage / §9 验收）

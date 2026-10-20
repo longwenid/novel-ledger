@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from test_opening import VALUES, contract_from, walk, walk_to
-from test_world_grand import base_model, check, choices_v5, record
+from test_world_grand import base_model, check, world_choices, record
 from novel_ledger import contracts, creation, world, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error
@@ -56,7 +56,7 @@ class WorldArchitectureTests(unittest.TestCase):
                 self.assertCode('opening_alignment', creation.validate_contract, broken, state, model)
 
     def test_world_requires_exact_text_in_the_designated_field(self):
-        choices = choices_v5(tier='t0')
+        choices = world_choices(tier='t0')
         choices['world']['architecture'] = copy.deepcopy(FRAME)
         model = base_model(choices)
         for key, (section, field) in DESTINATIONS.items():
@@ -72,8 +72,6 @@ class WorldArchitectureTests(unittest.TestCase):
             row[other], row[field] = row[field], '被改写的世界背景。'
             with self.subTest(key=key):
                 self.assertCode('world_alignment', check, broken, choices)
-        legacy = choices_v5()
-        check(base_model(legacy), legacy)
 
     def test_returning_to_world_invalidates_every_later_gate(self):
         complete = walk(creation.begin())

@@ -28,14 +28,14 @@ class PolicyTests(unittest.TestCase):
                     with self.assertRaises(Error):
                         (workflow.volume_policy if key == 'volume_outline' else workflow.chapter_policy)(book)
 
-    def test_missing_policies_default_and_current_means_rolling(self):
+    def test_missing_policies_default_and_rolling_selects_the_entering_volume(self):
         raw = contract(4, 2)
         for key in ('volume_outline', 'chapter_outline'):
             del raw[key]
         validated = planning.validate_contract(raw)
         for key in ('volume_outline', 'chapter_outline'):
             self.assertEqual(validated[key], policy_default(key))
-        validated['volume_outline']['scope'] = 'current'
+        validated['volume_outline']['scope'] = 'rolling'
         book = seeded_book(validated)
         job = workflow.next_volume_outline(book, book['contract'])
         self.assertEqual(job.payload['volume_ids'], ['v1'])

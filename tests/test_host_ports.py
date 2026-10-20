@@ -16,9 +16,8 @@ from support import link_or_skip
 
 class PublicApplication:
     """Simulate a worker's external submission through the public status boundary."""
-    def __init__(self, project, reviewer=None):
+    def __init__(self, project):
         self.project = project
-        self.reviewer = reviewer
         self.status_reads = 0
         self.released = []
         self.claims = []
@@ -32,7 +31,7 @@ class PublicApplication:
     def task_status(self, task_id):
         self.status_reads += 1
         return {'id': task_id, 'status': 'pending' if self.status_reads == 1 else 'done',
-                'reviewer': self.reviewer}
+                'reviewer': None}
 
     def claim(self, task_id, session, seconds=300):
         self.claims.append((task_id, session, seconds))
@@ -60,15 +59,6 @@ class HostPortTests(unittest.TestCase):
             environment = json.loads((project / 'host.log').read_text(encoding='utf-8'))
             self.assertEqual(environment, {'NOVEL_PROJECT': str(project), 'NOVEL_TASK_PATH': str(project / 'task.json'),
                                           'NOVEL_TASK_ID': 'task', 'NOVEL_EXECUTION_CLAIM': 'opaque-claim'})
-
-    def test_frozen_session_is_reported_without_storage_or_process_access(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            app = PublicApplication(Path(temporary), reviewer='reader-session')
-            result = host.step(app, ['unused-command'])
-            self.assertEqual(result['action'], 'resume_session_required')
-            self.assertEqual(result['session'], 'reader-session')
-            self.assertFalse(app.claims)
-            self.assertFalse(app.released)
 
     def test_non_file_delivery_is_rejected_before_claiming_a_worker(self):
         with tempfile.TemporaryDirectory() as temporary:

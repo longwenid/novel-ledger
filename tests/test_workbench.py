@@ -110,16 +110,17 @@ class SceneTests(unittest.TestCase):
 
 
 class WorkbenchTests(unittest.TestCase):
+    # Cleanup goes through addCleanup, not tearDown: unittest runs tearDown before the cleanups a
+    # test registers, so a secondary repository closed by addCleanup would still be open when a
+    # tearDown-owned temp cleanup ran — deletable on POSIX, locked on Windows.
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
         self.project = Path(self.temp.name) / 'book'
         self.repo = SQLiteRepository.initialize(self.project, seeded_book(contract(6)))
+        self.addCleanup(self.repo.close)
         self.app = Application(self.repo)
         self.owner = self.app.run(through=3, source='工程夹具：三章。')['owner']
-
-    def tearDown(self):
-        self.repo.close()
-        self.temp.cleanup()
 
     def scenes_receipt(self, dependencies=None):
         """A chapter-outline receipt whose rows declare the optional scene blocks."""
@@ -252,6 +253,84 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(book['revision_run']['first'], 1)
         self.assertTrue(self.app.audit()['ok'])
 
+    def test_scene_binding_includes_other_volumes_and_retains_the_replan_prefix(self):
+        repo = SQLiteRepository.initialize(Path(self.temp.name) / 'multi-volume', seeded_book(contract(6, 2)))
+        self.addCleanup(repo.close)
+        app = Application(repo)
+        owner = app.run(through=5, source='跨卷场景工程验证。')['owner']
+
+        def scenes():
+            result = response(app)
+            for row in result['data']['chapters']:
+                scene = plan_extras({'chapter': row['chapter']})['scenes'][0]
+                scene.update(id='scene:' + str(row['chapter']), present=['shen'],
+                             depends_on=['scene:1'] if row['chapter'] == 4 else [])
+                row['scenes'] = [scene]
+            return result
+
+        drive(app, owner, until='chapter_outline')
+        app.submit(scenes())
+        drive(app, owner, until='chapter_outline')
+        valid = scenes()
+        duplicate = copy.deepcopy(valid)
+        duplicate['data']['chapters'][0]['scenes'][0].update(id='scene:1', depends_on=[])
+        root = repo.get('book')
+        with self.assertRaises(Error) as caught:
+            app.check(duplicate)
+        self.assertEqual(caught.exception.code, 'scene_identity')
+        self.assertEqual(repo.get('book'), root)
+        app.submit(valid)
+        self.assertEqual(drive(app, owner)['action'], 'target_reached')
+        app.revise(4, '保留前缀场景来源，调整本卷表达。', owner, through=5,
+                   changes={'mode': 'reading', 'reading_changes': [{'kind': 'character', 'key': 'shen'}]})
+        self.assertEqual(app.advance(owner=owner)['task']['stage'], 'chapter_outline')
+        revised = scenes()
+        future_collision = copy.deepcopy(revised)
+        future_collision['data']['chapters'][0]['scenes'][0].update(id='scene:6', depends_on=[])
+        with self.assertRaises(Error) as caught:
+            app.check(future_collision)
+        self.assertEqual(caught.exception.code, 'scene_identity')
+        app.submit(revised)
+        self.assertEqual(repo.load()['plans']['4']['scenes'][0]['depends_on'], ['scene:1'])
+        self.assertEqual(app.advance(owner=owner)['task']['stage'], 'repair')
+        sources = repo.read_document(repo.pending()['input']['records']['scene_sources'])
+        self.assertEqual(sources[0]['prose_hash'], repo.chapter('main', 1)['prose'])
+
+    def test_patch_and_reuse_memory_quote_the_composed_chapter_and_rollback_preflight(self):
+        drive(self.app, self.owner, until='write')
+        self.app.submit(response(self.app))
+        drive(self.app, self.owner, until='write')
+        self.app.revise(1, '仅调整表达。', self.owner, through=1, changes={'mode': 'expression'})
+        self.app.advance(owner=self.owner)
+        result = response(self.app)
+        base = self.repo.load()['draft']['prose']
+        quote = base[:14]
+        original = '要求先核对退件人的名字再开箱。'
+        replacement = '请主管先确认退件人的名字然后开箱。'
+        patch = {'base_hash': digest(base), 'patches': [{'start': base.index(original),
+                  'old': original, 'new': replacement}], 'repair_note': '调整原句，保留本章事实。'}
+        root = self.repo.get('book')
+        for mode in ('prose', 'patches', 'reuse_original'):
+            candidate = copy.deepcopy(result)
+            candidate['data']['understanding'] = [interpretation(quote=quote)]
+            if mode != 'prose':
+                candidate['data'].pop('prose')
+                candidate['data'].update(patch if mode == 'patches' else {
+                    'base_hash': digest(base), 'reuse_original': True, 'repair_note': '核对原文仍成立。'})
+            self.assertTrue(self.app.check(candidate)['valid'])
+            self.assertEqual(self.repo.get('book'), root)
+            if mode == 'patches':
+                accepted = candidate
+        forged = copy.deepcopy(accepted)
+        forged['data']['understanding'][0]['evidence'][0]['quote'] = original
+        with self.assertRaises(Error):
+            self.app.check(forged)
+        self.assertEqual(self.repo.get('book'), root)
+        self.app.submit(accepted)
+        changed = base.replace(original, replacement)
+        memory = understanding.latest(self.repo.load()['understanding'])['fear']
+        self.assertEqual(memory['evidence'][0]['prose_hash'], digest(changed))
+
 
 class ReadingImpactTests(unittest.TestCase):
     def test_reading_influence_follows_explicit_associations_and_scene_bridges(self):
@@ -261,18 +340,53 @@ class ReadingImpactTests(unittest.TestCase):
                     'dependency_coverage': 'complete', 'reading_coverage': 'complete',
                     'reading_schema': story_memory.READING_SCHEMA,
                     'scenes': [{'id': 'scene:' + str(n), 'reads': [], 'reading_refs': [], 'depends_on': []}]}
+            story_memory.bind(plan, {})
             rows.append(dict(n=n, chain=str(n), plan=plan, events=[], plan_hash=str(n), events_hash=str(n)))
         rows[2]['plan']['scenes'][0]['depends_on'] = ['scene:2']
         impact = revision_impact.analyze(rows, 1, {'mode': 'reading',
                                                 'reading_changes': [{'kind': 'character', 'key': 'shen'}]})
-        self.assertEqual([r['action'] for r in impact['chapter_actions']], ['local', 'review', 'review', 'keep'])
-        self.assertEqual(impact['rewrite_chapters'], [1])
+        self.assertEqual([r['action'] for r in impact['chapter_actions']], ['local', 'rewrite', 'rewrite', 'keep'])
+        self.assertEqual(impact['rewrite_chapters'], [1, 2, 3])
+        rows[1]['plan']['participants'] = []
+        rows[2]['plan']['participants'] = ['shen']
+        rows[2]['plan']['scenes'][0]['depends_on'] = []
+        rows[3]['plan']['scenes'][0]['depends_on'] = ['scene:2']
+        gap_impact = revision_impact.analyze(rows, 1, {'mode': 'reading',
+                           'reading_changes': [{'kind': 'character', 'key': 'shen'}]})
+        self.assertEqual(gap_impact['last'], 4)
+        self.assertEqual(gap_impact['rewrite_chapters'], [1, 2, 3, 4])
+        rows[3]['plan']['scenes'][0]['depends_on'] = []
         rows[3]['plan'].pop('reading_coverage')
         self.assertEqual(revision_impact.analyze(rows, 1, {'mode': 'reading',
-                         'reading_changes': [{'kind': 'character', 'key': 'shen'}]})['chapter_actions'][-1]['action'], 'review')
+                         'reading_changes': [{'kind': 'character', 'key': 'shen'}]})['chapter_actions'][-1]['action'], 'rewrite')
+
+    def test_accepted_plans_require_current_protocols_without_mutating_the_source(self):
+        plan = {'chapter': 1, 'scenes': []}
+        story_memory.bind(plan, {})
+        row = dict(n=1, chain='one', plan=plan, events=[], plan_hash='plan', events_hash='events')
+        self.assertEqual(revision_impact.analyze([row], 1, {'mode': 'expression'})['last'], 1)
+        for field, obsolete in (('scene_schema', 'scene-identity/1'),
+                                ('reading_schema', 'reading-dependencies/0')):
+            for value in (None, obsolete):
+                with self.subTest(field=field, value=value):
+                    broken = copy.deepcopy(row)
+                    if value is None:
+                        broken['plan'].pop(field)
+                    else:
+                        broken['plan'][field] = value
+                    before = copy.deepcopy(broken)
+                    with self.assertRaises(Error) as caught:
+                        revision_impact.analyze([broken], 1, {'mode': 'expression'})
+                    self.assertEqual(caught.exception.code, 'story_protocol')
+                    self.assertEqual(broken, before)
+            invalid = copy.deepcopy(plan)
+            invalid[field] = obsolete
+            with self.assertRaises(Error) as caught:
+                story_memory.bind(invalid, {})
+            self.assertEqual(caught.exception.code, 'story_protocol')
 
 
-class GuidedV5WorkbenchTests(unittest.TestCase):
+class GuidedWorkbenchTests(unittest.TestCase):
     """A thirteen-gate opening still files its memory with the chapter that produced it.
 
     The workbench is on for every new book, so the guided path and the memory path are one flow: the

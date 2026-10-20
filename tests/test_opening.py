@@ -181,14 +181,14 @@ def contract_from(state, world_rules=('夜班退件必须登记负责人。',)):
     value.update(opposition=choices['opposition']['opposition'], story_engine=choices['opposition']['story_engine'])
     value.update(payoff_plan=copy.deepcopy(choices['payoff']['plan']), ending=choices['payoff']['ending'],
                  theme=choices['payoff']['theme'], promise_anchor=copy.deepcopy(choices['payoff']['anchor']))
-    value.update(title=choices['title']['title'], planning_window=6,
+    value.update(title=choices['title']['title'], revision_limit=6,
                  volumes=[{'id': 'v' + str(i + 1), 'purpose': '查明来源并面对后果。',
                            'end': total * (i + 1) // scale['volume_count']} for i in range(scale['volume_count'])])
     return value
 
 
 def values_for_version(version):
-    """The fixture values narrowed to what one protocol's gate owns (older versions own less)."""
+    """The fixture values narrowed to the current gate's owned fields."""
     narrowed = {}
     for gate in creation.gate_ids(version):
         if gate in creation.SYSTEM_GATES.get(version, ()) or gate not in VALUES:
@@ -405,9 +405,15 @@ class CurrentOpeningTests(unittest.TestCase):
     def test_an_older_declared_protocol_is_refused_with_the_fix_named(self):
         """Old gate sets are not re-planned: a state that declares one is refused, and a fresh init
         starts on the current protocol."""
-        state = {'schema': 'novel-ledger.creation/3', 'phase': 'choosing', 'cursor': 0}
-        self.assertCode('creation', creation.opening_version, state)
-        self.assertCode('creation', creation.begin, 'x', 3)
+        for version in range(1, OPENING_VERSION):
+            with self.subTest(version=version):
+                state = {'schema': 'novel-ledger.creation/' + str(version), 'phase': 'choosing', 'cursor': 0}
+                self.assertCode('creation', creation.opening_version, state)
+                self.assertCode('creation', creation.begin, 'x', version)
+                self.assertCode('creation', creation.validate_value, 'genre', VALUES['genre'], version)
+        for schema in (None, 'unknown/6', 'novel-ledger.creation/nonsense'):
+            with self.subTest(schema=schema):
+                self.assertCode('creation', creation.opening_version, {'schema': schema})
         self.assertEqual(creation.opening_version(self.repo.load()['creation']), OPENING_VERSION)
         self.assertEqual(creation.gates(self.repo.load()['creation']), creation.GATES)
 

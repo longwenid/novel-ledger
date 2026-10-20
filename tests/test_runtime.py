@@ -282,7 +282,6 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn('input_path', compact)
         self.assertNotIn('records', compact)
         self.assertNotIn('commands', compact)
-        self.assertTrue(all(Path(p['path']).is_file() for p in compact.get('prose_files', [])))
 
         claim = self.app.claim(handle['task_id'], 'worker-for-current-task')
         compact = self.app.advance(compact=True)['task']
@@ -595,13 +594,6 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn('NOVEL_TASK_ID', caught.exception.details['recover'])
         self.assertEqual(caught.exception.details['identity']['task_id'], task['task_id'])
 
-    def test_legacy_database_is_refused_after_the_schema_change(self):
-        older = Path(self.temp.name) / 'v1'
-        older.mkdir()
-        (older / 'novel.sqlite3').write_text('schema 声明为旧版的库', encoding='utf-8')
-        with self.assertRaises(Error) as caught:
-            SQLiteRepository(older)
-        self.assertEqual(caught.exception.code, 'schema')
 
 
     def test_dispatch_material_carries_its_own_path_self_check(self):
@@ -705,11 +697,15 @@ class DomainTests(unittest.TestCase):
             planning.check_contract_names(raw, planning.resolve_policy({'forbidden_name_chars': ['砚']}))
         self.assertEqual(caught.exception.code, 'literal_policy')
         self.assertIn('砚', json.dumps(caught.exception.details, ensure_ascii=False))
-        raw['unknown_field'] = '旧版本残留字段'
-        with self.assertRaises(Error) as caught:
-            workflow.new_book(raw)
-        self.assertEqual(caught.exception.code, 'contract')
-        self.assertIn('未知约定字段', caught.exception.message)
+        for field in ('unknown_field', 'planning_window', 'review_interval', 'review_chunk',
+                      'review_fanout', 'verification'):
+            with self.subTest(field=field):
+                raw = contract()
+                raw[field] = 3
+                with self.assertRaises(Error) as caught:
+                    workflow.new_book(raw)
+                self.assertEqual(caught.exception.code, 'contract')
+                self.assertIn('未知约定字段', caught.exception.message)
 
     def test_architecture_diagram_products_match_their_source(self):
         def block(text):
@@ -788,7 +784,7 @@ class GuidedOpeningTests(unittest.TestCase):
         self.assertEqual(book['chapter_outlines'], {})
         self.assertTrue(self.app.audit()['ok'])
 
-    def test_an_authorized_chapter_is_written_through_the_v5_opening(self):
+    def test_an_authorized_chapter_is_written_through_the_current_opening(self):
         drive(self.app)
         run = self.app.run(through=1, source='作者授权试写一章。')
         handoff = drive(self.app, run['owner'], until='write')

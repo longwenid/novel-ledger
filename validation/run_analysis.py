@@ -9,11 +9,17 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from novel_ledger.contracts import SCHEMA
+
 project = Path(sys.argv[1])
 db = sqlite3.connect('file:' + (project / 'novel.sqlite3').as_posix() + '?mode=ro', uri=True)
 db.row_factory = sqlite3.Row
+version = db.execute("SELECT value FROM kv WHERE key='schema'").fetchone()
+if version is None or json.loads(version['value']) != SCHEMA:
+    raise SystemExit('只支持当前数据库协议：' + SCHEMA)
 
-tasks = db.execute('SELECT id, status, input, result, first_read FROM tasks').fetchall()
+tasks = db.execute('SELECT id, status, input, result FROM tasks').fetchall()
 by_stage = defaultdict(lambda: {'n': 0, 'input': 0, 'result': 0, 'required': 0, 'records': 0})
 stage_of = {}
 for row in tasks:

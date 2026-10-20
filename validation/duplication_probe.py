@@ -11,22 +11,24 @@ are gone with the stages that produced them; a legacy project still lists its ow
 ``validation/results.md``.
 """
 import json
-import sqlite3
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from novel_ledger.contracts import dump
+from novel_ledger.sqlite_store import SQLiteRepository
+
 project = Path(sys.argv[1])
-db = sqlite3.connect('file:' + (project / 'novel.sqlite3').as_posix() + '?mode=ro', uri=True)
-db.row_factory = sqlite3.Row
+repo = SQLiteRepository(project, readonly=True)
+db = repo.db
 
 # (narrow, wide): the narrow record is a declared projection of the wide one. Mirrors
-# `context.PROJECTIONS` without importing the engine, so the probe can read any project offline.
+# `context.PROJECTIONS`; records are reconstructed through the current storage adapter.
 PAIRS = (('world_core', 'world_model'),)
 
 
 def document(ident):
-    row = db.execute('SELECT value FROM documents WHERE hash=?', (ident,)).fetchone()
-    return None if row is None else len(row['value'])
+    return len(dump(repo.read_document(ident)))
 
 
 printed = 0
@@ -49,3 +51,4 @@ for row in db.execute("SELECT id, input FROM tasks WHERE status='done'").fetchal
 if not printed:
     print('没有同时读到投影两侧的任务：%s 里的投影对为 %s。'
           % (project, '、'.join('%s ⊂ %s' % pair for pair in PAIRS)))
+repo.close()

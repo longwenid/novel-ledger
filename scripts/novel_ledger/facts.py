@@ -36,7 +36,7 @@ def resource_key(holder, asset, unit):
 
 
 def entity(state, item):
-    """Compatibility entry point for a factual state; identity rules own only entities."""
+    """Register an entity in the factual state using the shared identity rules."""
     register_entity(state['entities'], item)
 
 

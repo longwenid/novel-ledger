@@ -187,16 +187,16 @@ class EditorialTests(unittest.TestCase):
         drive(self.app, until='chapter_outline')
         result = response(self.app)
         row = result['data']['chapters'][0]
-        row['participants'] = ['shen']
         row['scenes'] = [{'id': 'scene:warehouse', 'label': '夜班仓库', 'present': ['shen'], 'speakers': ['shen'],
                           'intent': '追问签字责任。', 'conflict': '主管不愿核对。', 'turn': '要求公开来源。',
                           'reads': [], 'depends_on': [],
                           'dialogue_intents': [{'entity': 'shen', 'seeks': '核实经手人。',
                                                 'withholds': '暂不说自己开过箱。', 'pressure': '可能失业。',
                                                 'tactic': '先请对方解释封条。', 'knowledge_topics': []}]}]
-        row['expansion_units'] = [{'id': 'u1', 'scene': 1, 'focus': '核对封条。',
-                                   'development': '主管拒绝后换证据试探。',
-                                   'expected_change': '留下选择违规的原因及代价。'}]
+        obsolete = copy.deepcopy(result)
+        obsolete['data']['chapters'][0]['expansion_units'] = []
+        self.assertCode('chapter_outline', self.app.submit, obsolete)
+        self.assertEqual(self.repo.load()['chapter_outlines'], {})
         broken = copy.deepcopy(result)
         broken['data']['chapters'][0]['scenes'][0]['dialogue_intents'] = []
         self.assertCode('dialogue', self.app.submit, broken)

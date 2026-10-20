@@ -1,0 +1,758 @@
+{
+  "schema": "novel-ledger.storage-snapshot-fix-evaluation/1",
+  "recorded_date": "2026-10-20",
+  "timezone": "Asia/Shanghai",
+  "synthetic": true,
+  "boundary": "Storage-only synthetic engineering fixture. No model, actual submit, complete/deliver or literary acceptance was exercised.",
+  "runtime": {
+    "python": "3.10.12",
+    "platform": "macOS-15.5-arm64-arm-64bit",
+    "sqlite": "3.43.2"
+  },
+  "reproduce_fixed": "python3 validation/storage_snapshot_probe.py --chapters 100 500 1000 1667 --out /tmp/novel-snapshot-fixed-full.json",
+  "baseline_storage_schema": "novel-ledger/4",
+  "fixed_storage_schema": "novel-ledger/5",
+  "historical_report_preserved": "validation/storage-snapshot-stress-2026-10-20.json",
+  "baseline_bytes_match_historical_all_checkpoints": true,
+  "measurement_notes": [
+    "The baseline uses an isolated copy of the pre-fix source taken before any storage edits, including SCHEMA /4. It does not assign current /5 fingerprints to a historical run.",
+    "Baseline and fixed use the same 1667-chapter generator, 3000 filler Han per chapter, one settled development and one new version of the same interpretation per chapter, with every complete state and understanding retained by a done task.",
+    "The baseline probe source embedded below predates only frozen physical-closure byte accounting and second-GC timing. Those additions are outside all timed generation and complete-source read operations; the generator and full frozen-source verifier are identical.",
+    "Generation wall and process-CPU timings exclude checkpoint accounting and sample reads, reopen, complete-source verification and GC. Single runs are observations, not a controlled statistical benchmark; wall times can include scheduling and I/O effects.",
+    "Each latest-source read reports a three-sample median on an already open connection and includes production per-block and final logical integrity verification. Extra independent digest comparison is outside that timing.",
+    "The baseline frozen-source physical byte estimate equals its verified original canonical JSON byte total because /4 stores every distinct complete source as raw JSON; fixed physical bytes are a traversed unique closure of roots and blocks.",
+    "The fixed explicit GC validates all reachable logical roots before deletion under a writer lock. It therefore reads cumulative complete logical sources even when their physical blocks are shared. GC is measured separately and is not constant-time or linear in current state size."
+  ],
+  "comparison": {
+    "checkpoints": [
+      {
+        "chapters": 100,
+        "database_bytes": {
+          "baseline": 8499200,
+          "fixed": 2813952,
+          "reduction_fraction": 0.6689156626506024
+        },
+        "physical_document_bytes": {
+          "baseline": 7915398,
+          "fixed": 2255705,
+          "reduction_fraction": 0.7150231738189285
+        },
+        "frozen_source_physical_bytes": {
+          "baseline": 3477198,
+          "fixed": 1254452,
+          "reduction_fraction": 0.6392348091768142
+        },
+        "generation_cpu_ratio_fixed_over_baseline": 1.7774086378737544,
+        "generation_wall_ratio_fixed_over_baseline": 1.8132911392405062,
+        "latest_source_read_wall_ratio_fixed_over_baseline": 2.1164596273291925,
+        "latest_source_read_cpu_ratio_fixed_over_baseline": 2.1149068322981366
+      },
+      {
+        "chapters": 500,
+        "database_bytes": {
+          "baseline": 178827264,
+          "fixed": 14528512,
+          "reduction_fraction": 0.9187567282805378
+        },
+        "physical_document_bytes": {
+          "baseline": 176011965,
+          "fixed": 11840984,
+          "reduction_fraction": 0.9327262552861109
+        },
+        "frozen_source_physical_bytes": {
+          "baseline": 85607798,
+          "fixed": 6859564,
+          "reduction_fraction": 0.9198722060343147
+        },
+        "generation_cpu_ratio_fixed_over_baseline": 1.6302207637231505,
+        "generation_wall_ratio_fixed_over_baseline": 1.6361859556051934,
+        "latest_source_read_wall_ratio_fixed_over_baseline": 2.166812993854258,
+        "latest_source_read_cpu_ratio_fixed_over_baseline": 2.104661389621812
+      },
+      {
+        "chapters": 1000,
+        "database_bytes": {
+          "baseline": 699371520,
+          "fixed": 30588928,
+          "reduction_fraction": 0.9562622624381387
+        },
+        "physical_document_bytes": {
+          "baseline": 693482976,
+          "fixed": 24838373,
+          "reduction_fraction": 0.9641831539351299
+        },
+        "frozen_source_physical_bytes": {
+          "baseline": 341946052,
+          "fixed": 14881450,
+          "reduction_fraction": 0.9564801233616816
+        },
+        "generation_cpu_ratio_fixed_over_baseline": 1.7254507467306353,
+        "generation_wall_ratio_fixed_over_baseline": 1.7485489677466752,
+        "latest_source_read_wall_ratio_fixed_over_baseline": 1.9484170305676856,
+        "latest_source_read_cpu_ratio_fixed_over_baseline": 1.9460313100796482
+      },
+      {
+        "chapters": 1667,
+        "database_bytes": {
+          "baseline": 1927741440,
+          "fixed": 50847744,
+          "reduction_fraction": 0.9736231514533401
+        },
+        "physical_document_bytes": {
+          "baseline": 1917218538,
+          "fixed": 41302265,
+          "reduction_fraction": 0.9784571950555592
+        },
+        "frozen_source_physical_bytes": {
+          "baseline": 950614901,
+          "fixed": 24706024,
+          "reduction_fraction": 0.9740104810328447
+        },
+        "generation_cpu_ratio_fixed_over_baseline": 1.608927625952022,
+        "generation_wall_ratio_fixed_over_baseline": 1.5649440987504426,
+        "latest_source_read_wall_ratio_fixed_over_baseline": 1.924641439105421,
+        "latest_source_read_cpu_ratio_fixed_over_baseline": 1.9168356997971603
+      }
+    ],
+    "growth_500_to_1667": {
+      "baseline": {
+        "database_bytes": 10.779907922765066,
+        "physical_document_bytes": 10.892546640224147,
+        "logical_frozen_source_bytes": 11.104302682799995,
+        "cpu_s": 10.987321002386636,
+        "chapters": 3.334,
+        "database_observed_loglog_exponent": 1.974537254869617
+      },
+      "fixed": {
+        "database_bytes": 3.4998590358049055,
+        "physical_document_bytes": 3.4880770888635606,
+        "logical_frozen_source_bytes": 11.104302682799995,
+        "cpu_s": 10.843810046664837,
+        "chapters": 3.334,
+        "database_observed_loglog_exponent": 1.0403180577598283
+      }
+    },
+    "after_prune_1667": {
+      "database_bytes": {
+        "baseline": 973516800,
+        "fixed": 48291840,
+        "reduction_fraction": 0.9503944461975387
+      },
+      "physical_document_bytes": {
+        "baseline": 967267501,
+        "fixed": 40219384,
+        "reduction_fraction": 0.9584195851112339
+      },
+      "wall_ratio_fixed_over_baseline": 0.8834862826118293,
+      "cpu_ratio_fixed_over_baseline": 1.4161230195712957
+    },
+    "frozen_source_hash_stream_matches_between_versions": true,
+    "all_3334_frozen_logical_sources_verified_before_and_after_prune": true
+  },
+  "limitations": [
+    "This append-only synthetic fixture measures a specific growth pattern. Widespread edits to old values reduce subtree reuse; these ratios are not universal bounds.",
+    "Saving and full reads still traverse and verify complete logical values; this fix reduces physical duplication, not logical history or all cumulative CPU costs.",
+    "GC holds the writer lock while verifying retained sources and sweeping; its observed latency is a maintenance cost.",
+    "The /5 storage format requires /5 readers; /4 projects are rejected rather than silently relabeled or converted. No migration acceptance is claimed.",
+    "Exact source reconstruction and hash equality do not prove real long-form plot or prose quality. That requires independent literary reading of actual manuscripts."
+  ],
+  "baseline_run": {
+    "schema": "novel-ledger.storage-snapshot-probe/2",
+    "synthetic": true,
+    "conditions": {
+      "chapter_checkpoints": [
+        100,
+        500,
+        1000,
+        1667
+      ],
+      "filler_han_per_chapter": 3000,
+      "contract_chapters": 1667,
+      "development_events_per_chapter": 1,
+      "interpretation_ids": 1,
+      "new_interpretation_versions_per_chapter": 1,
+      "freeze_each_state_and_understanding": true,
+      "nominal_word_count": "Filler characters only; stored han is a synthetic lower bound.",
+      "boundary": "Storage-only synthetic tasks; no submit, model, full pipeline or literary acceptance.",
+      "timing": "Generation wall/CPU exclude checkpoint reads, storage accounting, full verification and prune."
+    },
+    "metric_definitions": {
+      "document_bytes": "UTF-8 bytes in documents.value only; unchanged from the historical probe.",
+      "document_block_bytes": "UTF-8 bytes in document_blocks.value; zero when the table is absent.",
+      "physical_document_bytes": "document_bytes + document_block_bytes; excludes SQLite indexes and task cells.",
+      "logical_frozen_source_bytes": "Sum of every original complete_state and complete_understanding canonical JSON byte length.",
+      "database_bytes": "Entire SQLite file including metadata, indexes, task cells, unused pages and document storage."
+    },
+    "source_sha256": {
+      "scripts/novel_ledger/sqlite_store.py": "c5d7c4f6ef4581b6caeb799f148e009273a23d16bb59b14ed6c8b1c6d954506d",
+      "scripts/novel_ledger/book_state.py": "91031c1757e7b7fd3c4259f47da6e8d0b3df769b36a05e690a5c3189ec5c73e9",
+      "scripts/novel_ledger/facts.py": "5c771d52962e63de8b99fd79f3cec74999c800596f7f4eb8910d13a685162935",
+      "scripts/novel_ledger/understanding.py": "03c632a3274f17224f27b0e920a2727c56f1870c5bedc9cbd3a46ddf392e1a79",
+      "scripts/novel_ledger/workflow.py": "584d3a47fc3aa48acd57e93b05256bc516d01ceb6fbf8c8033a7e93d7e08f25b",
+      "scripts/novel_ledger/contracts.py": "4504fff6f495286d663218ea9d23911e585bdb658a616836ec83e7244c99f03a",
+      "scripts/novel_ledger/evidence.py": "1b877d56fdbf62a913448b22ba09bba70b03a1b3a95c77b031c2d3b556c7b2aa",
+      "scripts/novel_ledger/store_keys.py": "08d0d8597f50aece990f9fa5a5ff3f925093e8a09dd1a7c24db4d2081ee100b2",
+      "tests/support.py": "18db07b764e070a9aaf9385a5ea9e63197b92b8c786fd08e2c38e8d8e3555b0b"
+    },
+    "probe_source_sha256": "9b06128270b82c527928c5b3a999ce10a297af068b90bcb848c281897c9e71ab",
+    "checkpoints": [
+      {
+        "chapters": 100,
+        "synthetic_prose_han_at_least": 300000,
+        "document_bytes": 7915398,
+        "document_count": 705,
+        "database_bytes": 8499200,
+        "document_block_bytes": 0,
+        "document_block_count": 0,
+        "physical_document_bytes": 7915398,
+        "current_state_bytes": 27055,
+        "current_understanding_bytes": 41330,
+        "logical_frozen_source_bytes": 3477198,
+        "elapsed_s": 0.316,
+        "cpu_s": 0.301,
+        "latest_source_read": {
+          "operation": "read_complete_state_and_understanding",
+          "documents_per_sample": 2,
+          "repeats": 3,
+          "connection_reopened": false,
+          "elapsed_ms_median": 0.644,
+          "cpu_ms_median": 0.644,
+          "samples": [
+            {
+              "elapsed_ms": 0.654,
+              "cpu_ms": 0.655
+            },
+            {
+              "elapsed_ms": 0.644,
+              "cpu_ms": 0.644
+            },
+            {
+              "elapsed_ms": 0.614,
+              "cpu_ms": 0.615
+            }
+          ],
+          "boundary": "Read plus production integrity verification; independent extra digest check is outside timing."
+        }
+      },
+      {
+        "chapters": 500,
+        "synthetic_prose_han_at_least": 1500000,
+        "document_bytes": 176011965,
+        "document_count": 3505,
+        "database_bytes": 178827264,
+        "document_block_bytes": 0,
+        "document_block_count": 0,
+        "physical_document_bytes": 176011965,
+        "current_state_bytes": 133855,
+        "current_understanding_bytes": 207730,
+        "logical_frozen_source_bytes": 85607798,
+        "elapsed_s": 7.163,
+        "cpu_s": 6.704,
+        "latest_source_read": {
+          "operation": "read_complete_state_and_understanding",
+          "documents_per_sample": 2,
+          "repeats": 3,
+          "connection_reopened": false,
+          "elapsed_ms_median": 3.417,
+          "cpu_ms_median": 3.411,
+          "samples": [
+            {
+              "elapsed_ms": 3.516,
+              "cpu_ms": 3.515
+            },
+            {
+              "elapsed_ms": 3.417,
+              "cpu_ms": 3.411
+            },
+            {
+              "elapsed_ms": 3.404,
+              "cpu_ms": 3.404
+            }
+          ],
+          "boundary": "Read plus production integrity verification; independent extra digest check is outside timing."
+        }
+      },
+      {
+        "chapters": 1000,
+        "synthetic_prose_han_at_least": 3000000,
+        "document_bytes": 693482976,
+        "document_count": 7005,
+        "database_bytes": 699371520,
+        "document_block_bytes": 0,
+        "document_block_count": 0,
+        "physical_document_bytes": 693482976,
+        "current_state_bytes": 267356,
+        "current_understanding_bytes": 415733,
+        "logical_frozen_source_bytes": 341946052,
+        "elapsed_s": 27.222,
+        "cpu_s": 25.846,
+        "latest_source_read": {
+          "operation": "read_complete_state_and_understanding",
+          "documents_per_sample": 2,
+          "repeats": 3,
+          "connection_reopened": false,
+          "elapsed_ms_median": 7.328,
+          "cpu_ms_median": 7.282,
+          "samples": [
+            {
+              "elapsed_ms": 7.449,
+              "cpu_ms": 7.359
+            },
+            {
+              "elapsed_ms": 7.203,
+              "cpu_ms": 7.181
+            },
+            {
+              "elapsed_ms": 7.328,
+              "cpu_ms": 7.282
+            }
+          ],
+          "boundary": "Read plus production integrity verification; independent extra digest check is outside timing."
+        }
+      },
+      {
+        "chapters": 1667,
+        "synthetic_prose_han_at_least": 5001000,
+        "document_bytes": 1917218538,
+        "document_count": 11674,
+        "database_bytes": 1927741440,
+        "document_block_bytes": 0,
+        "document_block_count": 0,
+        "physical_document_bytes": 1917218538,
+        "current_state_bytes": 446112,
+        "current_understanding_bytes": 695206,
+        "logical_frozen_source_bytes": 950614901,
+        "elapsed_s": 79.068,
+        "cpu_s": 73.659,
+        "latest_source_read": {
+          "operation": "read_complete_state_and_understanding",
+          "documents_per_sample": 2,
+          "repeats": 3,
+          "connection_reopened": false,
+          "elapsed_ms_median": 12.341,
+          "cpu_ms_median": 12.325,
+          "samples": [
+            {
+              "elapsed_ms": 12.544,
+              "cpu_ms": 12.505
+            },
+            {
+              "elapsed_ms": 12.341,
+              "cpu_ms": 12.325
+            },
+            {
+              "elapsed_ms": 12.061,
+              "cpu_ms": 12.021
+            }
+          ],
+          "boundary": "Read plus production integrity verification; independent extra digest check is outside timing."
+        }
+      }
+    ],
+    "reload": {
+      "operation": "reopen_and_load",
+      "connection_reopened": true,
+      "elapsed_ms": 39.246,
+      "cpu_ms": 38.865,
+      "latest_interpretations": 1,
+      "interpretation_versions": 1667,
+      "first_prose_hash": "a6e2455ae0bc8cf55c7c168fc155cdcdaaba645595dd9d45dd82ce5e4628b18f",
+      "first_prose_hash_verified": true,
+      "first_prose_complete": true
+    },
+    "frozen_sources_before_prune": {
+      "frozen_tasks_verified": 1667,
+      "complete_states_verified": 1667,
+      "complete_understandings_verified": 1667,
+      "full_logical_hashes_verified": 3334,
+      "all_expected_version_sequences_verified": true,
+      "logical_frozen_source_bytes": 950614901,
+      "frozen_source_hash_stream_sha256": "e2c31fd8614227b944ff3d3565fae24d81f970017ec8f130be5465c3b9653827",
+      "elapsed_s": 19.41,
+      "cpu_s": 17.213
+    },
+    "prune": {
+      "reachable_hashes": 10007,
+      "documents_kept": 6673,
+      "documents_removed": 5001,
+      "document_bytes": 967267501,
+      "document_count": 6673,
+      "database_bytes": 973516800,
+      "document_block_bytes": 0,
+      "document_block_count": 0,
+      "physical_document_bytes": 967267501,
+      "before": {
+        "document_bytes": 1917218538,
+        "document_count": 11674,
+        "database_bytes": 1927741440,
+        "document_block_bytes": 0,
+        "document_block_count": 0,
+        "physical_document_bytes": 1917218538
+      },
+      "elapsed_s": 20.813,
+      "cpu_s": 12.876,
+      "second_pass": {
+        "reachable_hashes": 10007,
+        "documents_kept": 6673,
+        "documents_removed": 0
+      }
+    },
+    "reload_after_prune": {
+      "operation": "reopen_and_load",
+      "connection_reopened": true,
+      "elapsed_ms": 34.398,
+      "cpu_ms": 34.37,
+      "latest_interpretations": 1,
+      "interpretation_versions": 1667,
+      "first_prose_hash": "a6e2455ae0bc8cf55c7c168fc155cdcdaaba645595dd9d45dd82ce5e4628b18f",
+      "first_prose_hash_verified": true,
+      "first_prose_complete": true
+    },
+    "frozen_sources_after_prune": {
+      "frozen_tasks_verified": 1667,
+      "complete_states_verified": 1667,
+      "complete_understandings_verified": 1667,
+      "full_logical_hashes_verified": 3334,
+      "all_expected_version_sequences_verified": true,
+      "logical_frozen_source_bytes": 950614901,
+      "frozen_source_hash_stream_sha256": "e2c31fd8614227b944ff3d3565fae24d81f970017ec8f130be5465c3b9653827",
+      "elapsed_s": 17.143,
+      "cpu_s": 17.039
+    },
+    "temporary_project_removed": true,
+    "source_sha256_after": {
+      "scripts/novel_ledger/sqlite_store.py": "c5d7c4f6ef4581b6caeb799f148e009273a23d16bb59b14ed6c8b1c6d954506d",
+      "scripts/novel_ledger/book_state.py": "91031c1757e7b7fd3c4259f47da6e8d0b3df769b36a05e690a5c3189ec5c73e9",
+      "scripts/novel_ledger/facts.py": "5c771d52962e63de8b99fd79f3cec74999c800596f7f4eb8910d13a685162935",
+      "scripts/novel_ledger/understanding.py": "03c632a3274f17224f27b0e920a2727c56f1870c5bedc9cbd3a46ddf392e1a79",
+      "scripts/novel_ledger/workflow.py": "584d3a47fc3aa48acd57e93b05256bc516d01ceb6fbf8c8033a7e93d7e08f25b",
+      "scripts/novel_ledger/contracts.py": "4504fff6f495286d663218ea9d23911e585bdb658a616836ec83e7244c99f03a",
+      "scripts/novel_ledger/evidence.py": "1b877d56fdbf62a913448b22ba09bba70b03a1b3a95c77b031c2d3b556c7b2aa",
+      "scripts/novel_ledger/store_keys.py": "08d0d8597f50aece990f9fa5a5ff3f925093e8a09dd1a7c24db4d2081ee100b2",
+      "tests/support.py": "18db07b764e070a9aaf9385a5ea9e63197b92b8c786fd08e2c38e8d8e3555b0b"
+    },
+    "source_unchanged_during_probe": true
+  },
+  "fixed_run": {
+    "schema": "novel-ledger.storage-snapshot-probe/2",
+    "synthetic": true,
+    "conditions": {
+      "chapter_checkpoints": [
+        100,
+        500,
+        1000,
+        1667
+      ],
+      "filler_han_per_chapter": 3000,
+      "contract_chapters": 1667,
+      "development_events_per_chapter": 1,
+      "interpretation_ids": 1,
+      "new_interpretation_versions_per_chapter": 1,
+      "freeze_each_state_and_understanding": true,
+      "nominal_word_count": "Filler characters only; stored han is a synthetic lower bound.",
+      "boundary": "Storage-only synthetic tasks; no submit, model, full pipeline or literary acceptance.",
+      "timing": "Generation wall/CPU exclude checkpoint reads, storage accounting, full verification and prune."
+    },
+    "metric_definitions": {
+      "document_bytes": "UTF-8 bytes in documents.value only; unchanged from the historical probe.",
+      "document_block_bytes": "UTF-8 bytes in document_blocks.value; zero when the table is absent.",
+      "physical_document_bytes": "document_bytes + document_block_bytes; excludes SQLite indexes and task cells.",
+      "frozen_source_storage": "Unique documents.value roots plus all reachable physical blocks for frozen complete sources; shared blocks count once.",
+      "logical_frozen_source_bytes": "Sum of every original complete_state and complete_understanding canonical JSON byte length.",
+      "database_bytes": "Entire SQLite file including metadata, indexes, task cells, unused pages and document storage."
+    },
+    "source_sha256": {
+      "scripts/novel_ledger/sqlite_store.py": "cabbe2e852d27e4e033729201da3777c2a8de6d5c1bbe03a1d06f88167f25bae",
+      "scripts/novel_ledger/book_state.py": "91031c1757e7b7fd3c4259f47da6e8d0b3df769b36a05e690a5c3189ec5c73e9",
+      "scripts/novel_ledger/facts.py": "5c771d52962e63de8b99fd79f3cec74999c800596f7f4eb8910d13a685162935",
+      "scripts/novel_ledger/understanding.py": "03c632a3274f17224f27b0e920a2727c56f1870c5bedc9cbd3a46ddf392e1a79",
+      "scripts/novel_ledger/workflow.py": "584d3a47fc3aa48acd57e93b05256bc516d01ceb6fbf8c8033a7e93d7e08f25b",
+      "scripts/novel_ledger/contracts.py": "d522ce280eb3bf5c65c8460e216b68163ce1ab4f3ae21d399bd79f16d4ee6a5d",
+      "scripts/novel_ledger/evidence.py": "1b877d56fdbf62a913448b22ba09bba70b03a1b3a95c77b031c2d3b556c7b2aa",
+      "scripts/novel_ledger/store_keys.py": "08d0d8597f50aece990f9fa5a5ff3f925093e8a09dd1a7c24db4d2081ee100b2",
+      "tests/support.py": "18db07b764e070a9aaf9385a5ea9e63197b92b8c786fd08e2c38e8d8e3555b0b"
+    },
+    "probe_source_sha256": "abb37950f1a3e6ad8937c7e23bb83ab94701d3da59f1fd89377fbd020c77e66c",
+    "checkpoints": [
+      {
+        "chapters": 100,
+        "synthetic_prose_han_at_least": 300000,
+        "document_bytes": 982796,
+        "document_count": 705,
+        "database_bytes": 2813952,
+        "document_block_bytes": 1272909,
+        "document_block_count": 836,
+        "physical_document_bytes": 2255705,
+        "current_state_bytes": 27055,
+        "current_understanding_bytes": 41330,
+        "logical_frozen_source_bytes": 3477198,
+        "frozen_source_storage": {
+          "logical_document_count": 200,
+          "unique_block_count": 624,
+          "document_root_bytes": 16779,
+          "unique_block_bytes": 1237673,
+          "physical_bytes": 1254452
+        },
+        "elapsed_s": 0.573,
+        "cpu_s": 0.535,
+        "latest_source_read": {
+          "operation": "read_complete_state_and_understanding",
+          "documents_per_sample": 2,
+          "repeats": 3,
+          "connection_reopened": false,
+          "elapsed_ms_median": 1.363,
+          "cpu_ms_median": 1.362,
+          "samples": [
+            {
+              "elapsed_ms": 1.363,
+              "cpu_ms": 1.362
+            },
+            {
+              "elapsed_ms": 1.362,
+              "cpu_ms": 1.361
+            },
+            {
+              "elapsed_ms": 1.421,
+              "cpu_ms": 1.421
+            }
+          ],
+          "boundary": "Read plus production integrity verification; independent extra digest check is outside timing."
+        }
+      },
+      {
+        "chapters": 500,
+        "synthetic_prose_han_at_least": 1500000,
+        "document_bytes": 4888796,
+        "document_count": 3505,
+        "database_bytes": 14528512,
+        "document_block_bytes": 6952188,
+        "document_block_count": 4436,
+        "physical_document_bytes": 11840984,
+        "current_state_bytes": 133855,
+        "current_understanding_bytes": 207730,
+        "logical_frozen_source_bytes": 85607798,
+        "frozen_source_storage": {
+          "logical_document_count": 1000,
+          "unique_block_count": 3424,
+          "document_root_bytes": 72779,
+          "unique_block_bytes": 6786785,
+          "physical_bytes": 6859564
+        },
+        "elapsed_s": 11.72,
+        "cpu_s": 10.929,
+        "latest_source_read": {
+          "operation": "read_complete_state_and_understanding",
+          "documents_per_sample": 2,
+          "repeats": 3,
+          "connection_reopened": false,
+          "elapsed_ms_median": 7.404,
+          "cpu_ms_median": 7.179,
+          "samples": [
+            {
+              "elapsed_ms": 7.404,
+              "cpu_ms": 7.179
+            },
+            {
+              "elapsed_ms": 11.089,
+              "cpu_ms": 9.124
+            },
+            {
+              "elapsed_ms": 7.231,
+              "cpu_ms": 7.106
+            }
+          ],
+          "boundary": "Read plus production integrity verification; independent extra digest check is outside timing."
+        }
+      },
+      {
+        "chapters": 1000,
+        "synthetic_prose_han_at_least": 3000000,
+        "document_bytes": 9771299,
+        "document_count": 7005,
+        "database_bytes": 30588928,
+        "document_block_bytes": 15067074,
+        "document_block_count": 8936,
+        "physical_document_bytes": 24838373,
+        "current_state_bytes": 267356,
+        "current_understanding_bytes": 415733,
+        "logical_frozen_source_bytes": 341946052,
+        "frozen_source_storage": {
+          "logical_document_count": 2000,
+          "unique_block_count": 6924,
+          "document_root_bytes": 142779,
+          "unique_block_bytes": 14738671,
+          "physical_bytes": 14881450
+        },
+        "elapsed_s": 47.599,
+        "cpu_s": 44.596,
+        "latest_source_read": {
+          "operation": "read_complete_state_and_understanding",
+          "documents_per_sample": 2,
+          "repeats": 3,
+          "connection_reopened": false,
+          "elapsed_ms_median": 14.278,
+          "cpu_ms_median": 14.171,
+          "samples": [
+            {
+              "elapsed_ms": 13.492,
+              "cpu_ms": 13.34
+            },
+            {
+              "elapsed_ms": 14.278,
+              "cpu_ms": 14.171
+            },
+            {
+              "elapsed_ms": 16.179,
+              "cpu_ms": 15.714
+            }
+          ],
+          "boundary": "Read plus production integrity verification; independent extra digest check is outside timing."
+        }
+      },
+      {
+        "chapters": 1667,
+        "synthetic_prose_han_at_least": 5001000,
+        "document_bytes": 16286555,
+        "document_count": 11674,
+        "database_bytes": 50847744,
+        "document_block_bytes": 25015710,
+        "document_block_count": 16225,
+        "physical_document_bytes": 41302265,
+        "current_state_bytes": 446112,
+        "current_understanding_bytes": 695206,
+        "logical_frozen_source_bytes": 950614901,
+        "frozen_source_storage": {
+          "logical_document_count": 3334,
+          "unique_block_count": 12879,
+          "document_root_bytes": 236159,
+          "unique_block_bytes": 24469865,
+          "physical_bytes": 24706024
+        },
+        "elapsed_s": 123.737,
+        "cpu_s": 118.512,
+        "latest_source_read": {
+          "operation": "read_complete_state_and_understanding",
+          "documents_per_sample": 2,
+          "repeats": 3,
+          "connection_reopened": false,
+          "elapsed_ms_median": 23.752,
+          "cpu_ms_median": 23.625,
+          "samples": [
+            {
+              "elapsed_ms": 23.752,
+              "cpu_ms": 23.693
+            },
+            {
+              "elapsed_ms": 24.422,
+              "cpu_ms": 23.625
+            },
+            {
+              "elapsed_ms": 22.363,
+              "cpu_ms": 22.338
+            }
+          ],
+          "boundary": "Read plus production integrity verification; independent extra digest check is outside timing."
+        }
+      }
+    ],
+    "reload": {
+      "operation": "reopen_and_load",
+      "connection_reopened": true,
+      "elapsed_ms": 49.471,
+      "cpu_ms": 47.402,
+      "latest_interpretations": 1,
+      "interpretation_versions": 1667,
+      "first_prose_hash": "a6e2455ae0bc8cf55c7c168fc155cdcdaaba645595dd9d45dd82ce5e4628b18f",
+      "first_prose_hash_verified": true,
+      "first_prose_complete": true
+    },
+    "frozen_sources_before_prune": {
+      "frozen_tasks_verified": 1667,
+      "complete_states_verified": 1667,
+      "complete_understandings_verified": 1667,
+      "full_logical_hashes_verified": 3334,
+      "all_expected_version_sequences_verified": true,
+      "logical_frozen_source_bytes": 950614901,
+      "frozen_source_hash_stream_sha256": "e2c31fd8614227b944ff3d3565fae24d81f970017ec8f130be5465c3b9653827",
+      "elapsed_s": 25.661,
+      "cpu_s": 25.131
+    },
+    "prune": {
+      "reachable_hashes": 10007,
+      "documents_kept": 6673,
+      "documents_removed": 5001,
+      "blocks_kept": 12897,
+      "blocks_removed": 3328,
+      "document_bytes": 15745775,
+      "document_count": 6673,
+      "database_bytes": 48291840,
+      "document_block_bytes": 24473609,
+      "document_block_count": 12897,
+      "physical_document_bytes": 40219384,
+      "before": {
+        "document_bytes": 16286555,
+        "document_count": 11674,
+        "database_bytes": 50847744,
+        "document_block_bytes": 25015710,
+        "document_block_count": 16225,
+        "physical_document_bytes": 41302265
+      },
+      "elapsed_s": 18.388,
+      "cpu_s": 18.234,
+      "frozen_source_storage": {
+        "logical_document_count": 3334,
+        "unique_block_count": 12879,
+        "document_root_bytes": 236159,
+        "unique_block_bytes": 24469865,
+        "physical_bytes": 24706024
+      },
+      "second_pass": {
+        "reachable_hashes": 10007,
+        "documents_kept": 6673,
+        "documents_removed": 0,
+        "blocks_kept": 12897,
+        "blocks_removed": 0,
+        "elapsed_s": 18.237,
+        "cpu_s": 18.086
+      }
+    },
+    "reload_after_prune": {
+      "operation": "reopen_and_load",
+      "connection_reopened": true,
+      "elapsed_ms": 45.631,
+      "cpu_ms": 45.604,
+      "latest_interpretations": 1,
+      "interpretation_versions": 1667,
+      "first_prose_hash": "a6e2455ae0bc8cf55c7c168fc155cdcdaaba645595dd9d45dd82ce5e4628b18f",
+      "first_prose_hash_verified": true,
+      "first_prose_complete": true
+    },
+    "frozen_sources_after_prune": {
+      "frozen_tasks_verified": 1667,
+      "complete_states_verified": 1667,
+      "complete_understandings_verified": 1667,
+      "full_logical_hashes_verified": 3334,
+      "all_expected_version_sequences_verified": true,
+      "logical_frozen_source_bytes": 950614901,
+      "frozen_source_hash_stream_sha256": "e2c31fd8614227b944ff3d3565fae24d81f970017ec8f130be5465c3b9653827",
+      "elapsed_s": 25.173,
+      "cpu_s": 24.745
+    },
+    "temporary_project_removed": true,
+    "source_sha256_after": {
+      "scripts/novel_ledger/sqlite_store.py": "cabbe2e852d27e4e033729201da3777c2a8de6d5c1bbe03a1d06f88167f25bae",
+      "scripts/novel_ledger/book_state.py": "91031c1757e7b7fd3c4259f47da6e8d0b3df769b36a05e690a5c3189ec5c73e9",
+      "scripts/novel_ledger/facts.py": "5c771d52962e63de8b99fd79f3cec74999c800596f7f4eb8910d13a685162935",
+      "scripts/novel_ledger/understanding.py": "03c632a3274f17224f27b0e920a2727c56f1870c5bedc9cbd3a46ddf392e1a79",
+      "scripts/novel_ledger/workflow.py": "584d3a47fc3aa48acd57e93b05256bc516d01ceb6fbf8c8033a7e93d7e08f25b",
+      "scripts/novel_ledger/contracts.py": "d522ce280eb3bf5c65c8460e216b68163ce1ab4f3ae21d399bd79f16d4ee6a5d",
+      "scripts/novel_ledger/evidence.py": "1b877d56fdbf62a913448b22ba09bba70b03a1b3a95c77b031c2d3b556c7b2aa",
+      "scripts/novel_ledger/store_keys.py": "08d0d8597f50aece990f9fa5a5ff3f925093e8a09dd1a7c24db4d2081ee100b2",
+      "tests/support.py": "18db07b764e070a9aaf9385a5ea9e63197b92b8c786fd08e2c38e8d8e3555b0b"
+    },
+    "source_unchanged_during_probe": true
+  },
+  "baseline_probe_source": "#!/usr/bin/env python3\n\"\"\"Measure retained cumulative snapshots in an isolated synthetic SQLite project.\n\nThis is a storage probe, not a novel pipeline or literary acceptance test. Each\nchapter settles one legal character-development event and adds one version of\nthe same interpretation. It saves the book and freezes complete state/memory\ndocuments exactly as task source retention requires. Probe tasks are deliberately\nminimal storage roots; no model, submit, outline validation, complete or deliver\nis exercised. All project data is removed on exit.\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\nimport hashlib\nimport json\nimport statistics\nimport sys\nimport tempfile\nimport time\nfrom pathlib import Path\n\nROOT = Path(__file__).resolve().parents[1]\nsys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]\nfrom novel_ledger import facts, understanding, workflow\nfrom novel_ledger.contracts import digest, dump\nfrom novel_ledger.evidence import evidence\nfrom novel_ledger.sqlite_store import SQLiteRepository\nfrom support import tracked_contract\n\nFINGERPRINT_PATHS = [\n    'scripts/novel_ledger/' + name + '.py' for name in\n    ('sqlite_store', 'book_state', 'facts', 'understanding', 'workflow',\n     'contracts', 'evidence', 'store_keys')\n] + ['tests/support.py']\n\n\ndef fingerprints():\n    return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()\n            for name in FINGERPRINT_PATHS}\n\n\ndef storage_bytes(repo):\n    result = {\n        'document_bytes': repo.db.execute(\n            'SELECT coalesce(sum(length(CAST(value AS BLOB))),0) FROM documents').fetchone()[0],\n        'document_count': repo.db.execute('SELECT count(*) FROM documents').fetchone()[0],\n        'database_bytes': (repo.project / 'novel.sqlite3').stat().st_size,\n    }\n    has_blocks = repo.db.execute(\n        \"SELECT 1 FROM sqlite_master WHERE type='table' AND name='document_blocks'\").fetchone()\n    result['document_block_bytes'] = (repo.db.execute(\n        'SELECT coalesce(sum(length(CAST(value AS BLOB))),0) FROM document_blocks').fetchone()[0]\n        if has_blocks else 0)\n    result['document_block_count'] = (repo.db.execute('SELECT count(*) FROM document_blocks').fetchone()[0]\n                                      if has_blocks else 0)\n    result['physical_document_bytes'] = result['document_bytes'] + result['document_block_bytes']\n    return result\n\n\ndef verify_snapshot_sources(repo, snapshots):\n    \"\"\"Read every historical root; a readable head is insufficient evidence of retention.\"\"\"\n    started, cpu_started = time.perf_counter(), time.process_time()\n    stream, logical_bytes = hashlib.sha256(), 0\n    for snapshot in snapshots:\n        number = snapshot['chapter']\n        # Fetch the frozen task as well: local expected hashes must still be reachable\n        # through immutable task roots after pruning and a fresh connection.\n        task = repo.task(snapshot['task'])\n        if task['status'] != 'done' or task['input']['records'] != snapshot['records']:\n            raise AssertionError('frozen task lost its original complete-source roots')\n        state = repo.read_document(snapshot['records']['complete_state'])\n        memory = repo.read_document(snapshot['records']['complete_understanding'])\n        for name, value in (('complete_state', state), ('complete_understanding', memory)):\n            encoded = dump(value).encode('utf-8')\n            actual = hashlib.sha256(encoded).hexdigest()\n            if actual != snapshot['records'][name]:\n                raise AssertionError('historical complete-source digest differs from its original value')\n            logical_bytes += len(encoded)\n            stream.update((str(number) + ':' + name + ':' + actual + '\\n').encode('ascii'))\n        developments = state['developments']['shen']\n        versions = memory['versions']\n        if (len(developments) != number or len(versions) != number\n                or [row['evidence']['chapter'] for row in developments] != list(range(1, number + 1))\n                or [row['version'] for row in versions] != list(range(1, number + 1))\n                or [row['producer'] for row in versions] != ['fixture-' + str(n) for n in range(1, number + 1)]\n                or [row['evidence'][0]['chapter'] for row in versions] != list(range(1, number + 1))\n                or len(understanding.latest(memory)) != 1):\n            raise AssertionError('historical complete source lost developments or interpretation versions')\n    return {\n        'frozen_tasks_verified': len(snapshots), 'complete_states_verified': len(snapshots),\n        'complete_understandings_verified': len(snapshots),\n        'full_logical_hashes_verified': 2 * len(snapshots),\n        'all_expected_version_sequences_verified': True,\n        'logical_frozen_source_bytes': logical_bytes,\n        'frozen_source_hash_stream_sha256': stream.hexdigest(),\n        'elapsed_s': round(time.perf_counter() - started, 3),\n        'cpu_s': round(time.process_time() - cpu_started, 3),\n    }\n\n\ndef latest_read_cost(repo, records, repeats=3):\n    samples = []\n    for _ in range(repeats):\n        started, cpu_started = time.perf_counter(), time.process_time()\n        values = [repo.read_document(records[name])\n                  for name in ('complete_state', 'complete_understanding')]\n        samples.append({'elapsed_ms': (time.perf_counter() - started) * 1000,\n                        'cpu_ms': (time.process_time() - cpu_started) * 1000})\n        for name, value in zip(('complete_state', 'complete_understanding'), values):\n            if digest(value) != records[name]:\n                raise AssertionError('latest complete-source read differs from the frozen value')\n    return {\n        'operation': 'read_complete_state_and_understanding', 'documents_per_sample': 2,\n        'repeats': repeats, 'connection_reopened': False,\n        'elapsed_ms_median': round(statistics.median(s['elapsed_ms'] for s in samples), 3),\n        'cpu_ms_median': round(statistics.median(s['cpu_ms'] for s in samples), 3),\n        'samples': [{key: round(value, 3) for key, value in row.items()} for row in samples],\n        'boundary': 'Read plus production integrity verification; independent extra digest check is outside timing.',\n    }\n\n\ndef reopen_and_verify(repo, snapshots, chapter_count, prose_han):\n    project = repo.project\n    repo.close()\n    started, cpu_started = time.perf_counter(), time.process_time()\n    repo = SQLiteRepository(project)\n    restored = repo.load()\n    reload = {\n        'operation': 'reopen_and_load', 'connection_reopened': True,\n        'elapsed_ms': round((time.perf_counter() - started) * 1000, 3),\n        'cpu_ms': round((time.process_time() - cpu_started) * 1000, 3),\n        'latest_interpretations': len(understanding.latest(restored['understanding'])),\n        'interpretation_versions': len(restored['understanding']['versions']),\n    }\n    first = repo.chapter('main', 1)\n    first_prose = repo.read_document(first['prose'])\n    if (reload['interpretation_versions'] != chapter_count or reload['latest_interpretations'] != 1\n            or digest(restored['state']) != snapshots[-1]['records']['complete_state']\n            or digest(restored['understanding']) != snapshots[-1]['records']['complete_understanding']):\n        raise AssertionError('reopened current book differs from its expected complete source')\n    if (first_prose != '第1章：沈桐承担代价。' + '测' * prose_han\n            or digest(first_prose) != first['prose']):\n        raise AssertionError('reopened first chapter differs from its complete frozen source')\n    reload.update(first_prose_hash=first['prose'], first_prose_hash_verified=True, first_prose_complete=True)\n    return repo, reload, verify_snapshot_sources(repo, snapshots)\n\n\ndef measure(checkpoints=(100, 500), *, prose_han=3000, prune=True, progress=None):\n    checkpoints = sorted(set(checkpoints))\n    if not checkpoints or any(type(n) is not int or n < 1 for n in checkpoints):\n        raise ValueError('chapter checkpoints must be positive integers')\n    if type(prose_han) is not int or prose_han < 1:\n        raise ValueError('prose_han must be a positive integer')\n    report = {\n        'schema': 'novel-ledger.storage-snapshot-probe/2',\n        'synthetic': True,\n        'conditions': {\n            'chapter_checkpoints': checkpoints,\n            'filler_han_per_chapter': prose_han,\n            'contract_chapters': max(1667, checkpoints[-1]),\n            'development_events_per_chapter': 1,\n            'interpretation_ids': 1,\n            'new_interpretation_versions_per_chapter': 1,\n            'freeze_each_state_and_understanding': True,\n            'nominal_word_count': 'Filler characters only; stored han is a synthetic lower bound.',\n            'boundary': 'Storage-only synthetic tasks; no submit, model, full pipeline or literary acceptance.',\n            'timing': 'Generation wall/CPU exclude checkpoint reads, storage accounting, full verification and prune.',\n        },\n        'metric_definitions': {\n            'document_bytes': 'UTF-8 bytes in documents.value only; unchanged from the historical probe.',\n            'document_block_bytes': 'UTF-8 bytes in document_blocks.value; zero when the table is absent.',\n            'physical_document_bytes': 'document_bytes + document_block_bytes; excludes SQLite indexes and task cells.',\n            'logical_frozen_source_bytes': 'Sum of every original complete_state and complete_understanding canonical JSON byte length.',\n            'database_bytes': 'Entire SQLite file including metadata, indexes, task cells, unused pages and document storage.',\n        },\n        'source_sha256': fingerprints(),\n        'probe_source_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),\n        'checkpoints': [],\n    }\n    with tempfile.TemporaryDirectory(prefix='novel-snapshot-probe-') as temporary:\n        repo = SQLiteRepository.initialize(\n            Path(temporary) / 'book',\n            workflow.new_book(tracked_contract(max(1667, checkpoints[-1]))))\n        try:\n            book, previous = repo.load(), 'genesis'\n            snapshots, logical_frozen_bytes = [], 0\n            generated_s, generated_cpu_s = 0, 0\n            for number in range(1, checkpoints[-1] + 1):\n                started, cpu_started = time.perf_counter(), time.process_time()\n                prose = '第%d章：沈桐承担代价。' % number + '测' * prose_han\n                ref = {'chapter': number, 'quote': '沈桐承担代价。'}\n                event = {\n                    'op': 'character_development', 'entity': 'shen',\n                    'choice': '选择核实来源并继续调查。',\n                    'cost': '承担调查后果并失去一次机会。',\n                    'change': '改用证据判断人物的可信度。', 'evidence': ref,\n                }\n                with repo.transaction():\n                    book['state'], normalized = facts.settle(book['state'], [event], prose, number)\n                    book['understanding'] = understanding.update(\n                        book['understanding'], [{\n                            'id': 'hero', 'kind': 'character', 'claim': '沈桐对人的信任继续变化。',\n                            'status': 'supported', 'subjects': ['shen'], 'topics': [],\n                            'reason': '本章选择与代价。', 'evidence': [ref], 'counterevidence': [],\n                        }], {number: prose}, evidence, 'fixture-' + str(number))\n                    row = {\n                        'n': number, 'title': '存储实验', 'prose': repo.document(prose),\n                        'events': repo.document(normalized), 'plan': repo.document({}),\n                        'review': repo.document({}), 'state_hash': digest(book['state']),\n                        'summary': '存储实验', 'han': prose_han,\n                    }\n                    row['chain'] = facts.chain(previous, row, digest(book['contract']))\n                    repo.add_chapter('main', row)\n                    previous = row['chain']\n                    book.update(written_han=number * prose_han, revision=number)\n                    repo.save(book)\n                    state = repo.document(book['state'])\n                    memory = repo.document(book['understanding'])\n                    if state != row['state_hash'] or memory != digest(book['understanding']):\n                        raise AssertionError('document write returned a different logical hash')\n                    logical_frozen_bytes += len(dump(book['state']).encode('utf-8'))\n                    logical_frozen_bytes += len(dump(book['understanding']).encode('utf-8'))\n                    task = repo.add_task({'records': {'complete_state': state,\n                                                     'complete_understanding': memory},\n                                          'stage': 'storage-probe'})\n                    # A finished frozen task remains a root for immutable complete sources.\n                    repo.db.execute(\"UPDATE tasks SET status='done' WHERE id=?\", (task['id'],))\n                    snapshots.append({'chapter': number, 'task': task['id'],\n                                      'records': {'complete_state': state, 'complete_understanding': memory}})\n                generated_s += time.perf_counter() - started\n                generated_cpu_s += time.process_time() - cpu_started\n                if number in checkpoints:\n                    point = {\n                        'chapters': number, 'synthetic_prose_han_at_least': number * prose_han,\n                        **storage_bytes(repo),\n                        'current_state_bytes': len(dump(book['state']).encode('utf-8')),\n                        'current_understanding_bytes': len(dump(book['understanding']).encode('utf-8')),\n                        'logical_frozen_source_bytes': logical_frozen_bytes,\n                        'elapsed_s': round(generated_s, 3),\n                        'cpu_s': round(generated_cpu_s, 3),\n                        'latest_source_read': latest_read_cost(repo, snapshots[-1]['records']),\n                    }\n                    report['checkpoints'].append(point)\n                    if progress:\n                        progress(point)\n            repo, report['reload'], report['frozen_sources_before_prune'] = reopen_and_verify(\n                repo, snapshots, checkpoints[-1], prose_han)\n            if report['frozen_sources_before_prune']['logical_frozen_source_bytes'] != logical_frozen_bytes:\n                raise AssertionError('reopened frozen-source bytes differ from original values')\n            if prune:\n                before = storage_bytes(repo)\n                started, cpu_started = time.perf_counter(), time.process_time()\n                removed = repo.prune()\n                report['prune'] = {\n                    **removed, **storage_bytes(repo), 'before': before,\n                    'elapsed_s': round(time.perf_counter() - started, 3),\n                    'cpu_s': round(time.process_time() - cpu_started, 3),\n                }\n                repo, report['reload_after_prune'], report['frozen_sources_after_prune'] = reopen_and_verify(\n                    repo, snapshots, checkpoints[-1], prose_han)\n                for key in ('logical_frozen_source_bytes', 'frozen_source_hash_stream_sha256'):\n                    if report['frozen_sources_after_prune'][key] != report['frozen_sources_before_prune'][key]:\n                        raise AssertionError('prune changed or lost an original complete frozen source')\n                report['prune']['second_pass'] = repo.prune()\n                if report['prune']['second_pass']['documents_removed']:\n                    raise AssertionError('second prune still removes live-source documents')\n        finally:\n            repo.close()\n    report['temporary_project_removed'] = True\n    report['source_sha256_after'] = fingerprints()\n    report['source_unchanged_during_probe'] = report['source_sha256_after'] == report['source_sha256']\n    if not report['source_unchanged_during_probe']:\n        raise AssertionError('measured source changed during the probe; repeat with stable source')\n    return report\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=__doc__)\n    sizes = parser.add_mutually_exclusive_group()\n    sizes.add_argument('--chapters', type=int, nargs='+', default=[100, 500],\n                       help='Checkpoints; add 1667 explicitly for at least five million filler Han characters.')\n    sizes.add_argument('--sizes', help='Comma-separated checkpoint alias, for example 100,500,1667.')\n    parser.add_argument('--prose-han', type=int, default=3000)\n    parser.add_argument('--no-prune', action='store_true')\n    parser.add_argument('--out', type=Path)\n    args = parser.parse_args()\n    checkpoints = args.chapters\n    if args.sizes is not None:\n        try:\n            checkpoints = [int(value) for value in args.sizes.split(',')]\n        except ValueError:\n            parser.error('--sizes must contain comma-separated positive integers')\n    if any(n < 1 for n in checkpoints) or args.prose_han < 1:\n        parser.error('chapter checkpoints and --prose-han must be positive integers')\n    result = measure(checkpoints, prose_han=args.prose_han, prune=not args.no_prune,\n                     progress=lambda point: print(json.dumps(point, ensure_ascii=False), file=sys.stderr, flush=True))\n    rendered = json.dumps(result, ensure_ascii=False, indent=2) + '\\n'\n    if args.out:\n        args.out.parent.mkdir(parents=True, exist_ok=True)\n        args.out.write_text(rendered, encoding='utf-8')\n    else:\n        print(rendered, end='')\n\n\nif __name__ == '__main__':\n    main()\n",
+  "baseline_probe_source_sha256_verified": true,
+  "fixed_probe_source_sha256_verified": true
+}

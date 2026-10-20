@@ -237,7 +237,7 @@ def task_line(work):
 
 
 # Work directory ownership. `work/<task>/` mixes two kinds of file:
-#   controller-authored, rebuildable: task.json, input.json, chapter-*.txt
+#   controller-authored, rebuildable: task.json, input.json
 #   worker-authored, never rewritten: result.template.json (the form) and result.json (the receipt)
 # Cancellation is the only event that retires worker-authored artifacts, and it does so by
 # deleting them rather than by leaving them for the next task to trip over.
@@ -290,11 +290,6 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     def artifact(name):
         return workspace.artifact_path(base / name)
 
-    prose_files = []
-    for ref in work['prose']:
-        path = artifact('chapter-' + str(ref['chapter']) + '.txt')
-        atomic_write(path, repo.read_document(ref['hash']))
-        prose_files.append({**ref, 'path': str(path)})
     command = [sys.executable, str(entry), '--project', str(workspace.project)]
     lease = repo.get(store_keys.claim(task['id']))
     # The envelope, its identity copy and the compact controller view all describe the same dispatch.
@@ -304,7 +299,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
               'chapter': work['chapter'], 'scope': work['scope'],
               'delivery_phase': 'formal',
               'requires_new_worker': task['reviewer'] is None, 'review_session': task['reviewer']}
-    envelope = {'schema': work['schema'], **shared, 'prose_files': prose_files,
+    envelope = {'schema': work['schema'], **shared,
                 'task_path': str(artifact('task.json')), 'result_path': str(artifact('result.json')),
                 'project_path': str(workspace.project), 'host_log_path': str(artifact('host.log')),
                 'process': {'project_path': str(workspace.project), 'task_path': str(artifact('task.json')),

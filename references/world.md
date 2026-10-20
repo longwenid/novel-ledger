@@ -10,7 +10,7 @@
 
 模型包含 premise/story_capacity/selection_hash 和完整记录数组。领域及记录字段以 `world.SECTIONS` 和当前任务模板为准；**必填集合由 `world.required_sections(tier, choices)` 合并档位基础域与门中声明后决定（微型档的基础域是规则、社会、日常、人物、隐秘与机制），最终列表之外的领域保留为空数组，不要为凑数写进来**——世界被之后每一次派工读取，它的规模是持续成本而不是一次性成本。
 
-**v5 起还要叠加门里声明的要求**：`world.required_sections(tier, choices)` = 档位基础域 ∪ `world.declared_sections(choices)`——`world` 门声明了 `resource` 就把 `economy` 加进来（包括原本不要求该域的 t0/t1/t2），声明了 `tiers` 就把 `powers` 加进来，`ladder` 里有 `一界`/`星海`/`诸天` 级别的 `scope` 就把 `cosmology` 加进来。简报与提交校验共用这个集合，已声明的硬通货不会再被要求留空。**t3–t5 的档位基础域是 `LEGACY_SECTIONS`（原有 10 域），不含新增两域**：在跑项目的世界没有 `powers`/`cosmology` 键，拿全领域表去要求会让它们的一致性复检直接失败；新领域只在门里声明时才要求。v6 声明 `architecture` 时，还要求 geography/history/factions/rules/mysteries 承接五项架构；不强制增加宇宙位面。mechanisms 按所选机制方向为空或实写。
+`world.required_sections(tier, choices)` 合并档位基础域与已声明内容：`resource` 要求 `economy`，`tiers` 要求 `powers`，格局包含 `一界`/`星海`/`诸天` 要求 `cosmology`。t3–t5 的基础域由 `BASE_SECTIONS` 声明；世界架构还要求 geography/history/factions/rules/mysteries 承接五项决定。简报与校验共用这个集合，不强制所有项目增加宇宙位面。模型始终包含全部领域键，不使用的领域显式给空数组；mechanisms 按所选机制方向为空或实写。
 
 | 领域 | 说明 |
 |---|---|
@@ -29,7 +29,7 @@
 
 ### 可选深字段
 
-`world.OPTIONAL_FIELDS` 给旧领域加了可选深字段（**写了就必须非空文本，不要求写**）：
+`world.OPTIONAL_FIELDS` 声明可选深字段（**写了就必须非空文本，不要求写**）：
 
 | 领域 | 可选深字段 |
 |---|---|
@@ -58,7 +58,7 @@
 
 ## 三条逐字绑定
 
-门里选完不是结束：`world`/`ladder` 门声明的东西必须在世界模型里有**同名记录**，提交时机械核对（错误码沿用 `world_alignment`，details 写清 rule/expect/got）。只在 `choices` 声明了才检查，旧开书（v1–v4）行为不变：
+门里选完不是结束：`world`/`ladder` 门声明的东西必须在世界模型里有**同名记录**，提交时机械核对（错误码沿用 `world_alignment`，details 写清 rule/expect/got）。按 `choices` 中的声明逐项检查；自备约定按实际声明核验：
 
 | 门里声明 | 世界模型里必须有 |
 |---|---|
@@ -66,7 +66,7 @@
 | `world_resource`（`name`/`source`/`allocator`） | `economy` 里有一条记录，其 `resource` 与声明的 `name` 逐字相同，且该条记录的 `distribution` 字段文本里出现声明的 `allocator`（分配者必须写在分配方式里；在别的字段出现不算） |
 | `world_ladder` 的每级 `stage` | `geography`/`cosmology`/`factions`/`powers` 里有一条 `name` 与它**逐字相同**的记录 |
 
-另外，`data` 里缺的领域会先规范化为 `[]`（在返回的深拷贝里补上），只有**本档位或本次声明要求**的领域才要求至少一条实写记录（`mechanisms` 的既有例外保留）——所以在跑项目（10 域、没有新键）仍能通过一致性复检。
+模型必须显式包含全部 12 个领域数组，缺键直接拒绝。只有本档位或本次声明要求的领域才须至少一条实写记录；其他领域给空数组。已选无机制时，`mechanisms` 必须为空。
 
 ## 世界架构绑定
 
@@ -80,7 +80,7 @@
 | conflict | 持续恶化的贯穿矛盾 | `rules.consequences` |
 | mystery | 终极真相与揭开后仍需解决的问题 | `mysteries.truth` |
 
-声明与绑定目标共用 `contracts.WORLD_ARCHITECTURE`；旧项目未声明时不追溯补填。存进 `truth` 的作者设定不自动成为人物知识，披露须经卷纲窗口与章纲知情链安排。
+声明与绑定目标共用 `contracts.WORLD_ARCHITECTURE`；逐门开书必须声明五项架构，直接导入完整约定时按实际声明核验。存进 `truth` 的作者设定不自动成为人物知识，披露须经卷纲窗口与章纲知情链安排。
 
 ## 机械校验与采纳
 

@@ -19,9 +19,6 @@ def step(app: HostApplication, command, owner=None, timeout=300):
         return handoff
     envelope = handoff['task']
     task = app.task_status(envelope['task_id'])
-    if task['reviewer']:
-        return {'action': 'resume_session_required', 'task_id': task['id'], 'session': task['reviewer'],
-                'message': '冻结首读须沿原模型会话恢复；该通用宿主不证明会话恢复能力。'}
     transport = envelope.get('process')
     require(isinstance(transport, dict) and all(text(transport.get(key))
             for key in ('project_path', 'task_path', 'log_path')), 'host_transport',

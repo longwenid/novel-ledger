@@ -88,8 +88,34 @@ def cross_chapter_duplicates(prose, priors, chapter, size=DUPLICATE_GRAM, limit=
 
 
 def _quote_counts(prose):
-    return {'corner': sum(prose.count(mark) for mark in _CORNER),
-            'western': sum(prose.count(mark) for mark in _WESTERN)}
+    """Count only top-level, closed quotations; nested quotation is a valid use of two families."""
+    counts = {'corner': 0, 'western': 0}
+    pairs = {'「': '」', '『': '』', '“': '”', '"': '"', '‘': '’'}
+    for block in prose.splitlines():
+        start = 0
+        while start < len(block):
+            opening = block[start]
+            closing = pairs.get(opening)
+            if closing is None:
+                start += 1
+                continue
+            stack, end = [closing], start + 1
+            while end < len(block) and stack:
+                char = block[end]
+                if char == stack[-1]:
+                    stack.pop()
+                elif char in pairs:
+                    stack.append(pairs[char])
+                end += 1
+            if stack:
+                start += 1
+                continue
+            if opening in _CORNER:
+                counts['corner'] += 1
+            elif opening in _WESTERN:
+                counts['western'] += 2
+            start = end
+    return counts
 
 
 def style_findings(prose, priors, chapter, minimum=STYLE_MIN_QUOTES):

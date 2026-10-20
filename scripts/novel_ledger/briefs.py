@@ -169,7 +169,7 @@ def _world_piece_lines(sections):
         lines.append('- **%s**' % layer)
         for name, text in rows:
             lines.append('  - %s（%s）：%s' % (name, world.LABELS.get(name, name), text))
-    lines.append('- 若 world 门声明 architecture，以下对应字段须逐字保留（无声明的旧项目不补填）：')
+    lines.append('- 若 world 门声明 architecture，以下对应字段须逐字保留（直接导入约定按实际声明核验）：')
     lines.extend('  - architecture.%s → %s.%s：%s' % (key, section, field, note)
                  for key, note, section, field in WORLD_ARCHITECTURE)
     return lines
@@ -269,7 +269,7 @@ def self_check_block():
 VOLUME_CHECK_HINTS = (
     'volumes 的 id 与顺序和 payload.volume_ids / contract.volumes 一一对应，不多不少。',
     '每卷汉字数落在 words±tolerance；purpose、arc、climax、exit_state、style.trend 都不能空。',
-    'stage 取已选格局阶梯里的一级并逐字一致，按卷序只升不降（旧开书没有阶梯时允许留空）。',
+    'stage 取已选格局阶梯里的一级并逐字一致，按卷序只升不降（直接导入约定未声明阶梯时允许留空）。',
     'node/thread/hook 的 id 全书唯一，不覆盖已批准的 id；node/thread window 落在本卷章号区间内。',
     'hooks 每条 plant 必须落在本卷章号区间；payoff[0] >= plant[1]；越过卷末的必须 continues=true 且 required=false。',
     'resources/places/knowledge/characters 引用的 key/entity 必须已存在于世界模型或既有状态。',
@@ -283,6 +283,15 @@ CHAPTER_CHECK_HINTS = (
     'node/thread 只能引用本卷卷纲已登记的集合；knowledge 的 to 取 hinted|suspected|misled|confirmed|retracted。',
     'hooks 只有 plant/payoff 两个动作：同一 id 各一次、payoff 不早于 plant、各自落在卷纲窗口内；'
     'hook_refs 承接的 id 必须已经 plant 过。',
+)
+
+NATURAL_PROSE_GUIDE = (
+    '先想人物此刻想要什么、怕被谁看出什么，再写他注意到的东西与实际反应；'
+    '同一个人可以嘴上推辞、手上接住，不替他立即总结动机或成长。'
+    '对白从彼此关系和眼前目的出发，可以绕开问题、接错话或只应半句，也允许直说；'
+    '不让所有人物替作者解释规则。生活细节要和人物当下的使用、在意或忽略有关。'
+    '保留有作用的心理、停顿与叙述，句段长短随场景呼吸；不靠加口头禅、错字或感官清单制造自然感。'
+    '事实与数量须有正文依据，核账说明放在回执，不为逐条举证给对白加说明。'
 )
 
 
@@ -317,7 +326,8 @@ def stage(name, payload=None):
                           '允许越过卷末，但越过时必须 continues=true 且 required=false；'
                           'required=true 的必须在卷末兑现，引擎在卷内状态链收尾处校验。'
                           '续写前卷留下的伏笔时沿用同一 id 并标 continues=true，id 清单见材料 hooks.open。'
-                          'style.trend 必填：用具体文字说清本卷文风怎么走（相对首章定调的松紧、对白占比、句长、节奏），'
+                          'style.trend 必填：用具体文字说清本卷的叙述意图与人物说话方式如何随处境变化；'
+                          '作者要求量化时再定对白或句段目标，'
                           '不写「同上」「保持」；可选 style.window 逐项覆盖契约 style_window'
                           '（sentence/paragraph/dialogue/repetition/person），只在对本卷有明确意图时才改。'
                           'clock.advance_days 是本卷总推进天数，clock.to 是卷末主线时钟的绝对累计天数（从初始状态累计，'
@@ -326,7 +336,9 @@ def stage(name, payload=None):
                           'node/thread/hook id 全书唯一，不覆盖已批准 id。'
                           '不写逐章 synopsis，不写脑暴与选案理由，不写正文。',
         'chapter_outline': '交付 {volume, chapters}：章号连续、恰好覆盖本卷冻结范围 [first,last]。每章给：'
-                           'synopsis（words±tolerance 汉字：行动、阻力、选择、代价、结果、对下一章的推动，只写因果不写氛围）；'
+                           'synopsis（words±tolerance 汉字：本章实际发生的事、人物处境与阅读作用）；'
+                           '行动、阻力、选择与后果可以跨章承接，静章可停留于关系或余波；'
+                           '写清实际承接，不要求每章六项齐备、即时结算或章末固定留钩。'
                            'plot.beat 一句话说清本章情节变化，plot.nodes=[{node,after:seeded|advanced|resolved,outcome}]、'
                            'plot.threads=[{thread,after:active|dormant|resolved,reason}] 只引用本卷卷纲已登记的 id；'
                            'resources=[{key,from,to,reason}]、places=[{entity,from,to,reason}]、'
@@ -338,7 +350,7 @@ def stage(name, payload=None):
                            'kind 取 resources|places|knowledge|character|node|thread|clock，key 用该坐标的键'
                            '（人物用实体 id，节点/线路用其 id，clock 用 clock）；'
                            'exit 必须等于 enter 施加本章全部增量后的结果——引擎自己算一遍比对，任一侧缺项即漂移、整份被拒，'
-                           '所以宁可少列一个坐标，也不要写一个自己对不上的值；'
+                           '先核实真实前态并列全实际变化，不能用少列坐标来避开核算；'
                            'disclosures 写读者认知的推进，world_refs 引用真实世界记录；'
                            'new_entities 内联新人物/地点/物品档案 {id,kind,name,role,desire,limit,knowledge_boundary}，'
                            '第一次出现就给全，不用另派档案阶段；'
@@ -353,7 +365,7 @@ def stage(name, payload=None):
                            'rhythm 用具体文字写本章句法与节奏、dialogue_ratio 给 0~1 的目标（可选）、'
                            'notes 写本章例外（如对峙段允许长句）。'
                            'hook_refs/reader_refs/history_refs 声明要承接的旧资料；'
-                           'scenes/pacing 可选，保留工作台兼容。不写正文。',
+                           'scenes/pacing 为当前章纲的可选字段。不写正文。',
         'write': '交 title/完整 prose/summary/具体 self_check 与逐条 drift_check。'
                  '本章纲（chapter_outline）与卷纲材料（volume_outline）都是必读；卷纲节点已按本章及前置依赖筛选，完整卷纲可从 complete_volume_outline 补读：按章纲的场景与增量落笔，'
                  '不添章纲没有的重大变化，也不漏掉章纲声明要发生的。'
@@ -361,13 +373,14 @@ def stage(name, payload=None):
                  '（actual.from 由引擎投影，不是你自报的前态）、status 取 kept|deviated|skipped，'
                  'deviated/skipped 必须写 reason，evidence.quote 必须是正文原文片段；'
                  '计划外资源/位置/知情/人物变化写进 unplanned，必须给 actual.from/to、reason 和本章 evidence；不接受只有 change 的说明，其他种类须回章纲契约处理。'
-                 '以动作、对白、选择、后果写场景，删除重复解释。遵守 word_budget 的本章范围；'
+                 '以具体处境展开场景，保留有作用的心理与体验，删除重复解释。遵守 word_budget 的本章范围；'
                  '静章承担余波、恢复、关系或暗线作用。作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
                  '文风上照 style_anchor 的首章定调、本卷 style.trend 与本章 style 写：'
-                 'pov/rhythm/dialogue_ratio 是本章声明的执行点，self_check 必须逐条点名它们各自在本章哪几段落了地'
-                 '（例如「对白占比按 0.30 走，集中在第 3、5 段」），不能只写「已遵循」。'
+                 'self_check 用具体表达说明实际视角、人物说话方式与节奏；'
+                 'dialogue_ratio 未声明时不用补比例，已声明时如实核对，不按段落分配对白。'
                  '材料 style.anchor 是首章的实测指标、style.window 是本卷生效的容差：'
-                 '机械指标只保证文风一致与可核对，不证明好看或人物可信，别为了凑指标牺牲场景。'
+                 '默认 style_guard=observe 时首章形状差异仅供观察；作者选 strict 才按容差核验句段与锚点对白比例。'
+                 '章纲明确的对白目标与高重复检查仍生效；代词统计只是视角核对线索，不能代替阅读。'
                  '伏笔上 plant 的承诺与 payoff 的兑现都要在正文里落地，drift_check 的 hook 行照实填。'
                  '约定的叙述视角与人称是硬约束：不越出约定的视角范围，也不无标记地切换人称；'
                  '母题靠事件与选择体现，不写成口号；基调不靠形容词报幕。',
@@ -401,6 +414,7 @@ def stage(name, payload=None):
                  '数字与数量关系一旦写成账目行，提交时机械验算，后续工件同键必须同值；'
                  '不声明就省略字段，不要把观感描述写成账目。')
     if name in ('write', 'repair', 'redesign'):
+        rule += ' ' + NATURAL_PROSE_GUIDE
         rule += (' 本章纲是该章的结算契约：正文写完后逐条比对，漏项/多项都会被 drift_coverage 拒绝；'
                  'scene_context 按场交付目标、依赖与准确前态，scene_sources 绑定历史原文版本；'
                  '依赖缺失先补读，不把人物误信当世界真相。')

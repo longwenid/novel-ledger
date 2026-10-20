@@ -1,11 +1,4 @@
-"""Zero-input opening choices. Pure state; only the author selects a board option.
-
-Two gate sets live side by side. Version 2 is what a new book opens with: one question per gate, the view
-settled before any gate that shows sample scenes, the setting decided before the people who live in it,
-and the length gate answered by the engine from a ladder of provably writable tiers instead of asking a
-writer to invent numbers. Version 1 is the gate set every already-opened project was opened with; it
-stays readable so an in-flight opening keeps its own protocol instead of being silently re-planned.
-"""
+"""Current guided opening choices; only the author selects a board option."""
 from __future__ import annotations
 
 import copy
@@ -24,9 +17,7 @@ GATES = (
     ('protagonist', '主角处境与底线'), ('relationships', '人物关系与立场'),
     ('opposition', '多方对抗与持续冲突'), ('payoff', '阶段兑现与终局回应'), ('title', '书名'),
 )
-GATE_SETS = {OPENING_VERSION: GATES}
-# No bare-module-lookup shortcut on purpose: which gate set applies is a property of the project's
-# creation document, so every lookup goes through gates(state).
+# State-based lookups validate the current protocol before using this gate set.
 # Gates the engine answers itself from a table it has already proved satisfiable. A worker must not
 # invent them, and no dispatch is spent on them.
 SYSTEM_GATES = {OPENING_VERSION: ('scale',)}
@@ -45,22 +36,21 @@ def opening_version(state):
     protocol; a state that declares an older protocol is refused with the fix named, not silently
     re-planned under a gate order its choices were never made for.
     """
-    raw = (state or {}).get('schema')
-    try:
-        version = int(str(raw).rsplit('/', 1)[-1])
-    except (TypeError, ValueError):
+    if state is None or state == {}:
         return OPENING_VERSION
-    require(version in GATE_SETS, 'creation',
-            '开书协议 opening/%d 已不再支持：旧协议项目不迁移，请以当前协议重开。' % version)
-    return version
+    require(isinstance(state, dict) and state.get('schema') == 'novel-ledger.creation/' + str(OPENING_VERSION),
+            'creation', '仅支持当前开书协议，请以当前协议重开。')
+    return OPENING_VERSION
 
 
 def gates(state):
-    return GATE_SETS[opening_version(state)]
+    opening_version(state)
+    return GATES
 
 
-def gate_ids(version):
-    return tuple(ident for ident, _title in GATE_SETS[version])
+def gate_ids(version=OPENING_VERSION):
+    require(version == OPENING_VERSION, 'creation', '仅支持当前开书协议。')
+    return tuple(ident for ident, _title in GATES)
 
 
 def gate_title(gate_id, version=None):
@@ -245,7 +235,7 @@ def value_fields(gate, version=OPENING_VERSION):
     fields = []
     for row in contracts.CONTRACT_FIELDS:
         source = contracts.opening_source(row, version)
-        if source and source[0] == gate and row.get('since', 1) <= version:
+        if source and source[0] == gate:
             fields.extend(row['shape'] if source[1] is None else (source[1],))
     return tuple(fields) + DERIVATION_INPUTS.get(gate, ())
 
@@ -328,109 +318,9 @@ def system_board(state):
 
 
 def validate_value(gate, value, version=OPENING_VERSION, choices=None):
+    """Validate the current opening's owned fields and structured decisions."""
+    require(version == OPENING_VERSION, 'creation', '仅支持当前开书协议，请以当前协议重开。')
     require(isinstance(value, dict), 'opening_option', '每个方案须有结构化 value。')
-    if version in (3, 4, 5, 6):
-        return _validate_value_modern(gate, value, version, choices)
-    if version == 2:
-        return _validate_value_v2(gate, value)
-    return _validate_value_v1(gate, value, choices or {})
-
-
-def _validate_value_v1(gate, value, choices):
-    if gate == 'genre':
-        require(text(value.get('genre')) and text(value.get('reader_promise')) and isinstance(value.get('red_lines'), list)
-                and all(text(s) for s in value['red_lines']) and type(value.get('allow_special_mechanism')) is bool,
-                'opening_option', '题材方案需要题材、读者承诺、禁区和机制允许范围。')
-    elif gate == 'scale':
-        band = value.get('word_range')
-        require(isinstance(band, list) and len(band) == 2 and all(type(n) is int and n > 0 for n in band)
-                and band[0] <= band[1], 'opening_option', '篇幅方案需要有效 word_range。')
-        require(all(type(value.get(k)) is int and value[k] > 0 for k in ('chapter_min', 'chapter_max', 'chapter_aim', 'volume_count'))
-                and value['chapter_min'] <= value['chapter_aim'] <= value['chapter_max'], 'opening_option', '章幅与卷数须有效。')
-        require(value['volume_count'] * value['chapter_min'] <= band[1], 'opening_option', '分卷最低承载不能超过总篇幅上限。')
-    elif gate == 'protagonist':
-        require(all(text(value.get(k)) for k in ('id', 'name', 'identity', 'desire', 'limit')), 'opening_option', '主角需要身份、欲望和底线。')
-        require(not any(c in value['id'] for c in ':>'), 'opening_option', '主角 ID 不能含分隔符。')
-    elif gate == 'engine':
-        require(text(value.get('story_engine')) and text(value.get('opposition')), 'opening_option', '推进方案需要持续动力和对抗。')
-    elif gate == 'relationships':
-        require(isinstance(value.get('relationships'), list) and all(text(s) for s in value['relationships']), 'opening_option', '核心关系须为具体关系数组，独行方案可为空。')
-    elif gate == 'world':
-        mechanism = value.get('mechanism')
-        require(text(value.get('world_premise')) and isinstance(mechanism, dict) and mechanism.get('mode') in ('none', 'bounded'), 'opening_option', '世界方案需要前提及明确机制类型。')
-        require(text(mechanism.get('principle')) and text(mechanism.get('cost')) and isinstance(mechanism.get('limits'), list)
-                and all(text(s) for s in mechanism['limits']), 'opening_option', '机制需要原理、代价和限制，无特殊机制也需解释。')
-        require(choices.get('genre', {}).get('allow_special_mechanism', True) or mechanism['mode'] == 'none',
-                'opening_constraint', '已选题材禁止特殊机制，不能用后续选项推翻。')
-    elif gate == 'ending':
-        require(text(value.get('ending')), 'opening_option', '终局方案需要具体成立方向。')
-    elif gate == 'voice':
-        require(text(value.get('voice')) and isinstance(value.get('style_traits'), list) and value['style_traits']
-                and all(text(s) for s in value['style_traits']), 'opening_option', '文风方案需要表达特点和节奏。')
-
-
-def _validate_value_v2(gate, value):
-    allowed = value_fields(gate, 2)
-    unknown = sorted(set(value) - set(allowed))
-    require(gate in gate_ids(2) and not unknown, 'opening_option', 'value 只能包含本门负责的字段。',
-            {'gate': gate, 'unknown_fields': unknown, 'allowed_fields': list(allowed),
-             'recover': '删除额外字段；修改此前决定须 back 返回对应门。'})
-    if gate == 'genre':
-        require(all(text(value.get(k)) for k in ('genre', 'reader_promise', 'tone')),
-                'opening_option', '题材方案需要题材、读者承诺和基调。')
-    elif gate == 'scale':
-        tier = next((row for row in SCALE_TIERS if row['id'] == value.get('tier')), None)
-        require(tier is not None, 'opening_option', '体量方案须来自档位表。',
-                {'valid_tiers': [row['id'] for row in SCALE_TIERS],
-                 'recover': '本门由主控从当前档位板照抄 value，不要自行改数。'})
-        require(all(value.get(key) == tier[key] for key in ('word_range', 'chapter_min', 'chapter_max',
-                                                           'chapter_aim', 'volume_count')),
-                'opening_option', '体量方案的数字必须与档位表逐字一致。', {'tier': tier['id']})
-        require(value.get('chapters') == tier['chapters'] and list(value.get('chapter_window') or []) == tier['chapter_window'],
-                'opening_option', '体量方案的总章数与可写完区间必须与档位表一致。', {'tier': tier['id']})
-        require(value['chapter_min'] <= value['chapter_aim'] <= value['chapter_max']
-                and value['volume_count'] * value['chapter_min'] <= value['word_range'][1],
-                'opening_option', '档位内的章幅与分卷须自洽。')
-        require(tier['chapter_window'][0] <= value['chapters'] <= tier['chapter_window'][1],
-                'opening_option', '档位推荐的章数必须落在该档可写完区间内。')
-    elif gate == 'world':
-        mechanism = value.get('mechanism')
-        require(text(value.get('world_premise')) and isinstance(mechanism, dict) and mechanism.get('mode') in ('none', 'bounded'),
-                'opening_option', '世界方案需要前提及明确机制类型。')
-        require(text(mechanism.get('principle')) and text(mechanism.get('cost')) and isinstance(mechanism.get('limits'), list)
-                and all(text(s) for s in mechanism['limits']), 'opening_option', '机制需要原理、代价和限制，无特殊机制也需解释。')
-        require(isinstance(value.get('red_lines'), list) and all(text(s) for s in value['red_lines']),
-                'opening_option', '世界方案需要禁区数组（可以为空，但必须是数组）。')
-        require(type(value.get('allow_special_mechanism')) is bool and value['allow_special_mechanism'] == (mechanism['mode'] == 'bounded'),
-                'opening_option', '机制允许范围必须与机制类型一致：有机制为真，无机制为假。')
-    elif gate == 'pov':
-        require(text(value.get('pov')), 'opening_option', '视角方案需要具体的人称与视角范围。')
-    elif gate == 'protagonist':
-        require(all(text(value.get(k)) for k in ('id', 'name', 'identity', 'desire', 'limit')), 'opening_option', '主角需要身份、欲望和底线。')
-        require(not any(c in value['id'] for c in ':>'), 'opening_option', '主角 ID 不能含分隔符。')
-    elif gate == 'relationships':
-        require(isinstance(value.get('relationships'), list) and value['relationships'] and all(text(s) for s in value['relationships']),
-                'opening_option', '核心关系至少一条：独行主角也要写清最关键的那段关系张力，不能交空数组。')
-    elif gate == 'engine':
-        require(text(value.get('story_engine')) and text(value.get('opposition')), 'opening_option', '推进方案需要持续动力和对抗。')
-    elif gate == 'ending':
-        require(all(text(value.get(k)) for k in ('ending', 'theme')), 'opening_option', '终局方案需要成立方向和母题。')
-    elif gate == 'voice':
-        require(text(value.get('voice')) and isinstance(value.get('style_traits'), list)
-                and value['style_traits'] and all(text(s) for s in value['style_traits']),
-                'opening_option', '文风方案需要文风和表达要点。')
-    elif gate == 'title':
-        require(text(value.get('title')), 'opening_option', '书名方案需要可用的书名。')
-
-
-def _validate_value_modern(gate, value, version=3, choices=None):
-    """opening/3, /4 and /5: the same ownership rule, with the male-channel decisions as first-class gates.
-
-    /5 keeps every check /3 and /4 made and adds the structured setting gates (premise, world's
-    ladder and currency, 格局, the payoff anchor), so the three versions share one body parameterised
-    by `version` rather than copies that can drift. The new checks read the closed `scale` gate for
-    their floors: how many rungs a size class has to show is a property of that tier, not a constant.
-    """
     allowed = value_fields(gate, version)
     unknown = sorted(set(value) - set(allowed))
     require(gate in gate_ids(version) and not unknown, 'opening_option', 'value 只能包含本门负责的字段。',
@@ -506,15 +396,13 @@ def _validate_value_modern(gate, value, version=3, choices=None):
                 'opening_option', '世界方案需要禁区数组（可以为空，但必须是数组）。')
         require(type(value.get('allow_special_mechanism')) is bool and value['allow_special_mechanism'] == (mechanism['mode'] == 'bounded'),
                 'opening_option', '机制允许范围必须与机制类型一致：有机制为真，无机制为假。')
-        if version >= 5:
-            _validate_world_structures(value, tier_id, floors)
-        if version >= 6:
-            fields = tuple(row[0] for row in contracts.WORLD_ARCHITECTURE)
-            frame = value.get('architecture')
-            require(isinstance(frame, dict) and set(frame) == set(fields)
-                    and all(text(frame.get(key)) for key in fields), 'opening_option',
-                    '世界架构须完整声明空间、历史、文明、持续矛盾与终极谜题。',
-                    {'expected_fields': list(fields), 'got': frame})
+        _validate_world_structures(value, tier_id, floors)
+        fields = tuple(row[0] for row in contracts.WORLD_ARCHITECTURE)
+        frame = value.get('architecture')
+        require(isinstance(frame, dict) and set(frame) == set(fields)
+                and all(text(frame.get(key)) for key in fields), 'opening_option',
+                '世界架构须完整声明空间、历史、文明、持续矛盾与终极谜题。',
+                {'expected_fields': list(fields), 'got': frame})
     elif gate == 'ladder':
         _validate_ladder(value, tier_id, floors)
     elif gate == 'opposition':
@@ -527,8 +415,7 @@ def _validate_value_modern(gate, value, version=3, choices=None):
                 'opening_option', '爽点方案 plan.ways 至少列一条兑现方式（脱困、打脸、升级、资源、地位、基建、复仇、争霸等）。')
         _require_keys(plan, ('cadence', 'hooks'), '爽点方案 plan')
         _require_keys(value, ('ending', 'theme'), '爽点方案')
-        if version >= 5:
-            _validate_promise_anchor(value, tier, floors)
+        _validate_promise_anchor(value, tier, floors)
     elif gate == 'title':
         require(text(value.get('title')), 'opening_option', '书名方案需要可用的书名。')
 
@@ -811,12 +698,11 @@ def view(state):
 def _field_groups(choices, version=OPENING_VERSION):
     """Project each decision from its declared owner, never merge entire option values.
 
-    Ownership is per version: a field a later protocol re-sources is read from that version's gate,
-    and a field the version never decided is simply absent instead of raising on a missing gate.
+    Ownership comes directly from CONTRACT_FIELDS; a gate cannot overwrite another gate's decision.
     """
     expected = {}
     for row in contracts.CONTRACT_FIELDS:
-        if row.get('since', 1) > version or row['key'] in contracts.DERIVED_FIELDS:
+        if row['key'] in contracts.DERIVED_FIELDS:
             continue
         source = contracts.opening_source(row, version)
         if source and source[0] in choices:

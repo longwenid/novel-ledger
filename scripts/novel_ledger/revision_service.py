@@ -48,7 +48,12 @@ class RevisionService:
         previous = headers[-1]['chain']
         contract_hash = digest(book['contract'])
         accepted_plans = {str(r['n']): self.repo.read_document(r['plan']) for r in headers}
-        actions = {r['chapter']: r['action'] for r in revision.get('impact', {}).get('chapter_actions', [])}
+        impact = revision.get('impact')
+        require(not impact or impact.get('schema') == revision_impact.SCHEMA,
+                'revision_impact', '修订方案必须按当前流程重新分析。')
+        actions = {r['chapter']: r['action'] for r in (impact or {}).get('chapter_actions', [])}
+        require(all(a in ('keep', 'local', 'rewrite') for a in actions.values()),
+                'revision_impact', '修订方案含已删除的处理动作，须重新分析。')
         remaining = [r for r in revision.get('carry', []) if r['n'] > head]
         for index, row in enumerate(remaining):
             prose = self.repo.read_document(row['prose'])
@@ -70,6 +75,7 @@ class RevisionService:
                 revision['outline_task'] = row['n']
                 return
             try:
+                story_memory.require_current(plan)
                 story_memory.bind(copy.deepcopy(plan), accepted_plans)
                 if book['contract'].get('narrative_tracking'):
                     require(not narrative.unmet(state, plan), 'plan_preconditions', '被携带章节的实际前提已被修订改变。',
@@ -81,12 +87,7 @@ class RevisionService:
             except Error as exc:
                 raise Error('revision_carry', '修订影响了第 %d 章的事实，不能原样携带其后缀。' % row['n'],
                             {'chapter': row['n'], 'cause': exc.as_dict(),
-                             'recover': '先重新分析实际依赖；审稿触发的扩大修订仍受自动回改边界约束，超范围先交付修复方案。'})
-            if actions.get(row['n']) == 'review':
-                # The revision's own analysis asked for this chapter to be re-read; with no
-                # reviewer dispatch left, its facts are still re-settled below and any divergence
-                # refuses the carry, so the safe behaviour is the carry itself.
-                revision['carry'] = remaining[index:]
+                             'recover': '先重新分析实际依赖；依赖传播产生的扩大修订仍受自动回改边界约束，超范围先交付修复方案。'})
             state = next_state
             original_state, _ = facts.settle(original_state, self.repo.read_document(row['events']), prose, row['n'])
             carried = dict(row)
@@ -124,7 +125,7 @@ class RevisionService:
         return digest({'editorial': editorial.context_hash(book), 'plans': book['plans'],
                        'revision': book['revision']})
 
-    def start_review(self, book, directive):
+    def start_revision(self, book, directive):
         changes = directive.get('changes', {'mode': 'semantic', 'changes': []})
         impact = self.analyze(book, directive['first'], changes, directive['through'])
         head = self.repo.headers(book['branch'])[-1]['n']

@@ -85,7 +85,7 @@ class Application:
         return {'plan_hash': plan['plan_hash'], 'first': plan['first'], 'requested_through': plan['through'],
                 'required_through': plan['impact']['last'], 'reason': plan['reason'],
                 'violations': plan['violations'], 'policy': plan['policy'],
-                'action_counts': {name: sum(a['action'] == name for a in actions) for name in ('keep', 'review', 'local', 'rewrite')},
+                'action_counts': {name: sum(a['action'] == name for a in actions) for name in ('keep', 'local', 'rewrite')},
                 'plan_path': self.presentation.revision_path(plan['plan_hash'])}
 
     def task_status(self, task_id):
@@ -134,21 +134,13 @@ class Application:
                      'recover': '先执行 claim --task ' + task['id'] + ' --session <你的会话> 取得新 token，'
                                 '再在回执顶层 execution_claim 填该 token（裸字符串）后重新提交；回执内容本身不用改。'})
 
-    def _sources(self, work, candidate=None):
-        """The prose a receipt may quote: the task's frozen pages, its recent context, the draft.
-
-        v2 has no reviewer stage, so the frozen `prose` list is empty by design; a writer's quotes
-        come from the candidate it just submitted and from the chapters it read for context. Both
-        are added here, because the alternative — an empty source map — made every evidence check
-        fail by construction (the workbench's understanding updates were unreachable that way).
-        """
-        sources = {ref['chapter']: self.repo.read_document(ref['hash']) for ref in work['prose']}
+    def _sources(self, work):
+        """Frozen recent chapters; workflow adds the composed current draft as its own evidence."""
+        sources = {}
         record = (work.get('records') or {}).get('previous_chapters')
         if record:
             for row in self.repo.read_document(record):
                 sources.setdefault(row['chapter'], row['prose'])
-        if isinstance(candidate, str) and candidate:
-            sources[work['chapter']] = candidate
         return sources
 
     def _priors(self, book, chapter):
@@ -253,20 +245,8 @@ class Application:
         work = task['input']
         already = [] if (record or everything) else [n for n in self.repo.read_names(task_id) if n in work['records']]
         names = [record] if record else [n for n in work['required'] if n not in already]
-        virtual = record in ('historical_index', 'memory_index')
-        if virtual:
-            require('history_source' in work['records'], 'record',
-                    '历史索引由 history_source 派生；旧任务目录形状不再支持。')
-        require(all(n in work['records'] for n in names) or virtual, 'record', '资料不在当前冻结任务目录中。')
-        if virtual:
-            require(record != 'memory_index' or work.get('narrative_tracking'), 'recall', '当前约定未启用叙事记忆检索。')
-            snapshot = self.repo.read_document(work['records']['history_source'])
-            pages = [p for _, p in self.repo.history_pages(snapshot)]
-            value = ([{'chapter': p['n'], 'prose_hash': p['prose'], 'summary': p['summary']} for p in reversed(pages)]
-                     if record == 'historical_index' else [r for p in reversed(pages) for r in self.repo.memory_rows(p)])
-            records = {record: {'hash': digest(value), 'source_hash': work['records']['history_source'], 'value': value}}
-        else:
-            records = {n: {'hash': work['records'][n], 'value': self.repo.read_document(work['records'][n])} for n in names}
+        require(all(n in work['records'] for n in names), 'record', '资料不在当前冻结任务目录中。')
+        records = {n: {'hash': work['records'][n], 'value': self.repo.read_document(work['records'][n])} for n in names}
         result = {'task_id': task_id, 'input_hash': task['input_hash'], 'complete_records': True,
                   'stage': work['stage'], 'chapter': work['chapter'],
                   'records': records,
@@ -345,9 +325,8 @@ class Application:
             # whether the chapter commits; the producer sees the finding without spending a review
             # round, and preflight runs the same code.
             priors = self._priors(book, work['chapter']) if work['stage'] in ('write', 'repair', 'redesign') else None
-            candidate = (result.get('data') or {}).get('prose') if work['stage'] in ('write', 'repair', 'redesign') else None
             outcome = workflow.apply(book, work, result.get('data'), result['session'],
-                                     self._sources(work, candidate), priors)
+                                     self._sources(work), priors)
             updated = outcome.book
             updated['last_task'] = task['id']
             if outcome.chapter:
@@ -373,7 +352,7 @@ class Application:
                 self._revisions.refresh_understanding(updated)
             if updated.get('revision_directive'):
                 directive = updated['revision_directive']
-                updated = self._revisions.start_review(updated, directive)
+                updated = self._revisions.start_revision(updated, directive)
             self.repo.save(updated)
             self.repo.record('submit', {'task': task['id'], 'stage': work['stage'], 'committed_chapter': outcome.chapter is not None})
             response = {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
@@ -381,6 +360,8 @@ class Application:
                         'committed_chapter': outcome.chapter['n'] if outcome.chapter else None,
                         'next_stage': updated['draft']['stage'] if updated['draft'] else None,
                         'rework': updated['rework'].get(str(work['chapter'])), 'status': updated['status']}
+            if outcome.style_report is not None:
+                response['style_report'] = outcome.style_report
         return response
 
     def claim(self, task_id, session, seconds=300):
@@ -408,7 +389,7 @@ class Application:
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self.repo.load()
-            require(book['contract'] is not None, 'creation', '开书约定尚未激活，先完成 opening 的独立核验。')
+            require(book['contract'] is not None, 'creation', '开书约定尚未激活，先完成世界与约定的机械校验。')
             end = editorial.effective_contract(book)['volumes'][-1]['end']
             target = end if finish else through
             require(type(target) is int and 1 <= target <= end, 'target', '运行目标须为约定范围内的章号。')
@@ -590,8 +571,8 @@ class Application:
             labels = [row['label'] for row in block.get('options') or []]
             require(option in labels, 'author_decision', '答复须是已展示的选项之一；作者另有第三条路时走改约或重新提案。',
                     {'options': labels, 'got': option,
-                     'recover': '把第三条路整理成完整候选后执行 recontract --file 并附作者原话，经独立核验回答本问题；'
-                                '注意已有正文的改约会在新分支自第 1 章重写重审全书（父分支保留，可 discard 恢复），'
+                     'recover': '把第三条路整理成完整候选后执行 recontract --file 并附作者原话，经机械校验激活后回答本问题；'
+                                '注意已有正文的改约会在新分支自第 1 章重写全书并重新机械核算（父分支保留，可 discard 恢复），'
                                 '先向作者说明该代价再动手。'})
             book.setdefault('author_decision_history', []).append(
                 {'question': copy.deepcopy(block),
@@ -683,48 +664,30 @@ class Application:
             return self.read(task_id, 'complete_state')
         require(before is None or type(before) is int and before > 0, 'recall', 'before 须为正整数章号。')
         work = task['input']
+        require('history_source' in work['records'], 'recall', '任务缺少冻结历史目录，须按当前协议重新派工。')
+        snapshot = self.repo.read_document(work['records']['history_source'])
         if kind:
             require(kind in ('entity', 'node', 'topic', 'thread') and text(key) and type(limit) is int and 1 <= limit <= 20,
                     'recall', '记忆检索需要有效类型、ID 和 1～20 条范围。')
-            if 'history_source' in work['records']:
-                require(work.get('narrative_tracking'), 'recall', '该冻结任务没有叙事记忆索引；按 chapter 补读。')
-                snapshot = self.repo.read_document(work['records']['history_source'])
-                matches, chapters, more = [], [], False
-                for _, page in self.repo.history_pages(snapshot, before):
-                    found = [r for r in self.repo.memory_rows(page) if
-                             (key in r['entities'] if kind == 'entity' else
-                              r.get(kind) == key or kind == 'topic' and key in r.get('topics', []))]
-                    if not found:
-                        continue
-                    if len(chapters) == limit:
-                        more = True
-                        break
-                    chapters.append(page['n'])
-                    matches.extend(found)
-                return self._observe_read(task_id, ['recall:' + kind],
-                        {'kind': kind, 'key': key, 'matches': matches,
-                         'more_before': chapters[-1] if more else None,
-                         'recover': '按 matches 的 chapter 使用 recall --chapter N 完整补读；more_before 可用于下一页 --before N。'})
-            require('memory_index' in work['records'], 'recall', '该冻结任务没有叙事记忆索引；按 chapter 补读。')
-            index = self.repo.read_document(task['input']['records']['memory_index'])
-            matches = [r for r in index if (before is None or r['chapter'] < before)
-                       and (key in r['entities'] if kind == 'entity' else r.get(kind) == key)]
-            chapters = sorted({r['chapter'] for r in matches}, reverse=True)[:limit]
+            require(work.get('narrative_tracking'), 'recall', '该冻结任务未启用叙事记忆检索；按 chapter 补读。')
+            matches, chapters, more = [], [], False
+            for _, page in self.repo.history_pages(snapshot, before):
+                found = [r for r in self.repo.memory_rows(page) if
+                         (key in r['entities'] if kind == 'entity' else
+                          r.get(kind) == key or kind == 'topic' and key in r.get('topics', []))]
+                if not found:
+                    continue
+                if len(chapters) == limit:
+                    more = True
+                    break
+                chapters.append(page['n'])
+                matches.extend(found)
             return self._observe_read(task_id, ['recall:' + kind],
-                    {'kind': kind, 'key': key, 'matches': [r for r in matches if r['chapter'] in chapters],
-                     'more_before': chapters[-1] if len({r['chapter'] for r in matches}) > limit else None,
+                    {'kind': kind, 'key': key, 'matches': matches,
+                     'more_before': chapters[-1] if more else None,
                      'recover': '按 matches 的 chapter 使用 recall --chapter N 完整补读；more_before 可用于下一页 --before N。'})
-        if 'history_source' in work['records']:
-            snapshot = self.repo.read_document(work['records']['history_source'])
-            require(type(chapter) is int and 1 <= chapter <= snapshot['through'], 'recall', '历史章不在本任务冻结目录中。')
-            page = next(p for _, p in self.repo.history_pages(snapshot) if p['n'] == chapter)
-            return self._observe_read(task_id, ['recall:chapter'],
-                    {'chapter': chapter, 'hash': page['prose'], 'prose': self.repo.read_document(page['prose']), 'summary': page['summary']})
-        require('history_source' in work['records'], 'recall',
-                '历史章按 history_source 分页读取；旧任务目录形状不再支持。')
-        snapshot = self.repo.read_document(work['records']['history_source'])
-        page = next((p for _, p in self.repo.history_pages(snapshot) if p['n'] == chapter), None)
-        require(page is not None, 'recall', '历史章不在本任务冻结目录中。')
+        require(type(chapter) is int and 1 <= chapter <= snapshot['through'], 'recall', '历史章不在本任务冻结目录中。')
+        page = next(p for _, p in self.repo.history_pages(snapshot) if p['n'] == chapter)
         return self._observe_read(task_id, ['recall:chapter'],
                 {'chapter': chapter, 'hash': page['prose'], 'prose': self.repo.read_document(page['prose']), 'summary': page['summary']})
 
@@ -759,7 +722,7 @@ class Application:
                 # radius exceeds the automatic range is saved as a complete proposal and waits for
                 # the author's own authorization (revise --proposal-hash), instead of silently
                 # rewriting half the book.
-                book = self._revisions.start_review(book, {
+                book = self._revisions.start_revision(book, {
                     'first': first, 'through': through, 'reason': reason,
                     'changes': changes if changes is not None else {'mode': 'semantic', 'changes': []},
                     'case_ids': []})

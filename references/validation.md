@@ -1,5 +1,7 @@
 # 验证
 
+当前执行仅以本技能入口、[任务协议](protocol.md)、[运行流程](runtime.md) 及其专项指南为准。`validation/` 中的历史规格、实验和报告只保存当轮证据，不作为执行规范或兼容承诺。
+
 何时读：修改引擎、检查协议与材料成本，或设计真实长篇的文学及用量验收。
 
 ## 验证范围与结论依据
@@ -16,7 +18,7 @@
 
 ## 工程检查
 
-先按下表选择受影响的行为回归。跨模块规则、持久化结构或公共协议的广泛变更使用全量测试；依赖、材料选择或历史传输变化时另做度量。仅调整文档时，核对链接、示例和相关图源；若改写了操作流程，再运行对应行为回归。
+日常默认运行 `python3 validation/run_tests.py`（快速组）；先按下表选择受影响的行为回归。跨模块规则、持久化结构或公共协议的广泛变更使用全量测试；依赖、材料选择或历史传输变化时另做度量。仅调整文档时，核对链接、示例和相关图源；若改写了操作流程，再运行对应行为回归。
 
 在技能仓库根目录执行，按本次改动选用：
 
@@ -28,7 +30,7 @@ python3 <skill-creator>/scripts/quick_validate.py ROOT
 python3 validation/measure.py --out /path/to/metrics.json
 ```
 
-`fast` 固定覆盖架构、端口替换、角色隔离、有限预算、修订授权及端到端交付（含档位形状声明、章纲状态链与漂移核算的守卫）；`full` 自动发现 tests/ 中全部测试。两种入口均在失败时返回非零状态，可供本机或 CI 调用；`--list` 仅列出案例，`-v` 显示逐项结果。全量回归优先用 pytest 并行入口（16 核实测 470 项约 87 秒，串行约 10 分钟；最慢的修订边界/长篇全流程驱动单条 15～25 秒，由多核吸收）。新增关键边界时维护快速组，新增测试始终由完整组自动收集。快速检查通过后，跨模块重构仍须完整回归；原 unittest discovery 命令继续可用。
+`fast` 固定覆盖架构、端口替换、角色隔离、有限预算、修订授权及端到端交付（含档位形状声明、章纲状态链与漂移核算的守卫）；`full` 自动发现 tests/ 中全部测试。两种入口均在失败时返回非零状态，可供本机或 CI 调用；`--list` 仅列出案例，`-v` 显示逐项结果。安装 pytest-xdist 时可使用并行入口；测试数量与耗时以当前执行结果为准，历史版本的测量不作为当前预算。新增关键边界时维护快速组，新增测试始终由完整组自动收集。快速检查通过后，跨模块重构仍须完整回归；原 unittest discovery 命令继续可用。
 
 `validation/anchor_check.py` 核对根目录、references/ 与 docs/ 活跃 Markdown 的行内本地文件链接、同页与跨页精确标题锚点；跳过围栏代码示例，坏引用返回非零。历史 validation/ 报告、引用式链接和 Setext 标题不在此入口覆盖内（改标题或挪小节后运行）。quick_validate 属宿主自带工具，路径按本机实际安装替换；它是可选的附加校验，缺失时不影响上面的测试与测量。Windows 控制台默认 GBK：测试与 CLI 自身按 UTF-8 读写，但外部校验脚本可能仍按本地编码读文件，此时对全部命令加 `PYTHONUTF8=1`。
 
@@ -38,17 +40,17 @@ python3 validation/measure.py --out /path/to/metrics.json
 |---|---|---|
 | 提交、约定与恢复 | 原子初始化、幂等、预检回滚、有限返修和准确版本认可；改约优先完成机械校验，字面规则跨激活与撤销保留；畸形回执与评测清单不留下部分提交。 | test_runtime、test_output_repairs |
 | 章纲与漂移核算 | 卷 id 与 volumes 对齐、字数区间；enter/exit 冗余一致；卷内状态链拒绝人为漂移（资源为负、时钟倒退、位置未知、知情倒退、人物缺 choice/cost、节点重复推进）；卷末核对结构化人物终值与 clock.to、整卷推进天数；drift_check 漏项/多项被拒、`actual.from` 取投影而不取自报值、偏差挂账并触发下一章纲重排。 | test_outlines、test_narrative、test_longform、test_architecture_repairs |
-| 伏笔账 | 卷纲 hooks 的 id 唯一/窗口合法/`text` 非空/跨卷必须 `continues:true` 且 `required:false`；章纲反例矩阵逐条被拒（未声明就 plant、payoff 早于 plant、同一 id plant 两次、payoff 两次、plant/payoff 越窗、卷末 required 未 paid、`hook_refs` 承接未埋的 hook）；`state.hooks` 非空、跨卷条目带入下一卷；`complete()` 因未兑现承诺拒绝，兑现后通过。 | test_outlines、test_longform、validation/ 的 `repro_hook_*.py` |
-| 文风代理指标 | 句长/段长/对白占比越界出 style finding 并进有界返修；`dialogue_ratio` 目标越界被核；`repetition` 绝对占比上限与视角标记一致性；锚点缺失时只跑重复度与视角两项。 | test_prose_lint、validation/ 的 `repro_style_*.py` |
+| 伏笔账 | 卷纲 hooks 的 id 唯一/窗口合法/`text` 非空/跨卷必须 `continues:true` 且 `required:false`；章纲反例矩阵逐条被拒（未声明就 plant、payoff 早于 plant、同一 id plant 两次、payoff 两次、plant/payoff 越窗、卷末 required 未 paid、`hook_refs` 承接未埋的 hook）；`state.hooks` 非空、跨卷条目带入下一卷；`complete()` 因未兑现承诺拒绝，兑现后通过。 | test_outlines、test_longform |
+| 文风代理指标 | 默认 observe 记录句段与锚点对白差异，不耗返修；作者 strict 选择保留数值拒绝；`dialogue_ratio` 显式目标与高重复两档都核；人称只观察；混合/嵌套引号、句数、原文顺序重复率不误报；预检回滚、提交保存报告。 | test_style、test_style_voice、test_style_guard_flow、test_prose_lint |
 | 派工、身份与宿主 | compact 保留完整材料及已填表单；--after 拒绝未提交或旧回调；认领后故障释放租约，非文件交付在认领前拒绝。 | test_runtime、test_host_ports |
 | 模块依赖与端口 | 全作用域 import 白名单、无环与核心 I/O 禁令；用内存账本、替代交付、公开宿主能力和运行工厂实际完成用例。 | test_architecture、test_application_ports、test_domain_boundaries、test_presentation_boundaries、test_host_ports、test_cli_boundary |
-| 存储与组合根 | 同根快照、未变哈希复用、损坏及跨区字段拒绝；文件回收只在提交后执行，回滚保留材料；真实 SQLite、CLI 重开与冻结交付重试。 | test_storage_boundaries、test_bootstrap、test_history |
+| 存储与组合根 | 同根快照、结构共享与完整逻辑哈希复用、损坏/丢块及跨区字段拒绝；共享来源清理可达性、预检/异常回滚和返回值隔离；文件回收只在提交后执行；真实 SQLite、CLI 重开与冻结交付重试。 | test_storage_boundaries、test_storage_growth、test_snapshot_integrity、test_bootstrap、test_history |
 | 开书、卷纲与叙事 | 逐门作者决定、卷纲 all/rolling 覆盖、跨卷续接、跨卷线路 continues、场景来源与完本兑现。 | test_opening、test_outlines、test_narrative、test_longform |
-| 创作记忆与场景身份 | 执笔提交的理解增量绑定准确版本；原文失效与携带恢复，场景移动保留身份，阅读关联与章纲重排，拒绝回滚和显式启用。 | test_workbench |
-| 历史修订与影响 | 直接及传递依赖、连续区间输出、节点带动线路与保守扩大；表达/阅读不改事实，窄修核对后缀，扩大终点同步传播，重排章纲后重新写，重排与人物重核不重复消耗正文额度。 | test_longform、test_revision_repairs、test_workbench |
+| 创作记忆与场景身份 | 执笔提交的理解增量绑定准确版本；原文失效与携带恢复，场景移动保留身份，阅读关联与章纲重排，初始化即建立理解结构，预检完整回滚。 | test_workbench |
+| 历史修订与影响 | 当前章纲协议拒绝边界、阅读变化纳入完整修改区间、直接及传递依赖、连续区间输出、节点带动线路与保守扩大；表达/阅读不改事实，窄修核对后缀，扩大终点同步传播，重排章纲后重新写，重排不重复消耗正文额度。 | test_longform、test_revision_repairs、test_workbench |
 | 自动回改与授权 | 创建分支前计算影响边界，超界保留原稿与额度；准确哈希授权、来源过期拒绝与预检回滚。 | test_revision_bounds |
-| 编辑、页面与交付 | 成长重核、补丁与重新核算、终审覆盖；模板随安装复制、异地运行、离线单文件及内容转义，准确快照交付。 | test_editorial、test_bookpage、test_bootstrap |
-| 协议边界 | 旧开书协议（creation/1~/5）读取即拒并给出重开指引；方案上限唯一规则无宽松解释；v2 及更早数据库拒绝且原文件不变。 | test_opening、test_creation_bounds、test_runtime |
+| 编辑、页面与交付 | 人物增量、补丁与重新核算、完本闭合与准确快照；模板随安装复制、异地运行、离线单文件及内容转义，准确快照交付。 | test_editorial、test_bookpage、test_bootstrap |
+| 协议边界 | 旧开书协议（creation/1~/5）读取即拒并给出重开指引；方案上限唯一规则无宽松解释，旧字段和旧任务能力不再接收；v4 及更早数据库拒绝且原文件不变。 | test_opening、test_creation_bounds、test_storage_boundaries |
 | 技能、文档与测试入口 | 元信息、链接锚点、命令示例及当前操作说明一致；架构图源与派生物一致；快速组无重复且为完整组的子集，保留关键边界。 | [技能指令与路由验收](#技能指令与路由验收)、test_architecture、test_validation_runner |
 
 表中的入口是定位起点，按实际调用关系补充关联回归；核验要求分别维护于 [运行](runtime.md)、[协议](protocol.md)、[叙事推进](narrative.md) 和 [编辑能力](editorial.md)。新增或改写后的用例名以 `tests/` 实际内容为准。验证观察提交、拒绝、保留、恢复和交付等结果，避免只匹配文档措辞或实现细节。真实模型历史隔离仍需宿主另验收。
@@ -84,6 +86,10 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_revisio
 
 history_transport 使用独立存储夹具，500 章包含至少 150 万合成汉字。记录目录入口、原全量摘要/事件索引字节、首次构建与复用、实际事件页读取、无命中最坏扫描和最早章完整补读。行为测试覆盖损坏、冻结边界、分支共享前缀、承诺关联、原事件解释及补读量留痕；存储夹具不构成完本交付。
 
+数百万字体量另用 `python3 validation/longform_stress.py --out /path/to/longform-stress.json`：默认测 100/500/1000/2000 章、每章至少 3000 合成汉字的末章必读、主控派工、冻结补读与重开保真，并独立跑 100 章/10 卷的真实工程提交和完本链。前者是来源记录，后者使用短合成正文，两者都不是实际百万字文学写作。相同任务增加 20/100/500/2000 条已收束伏笔和线路时，必读材料不应增长，完整旧来源与显式旧依赖仍须可读，见 test_context_growth。
+
+正文历史不能代表全部存储成本。用 `python3 validation/storage_snapshot_probe.py --sizes 100,500 --out /path/to/storage-snapshots.json` 单独量化累计人物发展和理解版本；更大规模显式指定 1667 等章数。存储协议 /5 对嵌套累计集合共享未变块，冻结来源仍为完整逻辑快照。报告当前逻辑值字节、文档根及共享块的物理总字节、数据库字节、生成与完整读取耗时、重开及清理效果，验证每个旧冻结来源仍可按原哈希完整读取；不把块清单大小当上下文量，也不把磁盘减少推断为序列化/核验 CPU 恒定。
+
 对照架构或流程时固定相同创作输入、模型和来源，计入首次正文前规划量、后续补纲/重排、修订范围、实际读取量及新增场景材料。测量结果按条件报告，不将任务减少或分区拆分直接等同于全程收益。
 
 真实长篇文学对照尚未完成，试写按下一节先做连续数十章预验收，再验证远距离回归与授权长篇目标。
@@ -96,7 +102,9 @@ history_transport 使用独立存储夹具，500 章包含至少 150 万合成�
 - 多线与呼吸：人工盲读连续完整章节及真实卷界，检查主线是否可感、支线的作用、暗线线索与揭示、高潮余波和静章变化；用原文说明得失，不以固定推进间隔、角色标签或张力分数当金标准。
 - 效率：分别保存派工/补读字符量、宿主实际 token/缓存日志、失败调用、返修次数及人工干预；对照版本应固定相同来源和模型条件。没有计费日志则费用未知，不从字节换算费用。
 
-人物对白样本库、主线间隔提醒与其他节奏辅助先在同条件盲评中验证收益及误报，再决定是否引入；不把尚未证实的建议直接变成拒绝规则。判据前移的收益（派工数下降、漂移在设计期被挡）可用新旧流程同条件对照复跑，但**不能把派工数下降说成文学质量提升**——那部分判断在 v2 里已没有独立来源。
+人物对白样本库、主线间隔提醒与其他节奏辅助先在同条件盲评中验证收益及误报，再决定是否引入；不把尚未证实的建议直接变成拒绝规则。判据前移的收益须记录实际派工数与漂移检出的阶段，并在同条件评测中验证，但**不能把派工数下降说成文学质量提升**——那部分判断在 v2 里已没有独立来源。
+
+调整文风指引可先做隔离小样：固定同一场景事实与作者风格，由空历史写手分别使用冻结的前后指引，独立读者只收匿名正文与场景要求，给出精确引文和可有可无的偏好。允许无显著差别，不用“AI味分数”、禁词命中或数值接近首章替代阅读。一两组模型小样不证明长期文学收益；角色视角与事实仍要结合原文检查。此类离线评测不自动加入正式章审流程。
 
 ## 评测与记录
 

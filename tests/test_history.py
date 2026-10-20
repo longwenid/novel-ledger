@@ -144,7 +144,7 @@ class HistoryTests(unittest.TestCase):
         self.populate(3)
         task = self.task()
         self.assertEqual(self.app.recall(task['id'], chapter=1)['chapter'], 1)
-        self.assertIn('historical_index', self.app.read(task['id'], 'historical_index')['records'])
+        self.assertIn('history_source', self.app.read(task['id'], 'history_source')['records'])
         self.assertEqual([r['chapter'] for r in self.app.recall(task['id'], kind='entity', key='shen')['matches']],
                          [3, 2, 1])
         expected = self.app.recall(task['id'], chapter=2)
@@ -155,16 +155,6 @@ class HistoryTests(unittest.TestCase):
         self.assertCode('recall', self.app.recall, task['id'], chapter=4)
         self.assertEqual(self.app.recall(task['id'], kind='node', key='missing')['matches'], [])
 
-    def test_explicit_full_index_read_remains_available_without_entering_default_input(self):
-        self.populate(3)
-        task = self.task()
-        material = self.app.read(task['id'])
-        self.assertNotIn('history_source', material['records'])
-        self.assertIn('history_source', material['on_demand'])
-        for name in ('historical_index', 'memory_index'):
-            value = self.app.read(task['id'], name)['records'][name]
-            self.assertEqual(value['hash'], digest(value['value']))
-            self.assertEqual([r['chapter'] for r in value['value']], [1, 2, 3])
 
     def test_recall_output_is_observed_once_and_rejected_reads_are_not_counted(self):
         self.populate(2)

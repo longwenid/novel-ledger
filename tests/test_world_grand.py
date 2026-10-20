@@ -1,13 +1,4 @@
-"""opening/5: the grand world keeps what the gates declared, word for word.
-
-The redesign widened the world from ten flat domains to twelve (`powers`, `cosmology`), made the
-world gate deliver a rank ladder and a hard currency as structured rows, and gave the older domains
-optional deep fields. What makes those decisions more than decoration is the binding check: a rank,
-a currency or a scale rung that exists in the gates but not in the world model is a design drift, and
-the engine refuses it before a word is written. Two compatibility red lines run through everything
-here: a world written before opening/5 (ten domains, no `powers`/`cosmology` key) must still pass,
-and a gate that declared nothing new must not be asked about anything new.
-"""
+"""Current world decisions bind rank, currency and escalation records word for word."""
 import copy
 import sys
 import unittest
@@ -45,8 +36,8 @@ def ladder_rows(scopes=('一城', '一界')):
     return rows
 
 
-def choices_v5(tiers=True, ladder=True, resource=True, scales=('一城', '一界'), tier=TIER):
-    """The selected opening choices a v5 world is checked against."""
+def world_choices(tiers=True, ladder=True, resource=True, scales=('一城', '一界'), tier=TIER):
+    """Partial declared choices for isolated world-binding checks and imported settings."""
     value = {'scale': {'tier': tier},
              'world': {'world_premise': PREMISE,
                        'mechanism': {'mode': 'none', 'principle': '只有规章与人情。',
@@ -110,37 +101,13 @@ def check(model, choices):
     return world.validate(model, choices, 'sel', sections=('rules',))
 
 
-class LegacyWorldTests(unittest.TestCase):
-    """The compatibility red line: a world written before opening/5 keeps passing."""
-
-    def legacy_choices(self):
-        value = choices_v5(tiers=False, ladder=False, resource=False)
-        value.pop('ladder', None)
-        return value
-
-    def test_a_ten_domain_world_passes_and_is_normalized_to_the_full_shape(self):
-        choices = self.legacy_choices()
-        model = base_model(choices)
-        for section in world.GRAND_SECTIONS:
-            model.pop(section)                      # exactly what an in-flight project has on disk
-        checked = check(model, choices)
-        self.assertEqual(checked['powers'], [])
-        self.assertEqual(checked['cosmology'], [])
-        self.assertEqual(set(checked), {'selection_hash', 'premise', 'story_capacity', *world.SECTIONS})
-
-    def test_the_legacy_tier_floor_never_demands_the_grand_domains(self):
-        choices = self.legacy_choices()
-        self.assertEqual(world.required_sections(TIER, choices), world.LEGACY_SECTIONS)
-        for section in world.GRAND_SECTIONS:
-            self.assertNotIn(section, world.required_sections(TIER, choices))
-        self.assertEqual(world.declared_sections(choices), ())
 
 
 class DeclaredSectionTests(unittest.TestCase):
     """A domain the gates declared is a domain the world has to fill."""
 
     def test_a_declared_rank_ladder_makes_powers_required(self):
-        choices = choices_v5(ladder=False, resource=False)
+        choices = world_choices(ladder=False, resource=False)
         self.assertEqual(world.declared_sections(choices), ('powers',))
         self.assertIn('powers', world.required_sections(TIER, choices))
         model = base_model(choices)
@@ -155,7 +122,7 @@ class DeclaredSectionTests(unittest.TestCase):
     def test_declared_currency_reaches_the_small_tier_brief_and_validator(self):
         for tier in ('t0', 't1', 't2'):
             with self.subTest(tier=tier):
-                choices = choices_v5(tier=tier, scales=('局部', '一城', '一域'))
+                choices = world_choices(tier=tier, scales=('局部', '一城', '一域'))
                 # These stages are already represented in powers, so a small
                 # world does not need extra geography solely to hold the names.
                 for index, rung in enumerate(choices['ladder']['ladder']):
@@ -183,16 +150,10 @@ class DeclaredSectionTests(unittest.TestCase):
                 with self.assertRaises(Error) as caught:
                     world.validate(model, choices, 'sel', sections=required)
                 self.assertEqual(caught.exception.code, 'world_section')
-        # The other side of the rule: a legacy small world that declared nothing gains no requirement.
-        for tier in ('t0', 't1', 't2'):
-            with self.subTest(tier=tier, legacy=True):
-                choices = choices_v5(tier=tier, tiers=False, ladder=False, resource=False)
-                self.assertEqual(world.required_sections(tier, choices), world.TIER_SECTIONS[tier])
-
     def test_a_scope_ladder_that_reaches_a_plane_makes_cosmology_required(self):
         for scope in contracts.COSMOLOGY_SCOPES:
             with self.subTest(scope=scope):
-                choices = choices_v5(tiers=False, resource=False, scales=('一城', scope))
+                choices = world_choices(tiers=False, resource=False, scales=('一城', scope))
                 self.assertEqual(world.declared_sections(choices), ('cosmology',))
                 model = base_model(choices)
                 model['cosmology'] = []
@@ -201,7 +162,7 @@ class DeclaredSectionTests(unittest.TestCase):
                 self.assertEqual(caught.exception.code, 'world_section')
                 self.assertIn('cosmology', dump(caught.exception.details))
         # The other side of the rule: a purely local ladder never asks for cosmology.
-        choices = choices_v5(tiers=False, resource=False, scales=('一城', '一域'))
+        choices = world_choices(tiers=False, resource=False, scales=('一城', '一域'))
         self.assertEqual(world.declared_sections(choices), ())
         self.assertNotIn('cosmology', world.required_sections(TIER, choices))
         model = base_model(choices)
@@ -209,7 +170,7 @@ class DeclaredSectionTests(unittest.TestCase):
         check(model, choices)
 
     def test_the_required_set_keeps_the_canonical_section_order(self):
-        choices = choices_v5(scales=('一城', '一界'))
+        choices = world_choices(scales=('一城', '一界'))
         required = world.required_sections(TIER, choices)
         self.assertEqual(required, tuple(section for section in world.SECTIONS if section in required))
         self.assertLess(required.index('powers'), required.index('cosmology'))
@@ -219,7 +180,7 @@ class BindingTests(unittest.TestCase):
     """The three verbatim bindings: a gate's decision must exist in the world, word for word."""
 
     def test_a_declared_rank_must_exist_verbatim_in_powers(self):
-        choices = choices_v5(ladder=False, resource=False)
+        choices = world_choices(ladder=False, resource=False)
         declared = choices['world']['tiers'][1]
         missing = base_model(choices)
         missing['powers'] = [row for row in missing['powers'] if row['name'] != declared['name']]
@@ -236,7 +197,7 @@ class BindingTests(unittest.TestCase):
         self.assertIn('逐字', caught.exception.message + dump(caught.exception.details))
 
     def test_the_hard_currency_must_exist_in_the_economy_with_its_allocator(self):
-        choices = choices_v5(ladder=False, tiers=False)
+        choices = world_choices(ladder=False, tiers=False)
         declared = choices['world']['resource']
         absent = base_model(choices)
         absent['economy'] = [record('economy', 'other', resource='别的资源')]
@@ -262,7 +223,7 @@ class BindingTests(unittest.TestCase):
         self.assertIn('distribution', dump(caught.exception.details))
 
     def test_every_ladder_stage_needs_a_same_named_record(self):
-        choices = choices_v5(tiers=False, resource=False)
+        choices = world_choices(tiers=False, resource=False)
         stage = choices['ladder']['ladder'][0]['stage']
         model = base_model(choices)
         model['geography'] = [row for row in model['geography'] if row.get('name') != stage]
@@ -280,7 +241,7 @@ class BindingTests(unittest.TestCase):
                 check(fixed, choices)
 
     def test_an_unbound_world_that_declares_nothing_is_never_asked(self):
-        choices = choices_v5(tiers=False, ladder=False, resource=False)
+        choices = world_choices(tiers=False, ladder=False, resource=False)
         model = base_model(choices)
         check(model, choices)
 
@@ -297,7 +258,7 @@ class OptionalFieldTests(unittest.TestCase):
              ('mysteries', 'survival', '真相公开后靠旧凭据换取庇护。'))
 
     def choices(self):
-        return choices_v5(tiers=False, ladder=False, resource=False)
+        return world_choices(tiers=False, ladder=False, resource=False)
 
     def test_a_written_deep_field_must_be_non_empty_text(self):
         for section, field, value in self.CASES:

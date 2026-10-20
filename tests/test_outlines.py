@@ -44,7 +44,7 @@ def ladder_value(scopes=('一城', '一界')):
 
 
 def ladder_book(ladder=True):
-    """A seeded book whose opening declared a scale ladder (or a legacy book that declared none)."""
+    """A seeded book with an optional ladder declared by its current opening."""
     book = seeded_book(contract(chapters=4, volumes=2))
     if ladder:
         state = creation.begin('工程夹具：格局阶梯。')
@@ -151,13 +151,6 @@ class VolumeStageTests(unittest.TestCase):
         for row in rows:
             self.assertIn('stage', row)
 
-    def test_a_legacy_opening_leaves_every_stage_empty(self):
-        book = ladder_book(ladder=False)
-        rows = volume_rows(book, ['v1', 'v2'])
-        self.assertEqual([row['stage'] for row in rows], ['', ''])
-        report = drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
-                                               {}, {}, ['v1', 'v2'], book['state'])
-        self.assertEqual([report['v1']['stage'], report['v2']['stage']], ['', ''])
 
     def test_a_declared_ladder_fills_the_stages_in_contract_order(self):
         book = ladder_book()

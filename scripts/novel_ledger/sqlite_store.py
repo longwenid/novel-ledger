@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -19,11 +20,19 @@ from . import book_state
 HISTORY_SCHEMA = 'novel-ledger.history/1'
 HISTORY_PAGE_SCHEMA = 'novel-ledger.history-page/1'
 
+# A physical document marker deliberately starts outside JSON. A user value that happens to
+# contain this text is still ordinary JSON (and therefore starts with a quote or container),
+# so no user-controlled dictionary or string can be confused with the storage representation.
+_BLOCK_PREFIX = 'NL5\n'
+_INLINE_BYTES = 1024
+_BLOCK_FANOUT = 32
+
 DDL = '''
 CREATE TABLE kv(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE documents(hash TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE document_blocks(hash TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE tasks(id TEXT PRIMARY KEY, status TEXT NOT NULL, input TEXT NOT NULL, input_hash TEXT NOT NULL,
-    result TEXT, result_hash TEXT, first_read TEXT, first_read_hash TEXT, reviewer TEXT);
+    result TEXT, result_hash TEXT, reviewer TEXT);
 CREATE UNIQUE INDEX one_pending ON tasks(status) WHERE status='pending';
 CREATE TABLE sessions(id TEXT PRIMARY KEY, task TEXT NOT NULL);
 CREATE TABLE branches(id TEXT PRIMARY KEY, parent TEXT, first INTEGER NOT NULL, status TEXT NOT NULL);
@@ -35,11 +44,12 @@ CREATE TABLE journal(id INTEGER PRIMARY KEY, at REAL NOT NULL, action TEXT NOT N
 
 
 class SQLiteRepository:
-    def __init__(self, project):
+    def __init__(self, project, readonly=False):
         self.project = Path(project).resolve()
         path = self.project / 'novel.sqlite3'
         require(path.is_file(), 'project', '项目未初始化。', {'recover': '使用 init --project 路径 --contract 作者约定.json 建立新项目。'})
-        self.db = sqlite3.connect(str(path), timeout=10, isolation_level=None)
+        self.db = sqlite3.connect(path.as_uri() + '?mode=ro' if readonly else str(path),
+                                  uri=readonly, timeout=10, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.execute('PRAGMA foreign_keys=ON')
         self._after_commit_callbacks = None
@@ -65,9 +75,7 @@ class SQLiteRepository:
             db.executescript(DDL)
             db.execute('INSERT INTO kv VALUES (?,?)', (store_keys.SCHEMA_KEY, dump(SCHEMA)))
             parts = book_state.split(book)
-            references = {name: digest(value) for name, value in parts.items()}
-            db.executemany('INSERT OR IGNORE INTO documents VALUES (?,?)',
-                           [(references[name], dump(value)) for name, value in parts.items()])
+            references = {name: cls._store_document(db, value) for name, value in parts.items()}
             db.execute('INSERT INTO kv VALUES (?,?)', (store_keys.BOOK_ROOT, dump({'schema': book_state.BOOK_SCHEMA, 'parts': references})))
             db.execute("INSERT INTO branches VALUES ('main',NULL,1,'active')")
             db.commit()
@@ -146,6 +154,9 @@ class SQLiteRepository:
         return root
 
     def save(self, book):
+        if not self.db.in_transaction:
+            with self.transaction():
+                return self.save(book)
         parts = {name: self.document(value) for name, value in book_state.split(book).items()}
         self.put(store_keys.BOOK_ROOT, {'schema': book_state.BOOK_SCHEMA, 'parts': parts})
 
@@ -157,7 +168,17 @@ class SQLiteRepository:
         live cell that can name a document and then followed transitively, so anything
         removed is unreachable by construction.
         """
-        keep, pending = set(), []
+        require(not self.db.in_transaction, 'transaction', '文档回收不能嵌套在已有事务中。')
+        # Hold the writer lock across marking, validation and deletion. Otherwise another
+        # connection could publish a new source after marking and lose it during sweeping.
+        # The transaction also restores every deleted row if a sweep operation fails.
+        with self.transaction():
+            result = self._prune_reachable()
+        self.db.execute('VACUUM')
+        return result
+
+    def _prune_reachable(self):
+        keep, pending, blocks, pending_blocks = set(), [], set(), []
 
         def scan(value):
             if value is None:
@@ -174,11 +195,44 @@ class SQLiteRepository:
             for row in self.db.execute('SELECT * FROM ' + table).fetchall():
                 for cell in tuple(row):
                     scan(cell)
-        while pending:
-            key = pending.pop()
-            row = self.db.execute('SELECT value FROM documents WHERE hash=?', (key,)).fetchone()
-            if row is not None:
-                scan(row[0])
+        def block_reference(key):
+            require(isinstance(key, str) and re.fullmatch(r'[0-9a-f]{64}', key),
+                    'source_integrity', '冻结来源的分块引用无效。')
+            if key not in blocks:
+                blocks.add(key)
+                pending_blocks.append(key)
+
+        while pending or pending_blocks:
+            while pending:
+                key = pending.pop()
+                row = self.db.execute('SELECT value FROM documents WHERE hash=?', (key,)).fetchone()
+                if row is not None:
+                    # A valid block hash alone cannot prove this is the correct tree for
+                    # the logical document key. Validate every reachable logical source
+                    # before *any* deletion, so a swapped root cannot make GC discard the
+                    # original tree. This explicit maintenance operation pays the cost of
+                    # reading the complete retained snapshots; normal reads stay per-source.
+                    self.read_document(key)
+                    if row[0].startswith(_BLOCK_PREFIX):
+                        block_reference(self._parse_source(row[0][len(_BLOCK_PREFIX):]))
+                    else:
+                        # Logical values can themselves name another frozen document.
+                        scan(row[0])
+            while pending_blocks:
+                block = self._read_block(pending_blocks.pop())
+                kind, payload = self._block_parts(block)
+                if kind in ('list-index', 'dict-index'):
+                    for child in payload:
+                        block_reference(child)
+                elif kind == 'value':
+                    scan(payload)
+                else:
+                    if kind == 'dict':
+                        for name, _ in payload:
+                            scan(name)
+                    for encoded in (payload if kind == 'list' else [entry[1] for entry in payload]):
+                        tag, item = self._encoded_parts(encoded)
+                        block_reference(item) if tag == 'ref' else scan(item)
         removed, kept = 0, 0
         for (key,) in self.db.execute('SELECT hash FROM documents').fetchall():
             if key in keep:
@@ -186,22 +240,163 @@ class SQLiteRepository:
             else:
                 self.db.execute('DELETE FROM documents WHERE hash=?', (key,))
                 removed += 1
-        self.db.execute('VACUUM')
+        removed_blocks = 0
+        for (key,) in self.db.execute('SELECT hash FROM document_blocks').fetchall():
+            if key not in blocks:
+                self.db.execute('DELETE FROM document_blocks WHERE hash=?', (key,))
+                removed_blocks += 1
         # Only some reachable digests are document hashes: task input hashes and chapter
         # state hashes share the shape, so both counts are reported separately.
-        return {'reachable_hashes': len(keep), 'documents_kept': kept, 'documents_removed': removed}
+        return {'reachable_hashes': len(keep), 'documents_kept': kept, 'documents_removed': removed,
+                'blocks_kept': len(blocks), 'blocks_removed': removed_blocks}
 
     def document(self, value):
-        key = digest(value)
-        self.db.execute('INSERT OR IGNORE INTO documents VALUES (?,?)', (key, dump(value)))
+        if self.db.in_transaction:
+            return self._store_document(self.db, value)
+        # Blocks become reachable only when their document root is published. Publish the
+        # whole tree atomically even for standalone callers, so concurrent GC never sees
+        # half a document as unreferenced garbage between autocommit statements.
+        with self.transaction():
+            return self._store_document(self.db, value)
+
+    @classmethod
+    def _store_document(cls, db, value):
+        """Keep the public logical hash while sharing immutable physical subtrees.
+
+        This is a bounded-fanout persistent tree, not a chain of prior snapshots. Appending
+        to a nested list rewrites its last leaf and ancestors; unchanged leaves keep their
+        hashes. Dictionaries use stable key-hash buckets so inserting a key cannot shift
+        every later leaf. The same encoder is used for roots and nested values, allowing
+        a book partition and a task's complete state to share the very same physical tree.
+        """
+        serialized = dump(value)
+        serialized_bytes = serialized.encode('utf-8')
+        key = hashlib.sha256(serialized_bytes).hexdigest()
+        if isinstance(value, (dict, list)) and len(serialized_bytes) > _INLINE_BYTES:
+            encoded = cls._encode_value(db, value, serialized)
+            serialized = _BLOCK_PREFIX + dump(encoded[1])
+        db.execute('INSERT OR IGNORE INTO documents VALUES (?,?)', (key, serialized))
         return key
 
     def read_document(self, key):
         row = self.db.execute('SELECT value FROM documents WHERE hash=?', (key,)).fetchone()
         require(row is not None, 'source', '冻结来源不存在。')
-        value = json.loads(row['value'])
+        serialized = row['value']
+        require(isinstance(serialized, str), 'source_integrity', '冻结来源的存储编码无效。')
+        if serialized.startswith(_BLOCK_PREFIX):
+            root = self._parse_source(serialized[len(_BLOCK_PREFIX):])
+            value = self._decode_block(root)
+        else:
+            value = self._parse_source(serialized)
         require(digest(value) == key, 'source_integrity', '冻结来源哈希不匹配。')
         return value
+
+    @staticmethod
+    def _store_block(db, value):
+        serialized = dump(value)
+        key = hashlib.sha256(serialized.encode('utf-8')).hexdigest()
+        db.execute('INSERT OR IGNORE INTO document_blocks VALUES (?,?)', (key, serialized))
+        return key
+
+    @classmethod
+    def _encode_value(cls, db, value, serialized=None):
+        serialized = dump(value) if serialized is None else serialized
+        if len(serialized.encode('utf-8')) <= _INLINE_BYTES:
+            return ['inline', value]
+        if isinstance(value, list):
+            leaves = []
+            for start in range(0, len(value), _BLOCK_FANOUT):
+                entries = [cls._encode_value(db, item) for item in value[start:start + _BLOCK_FANOUT]]
+                leaves.append(cls._store_block(db, ['list', entries]))
+            while len(leaves) > 1:
+                leaves = [cls._store_block(db, ['list-index', leaves[start:start + _BLOCK_FANOUT]])
+                          for start in range(0, len(leaves), _BLOCK_FANOUT)]
+            return ['ref', leaves[0]]
+        if isinstance(value, dict):
+            # dump/load normalizes JSON object keys just as the original raw JSON adapter did.
+            # This also covers Python's supported integer/bool/null keys without changing the
+            # logical digest; JSON round-tripping has always returned their string spellings.
+            normalized = value if all(isinstance(name, str) for name in value) else json.loads(serialized)
+            entries = [(name, cls._encode_value(db, item), digest(name))
+                       for name, item in sorted(normalized.items())]
+            return ['ref', cls._encode_dictionary(db, entries)]
+        return ['ref', cls._store_block(db, ['value', value])]
+
+    @classmethod
+    def _encode_dictionary(cls, db, entries, depth=0):
+        if len(entries) <= _BLOCK_FANOUT or depth == 64:
+            return cls._store_block(db, ['dict', [[name, value] for name, value, _ in entries]])
+        buckets = {}
+        for entry in entries:
+            buckets.setdefault(entry[2][depth], []).append(entry)
+        children = [cls._encode_dictionary(db, rows, depth + 1)
+                    for _, rows in sorted(buckets.items())]
+        return cls._store_block(db, ['dict-index', children])
+
+    @staticmethod
+    def _parse_source(serialized):
+        require(isinstance(serialized, str), 'source_integrity', '冻结来源的存储编码无效。')
+        try:
+            return json.loads(serialized, parse_constant=lambda value: require(
+                False, 'source_integrity', '冻结来源包含无效的 JSON 常量。'))
+        except (ValueError, TypeError):
+            require(False, 'source_integrity', '冻结来源的存储编码无效。')
+
+    @staticmethod
+    def _encoded_parts(value):
+        require(isinstance(value, list) and len(value) == 2 and value[0] in ('inline', 'ref'),
+                'source_integrity', '冻结来源的分块条目无效。')
+        return value
+
+    @staticmethod
+    def _block_parts(value):
+        require(isinstance(value, list) and len(value) == 2
+                and value[0] in ('list', 'list-index', 'dict', 'dict-index', 'value'),
+                'source_integrity', '冻结来源的分块类型无效。')
+        kind, payload = value
+        if kind != 'value':
+            require(isinstance(payload, list) and 0 < len(payload) <= _BLOCK_FANOUT,
+                    'source_integrity', '冻结来源的分块大小无效。')
+        if kind == 'dict':
+            require(all(isinstance(entry, list) and len(entry) == 2 and isinstance(entry[0], str)
+                        for entry in payload) and len({entry[0] for entry in payload}) == len(payload),
+                    'source_integrity', '冻结来源的字典分块无效。')
+        return kind, payload
+
+    def _read_block(self, key):
+        require(isinstance(key, str) and re.fullmatch(r'[0-9a-f]{64}', key),
+                'source_integrity', '冻结来源的分块引用无效。')
+        row = self.db.execute('SELECT value FROM document_blocks WHERE hash=?', (key,)).fetchone()
+        require(row is not None, 'source_integrity', '冻结来源的分块不存在。')
+        block = self._parse_source(row['value'])
+        require(digest(block) == key, 'source_integrity', '冻结来源的分块哈希不匹配。')
+        return block
+
+    def _decode_block(self, key):
+        # No decoded mutable value survives this call. Repeated references are decoded into
+        # independent JSON values, and every read checks the database bytes afresh.
+        kind, payload = self._block_parts(self._read_block(key))
+        if kind == 'value':
+            return payload
+        if kind == 'list':
+            return [self._decode_value(value) for value in payload]
+        if kind == 'dict':
+            return {name: self._decode_value(value) for name, value in payload}
+        children = [self._decode_block(child) for child in payload]
+        if kind == 'list-index':
+            require(all(isinstance(child, list) for child in children),
+                    'source_integrity', '冻结来源的列表分块类型不符。')
+            return [item for child in children for item in child]
+        result = {}
+        for child in children:
+            require(isinstance(child, dict) and not set(child) & set(result),
+                    'source_integrity', '冻结来源的字典分块重复或类型不符。')
+            result.update(child)
+        return result
+
+    def _decode_value(self, value):
+        tag, item = self._encoded_parts(value)
+        return self._decode_block(item) if tag == 'ref' else item
 
     def pending(self):
         row = self.db.execute("SELECT id FROM tasks WHERE status='pending'").fetchone()
@@ -226,10 +421,9 @@ class SQLiteRepository:
         row = self.db.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
         require(row is not None, 'task', '任务不存在。')
         result = dict(row)
-        for key in ('input', 'result', 'first_read'):
+        for key in ('input', 'result'):
             result[key] = json.loads(result[key]) if result[key] else None
         require(digest(result['input']) == result['input_hash'], 'task_integrity', '冻结任务被修改。')
-        require(result['first_read'] is None or digest(result['first_read']) == result['first_read_hash'], 'first_read_integrity', '冻结首读记录被修改。')
         return result
 
     def add_task(self, work):
@@ -237,8 +431,6 @@ class SQLiteRepository:
         self.db.execute('INSERT INTO tasks(id,status,input,input_hash) VALUES (?,\'pending\',?,?)', (ident, dump(work), digest(work)))
         return self.task(ident)
 
-    # The `seal` write path is gone with the blind first read; the columns stay declared because a
-    # project written under v1 still carries them and must keep loading.
     def finish_task(self, task_id, result):
         self.db.execute("UPDATE tasks SET status='done',result=?,result_hash=? WHERE id=?", (dump(result), digest(result), task_id))
 
@@ -259,6 +451,9 @@ class SQLiteRepository:
         branches build once, then only appended chapters are indexed. Tasks freeze the
         returned value and never consult this mutable cache when recalling sources.
         """
+        if not self.db.in_transaction:
+            with self.transaction():
+                return self.history_snapshot(branch)
         cache_key = store_keys.history_head(branch)
         cached = self.get(cache_key)
         snapshot = cached or {'schema': HISTORY_SCHEMA, 'head': None,

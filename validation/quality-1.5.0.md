@@ -1,5 +1,7 @@
 # 1.5.0 质检报告（长篇小说 / 架构解耦 / token 消耗）
 
+> 历史归档：本文件保留当轮版本、设计或实验条件，不是当前执行规范。旧门序、兼容条款、独立审查阶段及命令均不用于当前流程；当前唯一执行依据见 [任务协议](../references/protocol.md) 与 [运行流程](../references/runtime.md)。
+
 日期：2026-10-16。审计对象：`main` @ `5e2cb71`（离线 1.5.0 合并后）。范围：长篇创作能力、架构解耦、token 与上下文字符消耗。
 
 本报告是**对照审计**，不是作者的验收记录；原始工程结果见 [验收记录](results.md)，度量原值见 [metrics.json](metrics.json)。结论与作者自述不一致处，以本报告点名的代码位置和复现方式为准。
@@ -69,7 +71,7 @@ PYTHONUTF8=1 python validation/measure.py --out /tmp/metrics.json
 | 其中 task.json | 4.5–5.1 KB（`commands` 1307 B、`records` 895 B） | 本报告实测 |
 | `advance --compact` / 非 compact | 0.4–0.9 KB / 4.5–5.1 KB（约 6–12×） | 本报告实测 |
 | 覆盖树约束 | 深度 2/4/5；每综合者 ≤3 子报告、≤6 边界章 | 本报告复现 |
-| 综合 handoff 上限 | 6 项 × ≤800 字 + 1–8 条 × ≤240 字引文 | [scopes.py](../scripts/novel_ledger/scopes.py) L52-56 |
+| 综合 handoff 上限 | 6 项 × ≤800 字 + 1–8 条 × ≤240 字引文 | `scripts/novel_ledger/scopes.py`（历史模块，当前已删除） L52-56 |
 | 默认窗口/分块 | `planning_window=3`、`review_chunk=3`、`review_fanout=3` | [contracts.py](../scripts/novel_ledger/contracts.py) L167-172 |
 | 默认开关 | `verification=full`、`narrative_tracking=true`、`editorial_features=true` | [contracts.py](../scripts/novel_ledger/contracts.py) L170-173 |
 | 运行期 guides 体积（路径挂载，非信封体积） | protocol+craft+editorial+workbench = 48,781 B | 本报告按磁盘字节核算 |
@@ -101,7 +103,7 @@ PYTHONUTF8=1 python validation/measure.py --out /tmp/metrics.json
 ### 机制（有代码/测试支撑）
 
 - 默认 `rolling`：只完成近期已核验卷纲，按需补下一批（[架构](../references/architecture.md) 当前能力边界表）；批大小 = `min(6, planning_window)` = **3 章/批**（[workflow.py](../scripts/novel_ledger/workflow.py) L56）。`scope=current` 先出首卷全卷纲，`scope=all` 也仍分批派工 + 独立批审，不是一次交付。
-- **有界覆盖树**：[scopes.py](../scripts/novel_ledger/scopes.py) L9-28 固定 chunk/fanout 递归；500 章实测深度 5、每综合者 ≤3 子报告、≤6 章边界正文、handoff 六项各 ≤800 字。综合成本被硬性封顶。
+- **有界覆盖树**：`scripts/novel_ledger/scopes.py`（历史模块，当前已删除） L9-28 固定 chunk/fanout 递归；500 章实测深度 5、每综合者 ≤3 子报告、≤6 章边界正文、handoff 六项各 ≤800 字。综合成本被硬性封顶。
 - 连续性结算：资源前值与守恒、时钟、知情、关系、承诺、站位、历史断言由 `facts` / `narrative` 纯规则执行，设计与人物档案不直接产生事实。
 - 修订不毁全书：`revision_impact` 输出 keep / review / local / rewrite 四级；默认只自动改最近 3 章并保护已关闭卷。
 - 完本必须覆盖末章、实际总篇幅区间、作者首章决定和全部关闭条件，不自动降目标。

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+from decimal import Decimal, InvalidOperation
 from .contracts import require, text
 
 STATUSES = ('seeded', 'advanced', 'resolved')
@@ -78,9 +79,12 @@ def same(kind, expect, got):
     as strings would report every resource precondition as unmet.
     """
     if kind in ('resources', 'clock'):
+        if isinstance(expect, bool) or isinstance(got, bool):
+            return False
         try:
-            return float(str(expect).strip()) == float(str(got).strip())
-        except (TypeError, ValueError):
+            left, right = Decimal(str(expect).strip()), Decimal(str(got).strip())
+            return left.is_finite() and right.is_finite() and left == right
+        except (InvalidOperation, TypeError, ValueError):
             return False
     return expect == got
 

@@ -276,26 +276,26 @@ class DomainBoundaryTests(unittest.TestCase):
         from novel_ledger.contracts import (CONTRACT_FIELDS, DERIVED_FIELDS,
                                             OPENING_VERSION, alignment_for, opening_source)
         version = OPENING_VERSION
-        gates = [ident for ident, _title in creation.GATE_SETS[version]]
+        gates = [ident for ident, _title in creation.GATES]
         self.assertEqual(len(gates), 13)
         self.assertEqual(creation.SYSTEM_GATES[version], ('scale',))
         for gate in gates:
             self.assertTrue(creation.value_fields(gate, version),
                             'a gate must own at least one field')
         owned = {row['key'] for row in CONTRACT_FIELDS
-                 if row.get('since', 1) <= version and opening_source(row, version)
+                 if opening_source(row, version)
                  and row['key'] not in DERIVED_FIELDS}
         derived = {'entities', 'red_lines', 'volumes', 'world_rules', 'world_premise'}
         self.assertEqual(owned | derived, set(alignment_for(version)))
         self.assertEqual(owned & derived, set())
         sources = {row['key'] for row in CONTRACT_FIELDS
-                   if row.get('since', 1) <= OPENING_VERSION and opening_source(row, OPENING_VERSION)}
+                   if opening_source(row, OPENING_VERSION)}
         for key in ('protagonist_origin', 'core_premise', 'world_tiers', 'world_resource',
                     'world_scale', 'world_ladder', 'promise_anchor'):
             self.assertIn(key, sources)
         # The v5 order: the core idea right after the genre, the origin behind it, and the world
         # structure before the scale ladder that steps on it.
-        gates = [ident for ident, _title in creation.GATE_SETS[OPENING_VERSION]]
+        gates = [ident for ident, _title in creation.GATES]
         self.assertEqual(gates[:4], ['genre', 'premise', 'voice', 'scale'])
         self.assertEqual(gates.index('world') + 1, gates.index('ladder'))
         self.assertEqual(creation.value_fields('premise', OPENING_VERSION),
@@ -306,7 +306,7 @@ class DomainBoundaryTests(unittest.TestCase):
 
         A tier's floor is the world its line walks through. The two structural sections are required
         only when the opening declared something that lives there (`world.tiers`/`world.resource`/
-        a grand scale on the ladder), which is what keeps a legacy ten-section world valid.
+        a grand scale on the ladder); imported settings only require what they declare.
         """
         from novel_ledger import world
         self.assertEqual(len(world.ALL_SECTIONS), 12)
@@ -320,7 +320,7 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertIn('powers', sections, 'declared tiers must be mirrored in the world')
         self.assertIn('cosmology', sections, 'a grand scale needs the cosmology section')
         self.assertLessEqual(set(world.required_sections('t3')), set(sections))
-        # A legacy choice set declares neither, and its floor stays the ten original domains.
+        # An import without extra declarations uses only its tier floor.
         self.assertEqual(tuple(world.declared_sections({})), ())
         self.assertEqual(set(world.required_sections('t3', {})),
                          set(world.required_sections('t3')))
@@ -337,7 +337,7 @@ class DomainBoundaryTests(unittest.TestCase):
                                             opening_source)
         version = creation.OPENING_VERSION
         for row in CONTRACT_FIELDS:
-            if row.get('since', 1) > version or row['key'] in DERIVED_FIELDS                     or row['key'] not in alignment_for(version):
+            if row['key'] in DERIVED_FIELDS                     or row['key'] not in alignment_for(version):
                 continue
             source = opening_source(row, version)
             if not source:
@@ -393,18 +393,18 @@ class DomainBoundaryTests(unittest.TestCase):
     def test_frozen_capability_values_are_checked_instead_of_degrading(self):
         """A task frozen with an unknown protocol version must fail, not read as an older project."""
         from novel_ledger import contracts
-        task = {'capabilities': {'reading_dependencies': contracts.READING_DEPENDENCIES_CAPABILITY}}
-        self.assertEqual(contracts.capabilities_for(task)['reading_dependencies'],
-                         contracts.READING_DEPENDENCIES_CAPABILITY)
-        # A dispatch that predates the capability map declared nothing, and that is not an error.
-        self.assertEqual(contracts.capabilities_for({'capabilities': {}}), {})
+        current = {'understanding': contracts.UNDERSTANDING_CAPABILITY,
+                   'scene_identity': contracts.SCENE_IDENTITY_CAPABILITY,
+                   'reading_dependencies': contracts.READING_DEPENDENCIES_CAPABILITY}
+        self.assertEqual(contracts.capabilities_for({'capabilities': current}), current)
+        for invalid in (None, {}, [], {**current, 'scene_identity': 'scene-identity/1'},
+                        {key: value for key, value in current.items() if key != 'understanding'}):
+            with self.subTest(capabilities=invalid):
+                self.assertCode('capability', contracts.capabilities_for, {'capabilities': invalid})
         with self.assertRaises(Error) as caught:
-            contracts.capabilities_for({'capabilities': {'scene_identity': 'scene-idenity/2'}})
+            contracts.capabilities_for({'capabilities': {**current, 'scene_identity': 'scene-idenity/2'}})
         self.assertEqual(caught.exception.code, 'capability')
         self.assertEqual(caught.exception.details['unknown'], ['scene_identity=scene-idenity/2'])
-        # Every version still in flight stays readable, so the guard cannot lock out frozen work.
-        contracts.capabilities_for({'capabilities': {'scene_identity': contracts.SCENE_IDENTITY_V1}})
-        contracts.capabilities_for({'capabilities': {'scene_identity': contracts.SCENE_IDENTITY_CAPABILITY}})
         # The producer builds the same strings the consumer compares against.
         source = (ROOT / 'scripts' / 'novel_ledger' / 'context.py').read_text(encoding='utf-8')
         for literal in ("'editorial/1'", "'understanding/1'", "'scene-identity/2'", "'reading-dependencies/1'",

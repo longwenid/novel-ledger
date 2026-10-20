@@ -64,38 +64,6 @@ class OutputRepairTests(unittest.TestCase):
         self.assertEqual((self.project / 'book.html').read_bytes(), view)
         self.assertEqual((self.project / 'novel.sqlite3').read_bytes(), original)
 
-    def test_legacy_completion_metadata_keeps_frozen_content_and_understanding(self):
-        owner = self.app.run(finish=True, source='工程夹具：完成四章。')['owner']
-        drive(self.app, owner, until='write')
-        candidate = response(self.app)
-        candidate['data']['understanding'] = [{
-            'id': 'responsibility', 'kind': 'theme', 'claim': '承担责任仍是一种待检验的理解。',
-            'subjects': [], 'topics': [], 'status': 'tentative', 'reason': '正文行动支持这个解释。',
-            'evidence': [{'chapter': 1, 'quote': '要求先核对退件人的名字再开箱。'}], 'counterevidence': []}]
-        self.app.submit(candidate)
-        self.assertEqual(drive(self.app, owner)['action'], 'ready_to_complete')
-        completed = self.app.complete(owner)
-        snapshot = self.repo.read_document(completed['snapshot_hash'])
-        self.assertEqual(snapshot['book']['status'], 'completed')
-        snapshot['book']['status'] = 'running'
-        snapshot['book'].pop('completed_at')
-        live = self.repo.load()
-        completion_time = live['completed_at']
-        live['completion_snapshot'] = self.repo.document(snapshot)
-        live['contract']['title'] = '后来修改的标题不进入完本快照'
-        live['understanding']['versions'] = []
-        self.repo.save(live)
-        frozen, rows = delivery.publication(self.repo)
-        self.assertEqual(frozen['status'], 'completed')
-        self.assertEqual(frozen['completed_at'], completion_time)
-        self.assertEqual(frozen['contract']['title'], '夜班退件')
-        self.assertEqual(rows, snapshot['chapters'])
-        self.assertEqual(frozen['understanding'], snapshot['book']['understanding'])
-        page = bookpage.render(self.repo)
-        self.assertIn('<b>已完本</b><span>运行状态</span>', page)
-        self.assertIn('承担责任仍是一种待检验的理解。', page)
-        self.assertNotIn(live['contract']['title'], page)
-        self.assertEqual(self.repo.read_document(live['completion_snapshot']), snapshot)
 
 class EvaluationRepairTests(unittest.TestCase):
     def setUp(self):
