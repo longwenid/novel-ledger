@@ -157,4 +157,4 @@ board 哈希由主控从展示响应恢复，用户不需知道。选择绑定�
 
 默认 opening_contract 随 world_model 起草，读取闭合选择和同轮候选世界；候选世界与候选约定由引擎按同一套机械校验在提交时判定（字段、links 引用、与各门选择逐字一致），通过即原子激活，**没有独立核验阶段**。单独下发的 opening_contract 读取其冻结的已核验世界。逐门 value 的字段保留（主角门存为 protagonist_setup，关系门映射到 relationships，机制允许范围由世界门给出）。选定承诺、基调、核心脑洞、主角来历、视角、体量、世界架构、位阶与硬通货、格局尺度与升格阶梯、主角、关系、推进、终局、主题锚点、母题、书名和文风不得改变；卷职责、名称和初始化细节由系统推导，并在卷纲提交时与 `contract.volumes` 一一比对。对齐字段从同一字段声明派生，不通过合并整份 value 覆盖其他门。
 
-约定还须保留所选禁区（red_lines 是逐门所选禁区的超集），并在 entities 中保留所选主角，kind 为 person，id 与 name 与 protagonist_setup 一致，否则核验报 opening_alignment。result.template.json 由约定字段表派生，含全部对齐字段（含 title 与空 entities 骨架）；结构校验拒绝未知字段，因此模板不接受的字段不要提交。`tone`/`theme`/`pov` 由文风门选定：模板里有这三个字段，逐门开书必须逐字保留；自备约定（`init --contract`）可以不带它们，不追溯要求补选。书名由作者在最后一门选定，约定工人不再代拟。
+约定还须保留所选禁区（red_lines 是逐门所选禁区的超集），并在 entities 中保留所选主角，kind 为 person，id 与 name 与 protagonist_setup 一致，否则核验报 opening_alignment。result.template.json 由约定字段表派生，含全部对齐字段（含 title 与空 entities 骨架）；结构校验拒绝未知字段，因此模板不接受的字段不要提交。`tone`/`theme`/`pov` 分属题材门（genre）、兑现门（payoff）与视角门（voice）选定：模板里有这三个字段，逐门开书必须逐字保留；自备约定（`init --contract`）可以不带它们，不追溯要求补选。书名由作者在最后一门选定，约定工人不再代拟。
