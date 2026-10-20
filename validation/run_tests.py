@@ -19,6 +19,9 @@ FAST = (
     'test_architecture', 'test_domain_boundaries', 'test_application_ports',
     'test_cli_boundary', 'test_dependency_bounds', 'test_longform', 'test_outlines',
     'test_pipeline_shapes.PipelineShapeTests', 'test_review_material', 'test_storage_growth',
+    'test_context_growth', 'test_plot_precision',
+    'test_snapshot_integrity', 'test_snapshot_probe',
+    'test_style_voice', 'test_style_guard_flow',
     'test_validation_runner', 'test_architecture_repairs', 'test_opening_architecture',
     # The fast gate pins automatic revision bounds with one end-to-end case; the full gate
     # additionally covers proposal authorization, changed sources and rollback.

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, require, tier_of)
+from .contracts import (DEFAULTS, SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, require, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY,
                         SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
@@ -126,21 +126,25 @@ def scoped_state(state, participants, plan=None, chapter=0, horizon=3):
     view['resources'] = {k: v for k, v in state['resources'].items() if json.loads(k)[0] in selected}
     view['relations'] = {k: v for k, v in state['relations'].items() if k.split('>')[0] in selected or k.split('>')[1].split(':')[0] in selected}
     view['historical_assertions'] = {k: v for k, v in state['historical_assertions'].items() if selected.intersection(v['subjects'])}
-    view['hooks'] = {k: v for k, v in state['hooks'].items() if v['status'] == 'open'}
+    plan = plan or {}
+    refs = set(plan.get('reader_refs', [])) | {d['topic'] for d in plan.get('disclosures', [])}
+    view['hooks'] = {k: v for k, v in state['hooks'].items()
+                     if v['status'] == 'open' and
+                     (k in plan.get('hook_refs', []) or v['due'] <= chapter + horizon
+                      or selected.intersection(v.get('subjects', [])) or refs.intersection(v.get('topics', [])))}
+    view['developments'] = {k: v[-2:] for k, v in view['developments'].items()}
     if 'story_nodes' in state:
-        plan = plan or {}
         nodes = _planned_nodes(plan)
         for definition in plan.get('node_contracts', {}).values():
             nodes.update(definition['depends_on'])
         view['story_nodes'] = {k: v for k, v in state['story_nodes'].items() if k in nodes}
         view['character_current'] = {k: v for k, v in state['character_current'].items() if k in selected}
-        refs = set(plan.get('reader_refs', [])) | {d['topic'] for d in plan.get('disclosures', [])}
         view['reader_knowledge'] = {k: v for k, v in state['reader_knowledge'].items() if k in refs or v['chapter'] >= chapter - 2}
-        view['developments'] = {k: v[-2:] for k, v in view['developments'].items()}
         view['historical_assertions'] = {k: v for k, v in view['historical_assertions'].items() if k in plan.get('history_refs', [])}
-        view['hooks'] = {k: v for k, v in view['hooks'].items()
-                         if k in plan.get('hook_refs', []) or v['due'] <= chapter + horizon
-                         or selected.intersection(v.get('subjects', [])) or refs.intersection(v.get('topics', []))}
+        # Finished lines are history, while active and sleeping lines remain live obligations.
+        # Explicit inputs below restore even a resolved line when this chapter reads it.
+        view['thread_progress'] = {k: v for k, v in state['thread_progress'].items()
+                                   if v.get('status') != 'resolved'}
         view['memory_sources'] = 'complete_state 保留全部状态和人物发展；历史原文经 history_source/recall 完整补读。未选择不代表不存在。'
     # Explicit causal inputs may refer to an off-stage character or a remote promise.
     # Participant heuristics must never erase those coordinates.
@@ -375,7 +379,7 @@ def writing_volume_outline(outline, plan, chapter, source_hash):
     return view
 
 
-def hook_ledger(book, volume=None):
+def hook_ledger(book, volume=None, refs=None):
     """The promise account a design decision reads: what is declared, and what is still open.
 
     `declared` is every hook any approved volume has registered (cross-volume promises keep their
@@ -383,11 +387,17 @@ def hook_ledger(book, volume=None):
     `volume` is this volume's own declaration. A designer continuing a promise from an earlier
     volume needs the id, the text and the original window — re-inventing any of them is how a
     promise silently becomes two.
+
+    `refs` selects complete entries for the task, together with this volume's declarations.
+    None retains the complete ledger for supplemental reading; selection never edits the source.
     """
+    selected = None if refs is None else set(refs)
     declared, current = [], []
     for ident, row in (book.get('volumes_outline') or {}).items():
         rows = [entry for entry in (row or {}).get('hooks') or [] if isinstance(entry, dict)]
         for entry in rows:
+            if selected is not None and entry.get('id') not in selected and (volume is None or ident != volume['id']):
+                continue
             declared.append({'id': entry.get('id'), 'text': entry.get('text'),
                              'plant': entry.get('plant'), 'payoff': entry.get('payoff'),
                              'required': entry.get('required'), 'continues': entry.get('continues'),
@@ -397,10 +407,11 @@ def hook_ledger(book, volume=None):
     open_hooks = [{'id': ident, 'text': hook.get('text', ''), 'due': hook.get('due'),
                    'status': hook.get('status')}
                   for ident, hook in sorted((book['state'].get('hooks') or {}).items())
-                  if hook.get('status') == 'open']
+                  if hook.get('status') == 'open' and (selected is None or ident in selected)]
     return {'volume': current, 'declared': declared, 'open': open_hooks,
             'source': '伏笔账：卷纲声明（plant/payoff 窗口、required、continues），章纲只做 plant/payoff；'
-                      '中途再提一次用 hook_refs 承接，不新增动作。open 是引擎投影里仍未兑现的条目。'}
+                      '中途再提一次用 hook_refs 承接，不新增动作。open 是引擎投影里仍未兑现的条目。'
+                      + ('完整历史声明见 complete_hooks，未选择不代表不存在。' if selected is not None else '')}
 
 
 def style_material(book, volume, chapter_row=None):
@@ -417,12 +428,14 @@ def style_material(book, volume, chapter_row=None):
     chapter_style = (chapter_row or {}).get('style') if isinstance((chapter_row or {}).get('style'), dict) else {}
     return {'voice': contract.get('voice', ''), 'tone': contract.get('tone', ''),
             'pov': contract.get('pov', ''), 'style_traits': list(contract.get('style_traits') or []),
+            'guard': contract.get('style_guard', DEFAULTS['style_guard']),
             'anchor': style.baseline(book),
             'window': style.merged_window(contract, volume_style),
             'volume': dict(volume_style), 'chapter': dict(chapter_style),
             'source': '文风规格：契约 voice/tone/pov/style_traits 是底线，anchor 是作者认可首章的实测指标，'
                       'volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。'
-                      '机械指标只保证文风一致与可核对，不证明好看或人物可信。'}
+                      'guard=observe 默认只观察首章形状变化，strict 才执行锚点容差；'
+                      '显式对白目标和高重复检查仍生效，实际视角须结合正文自比。'}
 
 
 def _participants(plan, book):
@@ -435,8 +448,16 @@ def _participants(plan, book):
         named = plan.get('participants')
         if isinstance(named, list) and named:
             return list(named)
-        entities = [row.get('entity') for row in plan.get('characters') or []
-                    if isinstance(row, dict) and row.get('entity')]
+        # Raw chapter rows carry the same cast through deltas and scene presence; materialized
+        # rows normally already have participants. Keep both paths consistent before falling back
+        # conservatively when the author supplied no cast declaration at all.
+        entities = [row.get('entity') for row in plan.get('characters') or [] if isinstance(row, dict)]
+        entities += [row.get('id') for row in plan.get('new_entities') or [] if isinstance(row, dict)]
+        entities += [row.get('who') for row in plan.get('knowledge') or [] if isinstance(row, dict)]
+        entities += [row.get('entity') for row in plan.get('places') or [] if isinstance(row, dict)]
+        entities += [ident for scene in plan.get('scenes') or [] if isinstance(scene, dict)
+                     for ident in scene.get('present') or []]
+        entities = [ident for ident in entities if ident]
         if entities:
             return sorted(set(entities))
     return list(book['state']['entities'])
@@ -498,7 +519,8 @@ def build(repo: ContextStore, book, job):
     # contract and the world — so the (still nearly empty) state stays available on demand there.
     # A merged dispatch also answers chapter outlines, whose enter/exit chain is read off that same
     # state, so there it is required.
-    add('state', scoped_state(book['state'], participants, plan, anchor),
+    state_view = scoped_state(book['state'], participants, plan, anchor)
+    add('state', state_view,
         not opening_stage and (stage != 'volume_outline' or merged_outline))
     add('complete_state', book['state'], False)
     memory_stages = ('volume_outline', 'chapter_outline', 'write', 'repair', 'redesign')
@@ -526,7 +548,17 @@ def build(repo: ContextStore, book, job):
         # to read: the volume declares the promises and the style trend, the chapter executes them.
         design_volume = volume_row(book, volume)
         design_chapter = design_row(book, anchor) if anchor else None
-        add('hooks', hook_ledger(book, design_volume))
+        add('complete_hooks', hook_ledger(book, design_volume), False)
+        if stage in writing_stages:
+            hook_refs = set(state_view.get('hooks', {}))
+        else:
+            # A design pass must see unresolved promises even when their people are offstage.
+            hook_refs = {key for key, row in book['state'].get('hooks', {}).items()
+                         if row.get('status') == 'open'}
+            volume_ids = set((job.payload or {}).get('volume_ids') or ())
+            hook_refs.update(row['id'] for ident, outline in (book.get('volumes_outline') or {}).items()
+                             if ident in volume_ids for row in (outline or {}).get('hooks') or [])
+        add('hooks', hook_ledger(book, design_volume, hook_refs))
         add('style', style_material(book, design_volume, design_chapter))
     if book.get('author_block'):
         add('author_block', book['author_block'])
@@ -574,7 +606,7 @@ def build(repo: ContextStore, book, job):
                  # A basic project keeps no reader-knowledge ledger, so the boundary states the
                  # secrets and the outline's allowed changes and leaves reader state empty rather
                  # than inventing one.
-                 'reader_current': scoped_state(book['state'], participants, plan, anchor).get('reader_knowledge', {}),
+                 'reader_current': state_view.get('reader_knowledge', {}),
                  'author_secrets': [{'id': k, 'disclosure': v['disclosure'], 'causal_role': v['causal_role']} for k, v in original.items() if k.startswith('mysteries:')],
                  'source': '幕后真相见可选 world_author_records；作者真相不能自动成为人物知情或本章披露。'})
     if stage == 'chapter_outline' and volume_outline_row is not None:

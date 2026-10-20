@@ -6,7 +6,7 @@
 
 本页说明字段与机械核验，创作判断见 [创作与自比](craft.md)。填写时以当前任务的 capabilities、brief 和 result.template.json 为准，不自行增删字段或预填结论；格式不确定用 `check`，处理入口见 [运行](runtime.md)。
 
-约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威，模板与结构校验均由它派生。未知字段按 contract 拒绝，标为 optional 的数组/映射缺省时补空值；有 default 的字段采用表中默认值，其余按表检查必填。当前存储为 novel-ledger/4，任务不再保存首读列，仅支持当前库，v3 及更早数据库拒绝打开。CLI 版本为 `2.0.0`，只运行当前阶段与任务能力；旧门序、旧字段及独立审查阶段的任务直接拒绝，须以当前模板重新派工。开书协议版本为 `opening/6`（`novel-ledger.creation/6`，13 门，世界与格局先于主角来历），是唯一支持的协议：声明更早 creation 版本的项目在读取时被明确拒绝，以当前协议重开；自备约定不经门序核验，缺省的结构化开书字段不追溯补选。
+约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威，模板与结构校验均由它派生。未知字段按 contract 拒绝，标为 optional 的数组/映射缺省时补空值；有 default 的字段采用表中默认值，其余按表检查必填。当前存储为 novel-ledger/5，通过不可变结构分块共享累计快照；文档哈希仍对应完整逻辑值，任务和回执不感知分块。仅支持当前库，v4 及更早数据库拒绝打开并保留原文件，不自动转换。CLI 版本为 `2.0.0`，只运行当前阶段与任务能力；旧门序、旧字段及独立审查阶段的任务直接拒绝，须以当前模板重新派工。开书协议版本为 `opening/6`（`novel-ledger.creation/6`，13 门，世界与格局先于主角来历），是唯一支持的协议：声明更早 creation 版本的项目在读取时被明确拒绝，以当前协议重开；自备约定不经门序核验，缺省的结构化开书字段不追溯补选。
 
 ## 作者约定
 
@@ -24,7 +24,8 @@
 | promise_anchor | `{deliverable, deadline_chapter}`（**optional、参与对齐**）：主题锚点——`deliverable` ≥12 字符，`deadline_chapter` 为纯数字字符串且 `1 ≤ N ≤ min(DEFAULTS['world_ladder']['anchor_max_chapter'], 该档 chapter_window 上限)`（默认 30 章）。兑现门的 `anchor` 投影（`opening: ('payoff', 'anchor')`） |
 | volume_outline | `volumes[]`，字段、长度与卷末终值见 [卷纲](narrative.md#卷纲)；选择绑定见 [世界规则](world.md#三条逐字绑定) |
 | chapter_outline | `volume` + `chapters[]`，字段与状态链见 [章纲](narrative.md#章纲)；重排范围以冻结 payload 为准 |
-| style_window | `{sentence:0.35, paragraph:0.35, dialogue:0.40, repetition:0.12, person:1}`（optional、不参与对齐）：文风代理指标的容差；前四项是相对偏差上限（`repetition` 为本章内部高重复的绝对占比上限，实测校准：正常散文 0.04~0.09、复读文本 0.79~0.99），`person=1` 表示视角标记必须与声明一致；卷纲 `style.window` 与契约**逐项合并**（先用契约补默认，再按合法键与合法数值逐个覆盖），作者可改约调整。见 [文风](narrative.md#文风) |
+| style_guard | `observe`（默认）/`strict`：前者只观察相对首章的句段和未声明对白比例变化，后者按窗口执行数值约束。显式对白目标、高重复在两档都核，代词只观察；作者选择经正常约定或改约留档 |
+| style_window | `{sentence:0.35, paragraph:0.35, dialogue:0.40, repetition:0.12, person:1}`（optional、不参与对齐）：文风代理指标容差；句段与对白使用相对变化，repetition 是本章绝对重复度上限，person 保留为代词观察参数，不能据此断言叙事视角；卷纲 `style.window` 与契约**逐项合并**（先用契约补默认，再按合法键与合法数值逐个覆盖），作者可改约调整。见 [文风](narrative.md#文风) |
 | narrative_tracking | true；关闭时章纲的 `plot.nodes`/`plot.threads` 可空，但事实增量仍按同一规则核算，四类数组缺省或 null 按空数组处理 |
 | editorial_features | true；编辑能力要求叙事跟踪，关闭跟踪时也须关闭编辑能力；人物、场景与补丁字段见 [编辑能力](editorial.md) |
 | revision_limit | 正整数，默认 `DEFAULTS['revision_limit']`（3）；自动回改最近多少章，越界仍须作者对准确方案授权 |
@@ -71,7 +72,7 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 使用执行认领时附 execution_claim。preflight 完整校验后回滚，checked 不等于入库；submit 才更新。相同已提交结果幂等，不同结果拒绝。拒绝不计修复额度，真实短稿提交计实际执笔轮次并保留稿件。
 
-submit 的 accepted=true 表示回执已接受，不等于正文已入库。正文的字数、lint、文风和漂移 findings 会保留候选并进入有界返修；信封、结构或证据校验抛出的错误回滚提交。设计提交失败保持原任务，不自动消耗正文返修额度。
+预检和正式执笔提交的 style_report 含 metrics/observations/findings，正式章节核账记录保存同一报告；observations 不触发返修，findings 沿现有额度处理。submit 的 accepted=true 表示回执已接受，不等于正文已入库。正文的字数、lint、文风和漂移 findings 会保留候选并进入有界返修；信封、结构或证据校验抛出的错误回滚提交。设计提交失败保持原任务，不自动消耗正文返修额度。
 
 `check` 是给 Worker 的格式自检：把候选回执从标准输入管道进去（无需 `--file`，已通过身份环境定位当前任务时可省略命令行 `--task`）。回执本身仍须提供 task_id 和 input_hash（信封字段从 result.template.json 复制起稿，不手写；`input_version` 报错带 expected），不允许猜测或改投身份；会话取自身份进程或任务自身。它按与 submit 相同的校验运行但**不提交、不消耗额度**，直接报告缺哪个字段或哪个枚举不对，让执行者不必读引擎源码确认格式。常见拒绝对应的期望形状：前值不匹配时 details 带 `current`（照抄为 before，新键为 null）；章纲漂移带具体项、卷内位置与模拟到该章的状态；`opening_option`（choose）带 `valid_options`；`literal_policy` 带命中字段与命中词。报错里没有的形状不要去源码里找，用 check 试算。
 

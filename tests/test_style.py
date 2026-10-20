@@ -1,10 +1,7 @@
-"""Mechanical style proxies: they prove the prose matches its declared style, not that it is good.
+"""Mechanical style proxies measure declared numeric limits without judging literary quality.
 
-v2.1 answers "who judges literary quality" with two things that cost no dispatch: a style spec the
-author writes (contract `style_window`, a volume's `style.trend`, a chapter's `style{pov,rhythm,
-dialogue_ratio}`) and the mechanical proxies in `style.py` — sentence length, paragraph length,
-dialogue share, in-chapter repetition and narration person. A chapter that drifts away from the
-voice the author anchored is caught at submission and repaired like any other finding.
+Anchor-shape bounds below use an explicit strict contract. The default observation guard and
+ordinary prose that mixes pronouns are covered separately in test_style_voice.py.
 
 Every case here is calibration, not appreciation. The samples are constructed to have exact,
 predictable shapes — each sentence of a known 汉字 length, built from code points used nowhere else
@@ -30,6 +27,7 @@ from support import contract, drive, response, seeded_book
 # calibrated, not guessed: ordinary Chinese prose in this repository measures 0.04~0.09, a repeated
 # template 0.79~0.99.
 WINDOW = dict(style.DEFAULT_WINDOW)
+STRICT = {'style_guard': 'strict'}
 METRIC_KEYS = ('sentence_mean', 'sentence_short_share', 'paragraph_mean', 'paragraph_max',
                'dialogue_share', 'repetition_share', 'person')
 THIRD_POV = '第三人称限知'
@@ -170,9 +168,11 @@ class WindowTests(unittest.TestCase):
         anchor = metrics_of(sentences(30, 8))
         dragged = sentences(6, 20, start=0x6000)
         narrow = {'repetition': 0.04, 'dialogue': 0.4, 'person': 1, 'paragraph': 5, 'sentence': 0.35}
-        self.assertTrue(by_metric(style.compare(dragged, {}, anchor, narrow, chapter=1), 'sentence'))
+        self.assertTrue(by_metric(style.compare(dragged, {}, anchor, narrow, chapter=1,
+                                                contract=STRICT), 'sentence'))
         # A window that states nothing but repetition still applies the default sentence tolerance.
-        self.assertTrue(by_metric(style.compare(dragged, {}, anchor, {'repetition': 0.04}, chapter=1),
+        self.assertTrue(by_metric(style.compare(dragged, {}, anchor, {'repetition': 0.04}, chapter=1,
+                                                contract=STRICT),
                                   'sentence'))
 
     def test_shape_is_only_compared_between_samples_of_the_same_order(self):
@@ -180,10 +180,12 @@ class WindowTests(unittest.TestCase):
         short_anchor = metrics_of(sentences(10, 6))                      # 60 汉字
         long_chapter = sentences(20, 100, start=0x6000)                  # 2000 汉字
         self.assertGreater(metrics_of(long_chapter)['han'], 3 * short_anchor['han'])
-        self.assertEqual(style.compare(long_chapter, {}, short_anchor, WINDOW, chapter=1), [])
+        self.assertEqual(style.compare(long_chapter, {}, short_anchor, WINDOW, chapter=1,
+                                       contract=STRICT), [])
         # Within 3x the shapes are comparable again, and a real deviation is reported.
         comparable = sentences(20, 6, start=0x6000)                      # 120 汉字
-        self.assertTrue(by_metric(style.compare(comparable, {}, short_anchor, WINDOW, chapter=1),
+        self.assertTrue(by_metric(style.compare(comparable, {}, short_anchor, WINDOW, chapter=1,
+                                                contract=STRICT),
                                   'sentence'))
 
 
@@ -201,7 +203,7 @@ class BaselineTests(unittest.TestCase):
 
 
 class CompareTests(unittest.TestCase):
-    """Without an anchor only repetition and person are judged; with one, the proxies compare."""
+    """Strict shape bounds, explicit targets and nonbinding person observations stay separate."""
 
     def test_reporting_rows_carry_the_finding_shape(self):
         findings = style.compare('他把责任栏推到主管面前，要求先核对名字。' * 8, {}, None, WINDOW, chapter=2)
@@ -218,20 +220,20 @@ class CompareTests(unittest.TestCase):
     def test_anchor_tolerances_report_their_own_metric_family(self):
         """Sentence, paragraph and dialogue drift each raise their own metric, not a neighbour's."""
         sentence = style.compare(sentences(6, 20, start=0x6000), {},
-                                 metrics_of(sentences(30, 8)), WINDOW, chapter=3)
+                                 metrics_of(sentences(30, 8)), WINDOW, chapter=3, contract=STRICT)
         self.assertTrue(by_metric(sentence, 'sentence'), sentence)
         for row in by_metric(sentence, 'sentence'):
             self.assertEqual(row['target_chapter'], 3)
             self.assertEqual(row['criterion'], 'style_' + row['metric'])
         paragraph_anchor = metrics_of(paragraphs(10, 6, per_paragraph=1))
         blocked = sentences(10, 6, start=0x5000)        # one long paragraph instead of six
-        paragraph = style.compare(blocked, {}, paragraph_anchor, WINDOW, chapter=1)
+        paragraph = style.compare(blocked, {}, paragraph_anchor, WINDOW, chapter=1, contract=STRICT)
         self.assertTrue(by_metric(paragraph, 'paragraph'), paragraph)
         self.assertFalse(by_metric(paragraph, 'dialogue'), paragraph)
         self.assertFalse(by_metric(paragraph, 'sentence'), paragraph)
         dialogue_anchor = metrics_of(sentences(12, 4) + sentences(12, 4, start=0x6000, quoted=True))
         talky = sentences(12, 8, start=0x7000, quoted=True)
-        dialogue = style.compare(talky, {}, dialogue_anchor, WINDOW, chapter=1)
+        dialogue = style.compare(talky, {}, dialogue_anchor, WINDOW, chapter=1, contract=STRICT)
         self.assertTrue(by_metric(dialogue, 'dialogue'), dialogue)
         self.assertEqual(by_metric(dialogue, 'dialogue')[0]['criterion'], 'style_dialogue_share')
 
@@ -290,38 +292,47 @@ class CompareTests(unittest.TestCase):
         self.assertIn('style_window.repetition', findings[0]['reason'])
         self.assertEqual(style.compare(sentences(12, 8), {}, None, WINDOW), [])
 
-    def test_the_person_must_match_the_declared_view(self):
+    def test_person_markers_are_observations_even_under_strict_guarding(self):
         first = ('我走进值班室。我翻开登记册。我核对了名字。我一直站到天亮。'
                  '我又看了一遍凭据。我记得那天的雪。')
         third = ('他走进值班室。他翻开登记册。他核对了名字。他一直站到天亮。'
                  '他又看了一遍凭据。他记得那天的雪。')
         mixed = ('我走进值班室，他抬头看我。我核对名字，他把封条推过来。'
                  '我一直站到天亮，他先离开了。我写记录，他签字。')
-        self.assertTrue(by_metric(style.compare(first, {'pov': THIRD_POV}, None, WINDOW, chapter=4), 'person'))
-        self.assertTrue(by_metric(style.compare(third, {'pov': '第一人称'}, None, WINDOW, chapter=4), 'person'))
-        self.assertFalse(by_metric(style.compare(third, {'pov': THIRD_POV}, None, WINDOW, chapter=4), 'person'))
-        # A mixed voice is not silently accepted as either declared person.
-        self.assertTrue(by_metric(style.compare(mixed, {'pov': THIRD_POV}, None, WINDOW, chapter=4), 'person'))
-        # Narration with no marker at all is not evidence of the wrong view.
-        unmarked = sentences(12, 8, marker='')
-        self.assertEqual(metrics_of(unmarked)['person'], 'unknown')
-        self.assertFalse(by_metric(style.compare(unmarked, {'pov': THIRD_POV}, None, WINDOW, chapter=1),
-                                   'person'))
+        for guard in ('observe', 'strict'):
+            for prose, pov, markers in ((first, THIRD_POV, 'first'),
+                                        (third, '第一人称', 'third'),
+                                        (mixed, THIRD_POV, 'mixed')):
+                with self.subTest(guard=guard, pov=pov, markers=markers):
+                    report = style.examine(prose, {'pov': pov}, None, WINDOW, chapter=4,
+                                           contract={'style_guard': guard})
+                    self.assertFalse(by_metric(report['findings'], 'person'))
+                    observed = by_metric(report['observations'], 'person')
+                    self.assertEqual([(row['target_chapter'], row['got']) for row in observed],
+                                     [(4, markers)])
+            report = style.examine(third, {'pov': THIRD_POV}, None, WINDOW,
+                                   contract={'style_guard': guard})
+            self.assertFalse(by_metric(report['observations'], 'person'))
 
     def test_the_contract_view_is_read_when_the_chapter_declares_none(self):
         first = ('我走进值班室。我翻开登记册。我核对了名字。我一直站到天亮。'
                  '我又看了一遍凭据。我记得那天的雪。')
-        findings = style.compare(first, {}, None, WINDOW, chapter=1, contract={'pov': THIRD_POV})
-        self.assertTrue(by_metric(findings, 'person'), findings)
-        self.assertFalse(by_metric(style.compare(first, {}, None, WINDOW, chapter=1,
-                                                 contract={'pov': '第一人称'}), 'person'))
+        report = style.examine(first, {}, None, WINDOW, chapter=1, contract={'pov': THIRD_POV})
+        self.assertFalse(by_metric(report['findings'], 'person'))
+        self.assertTrue(by_metric(report['observations'], 'person'), report)
+        matching = style.examine(first, {}, None, WINDOW, chapter=1, contract={'pov': '第一人称'})
+        self.assertFalse(by_metric(matching['observations'], 'person'))
+        overridden = style.examine(first, {'pov': '第一人称'}, None, WINDOW, chapter=1,
+                                   contract={'pov': THIRD_POV})
+        self.assertFalse(by_metric(overridden['observations'], 'person'))
 
     def test_an_unknown_person_is_not_treated_as_a_mismatch(self):
         """Narration with no marker at all is not evidence of the wrong view."""
         unmarked = sentences(12, 8, marker='')
         self.assertEqual(metrics_of(unmarked)['person'], 'unknown')
-        self.assertFalse(by_metric(style.compare(unmarked, {'pov': THIRD_POV}, None, WINDOW, chapter=1),
-                                   'person'))
+        report = style.examine(unmarked, {'pov': THIRD_POV}, None, WINDOW, chapter=1)
+        self.assertFalse(by_metric(report['findings'], 'person'))
+        self.assertFalse(by_metric(report['observations'], 'person'))
 
     def test_degradation_without_an_anchor_or_below_the_floor_is_not_judged(self):
         """No anchor means no baseline and no length verdicts; too short means no verdicts at all."""
@@ -341,15 +352,18 @@ class CompareTests(unittest.TestCase):
         anchor = metrics_of(sentences(20, 10))
         drifted = sentences(22, 10, start=0x6000)
         self.assertAlmostEqual(drifted_sentence_gap(drifted, anchor), 0.1, places=2)
-        findings = style.compare(drifted, {'pov': THIRD_POV}, anchor, WINDOW, chapter=1)
+        findings = style.compare(drifted, {'pov': THIRD_POV}, anchor, WINDOW, chapter=1,
+                                 contract=STRICT)
         self.assertEqual(findings, [])
 
     def test_a_wider_contract_window_tolerates_what_the_default_would_not(self):
         anchor = metrics_of(sentences(20, 10))
         shouted = sentences(9, 10, start=0x6000)         # 55% shorter sentences
-        self.assertTrue(by_metric(style.compare(shouted, {}, anchor, WINDOW, chapter=1), 'sentence'))
+        self.assertTrue(by_metric(style.compare(shouted, {}, anchor, WINDOW, chapter=1,
+                                                contract=STRICT), 'sentence'))
         wide = {**WINDOW, 'sentence': 0.9}
-        self.assertFalse(by_metric(style.compare(shouted, {}, anchor, wide, chapter=1), 'sentence'))
+        self.assertFalse(by_metric(style.compare(shouted, {}, anchor, wide, chapter=1,
+                                                 contract=STRICT), 'sentence'))
 
     def test_a_comparison_against_its_own_metrics_is_silent(self):
         prose = sentences(14, 9)
@@ -368,7 +382,7 @@ class StyleIntegrationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.project = Path(self.temp.name) / 'book'
         raw = contract(2)
-        raw.update(narrative_tracking=True, editorial_features=True)
+        raw.update(narrative_tracking=True, editorial_features=True, style_guard='strict')
         self.repo = SQLiteRepository.initialize(self.project, seeded_book(raw))
         self.app = Application(self.repo)
         self.owner = self.app.run(through=2, source='工程夹具：两章。')['owner']
@@ -397,7 +411,7 @@ class StyleIntegrationTests(unittest.TestCase):
         # into a voice far from the anchor's: very short sentences, no dialogue at all.
         candidate['data']['prose'] = candidate['data']['prose'][:14] + sentences(4, 12, start=0x7000)
         direct = style.compare(candidate['data']['prose'], {}, style.baseline(self.repo.load()),
-                               WINDOW, chapter=2)
+                               WINDOW, chapter=2, contract=STRICT)
         self.assertTrue(by_metric(direct, 'sentence'), direct)
         outcome = self.app.submit(candidate)
         self.assertIsNone(outcome['committed_chapter'])
@@ -409,7 +423,8 @@ class StyleIntegrationTests(unittest.TestCase):
         self.assertEqual(handoff['task']['stage'], 'repair')
         repaired = response(self.app)
         self.assertFalse(by_metric(style.compare(repaired['data']['prose'], {},
-                                                 style.baseline(self.repo.load()), WINDOW, chapter=2),
+                                                 style.baseline(self.repo.load()), WINDOW, chapter=2,
+                                                 contract=STRICT),
                                    'sentence'))
         self.assertEqual(self.app.submit(repaired)['committed_chapter'], 2)
         self.assertEqual([row['n'] for row in self.repo.headers('main')], [1, 2])

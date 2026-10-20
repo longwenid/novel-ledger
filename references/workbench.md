@@ -83,4 +83,4 @@ reading_coverage 默认 partial。声明 complete 须有实际场景，且每场
 
 ## 项目边界
 
-所有项目自带工作台数据结构（init 即建立 understanding），无需事后单独启用。存储 schema 为 novel-ledger/4，已删除旧任务的首读字段；v3 及更早数据库明确拒绝，不自动转换。旧开书协议（creation/1~/5）与旧任务能力形状同样读取即拒，见 [协议](protocol.md)。
+所有项目自带工作台数据结构（init 即建立 understanding），无需事后单独启用。存储 schema 为 novel-ledger/5，已删除旧任务的首读字段；v4 及更早数据库明确拒绝，不自动转换。旧开书协议（creation/1~/5）与旧任务能力形状同样读取即拒，见 [协议](protocol.md)。

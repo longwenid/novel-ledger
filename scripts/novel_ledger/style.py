@@ -1,15 +1,13 @@
-"""Mechanical style proxies: the checkable half of "write in the contract's voice".
+"""Measure style without treating every change in chapter rhythm as a literary defect.
 
-The author's decision for v2.1: literary quality is carried by style, not by a reviewer. Design
-declares the spec — a volume's `style.trend` and a chapter's `style{pov,rhythm,dialogue_ratio}` —
-and the engine computes these proxies for free when a chapter is submitted, so a chapter that
-drifts away from the voice the author anchored is caught and repaired like any other drift.
+The default guard observes sentence, paragraph and unplanned dialogue-share differences from the
+approved sample. An author may explicitly select strict checking of those numeric shape limits.
+Chapter dialogue targets and high in-chapter repetition remain checkable in either mode.
 
-What these numbers prove is *consistency*: sentence and paragraph shape, how much of the text is
-dialogue, how repetitive a chapter is inside itself, and whether the narration keeps the person the
-contract chose. They cannot prove a chapter is good — a page can match every number and still be
-dull, and nothing here judges whether a character is believable. That residual is the author's to
-read, or to measure offline with `scripts/quality_eval.py`.
+Pronoun counts are observations in both modes: a first-person narrator can mention other people,
+and third-person prose can render a character's interior words. These proxies cannot determine
+narrative viewpoint or prove literary quality. The author, the declared style and the writer's
+comparison with that style remain the sources for those judgements.
 """
 from __future__ import annotations
 
@@ -20,7 +18,7 @@ from .contracts import DEFAULTS, han_count, policy_default, text
 # Sentence terminators, and the quote families a Chinese manuscript actually uses. A quote family
 # is a pair, so an unclosed quote simply yields no dialogue rather than half a chapter of it.
 SENTENCE_END = '。！？…!?；;'
-QUOTE_PAIRS = (('“', '”'), ('「', '」'), ('『', '』'), ('‘', '’'))
+QUOTE_PAIRS = (('“', '”'), ('「', '」'), ('『', '』'), ('‘', '’'), ('"', '"'))
 # Tolerances, metric floors and n-gram size all come from the one declaration in contracts.DEFAULTS:
 # a duplicated default is how the same band ends up meaning two different things in two layers.
 DEFAULT_WINDOW = policy_default('style_window')
@@ -58,20 +56,31 @@ def _iter_sentences(prose):
 
 def _dialogue_spans(prose):
     """The text inside quotes, per paragraph: narration is what is left of it."""
+    pairs = dict(QUOTE_PAIRS)
     spans, narration = [], []
     for block in _iter_paragraphs(prose):
-        rest, cursor = [], 0
-        for opening, closing in QUOTE_PAIRS:
-            while True:
-                start = block.find(opening, cursor)
-                if start < 0:
-                    break
-                end = block.find(closing, start + 1)
-                if end < 0:
-                    break
-                spans.append(block[start + 1:end])
-                rest.append(block[cursor:start])
-                cursor = end + 1
+        rest, cursor, start = [], 0, 0
+        while start < len(block):
+            closing = pairs.get(block[start])
+            if closing is None:
+                start += 1
+                continue
+            # Scan in reading order, and count nested quotations only once as part of their
+            # outer quotation. An unfinished quotation does not swallow the rest of a paragraph.
+            stack, end = [closing], start + 1
+            while end < len(block) and stack:
+                char = block[end]
+                if char == stack[-1]:
+                    stack.pop()
+                elif char in pairs:
+                    stack.append(pairs[char])
+                end += 1
+            if stack:
+                start += 1
+                continue
+            spans.append(block[start + 1:end - 1])
+            rest.append(block[cursor:start])
+            cursor = start = end
         rest.append(block[cursor:])
         narration.append(''.join(rest))
     return ' '.join(spans), ' '.join(narration)
@@ -79,11 +88,14 @@ def _dialogue_spans(prose):
 
 def metrics(prose):
     """The proxy metrics of one prose sample; every value is derived, never stored."""
-    sentences = [han_count(item) for item in _iter_sentences(prose)]
+    # Closing quotes and repeated terminators are punctuation, not zero-word sentences.
+    sentences = [size for item in _iter_sentences(prose) for size in (han_count(item),) if size]
     paragraphs = [han_count(item) for item in _iter_paragraphs(prose)]
     dialogue, narration = _dialogue_spans(prose)
     total = han_count(prose)
-    tokens = HAN.findall(narration + dialogue)
+    # Preserve the actual reading order: joining narration before dialogue invents n-grams at
+    # boundaries that never existed in the prose, and loses the original ones around quotations.
+    tokens = HAN.findall(str(prose or ''))
     body = ''.join(tokens)
     grams = [body[i:i + NGRAM] for i in range(max(0, len(body) - NGRAM + 1))]
     repeated = 0 if not grams else (len(grams) - len(set(grams))) / len(grams)
@@ -105,7 +117,7 @@ def metrics(prose):
 
 
 def _person(narration):
-    """Which person the narration keeps, from its markers; 'unknown' when it shows neither."""
+    """Inventory pronoun markers, without claiming they determine narrative viewpoint."""
     first = sum(narration.count(marker) for marker in FIRST_PERSON)
     third = sum(narration.count(marker) for marker in THIRD_PERSON)
     if first and third:
@@ -158,6 +170,11 @@ def _finding(chapter, metric, expect, got, reason):
             'repair_scope': 'local', 'metric': metric, 'expect': expect, 'got': got, 'reason': reason}
 
 
+def _observation(chapter, metric, expect, got, reason):
+    return {'criterion': 'style_' + metric, 'target_chapter': chapter, 'metric': metric,
+            'expect': expect, 'got': got, 'reason': reason}
+
+
 def _declared_person(declared, contract):
     """The person a declaration asks for, or None when it does not name one."""
     sources = [str((declared or {}).get('pov') or ''), str((contract or {}).get('pov') or '')]
@@ -184,19 +201,27 @@ def _same_order(left, right):
     return 1 / SAME_ORDER <= ratio <= SAME_ORDER
 
 
-def compare(prose, declared, anchor, window, chapter=0, contract=None):
-    """Findings for one chapter against the anchor sample and its own declared style points.
+def examine(prose, declared, anchor, window, chapter=0, contract=None):
+    """Return measured metrics, nonbinding observations and actionable numeric findings.
 
-    `anchor` is the baseline metrics (or None), `window` the tolerances, `declared` this chapter's
-    `style` row. Rows without an anchor keep the two checks that need no baseline — in-chapter
-    repetition and the narration person — instead of comparing against nothing.
+    Only explicit strict guarding routes anchor-shape changes to findings. Viewpoint markers are
+    always observations. Neither category substitutes for reading the author's actual style spec.
     """
     measured = metrics(prose)
+    findings, observations = [], []
+    report = {'metrics': measured, 'observations': observations, 'findings': findings}
     if measured['han'] < MIN_HAN:
-        return []
+        return report
     limits = window or DEFAULT_WINDOW
     declared = declared if isinstance(declared, dict) else {}
-    findings = []
+    strict = (contract or {}).get('style_guard', DEFAULTS['style_guard']) == 'strict'
+
+    def shape_change(metric, expect, got, reason):
+        if strict:
+            findings.append(_finding(chapter, metric, expect, got, reason))
+        else:
+            observations.append(_observation(chapter, metric, expect, got, reason))
+
     # Shape metrics are only comparable between samples of the same order of magnitude: a short
     # stub cannot say anything about a full chapter's rhythm, and measuring one against the other
     # produces findings that are artefacts of the sample rather than of the writing.
@@ -209,8 +234,8 @@ def compare(prose, declared, anchor, window, chapter=0, contract=None):
             if not base:
                 continue
             if _relative(measured[metric], base) > limits.get(family, DEFAULT_WINDOW[family]):
-                findings.append(_finding(chapter, metric, base, measured[metric],
-                                         label + '相对首章定调偏离超过容差，正文的语感走了形。'))
+                shape_change(metric, base, measured[metric],
+                             label + '相对首章样本的变化超过已设容差。')
     target = declared.get('dialogue_ratio')
     if type(target) in (int, float) and 0 <= float(target) <= 1:
         # A zero target must not lose a small amount of dialogue to the display metric's rounding.
@@ -218,12 +243,12 @@ def compare(prose, declared, anchor, window, chapter=0, contract=None):
                  else measured['dialogue_share'])
         if _relative(share, float(target)) > limits.get('dialogue', DEFAULT_WINDOW['dialogue']):
             findings.append(_finding(chapter, 'dialogue_ratio', float(target), share,
-                                     '对白占比与章纲声明不符，本章的推进方式变了。'))
+                                     '对白占比偏离章纲已声明的目标，超过已设容差。'))
     elif anchor and anchor.get('dialogue_share') and _same_order(measured.get('han'), anchor.get('han')):
         base = anchor['dialogue_share']
         if _relative(measured['dialogue_share'], base) > limits.get('dialogue', DEFAULT_WINDOW['dialogue']):
-            findings.append(_finding(chapter, 'dialogue_share', base, measured['dialogue_share'],
-                                     '对白占比相对首章定调偏离超过容差。'))
+            shape_change('dialogue_share', base, measured['dialogue_share'],
+                         '对白占比相对首章样本的变化超过已设容差。')
     if measured.get('repetition_grams', 0) >= MIN_NGRAMS:
         repetition = measured['repetition_share']
         if repetition > limits.get('repetition', DEFAULT_WINDOW['repetition']):
@@ -232,6 +257,12 @@ def compare(prose, declared, anchor, window, chapter=0, contract=None):
                                                  '把重复的句子改写；若这是本卷有意的复沓，由作者调宽 style_window.repetition。'))
     expected_person = _declared_person(declared, contract)
     if expected_person and measured['person'] not in ('unknown', expected_person):
-        findings.append(_finding(chapter, 'person', expected_person, measured['person'],
-                                 '叙述人称与章纲/约定的视角不一致。'))
-    return findings
+        observations.append(_observation(
+            chapter, 'person', expected_person, measured['person'],
+            '引号外出现的人称代词种类与视角声明标签不同；代词分布不能判定实际叙述视角。'))
+    return report
+
+
+def compare(prose, declared, anchor, window, chapter=0, contract=None):
+    """Compatibility entry point returning only actionable findings from :func:`examine`."""
+    return examine(prose, declared, anchor, window, chapter, contract)['findings']

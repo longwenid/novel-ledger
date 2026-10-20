@@ -2,7 +2,7 @@
 
 长篇小说的写作流程与事实账本：保存作者决定、设计、正文和事实状态，支持连续创作、暂停恢复与历史修订。
 
-运行仅依赖 Python 3.9+ 标准库；模型调用由宿主提供。当前 CLI 版本为 `2.0.0`，数据库为 `novel-ledger/4`，协议边界见 [协议](references/protocol.md#适用范围与字段来源)。
+运行仅依赖 Python 3.9+ 标准库；模型调用由宿主提供。当前 CLI 版本为 `2.0.0`，数据库为 `novel-ledger/5`，协议边界见 [协议](references/protocol.md#适用范围与字段来源)。
 
 入口：[SKILL.md](SKILL.md) 提供任务路由与执行边界；[运行指南](references/runtime.md) 提供命令动作与恢复方法；[架构](references/architecture.md) 维护模块职责；[返工与成本](references/rework.md) 说明工程原则。
 
@@ -242,7 +242,7 @@ python3 validation/measure.py --out validation/metrics.json          # 依赖图
 
 默认运行快速组，覆盖关键边界与主流程；需要完整回归时显式使用 full，自动收集全部工程测试；两者可从其他目录运行，失败返回非零状态。未安装 pytest-xdist 时使用串行入口。页面模板随技能安装，导出为离线单文件。
 
-测试使用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。全量项数以本机运行为准（`python3 validation/run_tests.py full`），详细记录见 [验收记录](validation/results.md)。当前工程度量见 [metrics.json](validation/metrics.json)，内含 UTC 生成时间、源码提交及覆盖本地修改的 Python 源码指纹；历史快照按其原始条件解释。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
+测试使用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。全量项数以本机运行为准（`python3 validation/run_tests.py full`），详细记录见 [验收记录](validation/results.md)。最新工程度量见 [2026-10-20 快照修复后测量](validation/quality-metrics-fixed-2026-10-20.json)，内含 UTC 生成时间、源码提交及覆盖本地修改的 Python 源码指纹；历史快照按其原始条件解释。数百万字的上下文、累计快照与完整来源验收见 [修复报告](validation/storage-snapshot-fix-2026-10-20.md)。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
 
 Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与 CLI 均可用；若运行外部校验脚本报编码错误，加 `PYTHONUTF8=1`。
 
@@ -252,7 +252,8 @@ Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与
 
 - **字数**按汉字计数；作者约定章数与每章篇幅区间，`word_range` 由二者派生，系统不会为了让指标好看而降低目标。
 - **默认字面规则**：正文与标题不出现系统词汇「账本、入账、回执」；**人名禁字默认为空**——起名是作者的决定，需要限制时用 `lexical` 命令按书设定。规则随任务材料的 `policy` 块交付，覆盖范围与版本可查，覆盖内容逐版留档、开书阶段即生效。
-- **数据库版本**：`novel-ledger/4`，仅支持当前库，v3 及更早库显式拒绝。
+- **数据库版本**：`novel-ledger/5`，仅支持当前库，v4 及更早库显式拒绝。
+- **文风模式**：默认 `style_guard=observe`，让句段与对白密度随场景自然变化；作者可显式选 `strict` 约束首章数值形状。显式对白目标与高重复仍检查，实际人物声线和视角结合正文判断，见 [创作指导](references/craft.md#人物与表达的真实感)。
 - **不做的事**：不自动打开或转换未知来源数据库；不代作者做选择。主干生命周期由宿主提供。
 - **未验证的部分**：真实子 agent 的历史隔离、计费用量控制与文学质量；验收方法见 [验证](references/validation.md)。
 

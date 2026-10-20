@@ -6,6 +6,7 @@ JSON-safe coordinates and repair scope for workflow.route_repair."""
 from __future__ import annotations
 
 import copy
+from decimal import Decimal, InvalidOperation, localcontext
 
 from .contracts import Error, han_count, require, text
 from .entities import register as register_entity
@@ -71,29 +72,27 @@ def _safe(value):
         return value
     if isinstance(value, float):
         return value if value == value and value not in (float('inf'), float('-inf')) else str(value)
+    if isinstance(value, Decimal):
+        return int(value) if value.is_finite() and value == value.to_integral_value() else str(value)
     return str(value)
 
 
 def _number(value):
-    """A comparable number for a declared quantity, or None when it is not numeric."""
+    """A precise comparable quantity, never a binary-float approximation of the ledger."""
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, int):
         return value
-    if isinstance(value, float):
-        return value if value == value and value not in (float('inf'), float('-inf')) else None
-    if isinstance(value, str):
-        body = value.strip()
-        if not body:
-            return None
-        try:
-            number = float(body)
-        except ValueError:
-            return None
-        if number != number or number in (float('inf'), float('-inf')):
-            return None
-        return number
-    return None
+    if not isinstance(value, (str, float, Decimal)):
+        return None
+    try:
+        number = Decimal(str(value).strip())
+    except InvalidOperation:
+        return None
+    if not number.is_finite() or len(number.as_tuple().digits) > 120 \
+            or abs(number.as_tuple().exponent) > 120:
+        return None
+    return int(number) if number == number.to_integral_value() else number
 
 
 def _item(container, key):
@@ -304,7 +303,7 @@ def project(state, kind, key):
     value the engine already holds instead of guessing it — the reconciliation compares the two, and
     the writer is never asked to self-report a before-value.
     """
-    return _project(state, kind, key)
+    return _safe(_project(state, kind, key))
 
 
 def _declared(kind, key, value, state, model):
@@ -326,7 +325,7 @@ def _same(kind, expect, got):
     kind = _kind_of(kind)
     if kind in ('resources', 'clock'):
         left, right = _number(expect), _number(got)
-        return left is not None and right is not None and abs(left - right) < 1e-9
+        return left is not None and right is not None and left == right
     if kind in ('knowledge', 'disclosure'):
         return _canonical_reveal(expect) == _canonical_reveal(got)
     return _safe(expect) == _safe(got)
@@ -1297,7 +1296,7 @@ def _normalize_chapter(chapter, state, world, registry=None, hooks=None):
             if kind == 'places':
                 row['expected'] = _place_id(state, world, row.get('expected')) if row.get('expected') is not None else None
             elif kind in ('resources', 'clock'):
-                row['expected'] = _number(row.get('expected'))
+                row['expected'] = _safe(_number(row.get('expected')))
             rows.append(row)
         normalized[field] = rows
     for field in ('disclosures', 'world_refs', 'new_entities', 'hook_refs', 'reader_refs',
@@ -1515,11 +1514,7 @@ def _amount_string(value):
     number = _number(value)
     if number is None:
         return None
-    if isinstance(number, float):
-        if number.is_integer() and abs(number) < 1e15:
-            return str(int(number))
-        return repr(number)
-    return str(number)
+    return facts.spell(Decimal(number))
 
 
 def _resource_event(coordinate, before, after, reason, evidence, findings):
@@ -1533,8 +1528,16 @@ def _resource_event(coordinate, before, after, reason, evidence, findings):
                                  '资源增量无法还原成 holder/asset/unit：请在增量行或自比行里显式声明。',
                                  'drift_resource', 'blocker'))
         return None
-    delta = (after or 0) - (before or 0)
-    if abs(delta) < 1e-9:
+    before, after = _number(before), _number(after)
+    if before is None or after is None:
+        findings.append(_finding(None, 'resources', coordinate, '有限资源前值与终值', None,
+                                 '资源变化需要可计算的数值。', 'drift_resource', 'blocker'))
+        return None
+    # Match facts.apply_event's exact arithmetic; even the smallest supported unit must settle.
+    with localcontext() as ctx:
+        ctx.prec = 512
+        delta = after - before
+    if delta == 0:
         return None
     if delta > 0:
         event = {'op': 'resource', 'from': None, 'to': holder, 'asset': asset, 'unit': unit,
@@ -1543,7 +1546,7 @@ def _resource_event(coordinate, before, after, reason, evidence, findings):
                  'reason': reason, 'evidence': evidence}
     else:
         event = {'op': 'resource', 'from': holder, 'to': None, 'asset': asset, 'unit': unit,
-                 'quantity': _amount_string(-delta),
+                 'quantity': _amount_string(delta.copy_abs() if isinstance(delta, Decimal) else -delta),
                  'from_before': _amount_string(before if before is not None else 0),
                  'reason': reason, 'evidence': evidence}
     return event

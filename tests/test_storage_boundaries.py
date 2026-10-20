@@ -1,5 +1,6 @@
 """The storage adapter owns transactions and rows, never delivery artifacts."""
 import json
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -108,7 +109,7 @@ class StorageBoundaryTests(unittest.TestCase):
         columns = {row['name'] for row in self.repo.db.execute('PRAGMA table_info(tasks)')}
         self.assertFalse({'first_read', 'first_read_hash'} & columns)
         path = self.project / 'novel.sqlite3'
-        for schema in ('novel-ledger/1', 'novel-ledger/2', 'novel-ledger/3', 'unknown'):
+        for schema in ('novel-ledger/1', 'novel-ledger/2', 'novel-ledger/3', 'novel-ledger/4', 'unknown'):
             with self.subTest(schema=schema):
                 self.repo.db.execute("UPDATE kv SET value=? WHERE key='schema'", (dump(schema),))
                 before = path.read_bytes()
@@ -122,6 +123,21 @@ class StorageBoundaryTests(unittest.TestCase):
         expected = {(self.project / ('novel.sqlite3' + suffix)).resolve()
                     for suffix in ('', '-wal', '-shm', '-journal')}
         self.assertEqual(self.repo.storage_paths, expected)
+
+    def test_readonly_connection_reconstructs_shared_sources_and_cannot_write(self):
+        value = {'versions': [{'chapter': n, 'text': '完整冻结来源' * 80} for n in range(100)]}
+        key = self.repo.document(value)
+        before = (self.project / 'novel.sqlite3').read_bytes()
+        reader = SQLiteRepository(self.project, readonly=True)
+        try:
+            self.assertEqual(reader.read_document(key), value)
+            self.assertEqual(reader.load(), self.repo.load())
+            with self.assertRaises(sqlite3.OperationalError):
+                reader.put('read-only-probe', True)
+            self.assertIsNone(self.repo.get('read-only-probe'))
+            self.assertEqual((self.project / 'novel.sqlite3').read_bytes(), before)
+        finally:
+            reader.close()
 
     def test_storage_paths_resolve_project_and_database_aliases(self):
         self.repo.close()

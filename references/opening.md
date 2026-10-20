@@ -88,7 +88,7 @@ AI 起名高度趋同（潇洒姓×玄乎单字是重灾区，同一个玄乎字
 
 运行时默认只维护在 `contracts.OPENING_DIRECTION` 与 `OPENING_DIRECTION_GATES`，简报据此生成。**作者原话和已选方向优先**：不因题材、短名、慢热、非数值成长或不同文风判错；不固定每三五章打脸，也不要求每卷更换地图与对手。
 
-开书项目保存 `novel-ledger.creation/6`（唯一支持的协议）；数据库布局为 `novel-ledger/4`，两者独立。
+开书项目保存 `novel-ledger.creation/6`（唯一支持的协议）；数据库布局为 `novel-ledger/5`，两者独立。
 
 ## 结构门（体量与分卷）
 

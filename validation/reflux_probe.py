@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from novel_ledger.contracts import SCHEMA
+from novel_ledger.sqlite_store import SQLiteRepository
 
 project = Path(sys.argv[1])
 db = sqlite3.connect('file:' + (project / 'novel.sqlite3').as_posix() + '?mode=ro', uri=True)
@@ -46,19 +47,12 @@ def digest(value):
 
 
 def book_document():
-    """The whole book, assembled from the four declared parts without importing the engine."""
-    root = db.execute("SELECT value FROM kv WHERE key='book'").fetchone()
-    if root is None:
-        return {}
-    parts = json.loads(root['value']).get('parts') or {}
-    book = {}
-    for ident in parts.values():
-        row = db.execute('SELECT value FROM documents WHERE hash=?', (ident,)).fetchone()
-        if row is not None:
-            value = json.loads(row['value'])
-            if isinstance(value, dict):
-                book.update(value)
-    return book
+    """Read logical parts through the adapter, including shared snapshot blocks."""
+    repo = SQLiteRepository(project, readonly=True)
+    try:
+        return repo.load()
+    finally:
+        repo.close()
 
 
 def engine_findings(book):

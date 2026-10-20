@@ -489,6 +489,7 @@ def apply(book, task, data, actor, sources, priors=None):
     # The opening gates run before any contract exists; every later stage has one.
     contract = editorial.effective_contract(book) if book.get('contract') else None
     row = None
+    style_report = None
     if stage == 'opening_options':
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         book['creation'] = creation.offer(book['creation'], data)
@@ -679,9 +680,10 @@ def apply(book, task, data, actor, sources, priors=None):
         write_volume = planning.volume_for(editorial.effective_contract(book), chapter)
         volume_style = ((book.get('volumes_outline') or {}).get(write_volume['id']) or {}).get('style') \
             if write_volume else None
-        findings.extend(style.compare(prose, plan.get('style'), style.baseline(book),
-                                      style.merged_window(book.get('contract'), volume_style), chapter,
-                                      contract=book.get('contract')))
+        style_report = style.examine(prose, plan.get('style'), style.baseline(book),
+                                     style.merged_window(book.get('contract'), volume_style), chapter,
+                                     contract=book.get('contract'))
+        findings.extend(style_report['findings'])
         if findings:
             route_repair(book, draft, findings, after_repair=stage != 'write')
         else:
@@ -722,7 +724,8 @@ def apply(book, task, data, actor, sources, priors=None):
                    # receipt, recorded on the chapter itself.
                    'review': {'drift_check': copy.deepcopy(draft['drift_check']),
                               'design_drift': copy.deepcopy(settlement['deviations']),
-                              'self_check': draft['self_check']},
+                              'self_check': draft['self_check'],
+                              'style_report': copy.deepcopy(style_report)},
                    'state_hash': digest(state), 'summary': draft['summary'], 'han': han_count(draft['prose'])}
             if draft.get('patch'):
                 row['patch'] = draft['patch']
@@ -735,4 +738,4 @@ def apply(book, task, data, actor, sources, priors=None):
         book['understanding'] = understanding.update(book.get('understanding'), data.get('understanding'),
                                                      sources, evidence, actor)
     book['revision'] += 1
-    return Outcome(book, row)
+    return Outcome(book, row, style_report)

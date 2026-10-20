@@ -360,6 +360,8 @@ class Application:
                         'committed_chapter': outcome.chapter['n'] if outcome.chapter else None,
                         'next_stage': updated['draft']['stage'] if updated['draft'] else None,
                         'rework': updated['rework'].get(str(work['chapter'])), 'status': updated['status']}
+            if outcome.style_report is not None:
+                response['style_report'] = outcome.style_report
         return response
 
     def claim(self, task_id, session, seconds=300):

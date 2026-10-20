@@ -1,0 +1,322 @@
+{
+  "schema": "novel-ledger.storage-snapshot-stress/1",
+  "recorded_date": "2026-10-20",
+  "timezone": "Asia/Shanghai",
+  "synthetic": true,
+  "conditions": {
+    "contract_chapters": 1667,
+    "filler_han_per_chapter": 3000,
+    "development_events_per_chapter": 1,
+    "interpretation_ids": 1,
+    "new_interpretation_versions_per_chapter": 1,
+    "state_and_understanding_frozen_after_each_chapter": true,
+    "boundary": "Storage-only synthetic tasks. Facts and interpretation evidence use the production reducers. No model, actual submit, outline validation, complete/deliver, full lifecycle or literary acceptance.",
+    "nominal_word_count": "Filler characters only; stored han is a synthetic lower bound.",
+    "prune": "Measured separately in a fresh 500-chapter project with the same generator.",
+    "cleanup": "Both temporary project directories were removed automatically after completion."
+  },
+  "reproduce": [
+    "python3 validation/storage_snapshot_probe.py --out /tmp/storage-snapshot-default.json",
+    "python3 validation/storage_snapshot_probe.py --chapters 100 500 1000 1667 --no-prune --out /tmp/storage-snapshot-1667.json"
+  ],
+  "source_sha256": {
+    "scripts/novel_ledger/sqlite_store.py": "c5d7c4f6ef4581b6caeb799f148e009273a23d16bb59b14ed6c8b1c6d954506d",
+    "scripts/novel_ledger/book_state.py": "91031c1757e7b7fd3c4259f47da6e8d0b3df769b36a05e690a5c3189ec5c73e9",
+    "scripts/novel_ledger/facts.py": "5c771d52962e63de8b99fd79f3cec74999c800596f7f4eb8910d13a685162935",
+    "scripts/novel_ledger/understanding.py": "03c632a3274f17224f27b0e920a2727c56f1870c5bedc9cbd3a46ddf392e1a79",
+    "scripts/novel_ledger/workflow.py": "584d3a47fc3aa48acd57e93b05256bc516d01ceb6fbf8c8033a7e93d7e08f25b",
+    "scripts/novel_ledger/contracts.py": "4504fff6f495286d663218ea9d23911e585bdb658a616836ec83e7244c99f03a",
+    "scripts/novel_ledger/evidence.py": "1b877d56fdbf62a913448b22ba09bba70b03a1b3a95c77b031c2d3b556c7b2aa",
+    "scripts/novel_ledger/store_keys.py": "08d0d8597f50aece990f9fa5a5ff3f925093e8a09dd1a7c24db4d2081ee100b2",
+    "tests/support.py": "18db07b764e070a9aaf9385a5ea9e63197b92b8c786fd08e2c38e8d8e3555b0b"
+  },
+  "original_experiment_sha256": {
+    "storage_scale_probe": "2769dbafe9354463deff6a16c28e7f5f47db718dfd4fe65d6bde8daf9512a417",
+    "storage_scale_prune_probe": "04875cd3610597651ca80b1422893391d7947eb376285b7501107a8b8207be80"
+  },
+  "five_million_run": {
+    "checkpoints": [
+      {
+        "chapters": 100,
+        "synthetic_prose_han_at_least": 300000,
+        "document_bytes": 7915398,
+        "database_bytes": 8499200,
+        "current_state_bytes": 27055,
+        "current_understanding_bytes": 41330,
+        "elapsed_s": 0.33
+      },
+      {
+        "chapters": 500,
+        "synthetic_prose_han_at_least": 1500000,
+        "document_bytes": 176011965,
+        "database_bytes": 178827264,
+        "current_state_bytes": 133855,
+        "current_understanding_bytes": 207730,
+        "elapsed_s": 7.147
+      },
+      {
+        "chapters": 1000,
+        "synthetic_prose_han_at_least": 3000000,
+        "document_bytes": 693482976,
+        "database_bytes": 699371520,
+        "current_state_bytes": 267356,
+        "current_understanding_bytes": 415733,
+        "elapsed_s": 26.945
+      },
+      {
+        "chapters": 1667,
+        "synthetic_prose_han_at_least": 5001000,
+        "document_bytes": 1917218538,
+        "database_bytes": 1927741440,
+        "current_state_bytes": 446112,
+        "current_understanding_bytes": 695206,
+        "elapsed_s": 84.432
+      }
+    ],
+    "reload": {
+      "elapsed_ms": 69.389,
+      "latest_interpretations": 1,
+      "interpretation_versions": 1667,
+      "operation": "load",
+      "connection_reopened": false,
+      "measurement_note": "Historical sample called repo.load() on the existing SQLite connection; this does not measure a reopen."
+    },
+    "temporary_project_removed": true
+  },
+  "prune_run_500": {
+    "before": {
+      "document_bytes": 176011965,
+      "database_bytes": 178827264,
+      "elapsed_s": 7.595
+    },
+    "prune": {
+      "reachable_hashes": 3005,
+      "documents_kept": 2005,
+      "documents_removed": 1500
+    },
+    "after": {
+      "document_bytes": 90602727,
+      "database_bytes": 92332032
+    },
+    "reload": {
+      "elapsed_ms": 9.74,
+      "latest_interpretations": 1,
+      "interpretation_versions": 500,
+      "operation": "load",
+      "connection_reopened": false,
+      "measurement_note": "Historical sample called repo.load() on the existing SQLite connection; this does not measure a reopen."
+    },
+    "temporary_project_removed": true
+  },
+  "conclusion": {
+    "observed": "Cumulative complete state and understanding versions create approximately quadratic snapshot storage growth. The history chapter-page optimization does not bound these sources.",
+    "prune_limit": "Prune removes unreachable partition wrappers, but finished tasks retain every frozen complete_state and complete_understanding document.",
+    "recovery": "Load succeeded after 1667 snapshots; no claim of multi-million-word creative quality or full pipeline acceptance follows.",
+    "unfixed": "This audit preserves complete frozen sources and the current storage protocol; cumulative snapshot retention remains an engineering limit.",
+    "future_direction": "Consider transparent content-addressed structural chunking under document/read_document while preserving the logical digest, exact reconstructed value, frozen source reachability, corruption detection and preview rollback."
+  },
+  "source_fingerprint_capture": "Collected after the measured run. These listed core storage/reducer/generator files have no working-tree changes from the recorded Git base; the probe program below is the exact program used for the 1667 measurements. No claim is made that post-audit changes to other modules were present during sampling.",
+  "source_git_base": "2e7eca7c531d2310b8ad30f38ecb6d7eb2e53467",
+  "original_probe_source": "import sys, tempfile, time, json\nfrom pathlib import Path\nROOT=Path('/Users/longwen/AndroidStudioProjects/skills/novel-ledger')\nsys.path[:0]=[str(ROOT/'scripts'),str(ROOT/'tests')]\nfrom novel_ledger import facts, workflow, understanding\nfrom novel_ledger.evidence import evidence\nfrom novel_ledger.contracts import digest, dump\nfrom novel_ledger.sqlite_store import SQLiteRepository\nfrom support import tracked_contract\n\ndef main():\n    with tempfile.TemporaryDirectory(prefix='novel-scale-qa-') as td:\n        repo=SQLiteRepository.initialize(Path(td)/'book',workflow.new_book(tracked_contract(1667)))\n        b=repo.load(); prev='genesis'; started=time.perf_counter()\n        for n in range(1,1668):\n            prose='第%d章：沈桐承担代价。'%n+'测'*3000\n            event={'op':'character_development','entity':'shen','choice':'选择核实来源并继续调查。','cost':'承担调查后果并失去一次机会。','change':'改用证据判断人物的可信度。','evidence':{'chapter':n,'quote':'沈桐承担代价。'}}\n            with repo.transaction():\n                b['state'], normalized=facts.settle(b['state'],[event],prose,n)\n                b['understanding']=understanding.update(b['understanding'],[{'id':'hero','kind':'character','claim':'沈桐对人的信任继续变化。','status':'supported','subjects':['shen'],'topics':[],'reason':'本章选择与代价。','evidence':[{'chapter':n,'quote':'沈桐承担代价。'}],'counterevidence':[]}],{n:prose},evidence,'fixture-'+str(n))\n                row={'n':n,'title':'存储实验','prose':repo.document(prose),'events':repo.document(normalized),'plan':repo.document({}),'review':repo.document({}),'state_hash':digest(b['state']),'summary':'存储实验','han':3000}\n                row['chain']=facts.chain(prev,row,digest(b['contract'])); repo.add_chapter('main',row);prev=row['chain']\n                b.update(written_han=n*3000,revision=n)\n                repo.save(b)\n                # Every actual write task freezes these as complete_state/complete_understanding.\n                state=repo.document(b['state']);memory=repo.document(b['understanding'])\n                repo.add_task({'records':{'complete_state':state,'complete_understanding':memory},'stage':'storage-probe'})\n                repo.db.execute(\"UPDATE tasks SET status='done' WHERE status='pending'\")\n            if n in (100,500,1000,1667):\n                bytes_docs=repo.db.execute('SELECT sum(length(CAST(value AS BLOB))) FROM documents').fetchone()[0]\n                print(json.dumps({'chapters':n,'prose_han':n*3000,'document_bytes':bytes_docs,'database_bytes':(Path(td)/'book/novel.sqlite3').stat().st_size,'current_state_bytes':len(dump(b['state']).encode()),'current_understanding_bytes':len(dump(b['understanding']).encode()),'elapsed_s':round(time.perf_counter()-started,3)},ensure_ascii=False),flush=True)\n        t=time.perf_counter();again=repo.load(); print(json.dumps({'reload_ms':round((time.perf_counter()-t)*1000,3),'latest_understandings':len(understanding.latest(again['understanding'])),'versions':len(again['understanding']['versions'])}),flush=True)\n        repo.close()\nmain()\n",
+  "maintained_cli_default_recheck": {
+    "schema": "novel-ledger.storage-snapshot-probe/1",
+    "synthetic": true,
+    "conditions": {
+      "chapter_checkpoints": [
+        100,
+        500
+      ],
+      "filler_han_per_chapter": 3000,
+      "contract_chapters": 1667,
+      "development_events_per_chapter": 1,
+      "interpretation_ids": 1,
+      "new_interpretation_versions_per_chapter": 1,
+      "freeze_each_state_and_understanding": true,
+      "nominal_word_count": "Filler characters only; stored han is a synthetic lower bound.",
+      "boundary": "Storage-only synthetic tasks; no submit, model, full pipeline or literary acceptance."
+    },
+    "source_sha256": {
+      "scripts/novel_ledger/sqlite_store.py": "c5d7c4f6ef4581b6caeb799f148e009273a23d16bb59b14ed6c8b1c6d954506d",
+      "scripts/novel_ledger/book_state.py": "91031c1757e7b7fd3c4259f47da6e8d0b3df769b36a05e690a5c3189ec5c73e9",
+      "scripts/novel_ledger/facts.py": "5c771d52962e63de8b99fd79f3cec74999c800596f7f4eb8910d13a685162935",
+      "scripts/novel_ledger/understanding.py": "03c632a3274f17224f27b0e920a2727c56f1870c5bedc9cbd3a46ddf392e1a79",
+      "scripts/novel_ledger/workflow.py": "584d3a47fc3aa48acd57e93b05256bc516d01ceb6fbf8c8033a7e93d7e08f25b",
+      "scripts/novel_ledger/contracts.py": "4504fff6f495286d663218ea9d23911e585bdb658a616836ec83e7244c99f03a",
+      "scripts/novel_ledger/evidence.py": "1b877d56fdbf62a913448b22ba09bba70b03a1b3a95c77b031c2d3b556c7b2aa",
+      "scripts/novel_ledger/store_keys.py": "08d0d8597f50aece990f9fa5a5ff3f925093e8a09dd1a7c24db4d2081ee100b2",
+      "tests/support.py": "18db07b764e070a9aaf9385a5ea9e63197b92b8c786fd08e2c38e8d8e3555b0b"
+    },
+    "checkpoints": [
+      {
+        "chapters": 100,
+        "synthetic_prose_han_at_least": 300000,
+        "document_bytes": 7915398,
+        "database_bytes": 8499200,
+        "current_state_bytes": 27055,
+        "current_understanding_bytes": 41330,
+        "elapsed_s": 0.304
+      },
+      {
+        "chapters": 500,
+        "synthetic_prose_han_at_least": 1500000,
+        "document_bytes": 176011965,
+        "database_bytes": 178827264,
+        "current_state_bytes": 133855,
+        "current_understanding_bytes": 207730,
+        "elapsed_s": 7.378
+      }
+    ],
+    "prune": {
+      "reachable_hashes": 3005,
+      "documents_kept": 2005,
+      "documents_removed": 1500,
+      "document_bytes": 90602727,
+      "database_bytes": 92332032
+    },
+    "reload": {
+      "elapsed_ms": 10.063,
+      "latest_interpretations": 1,
+      "interpretation_versions": 500,
+      "operation": "load",
+      "connection_reopened": false,
+      "measurement_note": "Historical sample called repo.load() on the existing SQLite connection; this does not measure a reopen."
+    },
+    "temporary_project_removed": true
+  },
+  "maintained_cli_small_recheck": {
+    "schema": "novel-ledger.storage-snapshot-probe/1",
+    "synthetic": true,
+    "conditions": {
+      "chapter_checkpoints": [
+        2,
+        3
+      ],
+      "filler_han_per_chapter": 3000,
+      "contract_chapters": 1667,
+      "development_events_per_chapter": 1,
+      "interpretation_ids": 1,
+      "new_interpretation_versions_per_chapter": 1,
+      "freeze_each_state_and_understanding": true,
+      "nominal_word_count": "Filler characters only; stored han is a synthetic lower bound.",
+      "boundary": "Storage-only synthetic tasks; no submit, model, full pipeline or literary acceptance."
+    },
+    "source_sha256": {
+      "scripts/novel_ledger/sqlite_store.py": "c5d7c4f6ef4581b6caeb799f148e009273a23d16bb59b14ed6c8b1c6d954506d",
+      "scripts/novel_ledger/book_state.py": "91031c1757e7b7fd3c4259f47da6e8d0b3df769b36a05e690a5c3189ec5c73e9",
+      "scripts/novel_ledger/facts.py": "5c771d52962e63de8b99fd79f3cec74999c800596f7f4eb8910d13a685162935",
+      "scripts/novel_ledger/understanding.py": "03c632a3274f17224f27b0e920a2727c56f1870c5bedc9cbd3a46ddf392e1a79",
+      "scripts/novel_ledger/workflow.py": "584d3a47fc3aa48acd57e93b05256bc516d01ceb6fbf8c8033a7e93d7e08f25b",
+      "scripts/novel_ledger/contracts.py": "4504fff6f495286d663218ea9d23911e585bdb658a616836ec83e7244c99f03a",
+      "scripts/novel_ledger/evidence.py": "1b877d56fdbf62a913448b22ba09bba70b03a1b3a95c77b031c2d3b556c7b2aa",
+      "scripts/novel_ledger/store_keys.py": "08d0d8597f50aece990f9fa5a5ff3f925093e8a09dd1a7c24db4d2081ee100b2",
+      "tests/support.py": "18db07b764e070a9aaf9385a5ea9e63197b92b8c786fd08e2c38e8d8e3555b0b"
+    },
+    "probe_source_sha256": "1136f2b00d73cb6c6b779f734377bc0e349328832474d71420cfe6a7b9cd188e",
+    "checkpoints": [
+      {
+        "chapters": 2,
+        "synthetic_prose_han_at_least": 6000,
+        "document_bytes": 27840,
+        "database_bytes": 94208,
+        "current_state_bytes": 993,
+        "current_understanding_bytes": 874,
+        "elapsed_s": 0.003
+      },
+      {
+        "chapters": 3,
+        "synthetic_prose_han_at_least": 9000,
+        "document_bytes": 42504,
+        "database_bytes": 110592,
+        "current_state_bytes": 1258,
+        "current_understanding_bytes": 1284,
+        "elapsed_s": 0.004
+      }
+    ],
+    "prune": {
+      "reachable_hashes": 23,
+      "documents_kept": 17,
+      "documents_removed": 9,
+      "document_bytes": 38095,
+      "database_bytes": 102400
+    },
+    "reload": {
+      "elapsed_ms": 0.284,
+      "latest_interpretations": 1,
+      "interpretation_versions": 3,
+      "operation": "load",
+      "connection_reopened": false,
+      "measurement_note": "Historical sample called repo.load() on the existing SQLite connection; this does not measure a reopen."
+    },
+    "temporary_project_removed": true,
+    "purpose": "Verify current --sizes alias, report generation, pruning and automatic temporary cleanup; not a rerun of the 1667 experiment."
+  },
+  "maintained_cli_reopen_small_recheck": {
+    "schema": "novel-ledger.storage-snapshot-probe/1",
+    "synthetic": true,
+    "conditions": {
+      "chapter_checkpoints": [
+        2,
+        3
+      ],
+      "filler_han_per_chapter": 3000,
+      "contract_chapters": 1667,
+      "development_events_per_chapter": 1,
+      "interpretation_ids": 1,
+      "new_interpretation_versions_per_chapter": 1,
+      "freeze_each_state_and_understanding": true,
+      "nominal_word_count": "Filler characters only; stored han is a synthetic lower bound.",
+      "boundary": "Storage-only synthetic tasks; no submit, model, full pipeline or literary acceptance."
+    },
+    "source_sha256": {
+      "scripts/novel_ledger/sqlite_store.py": "c5d7c4f6ef4581b6caeb799f148e009273a23d16bb59b14ed6c8b1c6d954506d",
+      "scripts/novel_ledger/book_state.py": "91031c1757e7b7fd3c4259f47da6e8d0b3df769b36a05e690a5c3189ec5c73e9",
+      "scripts/novel_ledger/facts.py": "5c771d52962e63de8b99fd79f3cec74999c800596f7f4eb8910d13a685162935",
+      "scripts/novel_ledger/understanding.py": "03c632a3274f17224f27b0e920a2727c56f1870c5bedc9cbd3a46ddf392e1a79",
+      "scripts/novel_ledger/workflow.py": "584d3a47fc3aa48acd57e93b05256bc516d01ceb6fbf8c8033a7e93d7e08f25b",
+      "scripts/novel_ledger/contracts.py": "4504fff6f495286d663218ea9d23911e585bdb658a616836ec83e7244c99f03a",
+      "scripts/novel_ledger/evidence.py": "1b877d56fdbf62a913448b22ba09bba70b03a1b3a95c77b031c2d3b556c7b2aa",
+      "scripts/novel_ledger/store_keys.py": "08d0d8597f50aece990f9fa5a5ff3f925093e8a09dd1a7c24db4d2081ee100b2",
+      "tests/support.py": "18db07b764e070a9aaf9385a5ea9e63197b92b8c786fd08e2c38e8d8e3555b0b"
+    },
+    "probe_source_sha256": "de78d3ceeadc21e9c1c592351677a1f765aa78e279639863e95c36b559620ee5",
+    "checkpoints": [
+      {
+        "chapters": 2,
+        "synthetic_prose_han_at_least": 6000,
+        "document_bytes": 27840,
+        "database_bytes": 94208,
+        "current_state_bytes": 993,
+        "current_understanding_bytes": 874,
+        "elapsed_s": 0.002
+      },
+      {
+        "chapters": 3,
+        "synthetic_prose_han_at_least": 9000,
+        "document_bytes": 42504,
+        "database_bytes": 110592,
+        "current_state_bytes": 1258,
+        "current_understanding_bytes": 1284,
+        "elapsed_s": 0.003
+      }
+    ],
+    "prune": {
+      "reachable_hashes": 23,
+      "documents_kept": 17,
+      "documents_removed": 9,
+      "document_bytes": 38095,
+      "database_bytes": 102400
+    },
+    "reload": {
+      "operation": "reopen_and_load",
+      "connection_reopened": true,
+      "elapsed_ms": 0.467,
+      "latest_interpretations": 1,
+      "interpretation_versions": 3,
+      "first_prose_hash": "a6e2455ae0bc8cf55c7c168fc155cdcdaaba645595dd9d45dd82ce5e4628b18f",
+      "first_prose_hash_verified": true,
+      "first_prose_complete": true
+    },
+    "temporary_project_removed": true,
+    "purpose": "Current --sizes 2,3 check closes and reopens SQLite, then verifies understanding versions and complete first-chapter source. It does not replace or rerun the historical 500/1667 samples."
+  }
+}

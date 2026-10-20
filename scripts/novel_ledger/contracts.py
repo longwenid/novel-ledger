@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 # task frozen by v1 (checks_version, obligations, blind first read, plan/book_plan stages) can no
 # longer be executed by this build. The pipeline and storage carry independent version identifiers.
 VERSION = '2.0.0'
-SCHEMA = 'novel-ledger/4'
+SCHEMA = 'novel-ledger/5'
 # The guided opening has its own protocol version, carried by the creation state itself. It is not the
 # database schema: a new gate set only changes a JSON document inside the book record, so raising the
 # storage version is independent; only the current guided-opening protocol is accepted.
@@ -47,10 +47,11 @@ DEFAULTS = {
     # Step four: one synopsis per chapter, with that chapter's drift declarations.
     'chapter_outline': {'scope': 'volume', 'words': 150, 'tolerance': 60},
     # Style proxies: relative tolerances against the approved first chapter, an absolute in-chapter
-    # repetition ceiling, and 1 meaning "the narration person must match what was declared". The
+    # repetition ceiling, and a retained person observation parameter. The
     # repetition ceiling is calibrated: ordinary Chinese prose measures 0.043~0.086 here, a chapter
     # that repeats one clause measures 0.79~0.99.
     'style_window': {'sentence': 0.35, 'paragraph': 0.35, 'dialogue': 0.40, 'repetition': 0.12, 'person': 1},
+    'style_guard': 'observe',
     # Where a style metric is worth measuring at all: below these floors the sample says nothing and
     # comparing it would only produce noise findings on chapters the word budget already governs.
     'style_floor_han': 40,
@@ -485,9 +486,11 @@ CONTRACT_FIELDS = (
     # qualitative (contract voice/tone, a volume's trend, a chapter's execution points); these are
     # the tolerances the engine applies to the proxies it can compute for free — see style.py.
     # `repetition` is an absolute in-chapter share, the others are relative deviations from the
-    # approved first chapter, and `person` is 1 meaning "the narration person must match".
+    # approved first chapter. Pronoun observations cannot determine actual narrative viewpoint.
     {'key': 'style_window', 'kind': 'map', 'default': policy_default('style_window'),
      'alignment': False, 'optional': True},
+    {'key': 'style_guard', 'kind': 'text', 'default': DEFAULTS['style_guard'],
+     'choices': ('observe', 'strict'), 'alignment': False, 'optional': True},
     {'key': 'anchors', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'links', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'initial_facts', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
@@ -623,6 +626,8 @@ def contract_errors(raw):
         if kind == 'text':
             if not text(value):
                 complaints.append(key + ' 须为非空文本。')
+            elif row.get('choices') and value not in row['choices']:
+                complaints.append(key + ' 须取 ' + '/'.join(row['choices']) + '。')
             continue
         if kind == 'bool':
             if type(value) is not bool:
@@ -678,4 +683,5 @@ class Job:
 class Outcome:
     book: Dict[str, Any]
     chapter: Optional[Dict[str, Any]] = None
+    style_report: Optional[Dict[str, Any]] = None
 

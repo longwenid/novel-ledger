@@ -61,6 +61,35 @@ class MeasurementSnapshotTests(unittest.TestCase):
 
 
 class CurrentAnalysisToolsTests(unittest.TestCase):
+    def test_material_reports_measure_reconstructed_sources_and_never_modify_them(self):
+        sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
+        from novel_ledger.contracts import dump
+        from novel_ledger.sqlite_store import SQLiteRepository
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / 'book'
+            repo = SQLiteRepository.initialize(project, {})
+            try:
+                value = {'versions': [{'version': n, 'text': '完整来源' * 120} for n in range(300)]}
+                ident = repo.document(value)
+                task = repo.add_task({'stage': 'write', 'chapter': 1,
+                                     'required': ['world_core', 'world_model'],
+                                     'records': {'world_core': ident, 'world_model': ident}})
+                repo.db.execute("UPDATE tasks SET status='done' WHERE id=?", (task['id'],))
+                before = (project / 'novel.sqlite3').read_bytes()
+                expected = len(dump(value))
+                for name, extra, amount in (
+                        ('required_probe.py', ['write'], expected * 2),
+                        ('duplication_probe.py', [], expected * 2),
+                        ('dup_required_probe.py', [], expected)):
+                    with self.subTest(report=name):
+                        run = subprocess.run([sys.executable, str(ROOT / 'validation' / name), str(project), *extra],
+                                             capture_output=True, text=True, encoding='utf-8')
+                        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                        self.assertIn(str(amount), run.stdout)
+                        self.assertEqual((project / 'novel.sqlite3').read_bytes(), before)
+            finally:
+                repo.close()
+
     def test_reports_run_on_current_projects_and_refuse_old_schemas_without_writes(self):
         sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
         from novel_ledger.bootstrap import local_application
@@ -78,7 +107,7 @@ class CurrentAnalysisToolsTests(unittest.TestCase):
                                             capture_output=True, text=True, encoding='utf-8')
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     self.assertIn('write' if name == 'run_analysis.py' else '执笔自比', result.stdout)
-                repo.put('schema', 'novel-ledger/3')
+                repo.put('schema', 'novel-ledger/4')
                 before = (project / 'novel.sqlite3').read_bytes()
                 for name in ('run_analysis.py', 'reflux_probe.py'):
                     result = subprocess.run([sys.executable, str(ROOT / 'validation' / name), str(project)],
