@@ -1471,6 +1471,11 @@ def _planned(row):
     clock = row.get('clock') if isinstance(row.get('clock'), dict) else {}
     planned.append({'kind': 'clock', 'key': 'clock',
                     'planned': {'advance_days': clock.get('advance_days') or 0}, 'detail': {}})
+    for entry in row.get('disclosures') or []:
+        if isinstance(entry, dict) and text(entry.get('topic')):
+            planned.append({'kind': 'disclosure', 'key': entry['topic'],
+                            'planned': {'after': entry.get('after')},
+                            'detail': {'claim': entry.get('claim')}})
     return planned
 
 
@@ -1492,10 +1497,11 @@ def _actual_of(kind, item, projected):
     actual = item.get('actual')
     if kind == 'hook':
         return None, actual.get('action') if isinstance(actual, dict) else actual
-    if kind in ('node', 'thread'):
-        if isinstance(actual, dict) and actual.get('after') in (NODE_STATES if kind == 'node' else THREAD_STATES):
+    if kind in ('node', 'thread', 'disclosure'):
+        states = NODE_STATES if kind == 'node' else THREAD_STATES if kind == 'thread' else REVEALS
+        if isinstance(actual, dict) and actual.get('after') in states:
             return None, actual.get('after')
-        if actual in (NODE_STATES if kind == 'node' else THREAD_STATES):
+        if actual in states:
             return None, actual
         return None, None
     if kind == 'clock':
@@ -1566,6 +1572,17 @@ def _event_for(kind, key, item, planned, actual_to, actual_from, state, chapter,
     detail = planned.get('detail') or {}
     inner = planned.get('planned') if isinstance(planned.get('planned'), dict) else {}
     reason = (item.get('reason') or detail.get('reason') or detail.get('change') or '')
+    if kind == 'disclosure':
+        before = _project(state, kind, key)
+        if actual_to not in REVEALS or (actual_to != 'retracted' and before is not None
+                and REVEAL_RANK.get(_canonical_reveal(actual_to), 0) < REVEAL_RANK.get(_canonical_reveal(before), 0)):
+            findings.append(_finding(chapter, kind, key, before, actual_to,
+                                     '读者认知须使用披露档位，除 retracted 外不得退回较早档位。',
+                                     'drift_disclosure', 'blocker'))
+            return None
+        return {'op': 'reader_knowledge', 'topic': key, 'before': before, 'after': actual_to,
+                'claim': item.get('claim') or detail.get('claim') or (evidence or {}).get('quote'),
+                'evidence': evidence}
     if kind == 'resources':
         if not text(reason):
             findings.append(_finding(chapter, kind, key, 'reason', None,
@@ -1719,7 +1736,8 @@ def reconcile(drift_check, row, state, world):
     always accepted — one item per planned increment, in a fixed order, with every `before` field
     projectively rebuilt here so the writer never self-reports a before-value. `findings` blocks the
     submission (coverage, an actual `from` that is not the projection, a `kept` row whose result
-    moved, missing evidence); `deviations` are the declared, reasoned departures that are recorded.
+    moved, missing evidence). Declared departures remain diagnostic candidates and always produce
+    findings: a frozen outline cannot be changed by accepting a different prose outcome.
     """
     findings, deviations, events = [], [], []
     require(isinstance(row, dict) and type(row.get('chapter')) is int, 'drift_check',
@@ -1745,9 +1763,7 @@ def reconcile(drift_check, row, state, world):
             continue
         kind = _kind_of(item.get('kind'))
         key = item.get('key')
-        if kind == 'disclosure':
-            continue
-        if kind not in ('node', 'thread', 'hook', 'resources', 'places', 'knowledge', 'characters', 'clock'):
+        if kind not in ('node', 'thread', 'hook', 'resources', 'places', 'knowledge', 'characters', 'clock', 'disclosure'):
             findings.append(_finding(chapter, 'item', key, '|'.join(ITEM_KINDS), kind,
                                      '未知的自比种类。', 'drift_coverage', 'blocker'))
             continue
@@ -1771,7 +1787,7 @@ def reconcile(drift_check, row, state, world):
     for coordinate in seen_items:
         if coordinate not in expected:
             findings.append(_finding(chapter, coordinate[0], coordinate[1], '章纲未声明', 'extra',
-                                     '多项：自比行没有对应的章纲增量（计划外变化走 unplanned）。',
+                                     '多项：自比行没有对应的章纲增量，须返修本章正文。',
                                      'drift_coverage', 'blocker'))
     # 2. Per-item reconciliation against the projected state.
     shadow = copy.deepcopy(state) if isinstance(state, dict) else {}
@@ -1812,11 +1828,11 @@ def reconcile(drift_check, row, state, world):
         # different key per kind (a node/thread declares `after`, the clock `advance_days`).
         expected_kept = (entry['planned'].get('advance_days') if kind == 'clock'
                          else entry['planned'].get('action') if kind == 'hook'
-                         else entry['planned'].get('after') if kind in ('node', 'thread')
+                         else entry['planned'].get('after') if kind in ('node', 'thread', 'disclosure')
                          else entry['planned'].get('to'))
         if status == 'kept' and not _same(kind, actual_to, expected_kept):
             findings.append(_finding(chapter, kind, key, expected_kept, actual_to,
-                                     'status=kept 时实际结果必须与章纲声明一致；不符请标 deviated 并说明理由。',
+                                     '实际结果必须与已固定章纲一致；须返修正文，改为 deviated 不能豁免。',
                                      'drift_kept', 'blocker'))
             continue
         if status == 'skipped' and not _same(kind, actual_to if actual_to is not None else projected, projected):
@@ -1912,56 +1928,20 @@ def reconcile(drift_check, row, state, world):
                                  'drift_check.verdict 须为 clean 或 deviated。', 'drift_verdict', 'quality'))
     elif verdict == 'clean' and deviations:
         findings.append(_finding(chapter, 'verdict', 'verdict', 'clean', 'deviated',
-                                 '有偏差却声明 clean：要么改回与章纲一致，要么把 verdict 改为 deviated。',
+                                 '有偏差却声明 clean：须返修正文使其符合章纲，并按最终稿重新自比。',
                                  'drift_verdict', 'quality'))
     elif verdict == 'deviated' and not deviations:
         findings.append(_finding(chapter, 'verdict', 'verdict', 'deviated', 'clean',
                                  '声明 deviated 却没有一条偏差：逐条标出 deviated/skipped 并写理由。',
                                  'drift_verdict', 'quality'))
-    # 5. Planned disclosures: settled from the outline when the writer filed no explicit row for
-    # them, and registered as a deviation so the ledger of what was not self-reported stays visible.
-    reported = {}
-    for item in items:
-        if isinstance(item, dict) and _kind_of(item.get('kind')) == 'disclosure':
-            reported[item.get('key')] = item
-    declared_disclosures = [row for row in row.get('disclosures') or [] if isinstance(row, dict)]
-    if declared_disclosures and not findings:
-        quote = None
-        for item in items:
-            if isinstance(item, dict) and isinstance(item.get('evidence'), dict) \
-                    and text(item['evidence'].get('quote')):
-                quote = {'chapter': chapter, 'quote': item['evidence']['quote']}
-                break
-        for disclosure in declared_disclosures:
-            topic, after = disclosure.get('topic'), disclosure.get('after')
-            if not text(topic) or after not in REVEALS:
-                findings.append(_finding(chapter, 'disclosure', topic, 'topic 与 ' + '|'.join(REVEALS), _safe(disclosure),
-                                         '章纲的披露需要 topic 与档位。', 'drift_disclosure', 'blocker'))
-                continue
-            if quote is None:
-                findings.append(_finding(chapter, 'disclosure', topic, '正文引文', None,
-                                         '披露入账需要正文引文：至少一条自比行要给出原文片段。',
-                                         'drift_evidence', 'blocker'))
-                continue
-            item = reported.get(topic) or {}
-            evidence = item.get('evidence') if isinstance(item.get('evidence'), dict) else quote
-            if not text((evidence or {}).get('quote')):
-                evidence = quote
-            before = _project(shadow, 'disclosure', topic)
-            if after != 'retracted' and before is not None \
-                    and REVEAL_RANK.get(_canonical_reveal(after), 0) < REVEAL_RANK.get(_canonical_reveal(before), 0):
-                findings.append(_finding(chapter, 'disclosure', topic, before, after,
-                                         '读者认知倒退：除 retracted 外不得退回暗示。',
-                                         'drift_disclosure', 'blocker'))
-                continue
-            events.append({'op': 'reader_knowledge', 'topic': topic, 'before': before, 'after': after,
-                           'claim': item.get('claim') or disclosure.get('claim') or (evidence or {}).get('quote'),
-                           'evidence': evidence})
-            _reduce(shadow, events[-1], chapter, 'disclosure', topic, findings)
-            if topic not in reported:
-                deviations.append({'chapter': chapter, 'kind': 'disclosure', 'key': topic,
-                                   'planned': {'after': after}, 'actual': {'after': after},
-                                   'reason': '执笔未逐条自报本章披露，引擎按章纲登记。'})
+    # 5. A declared departure diagnoses a failed draft; it never authorizes a new contract.
+    # Keep its proposed events as a scratch preview for diagnostics only. Workflow must repair the
+    # current prose, and audit uses this same reconciliation before accepting committed history.
+    for deviation in deviations:
+        findings.append(_finding(chapter, deviation['kind'], deviation['key'],
+                                 deviation['planned'], deviation['actual'],
+                                 '正文偏离已固定章纲，须返修本章正文；说明理由不能豁免，也不能自动重排章纲。',
+                                 'outline_alignment', 'blocker'))
     return {'events': registrations + events, 'findings': findings, 'deviations': deviations}
 
 

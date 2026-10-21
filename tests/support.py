@@ -674,7 +674,7 @@ def drift_check_fixture(app, work, prose, status='kept', deviations=None):
         kind = item['kind']
         if kind == 'clock':
             actual = {'advance_days': planned.get('advance_days')}
-        elif kind in ('node', 'thread'):
+        elif kind in ('node', 'thread', 'disclosure'):
             actual = {'after': planned.get('after')}
         elif kind == 'hook':
             actual = {'action': planned.get('action')}

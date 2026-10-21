@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from .contracts import digest, han_count, require, text
 from .ports import VerificationReader, VerificationSources
-from . import book_state, creation, editorial, facts, lint, narrative, planning, understanding, world
+from . import book_state, creation, drift, editorial, facts, lint, narrative, planning, understanding, world
 
 
 class VerificationService:
@@ -69,10 +69,21 @@ class VerificationService:
         state = self.replay(book['branch'], book['contract'], rows=rows)
         require(digest(state) == digest(book['state']), 'projection', '当前状态投影与完整重放不一致。')
         require(sum(r['han'] for r in rows) == book['written_han'], 'projection', '汉字计数投影不一致。')
+        chapter_state = facts.seed(book['contract'])
         for index, row in enumerate(rows):
             prose = self.sources.read_document(row['prose'])
             plan = self.sources.read_document(row['plan'])
             require(plan['chapter'] == row['n'], 'projection', '章节计划与章号不匹配。')
+            review = self.sources.read_document(row['review'])
+            require(isinstance(review, dict), 'outline_alignment', '章节缺少有效的章纲自比记录。',
+                    {'chapter': row['n']})
+            settlement = drift.reconcile(review.get('drift_check'), plan, chapter_state, book.get('world'))
+            require(not settlement['findings'], 'outline_alignment', '正式正文未通过固定章纲核验。',
+                    {'chapter': row['n'], 'findings': settlement['findings']})
+            chapter_state, events = facts.settle(chapter_state, facts.prepare_hook_links(settlement['events']),
+                                                prose, row['n'])
+            require(digest(events) == row['events'] and digest(chapter_state) == row['state_hash'],
+                    'outline_alignment', '章节事实与固定章纲及自比记录不一致。', {'chapter': row['n']})
             require(book['contract']['chapter_min'] <= han_count(prose) <= book['contract']['chapter_max']
                     and han_count(prose) == row['han'], 'length', '正式篇幅不符合约定。')
             planning.check_text(prose, planning.policy_of(book))
@@ -88,16 +99,16 @@ class VerificationService:
         # the closing record: an accepted candidate must never read as a clean pass.
         accepted = [{'stage': row['stage'], 'scope': row.get('scope'), 'findings': row['findings']}
                     for row in book.get('accepted_findings') or []]
-        drift = list(book.get('design_drift') or [])
+        deviations = list(book.get('design_drift') or [])
         return {'ok': True, 'chapters': len(rows), 'state_hash': digest(state), 'written_han': book['written_han'],
                 **self.scope(),
                 'accepted_findings': accepted,
                 'accepted_findings_note': ('这些是作者在返修额度用尽后选择“接受并把意见记为未解决项”的条目；'
                                            '它们不是通过，完本后仍以未解决状态保留。' if accepted else ''),
-                'design_drift': drift,
-                'design_drift_note': ('这些是执笔自比时申报并与章纲不符的变化；每一条都带着理由入账，'
-                                      '正文与状态已按实际结果结算。带 absorbed_by 的条目已被后续章纲重排吸收。'
-                                      if drift else '')}
+                'design_drift': deviations,
+                'design_drift_note': ('这些是历史版本遗留的偏差记录，不授予当前正文偏离章纲的权限；'
+                                      '当前验收仍逐章核对固定章纲、自比与事实。'
+                                      if deviations else '')}
 
     def completion(self, book, rows=None):
         """Current checks are run even for an already completed snapshot."""

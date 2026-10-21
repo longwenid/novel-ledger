@@ -236,17 +236,18 @@ DELTA_HINTS = {
                  'actual.from 由引擎投影，不要照抄章纲当既成事实。',
     'places': '人物从哪到哪与章纲一致，移动有过渡与耗时，不出现未登记地点，不瞬移。',
     'knowledge': '每个人只知道他该知道的：章纲写 hinted/suspected/confirmed 的，正文要有来源情节；'
-                 '越界知情要么在正文写出依据，要么如实记 deviated；除 retracted 外不得无由倒退。',
+                 '越界知情须从本章正文修掉，不能凭依据或 deviated 改变固定章纲；除 retracted 外不得无由倒退。',
     'characters': '人物变化有 choice（他选了什么）与 cost（付了什么）两个落点；'
-                  '本章没有变化就把这一行 status 记 skipped 并说明，不要硬凑。',
+                  '章纲声明的变化须在正文落实，漏写就返修；章纲未声明变化时保留原状态。',
     'clock': '本章推进天数与章纲一致，不倒退；章号不等于天数，同日续接不必为验收补造过夜。',
     'node': 'plot.nodes 写 seeded/advanced/resolved 的节点，正文里必须真发生：该埋的埋、该收的收；'
-            '同一节点不得重复推进或已 resolved 后再推，改做或漏做都要落成 deviated/skipped 并写 reason。',
+            '同一节点不得重复推进或已 resolved 后再推；改做或漏做须诊断并返修本章正文。',
     'thread': 'plot.threads 的线路状态（active/dormant/resolved）与正文一致；'
               '已 resolved 的线路不得重新启用，dormant 的线路要交代它为何搁置。',
     'hook': '本章声明的伏笔动作逐条对上：plant 的那一次要在正文里有读者能看见的具体载体'
             '（一件物、一句话、一个动作），payoff 的那一次是真兑现而不是再提一次；'
             '卷末 required 的必须在本卷内收（引擎在卷内状态链收尾校验），continuity 上的跨卷条目允许仍 open。',
+    'disclosure': '本章声明的读者披露逐项给出实际档位和正文引文，不越过章纲，也不默认已经落实。',
 }
 
 
@@ -258,7 +259,7 @@ def self_check_block():
     review stages removed, the thing a producer is judged by is exactly this list.
     """
     from .drift import DELTA_KINDS, ITEM_KINDS
-    kinds = list(DELTA_KINDS) + [kind for kind in ('node', 'thread', 'hook') if kind in ITEM_KINDS]
+    kinds = list(DELTA_KINDS) + [kind for kind in ('node', 'thread', 'hook', 'disclosure') if kind in ITEM_KINDS]
     rows = [(kind, DELTA_HINTS[kind]) for kind in kinds if kind in DELTA_HINTS]
     if not rows:
         return []
@@ -373,12 +374,12 @@ def stage(name, payload=None):
                  '不添章纲没有的重大变化，也不漏掉章纲声明要发生的。'
                  'drift_check.items 已按章纲的计划增量预填，逐条把 actual 填成正文实际发生的值'
                  '（actual.from 由引擎投影，不是你自报的前态）、status 取 kept|deviated|skipped，'
-                 'deviated/skipped 必须写 reason，evidence.quote 必须是正文原文片段；'
-                 '计划外资源/位置/知情/人物变化写进 unplanned，必须给 actual.from/to、reason 和本章 evidence；不接受只有 change 的说明，其他种类须回章纲契约处理。'
+                 'deviated/skipped 必须写 reason，但只作为待返修诊断，不能入库；evidence.quote 必须是正文原文片段。'
+                 'unplanned 用于报告须从正文修掉的计划外变化，不能据此新增事实；本章通过须所有项 kept、unplanned 为空、verdict=clean。'
                  'actual 按种类给形状：resources/places/knowledge/characters 一律 {"from": 可省, "to": 值}——'
                  'resources 的 to 是数值字符串（如 "2"），characters 的 to 是 {desire,stance,relationship_focus}（不得用 after 键），'
                  'knowledge 的 to 是档位，places 的 to 是地点 id；hook 用 {"action": "plant"|"payoff"}，'
-                 '节点/线路用 {"after": 状态}，clock 用 {"advance_days": n}。'
+                 '节点/线路/读者披露用 {"after": 状态}，clock 用 {"advance_days": n}。'
                  '以具体处境展开场景，保留有作用的心理与体验，删除重复解释。遵守 word_budget 的本章范围；'
                  '静章承担余波、恢复、关系或暗线作用。作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
                  '文风上照 style_anchor 的首章定调、本卷 style.trend 与本章 style 写：'
@@ -393,7 +394,7 @@ def stage(name, payload=None):
         'repair': '读完整基稿、返修问题与前态，交完整合成稿；local 保留成立部分，chapter 重排因果场景。'
                   '不重置修复额度。交付字段与 write 相同：完整 prose、summary、self_check，'
                   '以及逐条覆盖本章纲计划增量的 drift_check（返修后 actual 按最终稿填）。',
-        'redesign': '重新设计当前章的因果与场景，再交完整正文；不推翻已成立事实，不重复填充解释。'
+        'redesign': '保持已固定章纲的目标、变化与结局，重新组织当前章正文的因果呈现与场景展开；不修改章纲，不推翻已成立事实，不重复填充解释。'
                     '交付字段与 write 相同，修复额度共享；drift_check 仍须逐条覆盖本章纲的计划增量。',
     }
     stages.require_stage(name)
@@ -421,7 +422,8 @@ def stage(name, payload=None):
                  '不声明就省略字段，不要把观感描述写成账目。')
     if name in ('write', 'repair', 'redesign'):
         rule += ' ' + NATURAL_PROSE_GUIDE
-        rule += (' 本章纲是该章的结算契约：正文写完后逐条比对，漏项/多项都会被 drift_coverage 拒绝；'
+        rule += (' 本章纲是该章的固定契约：正文写完后逐条比对，有偏差就返修本章正文；不能自动改纲或重排后文来迁就偏差。'
+                 '章纲确实无法成立时保留候选说明矛盾，交由作者决定是否改纲；漏项/多项都会被 drift_coverage 拒绝；'
                  'scene_context 按场交付目标、依赖与准确前态，scene_sources 绑定历史原文版本；'
                  '依赖缺失先补读，不把人物误信当世界真相。')
     time_rule = ''

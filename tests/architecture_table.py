@@ -68,7 +68,7 @@ ALLOWED = {
                 'world', 'editorial', 'story_memory', 'understanding', 'planning', 'style',
                 'design_queries'},
     'publication': {'ports', 'verification'},
-    'verification': {'contracts', 'ports', 'book_state', 'creation', 'editorial', 'facts', 'lint', 'narrative', 'planning', 'understanding', 'world'},
+    'verification': {'contracts', 'ports', 'book_state', 'creation', 'drift', 'editorial', 'facts', 'lint', 'narrative', 'planning', 'understanding', 'world'},
     'workspace': {'contracts'},
     'delivery': {'contracts', 'ports', 'store_keys', 'envelope', 'result_templates', 'publication', 'workspace'},
     'bookpage': {'contracts', 'ports', 'publication', 'workspace', 'planning',

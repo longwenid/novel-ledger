@@ -14,6 +14,7 @@ flowchart TD
     APP --> VERIFY[只读验收 verification]
     VERIFY --> PORT
     VERIFY --> DOMAIN
+    VERIFY --> DRIFT
     APP --> WF[纯流程 workflow]
     APP --> DOMAIN[纯领域规则]
     CTX --> PORT

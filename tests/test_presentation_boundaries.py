@@ -153,7 +153,12 @@ class PresentationBoundaryTests(unittest.TestCase):
         frozen = workflow.new_book(contract(1))
         frozen['contract']['title'] = '冻结书名'
         prose = self.repo.documents['prose']
-        events, plan, review = [], {'chapter': 1}, {}
+        events, plan = [], {'chapter': 1, 'clock': {'advance_days': 0}}
+        review = {'drift_check': {'items': [
+            {'kind': 'clock', 'key': 'clock', 'planned': {'advance_days': 0},
+             'actual': {'advance_days': 0}, 'status': 'kept',
+             'evidence': {'chapter': 1, 'quote': prose}}], 'unplanned': [], 'verdict': 'clean'},
+                  'self_check': '本章在同一夜班核对签字，无状态增量。'}
         for value in (prose, events, plan, review):
             self.repo.documents[digest(value)] = copy.deepcopy(value)
         row = {'n': 1, 'title': '冻结章节', 'prose': digest(prose),

@@ -3,7 +3,7 @@
 The pipeline is still cheap per chapter, so a long book has to hand itself over from one volume to
 the next without re-planning what it already wrote: the next volume's chapter outlines are built
 from the state the book is actually in, the just-in-time policy drafts each volume only when it is
-entered, and a booked deviation re-plans only the remaining chapters of the current volume. The
+entered, and a prose departure repairs its own chapter while the approved outline remains fixed. The
 scene-memory guards (forward links, unknown coordinates) are unchanged, because they were never
 part of the review pipeline.
 """
@@ -91,26 +91,26 @@ class RollingOutlineTests(unittest.TestCase):
         enter_clock = [item['expected'] for item in rows[0]['enter'] if item['kind'] == 'clock']
         self.assertEqual(enter_clock, [2])
 
-    def test_a_booked_deviation_replans_only_the_remaining_chapters_of_this_volume(self):
+    def test_a_departure_repairs_this_chapter_and_preserves_the_whole_volume_outline(self):
         drive(self.app, self.owner, until='write')
+        original = copy.deepcopy(self.repo.load()['chapter_outlines'])
+        state = copy.deepcopy(self.repo.load()['state'])
         result = response(self.app)
         target = next(item for item in result['data']['drift_check']['items']
                       if item['kind'] == 'resources')
         target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='正文里多领了一趟车费。')
         result['data']['drift_check']['verdict'] = 'deviated'
-        self.app.submit(result)
-        self.next_stage()                                     # await_author
+        self.assertIsNone(self.app.submit(result)['committed_chapter'])
         handoff = self.next_stage()
-        self.assertEqual(handoff['task']['stage'], 'chapter_outline')
-        work = self.repo.pending()['input']
-        self.assertTrue(work['payload']['repair'])
-        self.assertEqual(work['payload']['from_chapter'], 2)
-        self.assertEqual(work['payload']['drift'][0]['kind'], 'resources')
-        # The re-plan lands in the same volume and leaves the already-written chapter alone.
-        rows = response(self.app)['data']['chapters']
-        self.assertGreaterEqual(min(row['chapter'] for row in rows), 1)
-        drift_rows = self.repo.load()['design_drift']
-        self.assertEqual([row['kind'] for row in drift_rows], ['resources'])
+        self.assertEqual((handoff['task']['stage'], handoff['task']['chapter']), ('repair', 1))
+        book = self.repo.load()
+        self.assertEqual(book['chapter_outlines'], original)
+        self.assertEqual(book['state'], state)
+        self.assertEqual(book['design_drift'], [])
+        self.assertEqual(self.app.submit(response(self.app))['committed_chapter'], 1)
+        handoff = self.next_stage()
+        self.assertEqual((handoff['task']['stage'], handoff['task']['chapter']), ('write', 2))
+        self.assertEqual(self.repo.load()['chapter_outlines'], original)
 
     def test_volume_rows_register_the_nodes_and_threads_the_chapters_advance(self):
         drive(self.app, self.owner, until='write')

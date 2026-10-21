@@ -115,26 +115,24 @@ class DispatchMaterialTests(unittest.TestCase):
         self.assertTrue(chapter['exit'])
         self.assertEqual(chapter['enter'], self.repo.load()['plans']['1']['enter'])
 
-    def test_design_drift_is_required_reading_once_a_deviation_is_booked(self):
+    def test_repair_reads_the_fixed_outline_and_failed_candidate_instead_of_replanning(self):
         owner = self.app.run(through=2, source='工程夹具授权两章。')['owner']
         drive(self.app, owner, until='write')
+        work = self.pending()
+        plan_hash = work['records']['chapter_outline']
         result = response(self.app)
         target = next(item for item in result['data']['drift_check']['items']
                       if item['kind'] == 'resources')
         target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='正文里他多领了一趟车费。')
         result['data']['drift_check']['verdict'] = 'deviated'
-        self.app.submit(result)
-        handoff = self.app.advance(owner=owner)
-        if handoff['action'] == 'await_author':
-            self.app.approve(handoff['prose_hash'], '工程夹具认可首章版本。', owner)
-            handoff = self.app.advance(owner=owner)
-        self.assertEqual(handoff['action'], 'task_ready')
+        self.assertIsNone(self.app.submit(result)['committed_chapter'])
+        self.app.advance(owner=owner)
         work = self.pending()
-        self.assertEqual(work['stage'], 'chapter_outline')
-        self.assertIn('design_drift', work['required'])
-        drift_rows = self.repo.read_document(work['records']['design_drift'])
-        self.assertEqual(drift_rows[0]['kind'], 'resources')
-        self.assertTrue(work['payload'].get('repair'))
+        self.assertEqual((work['stage'], work['chapter']), ('repair', 1))
+        self.assertEqual(work['records']['chapter_outline'], plan_hash)
+        self.assertIn('base_draft', work['required'])
+        candidate = self.repo.read_document(work['records']['base_draft'])
+        self.assertEqual(candidate['prose'], result['data']['prose'])
 
     def test_a_late_dispatch_does_not_require_what_it_can_read_on_demand(self):
         drive(self.app, until='write')

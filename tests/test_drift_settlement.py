@@ -53,7 +53,7 @@ class UnplannedSettlementTests(unittest.TestCase):
         row = empty_row()
         return drift.reconcile(receipt(row, entries), row, self.state, self.book['world'])
 
-    def test_all_supported_unplanned_values_reach_the_canonical_projection(self):
+    def test_unplanned_values_are_diagnostic_previews_with_blocking_alignment_findings(self):
         resource = '["shen","车费","元"]'
         rows = [extra('resources', resource, 4, 7), extra('resources', resource, 7, 8),
                 extra('knowledge', 'shen:secret', None, 'confirmed'),
@@ -61,7 +61,7 @@ class UnplannedSettlementTests(unittest.TestCase):
                 extra('characters', 'shen', None, CURRENT,
                       choice='先核对后签字。', cost='多等了一夜。')]
         settled = self.reconcile(rows)
-        self.assertEqual(settled['findings'], [])
+        self.assertIn('outline_alignment', {f['criterion'] for f in settled['findings']})
         self.assertEqual(len(settled['deviations']), len(rows))
         state, events = facts.settle(self.state, settled['events'], QUOTE, 1)
         self.assertEqual(len(events), len(rows))
@@ -70,10 +70,10 @@ class UnplannedSettlementTests(unittest.TestCase):
         self.assertEqual(state['placements']['shen'], 'yard')
         self.assertEqual(state['character_current']['shen']['value'], CURRENT)
 
-    def test_a_new_fully_qualified_resource_coordinate_can_be_settled(self):
+    def test_a_new_resource_coordinate_is_a_blocking_diagnostic_preview(self):
         key = '["shen","奖励","元"]'
         settled = self.reconcile([extra('resources', key, 0, 2)])
-        self.assertEqual(settled['findings'], [])
+        self.assertIn('outline_alignment', {f['criterion'] for f in settled['findings']})
         state, _ = facts.settle(self.state, settled['events'], QUOTE, 1)
         self.assertEqual(state['resources'][key], '2')
 
@@ -108,7 +108,7 @@ class UnplannedSettlementTests(unittest.TestCase):
         settled = self.reconcile([
             extra('knowledge', 'shen:secret', None, 'hinted', claim='先发现封条有异。'),
             extra('knowledge', 'shen:secret', 'suspected', 'confirmed', claim='核对后确认来源。')])
-        self.assertEqual(settled['findings'], [])
+        self.assertIn('outline_alignment', {f['criterion'] for f in settled['findings']})
         self.assertEqual(settled['events'][1]['before'], '先发现封条有异。')
         state, events = facts.settle(self.state, settled['events'], QUOTE, 1)
         self.assertEqual(len(events), 2)
@@ -123,7 +123,7 @@ class UnplannedSettlementTests(unittest.TestCase):
         item = next(item for item in check['items'] if item['kind'] == 'knowledge')
         item.update(actual={'from': None, 'to': 'hinted'}, claim='封条上的字迹可疑。')
         settled = drift.reconcile(check, row, self.state, self.book['world'])
-        self.assertEqual(settled['findings'], [])
+        self.assertIn('outline_alignment', {f['criterion'] for f in settled['findings']})
         self.assertEqual(settled['events'][1]['before'], '封条上的字迹可疑。')
         state, events = facts.settle(self.state, settled['events'], QUOTE, 1)
         self.assertEqual(len(events), 2)
@@ -146,7 +146,7 @@ class UnplannedSettlementTests(unittest.TestCase):
         item = next(item for item in check['items'] if item['kind'] == 'places')
         item['actual'] = {'from': 'office', 'to': 'yard'}
         settled = drift.reconcile(check, row, self.state, self.book['world'])
-        self.assertEqual(settled['findings'], [])
+        self.assertIn('outline_alignment', {f['criterion'] for f in settled['findings']})
         self.assertEqual([event['from'] for event in settled['events']], ['office', 'yard', 'office'])
         state, events = facts.settle(self.state, settled['events'], QUOTE, 1)
         self.assertEqual(len(events), 3)
@@ -195,7 +195,7 @@ class UnplannedSettlementTests(unittest.TestCase):
         rejected = self.reconcile([extra('knowledge', 'shen:secret', 'confirmed', 'hinted')])
         self.assertIn('drift_knowledge', {f['criterion'] for f in rejected['findings']})
         allowed = self.reconcile([extra('knowledge', 'shen:secret', 'confirmed', 'retracted')])
-        self.assertEqual(allowed['findings'], [])
+        self.assertIn('outline_alignment', {f['criterion'] for f in allowed['findings']})
         state, _ = facts.settle(self.state, allowed['events'], QUOTE, 1)
         self.assertEqual(state['knowledge']['shen:secret']['stance'], 'disproved')
 
@@ -212,11 +212,11 @@ class UnplannedSettlementTests(unittest.TestCase):
         self.assertIn('drift_knowledge', {f['criterion'] for f in rejected['findings']})
         item['actual']['to'] = 'retracted'
         allowed = drift.reconcile(check, row, self.state, self.book['world'])
-        self.assertEqual(allowed['findings'], [])
+        self.assertIn('outline_alignment', {f['criterion'] for f in allowed['findings']})
         state, _ = facts.settle(self.state, allowed['events'], QUOTE, 1)
         self.assertEqual(state['knowledge']['shen:secret']['stance'], 'disproved')
 
-    def test_skipped_deltas_record_the_deviation_without_any_state_event(self):
+    def test_skipped_deltas_block_alignment_without_any_state_event(self):
         variants = [('resources', [{'key': '["shen","车费","元"]', 'from': 4, 'to': 3, 'reason': '车费。'}]),
                     ('places', [{'entity': 'shen', 'from': 'office', 'to': 'yard', 'reason': '核对。'}]),
                     ('knowledge', [{'who': 'shen', 'topic': 'secret', 'from': None, 'to': 'hinted', 'reason': '发现。'}]),
@@ -231,7 +231,7 @@ class UnplannedSettlementTests(unittest.TestCase):
                 else:
                     row[field] = rows
                 settled = drift.reconcile(receipt(row, skip=True), row, self.state, self.book['world'])
-                self.assertEqual(settled['findings'], [])
+                self.assertIn('outline_alignment', {f['criterion'] for f in settled['findings']})
                 self.assertEqual(settled['events'], [])
                 self.assertEqual(len(settled['deviations']), 1)
                 state, _ = facts.settle(self.state, settled['events'], QUOTE, 1)

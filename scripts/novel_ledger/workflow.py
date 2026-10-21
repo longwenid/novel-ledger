@@ -191,12 +191,9 @@ def design_anchor(book, contract, volume, payload):
 
 
 def replan_volume_outline(book, contract, chapter, drift_rows, reason, through=None):
-    """Re-plan the rest of a volume's chapter outlines after reality moved under them.
+    """Build the bounded outline job for author-directed revision or an unplanned missing range.
 
-    This is where the old alignment stages went: a chapter that deviated from its outline, or a
-    state that no longer matches the next chapter's declared entry conditions, does not need a
-    reviewer to arbitrate it — the remaining chapter outlines of the volume are re-derived from
-    the state the book is actually in.
+    Failed prose is never a caller: it remains a repair of the current fixed chapter contract.
     """
     volume = planning.volume_for(contract, chapter)
     require(volume is not None, 'chapter_limit', '本章超出约定卷界，需作者改约。')
@@ -280,18 +277,15 @@ def choose(book, headers):
     row = (book.get('plans') or {}).get(str(chapter))
     if row is None:
         return replan_volume_outline(book, contract, chapter, [], '本卷章纲缺少这一章，按真实状态补齐。')
-    # Replan the remaining outlines when their entry state differs from settled facts.
+    # A fixed outline is not silently rewritten to fit a different committed history.
     mismatches = drift.state_mismatch(book['state'], row)
-    if mismatches:
-        return replan_volume_outline(book, contract, chapter, mismatches, '真实状态与本章纲的进入条件不符，先重排章纲。')
-    # Step five's precondition: deviations the writer booked on earlier chapters have not been
-    # absorbed by a re-plan yet, so the volume's remaining outlines are re-derived before the next
-    # chapter is drafted. The comparison is against the chapter about to be written: rows carry the
-    # chapter that declared them, so anything booked before it is still waiting.
+    require(not mismatches, 'outline_state', '真实前态与固定章纲不符，保留现场并由作者决定修订范围，不能自动改纲。',
+            {'chapter': chapter, 'findings': mismatches})
+    # Historical departures require author-directed revision; they cannot justify automatic replanning.
     pending = [d for d in (book.get('design_drift') or [])
                if not d.get('absorbed_by') and d.get('chapter', 0) < chapter]
-    if pending:
-        return replan_volume_outline(book, contract, chapter, pending, '前一章的实际变化挂账，先重排本章纲。')
+    require(not pending, 'outline_alignment', '历史正文仍有章纲偏差，须按作者授权修订，不能自动重排后续章纲。',
+            {'chapter': chapter, 'findings': pending})
     budget = book['rework'].get(str(chapter), {})
     if budget.get('initial_used'):
         stage = draft_exhaustion_stage(budget)
@@ -743,7 +737,6 @@ def apply(book, task, data, actor, sources, priors=None):
             if draft.get('patch'):
                 row['patch'] = draft['patch']
             book['state'], book['draft'] = state, None
-            book['design_drift'] = list(book.get('design_drift') or []) + settlement['deviations']
             book['written_han'] += row['han']
     else:
         require(False, 'stage', '未注册的任务阶段。')

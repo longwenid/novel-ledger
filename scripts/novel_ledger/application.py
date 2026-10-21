@@ -352,7 +352,7 @@ class Application:
             if outcome.chapter:
                 row = copy.deepcopy(outcome.chapter)
                 # prose/events/plan/review are stored as immutable documents; `review` now holds the
-                # chapter's reconciliation record (drift_check + booked deviations + self_check).
+                # chapter's reconciliation record (drift_check + alignment diagnostics + self_check).
                 for field in ('prose', 'events', 'plan', 'review'):
                     row[field] = self.repo.document(row[field])
                 previous = self.repo.headers(book['branch'])

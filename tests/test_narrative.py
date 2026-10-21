@@ -1,9 +1,7 @@
 """Step five on a tracked book: the writer's self-comparison replaces the reviewer's receipt.
 
-`drift.reconcile` is the whole check: the writer files one item per planned increment, the engine
-projects the true before-value itself, `kept` must land on the plan, and a declared deviation is
-booked into `book['design_drift']` instead of being argued about by a second agent. What used to
-be a chapter review dispatch is now arithmetic inside `workflow.apply`.
+`drift.reconcile` projects the true before-value and checks the fixed chapter contract. A declared
+change or omission stays a failed candidate; it cannot settle facts or rewrite future outlines.
 """
 import copy
 import sys
@@ -231,37 +229,35 @@ class DriftCheckReconciliationTests(unittest.TestCase):
                     self.app.submit(result)
                 self.assertEqual(caught.exception.code, code)
 
-    def test_declared_departures_are_booked_into_design_drift(self):
-        # One rule, two declared statuses: a `deviated` item settles its real value and books a row,
-        # a `skipped` promise books a row without planting it. Each variant commits its chapter, so
-        # the second one runs on its own book.
+    def test_declared_departures_are_failed_candidates_without_changing_facts_or_plans(self):
         result = self.receipt()
+        original = copy.deepcopy(self.repo.load())
         target = next(item for item in result['data']['drift_check']['items']
                       if item['kind'] == 'resources')
-        target.update(status='deviated', actual={'from': 4, 'to': 5},
-                      reason='正文里他多领了一趟车费。')
+        target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='正文里他多领了一趟车费。')
         result['data']['drift_check']['verdict'] = 'deviated'
-        outcome = self.submit(result)
-        self.assertEqual(outcome['committed_chapter'], 1)
+        self.assertIsNone(self.submit(result)['committed_chapter'])
         book = self.repo.load()
-        self.assertEqual(book['state']['resources'], {'["shen","车费","元"]': '5'})
-        self.assertEqual(len(book['design_drift']), 1)
-        self.assertEqual(book['design_drift'][0]['kind'], 'resources')
-        self.assertIn('多领了', book['design_drift'][0]['reason'])
+        self.assertEqual(book['state'], original['state'])
+        self.assertEqual(book['plans'], original['plans'])
+        self.assertEqual(book['design_drift'], [])
+        self.assertIn('outline_alignment', self.criteria())
 
         app = self.draft_book()
         result = response(app)
         check = result['data']['drift_check']
         item = next(item for item in check['items'] if item['kind'] == 'hook')
-        item.update(status='skipped', actual=None, reason='本章未埋设这条承诺，需重排后续安排。')
+        item.update(status='skipped', actual=None, reason='正文漏掉了本章必须埋设的承诺。')
         check['verdict'] = 'deviated'
-        self.assertEqual(app.submit(result)['committed_chapter'], 1)
+        self.assertIsNone(app.submit(result)['committed_chapter'])
         book = app.repo.load()
-        self.assertNotIn(item['key'], book['state']['hooks'])
-        self.assertEqual(book['design_drift'][0]['kind'], 'hook')
+        self.assertEqual(book['design_drift'], [])
+        self.assertEqual(book['draft']['stage'], 'repair')
+        self.assertEqual(app.repo.headers(book['branch']), [])
 
-    def test_unplanned_facts_are_committed_and_replanning_reads_the_updated_state(self):
+    def test_unplanned_facts_are_diagnosed_for_current_prose_repair_without_settling(self):
         result = self.receipt()
+        original = copy.deepcopy(self.repo.load())
         check = result['data']['drift_check']
         check['unplanned'] = [
             {'kind': 'knowledge', 'key': 'shen:secret',
@@ -271,25 +267,15 @@ class DriftCheckReconciliationTests(unittest.TestCase):
              'actual': {'from': 3, 'to': 7}, 'reason': '花费之后又领到四元车费。',
              'evidence': copy.deepcopy(check['items'][0]['evidence'])}]
         check['verdict'] = 'deviated'
-        self.assertEqual(self.submit(result)['committed_chapter'], 1)
+        self.assertIsNone(self.submit(result)['committed_chapter'])
         book = self.repo.load()
-        self.assertEqual(book['state']['knowledge']['shen:secret']['stance'], 'knows')
-        self.assertEqual(book['state']['resources']['["shen","车费","元"]'], '7')
-        self.assertEqual(len(book['design_drift']), 2)
+        self.assertEqual(book['state'], original['state'])
+        self.assertEqual(book['plans'], original['plans'])
+        self.assertEqual(book['design_drift'], [])
+        self.assertEqual(book['draft']['drift_check']['unplanned'], check['unplanned'])
         handoff = self.advance()
-        if handoff['action'] == 'await_author':
-            self.app.approve(handoff['prose_hash'], '工程夹具认可首章版本。', self.owner)
-            handoff = self.advance()
-        self.assertEqual(handoff['task']['stage'], 'chapter_outline')
-        # The booking re-plans the rest of the volume from the chapter after the booked one, with the
-        # drift rows riding along in the dispatch payload.
-        work = self.repo.pending()['input']
-        self.assertTrue(work['payload'].get('repair'))
-        self.assertTrue(work['payload'].get('drift'))
-        self.assertEqual(work['payload']['from_chapter'], 2)
-        replanned = response(self.app)
-        resource = replanned['data']['chapters'][0]['resources'][0]
-        self.assertEqual(resource['from'], 7)
+        self.assertEqual((handoff['task']['stage'], handoff['task']['chapter']), ('repair', 1))
+        self.assertEqual(self.submit(self.receipt())['committed_chapter'], 1)
 
     def test_a_deviation_without_a_reason_or_a_clean_verdict_over_deviations_is_refused(self):
         # One rule, two contradictions between the verdict and the rows: a departure filed without a
@@ -336,20 +322,22 @@ class CompletionTests(unittest.TestCase):
         self.assertTrue(self.app.audit()['ok'])
         self.assertEqual(self.app.complete(owner)['idempotent'], True)
 
-    def test_every_design_drift_row_is_visible_to_the_closing_audit(self):
+    def test_repaired_departures_finish_only_with_the_original_plans_fulfilled(self):
         owner = self.app.run(finish=True, source='工程夹具授权完本。')['owner']
-        # One declared deviation on the first chapter; the engine books it and re-plans the rest.
         drive(self.app, owner, until='write')
+        plans = copy.deepcopy(self.repo.load()['plans'])
         result = response(self.app)
         target = next(item for item in result['data']['drift_check']['items']
                       if item['kind'] == 'resources')
         target.update(status='deviated', actual={'from': 4, 'to': 5}, reason='正文里他多领了一趟车费。')
         result['data']['drift_check']['verdict'] = 'deviated'
-        self.app.submit(result)
+        self.assertIsNone(self.app.submit(result)['committed_chapter'])
         drive(self.app, owner)
         report = self.app.audit()
         self.assertTrue(report['ok'])
-        self.assertEqual([row['kind'] for row in report['design_drift']], ['resources'])
+        self.assertEqual(report['design_drift'], [])
+        self.assertEqual(self.repo.load()['plans'], plans)
+        self.assertTrue(self.app.complete(owner)['completed'])
 
     def test_rework_budget_still_bounds_the_loop(self):
         owner = self.app.run(finish=True, source='工程夹具授权完本。')['owner']
