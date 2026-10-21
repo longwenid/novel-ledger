@@ -12,6 +12,8 @@
 
 只读验收服务统一核对事实重放、章节链、正文机械项与完本闭合；推进和保存前检查投影属于真实链头，完本重试与导出也重新验证冻结快照。长段模板仅替换数字仍进入返修。章纲生效后固定，正文偏差只返修本章；自动重排不能迁就失败稿，改纲须由作者决定。
 
+可选快速无人值守模式：`run --complete --fast --source 原话`，同一 Worker 最多连写五章，逐章验收和入库；首章、卷界与作者停点单独处理，见[快速模式](references/runtime.md#快速无人值守五章一组)。
+
 流程不含独立设计审或章审。机械校验与文风代理指标不能证明文学质量，阅读效果仍需人工抽读或离线盲测。
 
 ## 二、架构
@@ -34,6 +36,10 @@ flowchart TD
     VERIFY --> PORT
     VERIFY --> DOMAIN
     VERIFY --> DRIFT
+    APP --> WRITE[连写编排 writing_service]
+    WRITE --> PORT
+    WRITE --> WF
+    WRITE --> DOMAIN
     APP --> WF[纯流程 workflow]
     APP --> DOMAIN[纯领域规则]
     CTX --> PORT
@@ -117,7 +123,7 @@ SQLite 中的七张表各司其职：
 | `kv` | schema 版本、`book` 的四分区哈希目录，以及分支存档、租约等键值 |
 | `documents` | 不可变分区（settings/canon/intent/execution）、冻结来源与正文，**按内容哈希寻址** |
 | `tasks` | 冻结输入、回执；**唯一 pending 索引**保证同一时刻只有一个在途任务 |
-| `sessions` | 会话到任务的绑定，用于**禁止跨任务复用会话** |
+| `sessions` | 普通会话绑定任务，快速会话绑定五章组；禁止跨组复用 |
 | `branches` / `chapters` | 分支与正式章节；每章带正文哈希、事件、章纲、漂移核算结果、状态哈希与**前章链指纹** |
 | `journal` | 操作轨迹：派工、提交、取消、改约、修订、完本 |
 

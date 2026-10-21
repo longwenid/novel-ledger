@@ -41,7 +41,7 @@ def watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, n
         handoff = app.advance(owner=owner, compact=True,
                               wait_pending=not steps or rounds < steps)
         action = handoff.get('action')
-        if action not in ('task_ready', 'wait_for_submit'):
+        if action not in ('task_ready', 'wait_for_submit', 'wait_for_batch'):
             return {**handoff, 'dispatched': waited,
                     'watch_note': 'watch 在此停下：这一步需要主控或作者处理，处理后再次运行 watch 继续。'}
         if steps and rounds >= steps:
@@ -54,7 +54,13 @@ def watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, n
         if on_dispatch:
             on_dispatch(row)
         idle_at, renew_at = now() + idle_limit, now() + RENEW_EVERY
-        while app.task_status(task['task_id'])['status'] == 'pending':
+        cursor = task['task_id']
+        while True:
+            current = app.task_status(task['task_id'])
+            if current['status'] != 'pending' and not current.get('batch_active'):
+                break
+            if current.get('batch_task') and current['batch_task'] != cursor:
+                cursor, idle_at = current['batch_task'], now() + idle_limit
             moment = now()
             if moment >= idle_at:
                 return {'action': 'idle', 'task_id': task['task_id'], 'dispatched': waited,

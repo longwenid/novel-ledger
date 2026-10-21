@@ -166,10 +166,19 @@ def render_dispatch_card(envelope, identity):
     steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。',
              '2. 执行一次无参数 read（命令见下）把必读记录拿齐；确需某份再 read --record 名称。',
              '3. 复制 `result.template.json` 为 `result.json` 起稿，只改 data；'
-             'schema/task_id/input_hash 不手写（input_version 报错会带 expected）。',
+             '填真实 session，已认领时附 execution_claim；schema/task_id/input_hash 不手写。',
              '4. `preflight` 试算，按报错 details.expect 修正；不为确认格式读引擎源码。',
              '5. `submit` 提交；worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令，不改写 commands/guides。']
     command_names = ('read', 'preflight', 'submit')
+    if envelope.get('worker_batch'):
+        group = envelope['worker_batch']
+        steps[-1] = ('5. 本组范围第 %s～%s 章：逐章落笔和提交，章纲固定、额度按章计算。'
+                     'submit 返回 worker_boundary=continue 时执行 commands.worker_next；'
+                     '只按返回任务更新 NOVEL_TASK_ID、NOVEL_TASK_PATH 与 NOVEL_EXECUTION_CLAIM，'
+                     '保留同一 NOVEL_SESSION。先读下一任务和新增/变更的必读资料，再写下一章。'
+                     'worker_boundary=finished 或 batch_finished 后结束；不得自行 advance 或处理作者决定。'
+                     % (group['first'], group['last']))
+        command_names = (*command_names, 'worker_next')
     lines = ['# Worker 自举卡：%s' % stage,
              '',
              identity.get('task_line') or ('本任务：stage=%s。' % stage),
@@ -294,13 +303,15 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
 
     command = [sys.executable, str(entry), '--project', str(workspace.project)]
     lease = repo.get(store_keys.claim(task['id']))
+    batch = work.get('payload', {}).get('worker_batch')
     # The envelope, its identity copy and the compact controller view all describe the same dispatch.
     # They are derived from one mapping so a shared field cannot be added to one of them and forgotten
     # in the others — which is how a controller ends up reading a stage the worker never got.
     shared = {'task_id': task['id'], 'input_hash': task['input_hash'], 'stage': work['stage'],
               'chapter': work['chapter'], 'scope': work['scope'],
               'delivery_phase': 'formal',
-              'requires_new_worker': task['reviewer'] is None, 'review_session': task['reviewer']}
+              'requires_new_worker': task['reviewer'] is None and not (batch and lease),
+              'review_session': task['reviewer'] or ((lease or {}).get('session') if batch else None)}
     envelope = {'schema': work['schema'], **shared,
                 'task_path': str(artifact('task.json')), 'result_path': str(artifact('result.json')),
                 'project_path': str(workspace.project), 'host_log_path': str(artifact('host.log')),
@@ -318,6 +329,9 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
                              'preflight': command + ['preflight', '--file', str(artifact('result.json'))],
                              'read': command + ['read', '--task', task['id']],
                              'recall': command + ['recall', '--task', task['id']]}}
+    if batch:
+        envelope['worker_batch'] = batch
+        envelope['commands']['worker_next'] = command + ['worker-next', '--task', task['id']]
     if work.get('capabilities', {}).get('editorial') and work['stage'] in ('repair', 'redesign'):
         envelope['commands']['patch'] = command + ['patch', '--task', task['id']]
     reference_dir = Path(entry).parent.parent / 'references'
@@ -389,7 +403,9 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         except (OSError, ValueError):
             prior = None
         stale = artifact('result.json')
-        if isinstance(prior, dict) and prior.get('input_hash') == envelope['input_hash'] and stale.exists():
+        same_batch_worker = bool(batch and lease and isinstance(prior, dict)
+                                 and prior.get('review_session') == lease.get('session'))
+        if isinstance(prior, dict) and prior.get('input_hash') == envelope['input_hash'] and stale.exists() and not same_batch_worker:
             try:
                 stale_receipt = json.loads(stale.read_text(encoding='utf-8'))
             except (OSError, ValueError):
@@ -416,7 +432,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     # half-filled form. A form minted for another task is stale and is replaced.
     if not form_is_current(template_path, task):
         result = {'schema': RESULT, 'task_id': task['id'], 'input_hash': task['input_hash'],
-                  'session': task['reviewer'] or '',
+                  'session': shared['review_session'] or '',
                   'data': template(work['stage'], work['chapter'], also, work['payload'],
                                    work.get('narrative_tracking', False))}
         json_write(template_path, result)
@@ -442,7 +458,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         # Keep the controller's context small; workers always receive the complete on-disk envelope.
         # The shared dispatch fields are listed from the same mapping the envelope was built from.
         keys = ('schema', 'version', *shared, 'task_path', 'identity_path', 'brief_path', 'dispatch_path',
-                'claim', 'redispatch_count', 'stale_result_session', 'catalog_path')
+                'claim', 'redispatch_count', 'stale_result_session', 'catalog_path', 'worker_batch')
         return {key: envelope[key] for key in keys if key in envelope}
     return envelope
 

@@ -39,6 +39,21 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 直接导入完整约定的默认目标为试章；逐门流程按当前卷纲策略交付开书设计，不自动获得正文授权。作者已授权正文后，用 `run --through N --source 原话` 或 `run --complete --source 原话` 保存目标并取得 owner。后续主控治理命令带 `--owner 返回值`；`renew --owner 返回值` 续租。过期后重新 run 认领，沿用已经授权的实际目标，不扩大范围。
 
+## 快速无人值守：五章一组
+
+作者明确要求快速无人值守时，在原授权目标上增加 `run --complete --fast --source 原话`，或 `run --through N --fast --source 原话`。模式保存为 `writing_mode=fast`；以后未指定模式的 run 沿用，使用 `--standard` 恢复普通模式。模式选择不增加正文或作者裁决授权。
+
+首章仍单独写并取得准确版本认可；之后每组由一个真实 Worker 最多连写五章，不跨卷、不越过授权终点或缺失章纲。每章单独冻结、完整成稿、自比与提交，沿用固定章纲，事实只在该章通过后入库。不能一次交五章后跳过中间核验。返修仍使用本章有限额度，同一 Worker 只返修当前章，通过后才写下一章；暂停、停摆或需要作者决定时结束该组。
+
+- 主干按原路径 advance 派出本组首任务，建议用真实会话 claim 并注入凭据；随后 `watch --owner ID` 等整组完成，不逐章另派 Worker。
+- Worker 提交返回 `worker_boundary=continue` 时，执行当前 task.json 的 `commands.worker_next`。该命令只允许从本人已提交的最新任务接续当前组，不授予 advance、认领主控、改纲或作者权限。
+- 返回下一任务后，按返回值更新 `NOVEL_TASK_ID`、`NOVEL_TASK_PATH`、`NOVEL_EXECUTION_CLAIM`，保留同一 `NOVEL_SESSION`；读取新 task.json、brief 和 read 返回的新增/变更必读材料。执行身份只在引擎授权的组内接续时更新。
+- 同一组中已经实际读取、名称与哈希都相同的记录可复用；变更记录重新读取，`read --all` 始终可取完整材料。新组不继承此缓存，也不能复用旧组会话。
+- 满五章、卷界、目标、规划阶段或作者边界时，submit 返回 `worker_boundary=finished`；`worker-next` 返回 `batch_finished` 同样结束。下一组由主干派新 Worker。重复接续返回同一个待办任务，旧回调不能跳过它。
+- 主干收到 `wait_for_batch` 时继续等待本组，不另派工。进程退出但组仍 active 属于未完成；确认原执行者已停止后，可用 `pause --cancel` 结束该组，再 resume/advance 派新 Worker，已提交章节与返修额度保留。活跃组内不切换模式或改变目标。
+
+本模式复用同一组的模型上下文；组间独立性仍由宿主提供。工程验证不等于模型写作速度或文学质量保证。
+
 ## 主干循环（默认执行路径）
 
 主干执行治理命令，子 agent 负责读取材料、写卷纲与章纲、执笔和返修；workflow 决定下一任务，SQLite 保存实际状态。开书门任务（opening_options）例外：主干在同一会话内自执，换组时延续已选方向与否决记录；完成全部开书选择、进入 world_model 后恢复派工。主干只保留授权目标、owner、当前 task_id 与宿主子 agent 会话的对应关系，以及简短执行状态。
@@ -46,8 +61,8 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 | 交接点 | 主干动作 | 核实依据 |
 |---|---|---|
 | 取当前状态 | advance --compact，已有 owner 时继续携带。 | 当前 action，不预猜阶段或自行拼任务。 |
-| task_ready | **开书门任务（opening_options）由主干自执**：读 task_path 的 task.json 与同目录 brief.md，`read --task` 取必读（同会话连门且 records_hash 未变可豁免），从 result.template.json 起稿一次成稿后 check/submit（session 填主干身份，门任务不绑定会话）。其余阶段（world_model、volume_outline、chapter_outline、write、repair、redesign）按任务交接规则派新 Worker 或等待。 | 原执行者状态与 claim；新任务用空历史会话，沿用当前模型设置。门任务对主控放行 read/recall（contracts.CONTROLLER_STAGES），正文阶段不在此列。 |
-| Worker 结束 | 接收身份和状态摘要，正文与完整回执留在项目。**子 agent 空转结束**（无提交、无报告，或宿主显示其模型调用连续空响应重试）不是流程事件：用 `advance --compact` 重派同一 pending 任务（引擎重渲染视图，`redispatch_count` 递增，上次未提交的回执草稿被隔离为 `result.stale.json`；未提交不计任何返修额度），换一个新子 agent；连续两次仍空转则保留现场报告作者，不要靠反复重派碰运气。 | task_id、真实 session、accepted/checked、worker_boundary 或错误码及原因。 |
+| task_ready | **开书门任务（opening_options）由主干自执**：读 task_path 的 task.json 与同目录 brief.md，`read --task` 取必读（同会话连门且 records_hash 未变可豁免），从 result.template.json 起稿一次成稿后 check/submit（session 填主干身份，门任务不绑定会话）。其余阶段按任务交接规则派工；快速组内只由原 Worker 接续。 | 原执行者状态与 claim；普通新任务和快速新组用空历史会话，沿用当前模型设置。门任务对主控放行 read/recall（contracts.CONTROLLER_STAGES），正文阶段不在此列。 |
+| Worker 结束 | 接收身份和状态摘要，正文与完整回执留在项目。**子 agent 空转结束**（无提交、无报告，或宿主显示其模型调用连续空响应重试）不是流程事件：用 `advance --compact` 重派同一 pending 任务（引擎重渲染视图，`redispatch_count` 递增，上次未提交的回执草稿被隔离为 `result.stale.json`；未提交不计任何返修额度），普通模式换一个新子 agent；快速模式先按上节确认原执行者停止，pause --cancel/resume 后重开组，不把已绑定组转给新会话。连续两次仍空转则保留现场报告作者，不要靠反复重派碰运气。 | task_id、真实 session、accepted/checked、worker_boundary 或错误码及原因。 |
 | 核实提交 | 无人值守用 `watch --owner ID`（默认一步：等当前任务提交后直接取下一派工）；需要显式核实时 advance --compact --after 该任务ID。 | wait_for_submit 表示未提交，resync 表示重取状态；不能仅凭 accepted_chapters 判断卷纲或章纲是否已采纳。watch 的等待发生在引擎进程里，主干会话不为等待付费。 |
 | 接续 | 按下面的动作表继续。 | 章节、卷纲、Worker 和卷末均非授权目标停点，修订采纳、完本与交付也在循环内。 |
 
@@ -57,11 +72,12 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端显示会乱；需要人读的长内容一律走引擎物化的文件（brief.md、board.md、question.json、dispatch.md、task.json、html），机器可读的短 JSON 才看控制台，或先 `$env:PYTHONUTF8=1`。自行重定向 JSON 时注意 PowerShell 5 的 `Out-File -Encoding utf8` 带 BOM，Python 读回要用 utf-8-sig。
 
-无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。
+无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。
 
 | action | 主干下一步 |
 |---|---|
 | task_ready | 按任务路径派工；先核对仍在运行的子 agent 与 claim，具体见任务交接 |
+| wait_for_batch | 原 Worker 正在接续本组，用 watch 等待整组；不要为下一章另派 Worker |
 | wait_for_submit | 等待或联系当前子 agent 完成提交；它已结束时核实错误并沿允许会话恢复当前任务，不派下一个任务 |
 | resync | 放下过期的 after 回调，重新调用不带 --after 的 advance --compact，以当前任务为准 |
 | revision_ready | 修订属于当前授权目标时执行 promote，再回到 advance --compact；作者明确要求先看候选再决定时，交付候选并等待该决定 |
@@ -89,7 +105,7 @@ advance --compact 的 task 只含任务身份、阶段、task_path、identity_pa
 
 每个任务目录另写 identity.json 与 dispatch.md：identity.json 是该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、入口与版本，以及 worker_env 里应注入的变量名）；dispatch.md 是引擎从冻结任务渲染的 **Worker 自举卡**（环境自举命令、执行步骤、认领状态、argv 命令行、常见坑）。identity 供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：除 opening_options 对主干放行 read/recall 外，read/recall/patch 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示宿主尚未注入执行身份，不能自行编造；已有 claim 时派工身份沿用其 session。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
 
-除主干自执的 opening_options 外，新任务派真实新 Worker，填真实 session（一个会话只做一个任务：`requires_new_worker` 保留，跨任务复用按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**认领由主干进程执行**：需要租约时主干调用 `claim --task ID --session ID` 并把返回 token 转给该 Worker 填入回执顶层 execution_claim，提交时附带；Worker 进程执行 claim 会被 worker_boundary 拒绝，claim=null 表示无需认领。
+除主干自执的 opening_options 外，新任务派真实新 Worker，填真实 session（普通模式一个会话只做一个任务；快速模式仅冻结的同组正文及其返修可接续，跨组仍按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**初始认领由主干进程执行**：需要租约时主干调用 `claim --task ID --session ID` 并把返回 token 转给该 Worker 填入回执顶层 execution_claim，提交时附带；Worker 进程执行 claim 会被 worker_boundary 拒绝；快速组内下一任务的受限认领由 worker-next 在事务内生成，返回 token 仅供该任务。claim=null 表示无需认领。
 
 主干已派出的子 agent 仍在运行，或 claim.expired=false 时继续等待，不重派；claim=null 只表示没有执行认领，不证明没有运行中的子 agent。expired=true 表示提交前须重新认领，也不证明旧执行者已停止。已写好 result.json 但租约过期时，由主干沿允许的会话重新 claim，Worker 只更新 execution_claim 后重提，保留已填回执。恢复任务先 status、再 advance --compact，以当前任务为准，不手改库；要看全部派工的生命周期用 `status --tasks`（id/状态/阶段/会话，取代直接查库）。
 
@@ -203,6 +219,6 @@ HASH 取 advance 的 proposal.plan_hash 或 status 的 revision_proposal.plan_ha
 
 command.json 是已安装模型宿主的 argv 数组。`host-step --command-json 文件 --owner ID` 执行一步；`host-loop ... --limit N` 在当前进程持续监督，遇作者边界、失败、暂停或目标终点停止。宿主用子 agent（而非子进程）执行 Worker 时，等价能力是 `watch`：等待与续租在引擎侧，派工由宿主完成。
 
-通过 NOVEL_TASK_PATH/NOVEL_PROJECT/NOVEL_TASK_ID/NOVEL_SESSION/NOVEL_EXECUTION_CLAIM 提供身份；CLI 只消费其中的 TASK_ID/SESSION/EXECUTION_CLAIM，PROJECT 与 TASK_PATH 是给 Worker 进程定位项目和回执的便利变量，命令行仍须显式给 --project。宿主负责实际模型新会话；新子进程不证明空模型历史。超时终止并等待自己的进程；返回 0 且任务实际 done 才继续。日志无法打开或进程无法启动时返回 host_launch_failed；认领后的各退出路径均释放任务占用，包括主控续租失败。
+通过 NOVEL_TASK_PATH/NOVEL_PROJECT/NOVEL_TASK_ID/NOVEL_SESSION/NOVEL_EXECUTION_CLAIM 提供身份；CLI 只消费其中的 TASK_ID/SESSION/EXECUTION_CLAIM，PROJECT 与 TASK_PATH 是给 Worker 进程定位项目和回执的便利变量，命令行仍须显式给 --project。宿主负责实际模型新会话；新子进程不证明空模型历史。超时终止并等待自己的进程；返回 0 且任务实际 done、连写组也已结束才继续。日志无法打开或进程无法启动时返回 host_launch_failed；认领后的各退出路径均释放任务占用，包括主控续租失败。
 
 适配器另有 worker_finished、host_timeout、step_limit、host_launch_failed、needs_attention；step_limit 是适配器步数上限，不表示作者目标完成。advance 返回动作仍按上表处理。通用适配器不证明模型会话恢复能力，真实模型历史隔离和计费用量需另行验收。

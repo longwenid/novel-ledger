@@ -15,6 +15,10 @@ flowchart TD
     VERIFY --> PORT
     VERIFY --> DOMAIN
     VERIFY --> DRIFT
+    APP --> WRITE[连写编排 writing_service]
+    WRITE --> PORT
+    WRITE --> WF
+    WRITE --> DOMAIN
     APP --> WF[纯流程 workflow]
     APP --> DOMAIN[纯领域规则]
     CTX --> PORT

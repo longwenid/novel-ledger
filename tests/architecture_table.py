@@ -60,7 +60,8 @@ ALLOWED = {
     # key space). book_state stays a pure declaration module: it imports nothing but contracts.
     'application': {'contracts', 'ports', 'store_keys', 'book_state', 'creation', 'facts', 'narrative', 'planning',
                     'workflow', 'world', 'craft', 'editorial',
-                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'verification', 'lint'},
+                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'verification', 'lint', 'writing_service'},
+    'writing_service': {'contracts', 'ports', 'store_keys', 'editorial', 'planning', 'workflow'},
     'revision_service': {'contracts', 'ports', 'store_keys', 'editorial', 'facts', 'narrative', 'revision_impact',
                          'story_memory', 'understanding', 'workflow', 'verification'},
     'contract_activation': {'contracts', 'ports', 'store_keys', 'workflow', 'verification'},
@@ -116,6 +117,7 @@ CORE_EXTERNAL = {
     'briefs': {'__future__'},
     'workflow': {'__future__', 'copy'},
     'application': {'__future__', 'copy'},
+    'writing_service': {'__future__'},
     'revision_service': {'__future__', 'copy'},
     'contract_activation': {'__future__', 'copy'},
     'context': {'__future__', 'copy', 'json'},

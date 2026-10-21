@@ -9,6 +9,7 @@ from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
 from .contract_activation import ContractActivation
 from .verification import VerificationService
+from .writing_service import WritingService
 
 # An amendment preview is a JSON-encoded value, not prose: if it is cut, it says so, because a
 # silently truncated preview reads as a valid value and would let a reviewer (or a script) compare
@@ -31,6 +32,7 @@ class Application:
         self._revisions = RevisionService(repo, cancel_pending=self._cancel_pending)
         self._contracts = ContractActivation(repo)
         self._verification = VerificationService(repo)
+        self._writing = WritingService(repo, compile_task, clock, new_id)
 
     def _load(self):
         book = self.repo.load()
@@ -77,6 +79,7 @@ class Application:
                 'accepted_chapters': rows[-1]['n'] if rows else 0, 'formal_chapters': formal[-1]['n'] if formal else 0,
                 'candidate_chapter': book['draft']['chapter'] if book['draft'] else None,
                 'target': book['target'], 'written_han': book['written_han'], 'finish': book['finish'],
+                'writing_mode': book.get('writing_mode', 'standard'), 'worker_batch': self._writing.describe(),
                 'pending_task': task['id'] if task else None, 'stage': task['input']['stage'] if task else None,
                 'pause_reason': None if sealed else book.get('pause_reason'),
                 'author_decision': None if sealed else copy.deepcopy(book.get('author_block')),
@@ -108,7 +111,7 @@ class Application:
 
     def task_status(self, task_id):
         task = self.repo.task(task_id)
-        return {key: task[key] for key in ('id', 'status', 'reviewer')}
+        return {**{key: task[key] for key in ('id', 'status', 'reviewer')}, **self._writing.task_status(task)}
 
     def authorize_worker(self, task_id, session, claim=None):
         task = self.repo.task(task_id)
@@ -116,6 +119,7 @@ class Application:
         self._session(task, session, claim)
 
     def _cancel_pending(self, reason):
+        self._writing.close(reason)
         ident = self.repo.cancel_pending(reason)
         if ident:
             self.repo.after_commit(lambda: self.presentation.retire(ident))
@@ -145,7 +149,8 @@ class Application:
                 'execution_claim 须为 claim 命令返回的 token 裸字符串，不能是对象。',
                 {'expect': '回执顶层 "execution_claim": "<token>"；token 来自 claim --task <ID> --session <会话> 的返回。'})
         owner = self.repo.session_task(session)
-        require(owner is None or owner == task['id'], 'session_reuse', '新任务须由新 Worker 执行，不得复用其他任务会话。')
+        scope = self._writing.scope(task, session)
+        require(owner is None or owner == scope, 'session_reuse', '新任务须由新 Worker 执行；仅同一连写组允许复用。')
         lease = self.repo.get(store_keys.claim(task['id']))
         if lease and check_lease:
             require(lease['session'] == session and lease['token'] == claim and lease['until'] > self.clock(),
@@ -203,6 +208,12 @@ class Application:
                 return {'action': 'wait_for_submit',
                         'task': {'task_id': task['id'], **{key: work[key] for key in ('stage', 'chapter', 'scope')}}}
             if not task:
+                group = self._writing.active()
+                if group:
+                    current = self.repo.task(group['task_id'])
+                    return {'action': 'wait_for_batch', 'task': {'task_id': current['id'],
+                            **{key: current['input'][key] for key in ('stage', 'chapter', 'scope')}},
+                            'worker_batch': self._writing.describe()}
                 choice = workflow.choose(book, self.repo.headers(book['branch']))
                 if isinstance(choice, dict) and choice['action'] == 'contract_ready':
                     book = self._contracts.activate(book)
@@ -221,8 +232,7 @@ class Application:
                     else:
                         boundary = {**choice, 'status': self.status()}
                 else:
-                    task = self.repo.add_task(self.compile_task(book, choice))
-                    self.repo.record('dispatch', {'task': task['id'], 'stage': choice.stage})
+                    task = self._writing.dispatch(book, choice, owner)
         view = {}
         # The world view belongs to boundaries that hand a world over (or a refresh after
         # contract activation); a choice board must not drag an unverified world into the return.
@@ -264,6 +274,8 @@ class Application:
         self._live(task, verify=False)
         work = task['input']
         already = [] if (record or everything) else [n for n in self.repo.read_names(task_id) if n in work['records']]
+        if not record and not everything:
+            already = sorted(set(already) | set(self._writing.already_read(task)))
         names = [record] if record else [n for n in work['required'] if n not in already]
         require(all(n in work['records'] for n in names), 'record', '资料不在当前冻结任务目录中。')
         records = {n: {'hash': work['records'][n], 'value': self.repo.read_document(work['records'][n])} for n in names}
@@ -291,6 +303,7 @@ class Application:
     def _observe_read(self, task_id, names, result):
         """Count actual supplemental output, including recall; this is not billed usage."""
         with self.repo.transaction():
+            self._writing.record_read(self.repo.task(task_id), names)
             self.repo.record('read', store_keys.read_record(task_id, names, len(dump(result))))
         return result
 
@@ -331,8 +344,11 @@ class Application:
             task = self.repo.task(result.get('task_id'))
             if task['status'] == 'done':
                 require(task['result_hash'] == digest(result), 'replay_conflict', '同一任务不能提交不同内容。')
+                group = self._writing.active()
+                continuing = bool(group and group['task_id'] == task['id'])
                 return {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
-                        'idempotent': True, 'task_id': task['id'], 'worker_boundary': 'finished'}
+                        'idempotent': True, 'task_id': task['id'],
+                        'worker_boundary': 'continue' if continuing else 'finished'}
             book = self._live(task)
             require(book['status'] == 'running' or (book['status'] == 'preparing' and task['input']['stage'] == 'opening_options'),
                     'paused', '项目暂停，保留回执并由主控恢复。')
@@ -362,7 +378,7 @@ class Application:
             if work['stage'] not in CONTROLLER_STAGES:
                 # Session binding keeps one worker per task: a replay of the same receipt stays
                 # idempotent, and a second submission from another session is refused.
-                self.repo.bind_session(result['session'], task['id'])
+                self._writing.bind(task, result['session'])
             self.repo.finish_task(task['id'], result)
             revision = updated.get('revision_run')
             if revision and outcome.chapter and revision['last'] <= outcome.chapter['n'] and revision.get('carry'):
@@ -373,10 +389,11 @@ class Application:
             if updated.get('revision_directive'):
                 directive = updated['revision_directive']
                 updated = self._revisions.start_revision(updated, directive)
+            worker_boundary = self._writing.after_submit(updated, task)
             self._save(updated)
             self.repo.record('submit', {'task': task['id'], 'stage': work['stage'], 'committed_chapter': outcome.chapter is not None})
             response = {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
-                        'task_id': task['id'], 'worker_boundary': 'finished',
+                        'task_id': task['id'], 'worker_boundary': worker_boundary,
                         'committed_chapter': outcome.chapter['n'] if outcome.chapter else None,
                         'next_stage': updated['draft']['stage'] if updated['draft'] else None,
                         'rework': (updated.get('rework') or {}).get(str(work['chapter'])), 'status': updated['status']}
@@ -394,7 +411,7 @@ class Application:
             require(not old or old['until'] <= self.clock() or old['session'] == session, 'worker_busy', '另一 Worker 仍持有任务租约。')
             lease = {'session': session, 'token': old['token'] if old and old['session'] == session else self.new_id(), 'until': self.clock() + seconds}
             self.repo.put(store_keys.claim(task_id), lease)
-            self.repo.bind_session(session, task_id)
+            self._writing.bind(task, session, seconds)
             return {**lease, 'usage': '回执顶层 execution_claim 填写返回的 token 字段（裸字符串，非对象）。'}
 
     def release_claim(self, task_id, token):
@@ -404,11 +421,16 @@ class Application:
             self.repo.put(store_keys.claim(task_id), None)
             self.repo.record('worker_release', {'task': task_id})
 
-    def run(self, through=None, finish=False, owner=None, seconds=300, source=''):
+    def run(self, through=None, finish=False, owner=None, seconds=300, source='', mode=None):
         require(type(seconds) is int and seconds > 0, 'lease', '租期须为正整数。')
+        require(mode in (None, 'standard', 'fast'), 'writing_mode', '写作模式须为 standard 或 fast。')
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self._load()
+            selected_mode = mode or book.get('writing_mode', 'standard')
+            group = self._writing.active()
+            require(not group or selected_mode == book.get('writing_mode') and owner == group['owner'],
+                    'writing_batch', '连写组仍在执行，先等本组结束；停止执行后可 pause --cancel 保留进度再切换模式。')
             require(book['contract'] is not None, 'creation', '开书约定尚未激活，先完成世界与约定的机械校验。')
             end = editorial.effective_contract(book)['volumes'][-1]['end']
             target = end if finish else through
@@ -420,10 +442,23 @@ class Application:
             require(book['revision_run'] is None or target >= book['revision_run']['last'], 'revision_target', '运行目标不能低于修订范围，先完成或撤销修订。')
             owner = owner or self.new_id()
             self.repo.put(store_keys.CONTROLLER, {'owner': owner, 'until': self.clock() + seconds})
-            book.update(target=target, finish=finish, run_authorized=True)
-            book['decisions'].append({'kind': 'run', 'target': target, 'finish': finish, 'source': source})
+            require(not group or target == book['target'] and finish == book['finish'],
+                    'writing_batch', '连写期间不能改变授权终点，先停止当前组。')
+            book.update(target=target, finish=finish, run_authorized=True, writing_mode=selected_mode)
+            book['decisions'].append({'kind': 'run', 'target': target, 'finish': finish, 'source': source, 'mode': selected_mode})
             self._save(book)
-            return {'owner': owner, 'target': target, 'finish': finish, 'lease_seconds': seconds}
+            return {'owner': owner, 'target': target, 'finish': finish, 'lease_seconds': seconds, 'writing_mode': selected_mode}
+
+    def continue_writing(self, task_id, session, claim=None):
+        """A worker's bounded continuation capability, never a general advance or author command."""
+        with self.repo.transaction():
+            book = self._load()
+            task, lease = self._writing.continue_task(book, task_id, session, claim)
+        if task is None:
+            return {'action': 'batch_finished', 'worker_boundary': 'finished'}
+        return {'action': 'task_ready', 'worker_boundary': 'continue',
+                'task': self.presentation.task(task, self._baseline(book, task), compact=True),
+                'execution_claim': lease['token'] if lease else None}
 
     def renew(self, owner, seconds=300):
         require(type(seconds) is int and seconds > 0, 'lease', '租期须为正整数。')

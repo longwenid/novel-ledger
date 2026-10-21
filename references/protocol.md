@@ -95,6 +95,12 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 `audit` 与 `complete` 的 `ok` 仅表示通过当前机械判据，报告包含 `verification_scope=mechanical`；`unverified` 列出 `model_context_isolation`、`author_statement_authenticity` 与 `literary_quality`，不把声明的 session、作者原话文本或自比结论当成这些能力已验证。完本重试与正式导出均重新验证冻结来源，不信任旧状态标记或 audit 报告。当前存储与任务字段版本不变，不转换旧库。
 
+## 快速连写能力
+
+`run --fast` 是执行模式，不属于创作约定，不改变章纲、篇幅或返修限额。普通任务的会话绑定任务 ID；快速正文任务声明 `continuous_writing=continuous-writing/1` 与 `payload.worker_batch={id,first,last}`，会话绑定组 ID，仅组内允许接续。每章仍有独立 task_id、input_hash、结果及事务；组内版本只随已验证的本任务提交推进。组冻结约定、分支及各章章纲哈希，其他修改使接续失效。
+
+submit 的 `worker_boundary=continue` 表示当前任务结束但本组未结束，Worker 只执行 `commands.worker_next`。返回的新任务与 execution_claim 指定下一步身份；更新环境后读取新任务。finished/batch_finished 表示 Worker 结束。重复回调仅恢复当前待办，不创造多条任务分支。预检同时回滚章节、组进度、绑定和凭据。运行与恢复见[快速无人值守](runtime.md#快速无人值守五章一组)。
+
 ## 漂移核算
 
 执笔按模板填写 `drift_check`，事件由引擎生成。计划增量覆盖、前态来源、伏笔动作、计划外变化与精确引文要求统一见 [执笔自比与引擎核算](narrative.md#执笔自比与引擎核算)。

@@ -14,12 +14,14 @@ KEYS = {
     'official_branch': {'owner': 'application', 'readers': ('application', 'delivery')},
     'amendment_base': {'owner': 'application', 'readers': ('contract_activation',)},
     'completion_delivery': {'owner': 'application', 'readers': ('application',)},
+    'writing_batch': {'owner': 'writing_service', 'readers': ('writing_service',)},
     'schema': {'owner': 'sqlite_store', 'readers': ('sqlite_store',)},
 }
 CONTROLLER = 'controller'
 OFFICIAL_BRANCH = 'official_branch'
 AMENDMENT_BASE = 'amendment_base'
 COMPLETION_DELIVERY = 'completion_delivery'
+WRITING_BATCH = 'writing_batch'
 SCHEMA_KEY = 'schema'
 # The four-partition root is storage-owned: the concrete store owns the layout
 # of the ledger it writes, so this one is declared but built by the adapter.
