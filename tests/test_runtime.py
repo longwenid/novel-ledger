@@ -166,7 +166,8 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(stages, ['write', 'repair', 'repair'])
         status = self.app.status()
         self.assertEqual(status['status'], 'paused')
-        self.assertEqual(status['author_decision']['id'], 'repair-stalled:chapter_repair')
+        decision_id = status['author_decision']['id']
+        self.assertTrue(decision_id.startswith('repair-stalled:chapter_repair:'))
         self.assertIn('第 1 章', status['author_decision']['question'])
         book = self.repo.load()
         self.assertEqual(book['draft']['prose'], '他走了。')
@@ -176,9 +177,9 @@ class RuntimeTests(unittest.TestCase):
         options = [row['label'] for row in status['author_decision']['options']]
         self.assertNotIn(workflow.ACCEPT_OPEN, options)
         self.assertCode('author_decision', self.app.answer,
-                        'repair-stalled:chapter_repair', workflow.ACCEPT_OPEN, '这一处我承担。')
+                        decision_id, workflow.ACCEPT_OPEN, '这一处我承担。')
         self.assertEqual(self.repo.load()['draft']['prose'], '他走了。')
-        granted = self.app.answer('repair-stalled:chapter_repair', workflow.REPAIR_AGAIN, '再返修一轮。')
+        granted = self.app.answer(decision_id, workflow.REPAIR_AGAIN, '再返修一轮。')
         self.assertEqual(granted['status'], 'running')
         self.assertEqual(self.app.advance()['task']['stage'], 'repair')
         self.app.submit(response(self.app))
@@ -593,6 +594,14 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'role_boundary')
         self.assertIn('NOVEL_TASK_ID', caught.exception.details['recover'])
         self.assertEqual(caught.exception.details['identity']['task_id'], task['task_id'])
+
+        # A claim carries the host-supplied execution identity into every derived
+        # artifact; a card must not teach a worker to invent a replacement ID.
+        lease = self.app.claim(task['task_id'], 'host-execution-123')
+        refreshed = self.app.advance()['task']
+        identity = json.loads(Path(refreshed['identity_path']).read_text(encoding='utf-8'))
+        self.assertEqual(identity['worker_env']['NOVEL_SESSION'], lease['session'])
+        self.assertIn('host-execution-123', Path(refreshed['dispatch_path']).read_text(encoding='utf-8'))
 
 
 

@@ -55,6 +55,7 @@ class HostPortTests(unittest.TestCase):
             result = host.step(app, [sys.executable, '-c', code], timeout=10)
             self.assertEqual(result['action'], 'worker_finished')
             self.assertTrue(result['submitted'])
+            self.assertEqual(result['context_isolation'], 'unverified')
             self.assertEqual(app.released, [('task', 'opaque-claim')])
             environment = json.loads((project / 'host.log').read_text(encoding='utf-8'))
             self.assertEqual(environment, {'NOVEL_PROJECT': str(project), 'NOVEL_TASK_PATH': str(project / 'task.json'),

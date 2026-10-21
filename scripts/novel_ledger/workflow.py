@@ -85,7 +85,7 @@ def draft_exhaustion_stage(budget):
 
 
 def spend(book, chapter, stage):
-    budget = book.setdefault('rework', {}).setdefault(str(chapter), {'repairs': 0, 'redesigns': 0})
+    budget = book['rework'].setdefault(str(chapter), {'repairs': 0, 'redesigns': 0})
     if stage == 'write':
         require(not budget.get('initial_used'), 'repair_budget', '同一章不能通过重新开初稿重置修复轮次。')
         budget['initial_used'] = True
@@ -292,7 +292,7 @@ def choose(book, headers):
                if not d.get('absorbed_by') and d.get('chapter', 0) < chapter]
     if pending:
         return replan_volume_outline(book, contract, chapter, pending, '前一章的实际变化挂账，先重排本章纲。')
-    budget = (book.get('rework') or {}).get(str(chapter), {})
+    budget = book['rework'].get(str(chapter), {})
     if budget.get('initial_used'):
         stage = draft_exhaustion_stage(budget)
         if stage == 'exhausted':
@@ -302,7 +302,7 @@ def choose(book, headers):
 
 
 def route_repair(book, draft, findings, after_repair=False):
-    budget = book.setdefault('rework', {}).setdefault(str(draft['chapter']), {'repairs': 0, 'redesigns': 0})
+    budget = book['rework'].setdefault(str(draft['chapter']), {'repairs': 0, 'redesigns': 0})
     prior = {digest(f) for f in draft.get('findings', [])}
     combined = draft.get('findings', []) + copy.deepcopy(findings)
     draft['findings'] = list({digest(f): f for f in combined}.values())
@@ -424,12 +424,21 @@ ACCEPT_OPEN = '接受当前候选，把这几条记为未解决项继续'
 STALL_AFTER_ROUNDS = DEFAULTS['stall_after_rounds']
 
 
+def draft_decision_subject(book, draft):
+    """Bind a budget answer to one candidate and one consumed allowance state."""
+    return {'branch': book['branch'], 'chapter': draft['chapter'], 'revision': book['revision'],
+            'contract_hash': digest(book['contract']), 'prose_hash': digest(draft.get('prose')),
+            'findings_hash': digest(draft.get('findings') or []),
+            'budget': copy.deepcopy(book['rework'].get(str(draft['chapter']), {}))}
+
+
 def hold_for_draft_exhaustion(book):
     """Ask the author how to proceed when one chapter has spent its repair rounds."""
     draft = book['draft']
     findings = draft.get('findings') or []
+    subject = draft_decision_subject(book, draft)
     book['author_block'] = {
-        'id': 'repair-exhausted:chapter_repair',
+        'id': 'repair-exhausted:chapter_repair:' + digest(subject), 'subject': subject,
         'question': '第 %d 章的返修额度已用尽，引擎核账仍给出 %d 条意见，接下来怎么处理？'
                     % (draft['chapter'], len(findings)),
         'options': copy.deepcopy(list(EXHAUSTION_OPTIONS))}
@@ -446,8 +455,9 @@ def hold_for_stalled_repeat(book, draft, stalled):
     for the findings named here, so an author who sees actual movement can keep going.
     """
     draft['stage'] = 'stalled'
+    subject = draft_decision_subject(book, draft)
     book['author_block'] = {
-        'id': 'repair-stalled:chapter_repair',
+        'id': 'repair-stalled:chapter_repair:' + digest(subject), 'subject': subject,
         'question': '第 %d 章的同 %d 条意见已连续 %d 轮返修未解决，再按原样返修不会收敛，接下来怎么处理？'
                     % (draft['chapter'], len(stalled), STALL_AFTER_ROUNDS),
         'options': copy.deepcopy(list(EXHAUSTION_OPTIONS))}
@@ -455,19 +465,22 @@ def hold_for_stalled_repeat(book, draft, stalled):
     return book['author_block']
 
 
-def resolve_draft_exhaustion(book, option):
+def resolve_draft_exhaustion(book, option, subject=None):
     """Apply the author's answer for a spent chapter repair budget."""
     draft = book['draft']
-    require(draft is not None, 'draft', '没有可处理的候选稿。')
-    chapter = draft['chapter']
-    budget = book.setdefault('rework', {}).setdefault(str(chapter), {})
+    chapter = subject.get('chapter') if subject else (draft or {}).get('chapter')
+    require(type(chapter) is int and str(chapter) in book['rework'], 'draft', '没有对应候选与额度记录。')
+    budget = book['rework'][str(chapter)]
     if option == REPAIR_AGAIN:
         budget['repairs'] = max(0, budget.get('repairs', 0) - 1)
-        draft['stage'] = 'repair'
+        if draft and draft['chapter'] == chapter:
+            draft['stage'] = 'repair'
         # A granted round is a new lease on convergence: the counter that stalled the loop
         # starts over for the findings the author just voted to keep trying on.
-        draft.pop('recurrence', None)
+        if draft and draft['chapter'] == chapter:
+            draft.pop('recurrence', None)
         book['status'] = 'running'
+        book.pop('pause_reason', None)
     elif option == ACCEPT_OPEN:
         require(False, 'author_decision', '当前候选仍未通过机械入库条件，不能直接接受；请再返修一轮或保留候选并暂停。',
                 {'options': copy.deepcopy(list(EXHAUSTION_OPTIONS))})

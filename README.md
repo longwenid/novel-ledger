@@ -10,6 +10,8 @@
 
 章纲在动笔前声明变化，引擎逐章模拟资源、位置、知情、时钟、人物、情节与伏笔状态。执笔后根据自比回执和正文引文核账，提交成功才更新事实。修订使用候选分支，保留正式稿。
 
+只读验收服务统一核对事实重放、章节链、正文机械项与完本闭合；推进和保存前检查投影属于真实链头，完本重试与导出也重新验证冻结快照。长段模板仅替换数字仍进入返修。
+
 流程不含独立设计审或章审。机械校验与文风代理指标不能证明文学质量，阅读效果仍需人工抽读或离线盲测。
 
 ## 二、架构
@@ -28,6 +30,9 @@ flowchart TD
     BOOT --> WF
     BOOT --> WS[输出路径 workspace]
     APP --> PORT[应用端口 ports]
+    APP --> VERIFY[只读验收 verification]
+    VERIFY --> PORT
+    VERIFY --> DOMAIN
     APP --> WF[纯流程 workflow]
     APP --> DOMAIN[纯领域规则]
     CTX --> PORT
@@ -51,6 +56,7 @@ flowchart TD
     PAGE --> WS
     TPL --> DOMAIN
     PUB --> PORT
+    PUB --> VERIFY
     SQL --> BS[四区归属 book_state]
     SQL --> C[基础契约 contracts]
     HOST --> PORT

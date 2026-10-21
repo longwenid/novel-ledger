@@ -54,6 +54,8 @@ def check_state(book):
     read of the status, so the command that broke it is the command that reports it.
     """
     status = book.get('status')
+    require(isinstance(book.get('rework'), dict), 'book_state',
+            '返修额度记录缺失或损坏，禁止把缺失解释为未消耗。')
     require(status in STATUSES, 'book_state', '未知的项目状态。', {'status': status, 'known': list(STATUSES)})
     reason = book.get('pause_reason')
     require(status != 'running' or not reason, 'book_state',

@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 from .contracts import digest
 from .ports import Repository
+from .verification import VerificationService
 from . import store_keys, workflow
 
 
@@ -45,8 +46,9 @@ class ContractActivation:
             # An unsaved candidate demotes to prior_candidate so a fresh write round can reuse
             # its prose instead of losing it.
             book['carry_findings'].extend(copy.deepcopy(old['draft'].get('findings', [])))
+            book['carry_findings'] = list({digest(row): row for row in book['carry_findings']}.values())
             book['prior_candidate'] = {k: old['draft'][k] for k in ('chapter', 'title', 'prose')}
-        book.update(rework=old.get('rework') or {}, revision=old['revision'] + 1,
+        book.update(rework=copy.deepcopy(old['rework']), revision=old['revision'] + 1,
                     target=min(old['target'], book['contract']['volumes'][-1]['end']), finish=old['finish'])
         if rows:
             book['branch'] = self.repo.fork(old['branch'], 1)
@@ -56,16 +58,18 @@ class ContractActivation:
                                       'target': min(old['target'], book['contract']['volumes'][-1]['end']), 'finish': old['finish']})
         else:
             book['branch'] = old['branch']
-            # A re-contract with no settled chapter cannot carry a spent budget: a carried
-            # `initial_used` would brick the chapter (no write, no repair, no answer). The
-            # anti-abuse rule protects written books — those fork a branch above — not a
-            # zero-progress re-plan. The ledger is reset rather than dropped so every later
-            # reader keeps the new-book invariant that `rework` is always present.
-            book['rework'] = {}
-            book['draft'] = None
-            block = book.get('author_block')
-            if block and str(block.get('id', '')).startswith('repair-exhausted'):
-                book.pop('author_block', None)
+            # Replanning does not create new editorial effort. An unanswered budget
+            # decision stays actionable; its exact candidate survives the new contract.
+            if old.get('draft'):
+                book['draft'] = copy.deepcopy(old['draft'])
+                book['draft']['stage'] = workflow.draft_exhaustion_stage(book['rework'].get(str(old['draft']['chapter']), {}))
+                if book['draft']['stage'] == 'exhausted':
+                    book['status'] = 'paused'
+                    book['pause_reason'] = old.get('pause_reason') or '原修复额度已经耗尽，须作者决定。'
+        if book.get('author_block'):
+            book['status'] = 'paused'
+            book['pause_reason'] = book['author_block']['question']
+        VerificationService(self.repo).head(book)
         self.repo.save(book)
         self.repo.record('contract_activate', {'hash': digest(book['contract']), 'source': proposal['source']})
         return book

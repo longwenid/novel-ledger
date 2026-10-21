@@ -159,7 +159,9 @@ def render_dispatch_card(envelope, identity):
     else:
         state = '已过期' if claim.get('expired') else '生效中（session=%s）' % claim.get('session')
         claim_lines = ['- 本任务已有租约（%s）：未过期沿用原会话；过期由主干重新认领，Worker 不执行 claim。' % state]
-    suggested = identity['worker_env'].get('NOVEL_SESSION') or ('worker-%s-XXXX（自命名，XXXX 任选四位）' % stage)
+    session = identity['worker_env'].get('NOVEL_SESSION')
+    session_line = ("    $env:NOVEL_SESSION='%s'" % session.replace("'", "''") if session else
+                    "    if (-not $env:NOVEL_SESSION) { throw '缺少宿主执行身份：由主干注入真实会话标识，不得自拟。' }")
     commands = envelope.get('commands') or {}
     steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。',
              '2. 执行一次无参数 read（命令见下）把必读记录拿齐；确需某份再 read --record 名称。',
@@ -173,12 +175,12 @@ def render_dispatch_card(envelope, identity):
              identity.get('task_line') or ('本任务：stage=%s。' % stage),
              '任务文件（唯一权威）：`%s`；简报全文：同目录 `brief.md`（不必解析 input.json）。' % envelope['task_path'],
              '',
-             '## 1. 环境自举（PowerShell，照抄；会话名一次定下不再改）',
+             '## 1. 环境自举（PowerShell，沿用宿主注入的执行身份）',
              '',
              '    $env:PYTHONIOENCODING=\'utf-8\'',
              '    [Console]::OutputEncoding=[System.Text.Encoding]::UTF8',
              "    $env:NOVEL_TASK_ID='%s'" % envelope['task_id'],
-             "    $env:NOVEL_SESSION='%s'" % suggested,
+             session_line,
              '',
              '首条 read 报 role_boundary 说明环境变量未生效：回本块重设后再试。',
              '',
@@ -207,7 +209,7 @@ def render_dispatch_card(envelope, identity):
               '- 控制台 GBK 会乱码：中文内容走文件工件（brief.md、work/board.md、work/question.json），'
               '不在控制台打印长 JSON；自行重定向时 PowerShell 5 的 `Out-File -Encoding utf8` 带 BOM，读回用 utf-8-sig。',
               '- 完成后向主控只报状态：task_id、valid/accepted/committed、worker_boundary、'
-              '错误或拒绝摘要（含 code）；不贴正文或完整回执。']
+              'committed_chapter、错误或拒绝摘要（含 code）；accepted=true 不等于章节落库，不贴正文或完整回执。']
     return '\n'.join(lines) + '\n'
 
 
@@ -344,7 +346,8 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     identity = {'schema': IDENTITY, **shared, 'stages': envelope['stages'],
                 'project_path': str(workspace.project), 'task_path': envelope['task_path'],
                 'entry': str(entry), 'version': VERSION,
-                'worker_env': {'NOVEL_TASK_ID': task['id'], 'NOVEL_SESSION': task['reviewer']},
+                'worker_env': {'NOVEL_TASK_ID': task['id'],
+                               'NOVEL_SESSION': task['reviewer'] or (lease or {}).get('session')},
                 # What this dispatch is, rendered from the frozen task itself. A controller that
                 # describes the work from an assumed pipeline position instead of from here can hand a
                 # worker a task it is not (a revision-scope review announced as the book's final
@@ -352,7 +355,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
                 'task_line': task_line(work),
                 'note': '本文件是派工身份的可核对副本，不授予权限：read/recall/patch 仍只对'
                         '宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放；NOVEL_SESSION 为空表示'
-                        '本次由新会话自行命名。'}
+                        '须由宿主提供真实执行身份，不能自行编造；这些声明不证明模型上下文隔离。'}
     validate_identity(identity)
     identity_file = artifact('identity.json')
     json_write(identity_file, identity)

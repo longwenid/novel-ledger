@@ -20,7 +20,8 @@ FAST = (
     'test_cli_boundary', 'test_dependency_bounds', 'test_longform', 'test_outlines',
     'test_pipeline_shapes.PipelineShapeTests', 'test_review_material', 'test_storage_growth',
     'test_context_growth', 'test_plot_precision',
-    'test_snapshot_integrity', 'test_snapshot_probe',
+    'test_snapshot_integrity', 'test_snapshot_probe', 'test_verification',
+    'test_prose_lint.LintUnitTests',
     'test_style_voice', 'test_style_guard_flow',
     'test_validation_runner', 'test_architecture_repairs', 'test_opening_architecture',
     # The fast gate pins automatic revision bounds with one end-to-end case; the full gate

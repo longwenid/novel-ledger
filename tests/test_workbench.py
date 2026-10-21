@@ -253,41 +253,45 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(book['revision_run']['first'], 1)
         self.assertTrue(self.app.audit()['ok'])
 
-    def test_a_zero_progress_recontract_resets_the_spent_budget_and_keeps_the_candidate(self):
-        # The live 2026-10-21 run bricked chapter one: same-contract re-activations each carried
-        # the previous round's spent budget, until the chapter could neither write, repair nor
-        # answer. A re-contract with no settled chapter owes the fresh book a clean ledger.
+    def test_zero_progress_recontracts_preserve_budget_and_an_actionable_author_decision(self):
         book = self.repo.load()
         book.update(draft={'chapter': 1, 'title': '第一章 落账', 'prose': '正文一句。', 'findings': [{'code': 'scene_identity'}]},
                     rework={'1': {'repairs': 2, 'redesigns': 1, 'initial_used': True}},
-                    author_block={'id': 'repair-exhausted:chapter_repair', 'question': '额度用尽。', 'options': []},
                     status='paused', pause_reason='额度用尽。')
+        workflow.hold_for_draft_exhaustion(book)
+        spent = dict(book['rework']['1'])
         self.repo.save(book)
         changed = contract(6)
         changed['reader_promise'] = '重新激活规划链。'
         self.app.recontract(changed, '零进度重开。', self.owner)
         handoff = self.app.advance(owner=self.owner)
-        self.assertEqual(handoff['task']['stage'], 'volume_outline')
+        self.assertEqual(handoff['action'], 'paused')
         new = self.repo.load()
-        self.assertEqual(new['rework'], {})
-        self.assertIsNone(new['draft'])
+        self.assertEqual(new['rework']['1'], spent)
+        self.assertEqual(new['draft']['prose'], '正文一句。')
         self.assertEqual(new['prior_candidate']['prose'], '正文一句。')
-        self.assertNotIn('author_block', new)
-        self.assertEqual(new['status'], 'running')
+        self.assertEqual(new['author_block'], book['author_block'])
+        self.assertEqual(new['status'], 'paused')
         # The demoted candidate files its findings once, not once per code path.
         self.assertEqual(new['carry_findings'].count({'code': 'scene_identity'}), 1)
+        # Another amendment cannot turn the pause into a fresh writing allowance.
+        self.app.recontract(changed, '同一零进度项目再次改约。', self.owner)
+        self.app.advance(owner=self.owner)
+        self.assertEqual(self.repo.load()['rework']['1'], spent)
+        block = self.repo.load()['author_block']
+        self.app.answer(block['id'], block['options'][0]['label'], '作者明确追加一轮返修。', self.owner)
+        self.assertEqual(self.repo.load()['rework']['1']['repairs'], spent['repairs'] - 1)
+        self.assertEqual(self.app.advance(owner=self.owner)['task']['stage'], 'volume_outline')
 
-    def test_budget_reads_survive_a_book_without_a_rework_ledger(self):
-        # `rework` is a new-book invariant, but a book saved by an interim hot-fix dropped the
-        # key; spend recreates the ledger and choose reads through its absence.
+    def test_missing_budget_is_rejected_without_creating_fresh_allowances(self):
         book = self.repo.load()
         del book['rework']
         self.repo.save(book)
-        workflow.spend(book, 4, 'write')
-        self.assertTrue(book['rework']['4']['initial_used'])
-        del book['rework']
-        outcome = workflow.choose(book, self.repo.headers(book['branch']))
-        self.assertIsNotNone(outcome)
+        before = self.repo.get('book')
+        with self.assertRaises(Error) as caught:
+            self.app.advance(owner=self.owner)
+        self.assertEqual(caught.exception.code, 'book_state')
+        self.assertEqual(self.repo.get('book'), before)
 
     def test_scene_binding_includes_other_volumes_and_retains_the_replan_prefix(self):
         repo = SQLiteRepository.initialize(Path(self.temp.name) / 'multi-volume', seeded_book(contract(6, 2)))

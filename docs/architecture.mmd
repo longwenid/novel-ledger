@@ -11,6 +11,9 @@ flowchart TD
     BOOT --> WF
     BOOT --> WS[输出路径 workspace]
     APP --> PORT[应用端口 ports]
+    APP --> VERIFY[只读验收 verification]
+    VERIFY --> PORT
+    VERIFY --> DOMAIN
     APP --> WF[纯流程 workflow]
     APP --> DOMAIN[纯领域规则]
     CTX --> PORT
@@ -34,6 +37,7 @@ flowchart TD
     PAGE --> WS
     TPL --> DOMAIN
     PUB --> PORT
+    PUB --> VERIFY
     SQL --> BS[四区归属 book_state]
     SQL --> C[基础契约 contracts]
     HOST --> PORT

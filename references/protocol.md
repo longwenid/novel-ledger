@@ -91,6 +91,10 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 卷纲与章纲校验（文风必填、可计算卷末终值）对所有提交统一执行；重排使用当前任务模板，历史前缀不再按旧形状解释。
 
+## 验收报告
+
+`audit` 与 `complete` 的 `ok` 仅表示通过当前机械判据，报告包含 `verification_scope=mechanical`；`unverified` 列出 `model_context_isolation`、`author_statement_authenticity` 与 `literary_quality`，不把声明的 session、作者原话文本或自比结论当成这些能力已验证。完本重试与正式导出均重新验证冻结来源，不信任旧状态标记或 audit 报告。当前存储与任务字段版本不变，不转换旧库。
+
 ## 漂移核算
 
 执笔按模板填写 `drift_check`，事件由引擎生成。计划增量覆盖、前态来源、伏笔动作、计划外变化与精确引文要求统一见 [执笔自比与引擎核算](narrative.md#执笔自比与引擎核算)。

@@ -21,6 +21,10 @@ DUPLICATE_GRAM = 25
 # so this bounds the cost of the check without pretending to be the whole book's memory.
 DUPLICATE_WINDOW = 8
 DUPLICATE_LIMIT = 3
+# A long template with many changed numbers is stronger evidence than a shared
+# sentence. Short numerical examples and ordinary dates do not trigger this path.
+NUMERIC_TEMPLATE_SPAN = 120
+NUMERIC_TEMPLATE_RUNS = 8
 # Fewer dialogue quotes than this cannot establish a family; a stray mark is not a style breach.
 STYLE_MIN_QUOTES = 3
 # A run of this many Latin letters is foreign residue in an otherwise-Chinese voice. Single letters
@@ -30,6 +34,24 @@ LATIN_MIN = 2
 _CORNER = ('「', '『')
 _WESTERN = ('"', '“', '”')
 _LATIN_RUN = re.compile('[A-Za-z]{%d,}' % LATIN_MIN)
+_NUMBER_RUN = re.compile(r'\d+')
+
+
+def _numeric_view(prose):
+    """Normalize digit runs while keeping offsets into the unmodified source."""
+    parts, starts, ends, cursor = [], [], [], 0
+    for match in _NUMBER_RUN.finditer(prose):
+        parts.append(prose[cursor:match.start()])
+        starts.extend(range(cursor, match.start()))
+        ends.extend(range(cursor + 1, match.start() + 1))
+        parts.append('#')
+        starts.append(match.start())
+        ends.append(match.end())
+        cursor = match.end()
+    parts.append(prose[cursor:])
+    starts.extend(range(cursor, len(prose)))
+    ends.extend(range(cursor + 1, len(prose) + 1))
+    return ''.join(parts), starts, ends
 
 
 def _runs(prose, size):
@@ -69,11 +91,27 @@ def cross_chapter_duplicates(prose, priors, chapter, size=DUPLICATE_GRAM, limit=
     carrying the shared span as the quote, so the repair rewrites exactly that span.
     """
     findings = []
+    numeric = None
     for prior_chapter, prior_text in priors:
         if not prior_text:
             continue
         span = _shared_span(prose, prior_text, size)
         if span is None:
+            if numeric is None:
+                numeric = _numeric_view(prose)
+            normalized, starts, ends = numeric
+            prior_normalized, _, _ = _numeric_view(prior_text)
+            repeated = _shared_span(normalized, prior_normalized, NUMERIC_TEMPLATE_SPAN)
+            if repeated is None or normalized[repeated[0]:repeated[1]].count('#') < NUMERIC_TEMPLATE_RUNS:
+                continue
+            left, right = starts[repeated[0]], ends[repeated[1] - 1]
+            findings.append(_finding(
+                'repetition', chapter,
+                '与第 %d 章存在仅数字变化的长段落模板；需重写本章实际行动、阻力与后果，不能靠章号或数字扰动消除匹配。'
+                % prior_chapter, duplicate_of=prior_chapter, quote=prose[left:right],
+                length=right - left, normalization='numeric'))
+            if len(findings) >= limit:
+                break
             continue
         left, right = span
         findings.append(_finding(

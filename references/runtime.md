@@ -19,6 +19,8 @@
 
 ROOT/PROJECT 替换为绝对路径，项目产物不放技能目录。默认执行路径为主干循环调度子 agent；主干推进已授权目标，子 agent（Worker）只处理当前冻结任务。状态变化以真实命令返回和数据库提交为准。主干生命周期由宿主提供，本协议只约定业务推进与任务交接。
 
+进入 world_model 及后续创作派工前，主干确认宿主能实际创建独立 Worker，并把宿主返回的执行身份与 task_id 对应保存。宿主不支持时保留在途任务并报告能力缺失，不能通过新造 session、同一主干批写或新子进程冒充空模型历史。会话身份由宿主注入；环境变量和 claim 只用于协议核对，不是模型隔离证明。
+
 | 项目状态 | 开始方式 |
 |---|---|
 | 已有 PROJECT，续写或恢复 | 先 status，再 advance --compact；保留当前任务、候选和授权，不重新 init。 |
@@ -75,11 +77,17 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 
 未登记的动作和命令错误按返回的 code/details 核实修正入口，不猜测成功或无条件重试。字段拒绝交回当前子 agent 修正；完整性失败、作者裁决和修复耗尽保留现场并报告。可恢复的执行失败先核实任务是否已提交、原执行者是否仍在运行，再决定等待或恢复；换执行者不增加返修额度。
 
+projection、chain、state_integrity、source_integrity 与 schema 是数据或版本问题：保留候选和失败信息，停止状态推进；已冻结的 read/recall 仍可用于定位来源。写作任务不调用底层存储保存投影，不改写 schema，不修改或复制临时引擎来取消判据。程序在派工/提交前和事务保存前检查聚合状态；未通过时该次状态变化回滚。
+
+submit.accepted=true 只表示回执已接受处理；写作回执还可能生成待返修候选。报告章节已完成必须核对 committed_chapter，不能用进程退出成功或 accepted 单独推断。无人值守目标不自动提供首章准确版本认可、额外返修额度或改约授权；已有相应的明确授权则直接沿用。
+
+返修裁决的 id 绑定候选正文、约定、章节、项目版本、问题及已消耗额度；使用当前 status.author_decision.id 原样回答，不拼接固定停止点名称。改约保留候选、额度与未回答问题；作者追加额度时按问题绑定的章节处理，旧答复不能套用到另一个候选版本。
+
 ## 任务交接
 
 advance --compact 的 task 只含任务身份、阶段、task_path、identity_path、brief_path、dispatch_path、claim 等派工信息；完整 task.json 仍按原协议写入 task_path，作者选择板与非派工动作保持完整（--compact 下板面回显压缩为哈希与 option_ids，全文在 board.md 与 work/last-advance.json）。主干把 task_path 交给子 agent，由它完整读取本任务。commands 为 argv 数组，按数组执行，不拼 shell 字符串。
 
-每个任务目录另写 identity.json 与 dispatch.md：identity.json 是该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、入口与版本，以及 worker_env 里应注入的变量名）；dispatch.md 是引擎从冻结任务渲染的 **Worker 自举卡**（环境自举命令、执行步骤、认领状态、argv 命令行、常见坑）。identity 供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：除 opening_options 对主干放行 read/recall 外，read/recall/patch 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示本次由新会话自行命名。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
+每个任务目录另写 identity.json 与 dispatch.md：identity.json 是该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、入口与版本，以及 worker_env 里应注入的变量名）；dispatch.md 是引擎从冻结任务渲染的 **Worker 自举卡**（环境自举命令、执行步骤、认领状态、argv 命令行、常见坑）。identity 供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：除 opening_options 对主干放行 read/recall 外，read/recall/patch 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示宿主尚未注入执行身份，不能自行编造；已有 claim 时派工身份沿用其 session。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
 
 除主干自执的 opening_options 外，新任务派真实新 Worker，填真实 session（一个会话只做一个任务：`requires_new_worker` 保留，跨任务复用按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**认领由主干进程执行**：需要租约时主干调用 `claim --task ID --session ID` 并把返回 token 转给该 Worker 填入回执顶层 execution_claim，提交时附带；Worker 进程执行 claim 会被 worker_boundary 拒绝，claim=null 表示无需认领。
 
@@ -125,6 +133,8 @@ lexical 将新版本追加到项目记录，旧版本保留；规则不属于作
 target_reached 表示授权章节目标完成；ready_to_complete 仍须 complete 验收。export 可导出纯文本（`--format md`）或简化 HTML，html 生成包含设计、事实和正文的全书视图，两者返回绝对路径；导出不代替完本验收。
 
 **卷末不是审查阶段**：卷末闭合核对卷纲的结构化资源/位置/知情/人物终值、主线时钟 `clock.to` 与必要伏笔；自然语言 `exit_state` 只作说明，不宣称语义已被机械证明，不再有卷末范围审与根问题裁决。完本仍须 `complete` 验收：章数、每章篇幅区间、required 节点与线路解清、首章认可；之后执行 `deliver`，得到 book.md/book.html/delivery.json；交付失败重试该快照的 deliver，不重新写书。`usage` 查看实际记录字符，宿主 token 用独立 observe.py 导入观测，不从字符估算。
+
+complete 的重复调用也复验准确快照；html/export/deliver 在写正式文件前通过同一只读服务重新核对冻结章节、完整事件链、正文机械项、首章版本和必需线路。旧 audit.ok 与 completed 状态均不能豁免。可变视图被改坏时，仍以已通过当前复验的完本快照恢复交付，不导出可变内容。报告 verification_scope=mechanical，unverified 明确列出模型隔离、作者原话真实性与文学质量。
 
 工作台随项目初始化，协议与边界见 [叙事工作台](workbench.md)。阅读变化在新流程里不再派独立重读任务：受影响的章纲先由 `chapter_outline`（payload 带 `repair=True`，并提供修订影响与原因）按卷重排，冻结的 last 限制本批终点，区间外章纲由引擎保留并核对；纳入影响区间的正文重写，区间外后缀仅在显式前态与事实重放均通过时原样携带。
 

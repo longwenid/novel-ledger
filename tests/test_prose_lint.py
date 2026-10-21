@@ -21,6 +21,26 @@ from support import contract, drive, response
 
 
 class LintUnitTests(unittest.TestCase):
+    def test_changing_dense_numeric_markers_does_not_hide_a_paragraph_template(self):
+        clauses = ['庭院里的旧契约被摊在桌边', '少女守住了通向库房的回廊',
+                   '主事们等待对手露出真实底牌', '远处长街的灯火逐一熄灭',
+                   '借据背后的连带关系渐渐清楚', '几名门人仍在争论该由谁承担',
+                   '他没有解释为何留下这张残纸', '风声掩住门外传来的急促脚步',
+                   '对面的老人终于伸手取走印信', '这一回无人愿意替他作出选择']
+        def paragraph(number):
+            return ''.join(f'第{number}度{clause}，第{number}步' for clause in clauses)
+        original, candidate = paragraph(99), paragraph(100)
+        findings = lint.cross_chapter_duplicates(candidate, [(99, original)], 100)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]['normalization'], 'numeric')
+        self.assertIn(findings[0]['quote'], candidate)
+        self.assertEqual(findings[0]['duplicate_of'], 99)
+
+    def test_normal_dates_and_changed_short_quantities_are_not_numbered_templates(self):
+        self.assertEqual(lint.cross_chapter_duplicates(
+            '到了2026年10月21日，他收到第13封信，里面只有300元。',
+            [(1, '到了2025年9月20日，他收到第12封信，里面只有200元。')], 2), [])
+
     def test_verbatim_reuse_of_a_prior_chapter_is_found_with_the_shared_span(self):
         reused = '沈桐把退回的箱子放在桌上，指给主管看封条上的签字。'
         first = '第一章开头各不相同。' + reused + '第一章结尾各不相同。'

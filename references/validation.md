@@ -44,6 +44,7 @@ python3 validation/measure.py --out /path/to/metrics.json
 | 文风代理指标 | 默认 observe 记录句段与锚点对白差异，不耗返修；作者 strict 选择保留数值拒绝；`dialogue_ratio` 显式目标与高重复两档都核；人称只观察；混合/嵌套引号、句数、原文顺序重复率不误报；预检回滚、提交保存报告。 | test_style、test_style_voice、test_style_guard_flow、test_prose_lint |
 | 派工、身份与宿主 | compact 保留完整材料及已填表单；--after 拒绝未提交或旧回调；认领后故障释放租约，非文件交付在认领前拒绝。 | test_runtime、test_host_ports |
 | 模块依赖与端口 | 全作用域 import 白名单、无环与核心 I/O 禁令；用内存账本、替代交付、公开宿主能力和运行工厂实际完成用例。 | test_architecture、test_application_ports、test_domain_boundaries、test_presentation_boundaries、test_host_ports、test_cli_boundary |
+| 只读验收与信任边界 | 零章/已写投影被外部修改后拒绝继续派工与提交；状态变化在事务提交前核验；completed 与伪造 audit.ok 不能绕过线路闭合和历史重放；失败不覆盖正文与交付文件；改约不重置额度且保留可回答的作者问题；数字扰动长模板仍被识别。 | test_verification、test_workbench、test_prose_lint |
 | 存储与组合根 | 同根快照、结构共享与完整逻辑哈希复用、损坏/丢块及跨区字段拒绝；共享来源清理可达性、预检/异常回滚和返回值隔离；文件回收只在提交后执行；真实 SQLite、CLI 重开与冻结交付重试。 | test_storage_boundaries、test_storage_growth、test_snapshot_integrity、test_bootstrap、test_history |
 | 开书、卷纲与叙事 | 逐门作者决定、卷纲 all/rolling 覆盖、跨卷续接、跨卷线路 continues、场景来源与完本兑现。 | test_opening、test_outlines、test_narrative、test_longform |
 | 创作记忆与场景身份 | 执笔提交的理解增量绑定准确版本；原文失效与携带恢复，场景移动保留身份，阅读关联与章纲重排，初始化即建立理解结构，预检完整回滚。 | test_workbench |

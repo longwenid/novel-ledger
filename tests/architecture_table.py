@@ -60,14 +60,15 @@ ALLOWED = {
     # key space). book_state stays a pure declaration module: it imports nothing but contracts.
     'application': {'contracts', 'ports', 'store_keys', 'book_state', 'creation', 'facts', 'narrative', 'planning',
                     'workflow', 'world', 'craft', 'editorial',
-                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'lint'},
+                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'verification', 'lint'},
     'revision_service': {'contracts', 'ports', 'store_keys', 'editorial', 'facts', 'narrative', 'revision_impact',
-                         'story_memory', 'understanding', 'workflow'},
-    'contract_activation': {'contracts', 'ports', 'store_keys', 'workflow'},
+                         'story_memory', 'understanding', 'workflow', 'verification'},
+    'contract_activation': {'contracts', 'ports', 'store_keys', 'workflow', 'verification'},
     'context': {'contracts', 'ports', 'envelope', 'briefs', 'creation', 'narrative', 'drift',
                 'world', 'editorial', 'story_memory', 'understanding', 'planning', 'style',
                 'design_queries'},
-    'publication': {'ports'},
+    'publication': {'ports', 'verification'},
+    'verification': {'contracts', 'ports', 'book_state', 'creation', 'editorial', 'facts', 'lint', 'narrative', 'planning', 'understanding', 'world'},
     'workspace': {'contracts'},
     'delivery': {'contracts', 'ports', 'store_keys', 'envelope', 'result_templates', 'publication', 'workspace'},
     'bookpage': {'contracts', 'ports', 'publication', 'workspace', 'planning',
@@ -119,6 +120,7 @@ CORE_EXTERNAL = {
     'contract_activation': {'__future__', 'copy'},
     'context': {'__future__', 'copy', 'json'},
     'publication': {'__future__'},
+    'verification': {'__future__'},
 }
 
 # Every remaining module is an adapter by explicit decision: it may perform I/O,

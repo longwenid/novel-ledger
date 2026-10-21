@@ -68,7 +68,8 @@ def step(app: HostApplication, command, owner=None, timeout=300):
                 raise
         current = app.task_status(task['id'])
         return {'action': 'worker_finished' if current['status'] == 'done' and process.returncode == 0 else 'needs_attention',
-                'task_id': task['id'], 'exit_code': process.returncode, 'submitted': current['status'] == 'done', 'log': str(log_path)}
+                'task_id': task['id'], 'exit_code': process.returncode, 'submitted': current['status'] == 'done', 'log': str(log_path),
+                'context_isolation': 'unverified'}
     finally:
         app.release_claim(task['id'], claim['token'])
 

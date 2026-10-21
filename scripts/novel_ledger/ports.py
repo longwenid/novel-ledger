@@ -14,6 +14,20 @@ class DocumentReader(Protocol):
     def read_document(self, key): ...
 
 
+class VerificationReader(DocumentReader, Protocol):
+    """Immutable source verification has no save, transaction or task mutation capability."""
+    def headers(self, branch): ...
+
+
+class VerificationSources:
+    """A concrete capability view; do not hand a verifier the mutable repository."""
+    __slots__ = ('read_document', 'headers')
+
+    def __init__(self, read_document, headers):
+        self.read_document = read_document
+        self.headers = headers
+
+
 class PublicationReader(DocumentReader, Protocol):
     def load(self): ...
     def headers(self, branch): ...

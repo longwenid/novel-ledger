@@ -377,7 +377,7 @@ class DomainBoundaryTests(unittest.TestCase):
         it instead of a later command discovering it.
         """
         from novel_ledger import book_state
-        good = {'status': 'running', 'draft': None, 'accepted_findings': []}
+        good = {'status': 'running', 'draft': None, 'accepted_findings': [], 'rework': {}}
         self.assertIs(book_state.check_state(good), good)
         with self.assertRaises(Error) as caught:
             book_state.check_state(dict(good, pause_reason='上一步的暂停原因'))
