@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from .contracts import digest, han_count, require, text
 from .ports import VerificationReader, VerificationSources
-from . import book_state, creation, drift, editorial, facts, lint, narrative, planning, understanding, world
+from . import book_state, creation, drift_reconcile, editorial, facts, lint, narrative, planning, understanding, world
 
 
 class VerificationService:
@@ -77,7 +77,7 @@ class VerificationService:
             review = self.sources.read_document(row['review'])
             require(isinstance(review, dict), 'outline_alignment', '章节缺少有效的章纲自比记录。',
                     {'chapter': row['n']})
-            settlement = drift.reconcile(review.get('drift_check'), plan, chapter_state, book.get('world'))
+            settlement = drift_reconcile.reconcile(review.get('drift_check'), plan, chapter_state, book.get('world'))
             require(not settlement['findings'], 'outline_alignment', '正式正文未通过固定章纲核验。',
                     {'chapter': row['n'], 'findings': settlement['findings']})
             chapter_state, events = facts.settle(chapter_state, facts.prepare_hook_links(settlement['events']),

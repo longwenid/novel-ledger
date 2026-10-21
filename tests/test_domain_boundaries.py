@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import design_queries, entities, facts, planning, result_templates, workflow
+from novel_ledger import catalog, design_queries, drift_validation, entities, facts, planning, result_templates, workflow
 from novel_ledger.contracts import Error
 from novel_ledger.evidence import evidence
 from architecture_table import ADAPTERS, ALLOWED, CORE_EXTERNAL
@@ -255,7 +255,8 @@ class DomainBoundaryTests(unittest.TestCase):
         surfacing as an empty brief in a dispatch.
         """
         from novel_ledger import creation
-        from novel_ledger.contracts import OPENING_DIRECTION_GATES, OPENING_VERSION
+        from novel_ledger.catalog import OPENING_DIRECTION_GATES
+        from novel_ledger.contracts import OPENING_VERSION
         gates = creation.gate_ids(OPENING_VERSION)
         for gate in gates:
             with self.subTest(gate=gate):
@@ -442,7 +443,7 @@ class HookDeclarationTests(unittest.TestCase):
         rows = volume_rows(book, ['v1'])
         rows[0].pop('hooks')
         with self.assertRaises(Error) as caught:
-            drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+            drift_validation.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
                                           {}, {}, ['v1'], book['state'])
         self.assertEqual(caught.exception.code, 'design_drift')
         criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
@@ -462,7 +463,7 @@ class WebnovelSettingMethodTests(unittest.TestCase):
 
     def lenses(self):
         from novel_ledger import contracts
-        return contracts.LENSES
+        return catalog.LENSES
 
     def test_every_lens_is_a_nonempty_method_triple(self):
         from novel_ledger import creation
@@ -494,7 +495,8 @@ class WebnovelSettingMethodTests(unittest.TestCase):
 
     def test_the_world_and_edge_gate_notes_state_their_constraints(self):
         from novel_ledger import creation
-        from novel_ledger.contracts import OPENING_DIRECTION_GATES
+        from novel_ledger.catalog import OPENING_DIRECTION_GATES
+
         note = creation.gate_note(creation.OPENING_VERSION, 'world')
         self.assertTrue(note.strip())
         for word in ('architecture', '资源', '切面'):

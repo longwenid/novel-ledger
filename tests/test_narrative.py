@@ -1,6 +1,6 @@
 """Step five on a tracked book: the writer's self-comparison replaces the reviewer's receipt.
 
-`drift.reconcile` projects the true before-value and checks the fixed chapter contract. A declared
+`drift_reconcile.reconcile` projects the true before-value and checks the fixed chapter contract. A declared
 change or omission stays a failed candidate; it cannot settle facts or rewrite future outlines.
 """
 import copy
@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import drift, narrative
+from novel_ledger import drift, drift_reconcile, drift_simulation, drift_validation, narrative
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error
 from novel_ledger.sqlite_store import SQLiteRepository
@@ -35,13 +35,13 @@ class TrackingChainTests(unittest.TestCase):
         self.contract = self.book['contract']
         self.world = self.book['world']
         self.volume = self.contract['volumes'][0]
-        self.volume_row = drift.validate_volume_outline(
+        self.volume_row = drift_validation.validate_volume_outline(
             {'volumes': volume_rows(self.book, ['v1'])}, self.contract, self.world,
             {}, {}, ['v1'], self.book['state'])['v1']
         self.rows = chapter_rows(self.book, self.volume, self.book['state'])
 
     def submit(self, rows, state0=None):
-        return drift.validate_chapter_outline(
+        return drift_validation.validate_chapter_outline(
             {'volume': 'v1', 'chapters': rows}, self.contract['chapter_outline'], self.volume,
             self.volume_row, self.world,
             self.book['state'] if state0 is None else state0)
@@ -56,7 +56,7 @@ class TrackingChainTests(unittest.TestCase):
 
     def test_a_tracked_chain_resolves_every_node_and_closes_the_line(self):
         rows = self.submit(self.rows)
-        state, findings = drift.simulate(rows, self.book['state'], self.world, self.volume,
+        state, findings = drift_simulation.simulate(rows, self.book['state'], self.world, self.volume,
                                          self.volume_row)
         self.assertEqual(findings, [])
         self.assertEqual(state['story_nodes'][rows[0]['plot']['nodes'][0]['node']]['status'], 'resolved')
@@ -98,7 +98,7 @@ class TrackingChainTests(unittest.TestCase):
             with self.subTest(criterion=criterion):
                 outline, rows = build()
                 with self.assertRaises(Error) as caught:
-                    drift.validate_chapter_outline(
+                    drift_validation.validate_chapter_outline(
                         {'volume': 'v1', 'chapters': rows}, self.contract['chapter_outline'],
                         self.volume, outline, self.world, self.book['state'])
                 self.assertEqual(caught.exception.code, 'design_drift')

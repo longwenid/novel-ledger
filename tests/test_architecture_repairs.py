@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import context, drift, facts, planning, spatial, workflow
+from novel_ledger import context, drift, drift_reconcile, drift_simulation, facts, planning, spatial, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import Error, digest, policy_default
 from novel_ledger.sqlite_store import SQLiteRepository
@@ -75,18 +75,18 @@ class SharedTransitionsTests(unittest.TestCase):
 
     def reconcile(self, row):
         items = []
-        for entry in drift._planned(row):
+        for entry in drift_reconcile._planned(row):
             kind = entry['kind']
             actual = {'advance_days': 2} if kind == 'clock' else {'from': 'office', 'to': 'yard'}
             items.append({'kind': kind, 'key': entry['key'], 'planned': entry['planned'],
                           'actual': actual, 'status': 'kept', 'reason': '赴后院核对。',
                           'evidence': {'chapter': 1, 'quote': self.quote}})
-        return drift.reconcile({'items': items, 'unplanned': [], 'verdict': 'clean'},
+        return drift_reconcile.reconcile({'items': items, 'unplanned': [], 'verdict': 'clean'},
                                row, self.state, self.book['world'])
 
     def test_design_and_prose_use_the_same_travel_clock_and_arrival_rules(self):
         before = copy.deepcopy(self.state)
-        simulated, findings = drift.simulate([self.row], before, self.book['world'])
+        simulated, findings = drift_simulation.simulate([self.row], before, self.book['world'])
         self.assertEqual(findings, [])
         result = self.reconcile(self.row)
         self.assertEqual(result['findings'], [])
@@ -117,7 +117,7 @@ class SharedTransitionsTests(unittest.TestCase):
                     self.state['entities']['carrier'] = {'id': 'carrier', 'name': '携带者', 'kind': 'person'}
                     self.state['placements']['carrier'] = 'office'
                     self.state['custody']['shen'] = 'carrier'
-                simulated, findings = drift.simulate([row], self.state, self.book['world'])
+                simulated, findings = drift_simulation.simulate([row], self.state, self.book['world'])
                 self.assertTrue(any(f['criterion'] == 'drift_place' for f in findings), scenario)
                 self.assertEqual(simulated['placements'], self.state['placements'])
                 self.assertTrue(any(f['criterion'] == 'drift_place' for f in self.reconcile(row)['findings']))
@@ -139,7 +139,7 @@ class SharedTransitionsTests(unittest.TestCase):
         row['hooks'] = [{'hook': 'promise', 'action': 'plant', 'note': '当章应兑现。'}]
         outline = {'hooks': [{'id': 'promise', 'text': '交代来源。', 'plant': [1, 1],
                               'payoff': [1, 1], 'required': False, 'continues': False}]}
-        _, findings = drift.simulate([row], self.state, self.book['world'], volume_outline=outline)
+        _, findings = drift_simulation.simulate([row], self.state, self.book['world'], volume_outline=outline)
         self.assertTrue(any(f['criterion'] == 'drift_deadline' for f in findings))
         event = {'op': 'hook', 'id': 'promise', 'status': 'open', 'before': None, 'due': 1,
                  'text': '交代来源。', 'evidence': {'chapter': 1, 'quote': self.quote}}

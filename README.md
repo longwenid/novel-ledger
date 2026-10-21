@@ -35,7 +35,7 @@ flowchart TD
     APP --> VERIFY[只读验收 verification]
     VERIFY --> PORT
     VERIFY --> DOMAIN
-    VERIFY --> DRIFT
+    VERIFY --> DRIFTR[执笔核算 drift_reconcile]
     APP --> WRITE[连写编排 writing_service]
     WRITE --> PORT
     WRITE --> WF
@@ -49,6 +49,10 @@ flowchart TD
     WF --> DOMAIN
     WF --> DRIFT[漂移核算 drift]
     DRIFT --> DOMAIN
+    WF --> DRIFTS[状态链模拟 drift_simulation]
+    WF --> DRIFTR
+    DRIFTS --> DOMAIN
+    DRIFTR --> DOMAIN
     VIEW --> PORT
     VIEW --> DEL[任务与导出 delivery]
     VIEW --> PAGE[全书页面 bookpage]
@@ -116,12 +120,13 @@ my-novel/
 
 `export` 输出纯文本或简化 HTML，**默认不会写 `book.html`**（那个位置归全书视图）；需要另一个文件时显式给 `--output`：`export --format md`、`export --output book-plain.html`。
 
-SQLite 中的七张表各司其职：
+SQLite 中的八张表各司其职：
 
 | 表 | 作用 |
 |---|---|
 | `kv` | schema 版本、`book` 的四分区哈希目录，以及分支存档、租约等键值 |
 | `documents` | 不可变分区（settings/canon/intent/execution）、冻结来源与正文，**按内容哈希寻址** |
+| `document_blocks` | 大文档的物理支撑：超过内联阈值的 `documents` 值按内容哈希拆成不可变共享块（见[架构](references/architecture.md)） |
 | `tasks` | 冻结输入、回执；**唯一 pending 索引**保证同一时刻只有一个在途任务 |
 | `sessions` | 普通会话绑定任务，快速会话绑定五章组；禁止跨组复用 |
 | `branches` / `chapters` | 分支与正式章节；每章带正文哈希、事件、章纲、漂移核算结果、状态哈希与**前章链指纹** |
@@ -222,6 +227,7 @@ DSH 通过 `@deepseek-ai/dsh-skill-filesystem` 发现本地技能（需该 provi
 | 200 | `<projectRoot>/.agents/skills` | 同上，另一个共享约定 |
 | 300 | `customSkillDirs` | 在 DSH 设置里自定义 |
 | 400 | `$DSH_HOME/skills`（默认 `~/.dsh/skills`） | **推荐**：开启的每个工作区都能看到 |
+| 500 | `$DSH_AGENTS_HOME/skills` | 另一全局根，优先级最低 |
 
 安装就是把仓库链接到某个根目录，让 `git pull` 直接更新已安装的技能：
 

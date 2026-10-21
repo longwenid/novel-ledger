@@ -161,7 +161,7 @@
 - `plant` → `{'op':'hook','id':…,'status':'open','due': payoff[1],'text':…,'reason': note?,'evidence':…}`
 - `payoff` → `{'op':'hook','id':…,'status':'paid','reason': note?,'evidence':…}`
 
-这些事件由 `drift.reconcile` 从章纲行加 `drift_check` **产出，写手不手写事件**。`drift_check.items` 因此新增 `kind='hook'`：`planned={'action':'plant'|'payoff'}`、`actual={'action':…}`、`evidence` 为正文引文。
+这些事件由 `drift_reconcile.reconcile` 从章纲行加 `drift_check` **产出，写手不手写事件**。`drift_check.items` 因此新增 `kind='hook'`：`planned={'action':'plant'|'payoff'}`、`actual={'action':…}`、`evidence` 为正文引文。
 
 `state.hooks` 保存承诺状态，页面据此展示；`complete()` 拒绝仍开放的承诺。
 
@@ -240,7 +240,7 @@
 3. 已生效章纲是固定契约。`status=kept` 时实际结果必须等于章纲的计划结果；`deviated`/`skipped` 即使给出理由也产生 `outline_alignment`，候选保留并返修当前正文，不能入库或自动改纲。
 4. `unplanned` 只报告待修正文中的计划外变化，不授予新增事实的权限。资源/位置/知情/人物变化仍需具体前后值、原因和引文供诊断；通过时必须为空。读者披露与其他计划增量一样逐项自比，不由引擎默认为已落实。
 5. `evidence.quote` 必须是正文原文片段，走精确引文校验。
-6. 通过后原子入账：复用事实、叙事与空间的既有机械判据（`facts.settle` 及其调用的叙事、空间规则），事件来源是 `drift_check.items`；伏笔事件由 `drift.reconcile` 产出。
+6. 通过后原子入账：复用事实、叙事与空间的既有机械判据（`facts.settle` 及其调用的叙事、空间规则），事件来源是 `drift_check.items`；伏笔事件由 `drift_reconcile.reconcile` 产出。
 7. 通过时所有计划项均须落实、无跳过或计划外变化，`verdict=clean`。失败只沿本章有界返修推进，章纲、后文计划和正式事实保持原样。章纲确有矛盾时保留现场交作者决定；作者明确发起的改纲或历史修订才进入对应重排流程。
 8. 其余既有闸门保留：字数区间（`word_budget`）、`lint.draft_findings`、字面约定（`literal_policy`）、禁用名，以及文风代理指标（见 [文风](#文风)）。
 

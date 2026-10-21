@@ -109,7 +109,7 @@ class InlineOpeningTests(unittest.TestCase):
         work = self.repo.pending()['input']
         self.assertEqual(work['payload']['gate']['id'], 'genre')
         self.assertIn('全类目目录', work['brief'])
-        for name, _hook in __import__('novel_ledger.contracts', fromlist=['GENRE_CATALOG']).GENRE_CATALOG:
+        for name, _hook in __import__('novel_ledger.catalog', fromlist=['GENRE_CATALOG']).GENRE_CATALOG:
             self.assertIn(name, work['brief'])
 
 

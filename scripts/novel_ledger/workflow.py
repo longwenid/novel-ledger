@@ -5,7 +5,7 @@ import copy
 from .contracts import (DEFAULTS, OPENING_VERSION, PIPELINE_SHAPES, REDESIGNS,
                         REPAIRS, Job, Outcome,
                         capabilities_for, digest, han_count, require, text, tier_of)
-from . import creation, drift, facts, narrative, planning, world, craft, editorial, understanding, ledger, lint, style
+from . import craft, creation, drift, drift_reconcile, drift_simulation, editorial, facts, ledger, lint, narrative, planning, style, understanding, world
 from .evidence import evidence
 
 # Where the engine stops moving on its own, and who decides what happens next. The value of this
@@ -185,7 +185,7 @@ def design_anchor(book, contract, volume, payload):
             break
         rows = (book.get('chapter_outlines') or {}).get(prior['id'])
         if rows:
-            state, _ = drift.simulate(rows, state, book.get('world'), prior,
+            state, _ = drift_simulation.simulate(rows, state, book.get('world'), prior,
                                       (book.get('volumes_outline') or {}).get(prior['id']))
     return state
 
@@ -278,7 +278,7 @@ def choose(book, headers):
     if row is None:
         return replan_volume_outline(book, contract, chapter, [], '本卷章纲缺少这一章，按真实状态补齐。')
     # A fixed outline is not silently rewritten to fit a different committed history.
-    mismatches = drift.state_mismatch(book['state'], row)
+    mismatches = drift_reconcile.state_mismatch(book['state'], row)
     require(not mismatches, 'outline_state', '真实前态与固定章纲不符，保留现场并由作者决定修订范围，不能自动改纲。',
             {'chapter': chapter, 'findings': mismatches})
     # Historical departures require author-directed revision; they cannot justify automatic replanning.
@@ -572,7 +572,7 @@ def apply(book, task, data, actor, sources, priors=None):
                 book.setdefault('chapter_outlines', {})[volume_id] = validated
                 for item in drift.plan_rows(validated):
                     book.setdefault('plans', {})[str(item['chapter'])] = item
-                simulated, chain_findings = drift.simulate(validated, simulated, book.get('world'),
+                simulated, chain_findings = drift_simulation.simulate(validated, simulated, book.get('world'),
                                                            volume, outlines[volume_id])
                 require(not chain_findings, 'design_drift', '合并回执的卷内状态链核账未通过。',
                         {'volume': volume_id, 'findings': chain_findings[:12]})
@@ -669,7 +669,10 @@ def apply(book, task, data, actor, sources, priors=None):
             draft['patch'] = patch
         plan = (book.get('plans') or {}).get(str(chapter))
         require(plan is not None, 'chapter_outline', '本章尚无已登记的章纲，不能执笔。')
-        settlement = drift.reconcile(data.get('drift_check'), plan, book['state'], book.get('world'))
+        presence = drift_reconcile.presence_notes(plan, book.get('world'), data['prose'])
+        if presence:
+            draft['presence'] = presence
+        settlement = drift_reconcile.reconcile(data.get('drift_check'), plan, book['state'], book.get('world'))
         findings = list(settlement['findings'])
         count = han_count(prose)
         band = narrative.budget_for(book, chapter) if tracking else {'minimum': book['contract']['chapter_min'],

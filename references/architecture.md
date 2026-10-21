@@ -21,7 +21,7 @@
 
 ## 判据前移与可靠底座
 
-作者约定提供作品方向；卷纲与章纲在设计期声明资源、位置、知情、时钟、人物、情节与伏笔增量，以及本卷/本章的文风要求，引擎用卷内状态链逐章模拟；执笔后由 `drift_check` 逐项自比、`drift.reconcile` 机械核算（并产出 hook 事件），再由事实、叙事与空间的既有判据入账，同时用 `style` 记录数值观察并核验已声明的文风约束。理解记录与创作记忆仍按版本保存，实际事件才写入 canon。context 将方向、当前事实、相关理解、文风规格与原文编译为冻结任务，workflow 负责交接，SQLite 事务、不可变文档和章节分支作为可靠底座。
+作者约定提供作品方向；卷纲与章纲在设计期声明资源、位置、知情、时钟、人物、情节与伏笔增量，以及本卷/本章的文风要求，引擎用卷内状态链逐章模拟；执笔后由 `drift_check` 逐项自比、`drift_reconcile.reconcile` 机械核算（并产出 hook 事件），再由事实、叙事与空间的既有判据入账，同时用 `style` 记录数值观察并核验已声明的文风约束。理解记录与创作记忆仍按版本保存，实际事件才写入 canon。context 将方向、当前事实、相关理解、文风规格与原文编译为冻结任务，workflow 负责交接，SQLite 事务、不可变文档和章节分支作为可靠底座。
 
 understanding 是 intent 内独立的版本对象，不把解释与未来方案混成事实；原文证据失效时撤下对应版本，未改后文携带后恢复其有效记录。稳定场景身份与阅读位置分离，故事时间和披露另行记录。revision_impact 给出事实重写范围与阅读影响动作；v2 没有独立阅读任务，受影响章的章纲由 `chapter_outline` 重排。协议与项目边界见 [叙事工作台](workbench.md)。
 
@@ -50,7 +50,7 @@ flowchart TD
     APP --> VERIFY[只读验收 verification]
     VERIFY --> PORT
     VERIFY --> DOMAIN
-    VERIFY --> DRIFT
+    VERIFY --> DRIFTR[执笔核算 drift_reconcile]
     APP --> WRITE[连写编排 writing_service]
     WRITE --> PORT
     WRITE --> WF
@@ -64,6 +64,10 @@ flowchart TD
     WF --> DOMAIN
     WF --> DRIFT[漂移核算 drift]
     DRIFT --> DOMAIN
+    WF --> DRIFTS[状态链模拟 drift_simulation]
+    WF --> DRIFTR
+    DRIFTS --> DOMAIN
+    DRIFTR --> DOMAIN
     VIEW --> PORT
     VIEW --> DEL[任务与导出 delivery]
     VIEW --> PAGE[全书页面 bookpage]
@@ -90,22 +94,26 @@ flowchart TD
 
 箭头表示主要源码依赖，方向从调用方指向依赖。`novel.py` 只依赖基础契约与组合根，`bootstrap` 的 LocalRuntime 统一打开/初始化账本并提供视图、导出、交付与宿主执行入口。`bootstrap` 装配 SQLite、冻结编译器、文件交付、时钟与 ID 生成器；`Application` 只接收 `ports` 中声明的能力，通过注入的接口完成持久化、任务编译与交付。核心不发现项目目录、数据库文件、标准输入或宿主进程。`host` 只调用公开用例与任务状态查询。`TaskDelivery` 可选携带 `process: FileTaskTransport`，其中声明实际项目、任务和日志路径；子进程宿主在 claim 前验证该文件传输能力，非文件交付按 `host_transport` 拒绝且不会留下执行租约。
 
-层级独立以可替换性为标准：存储、冻结编译、交付、时间和身份提供方可各自替换，核心规则与用例无需修改。`context` 依赖最小 `ContextStore`，交付与全书视图依赖只读 `PublicationReader`，完本交付也只生成文件与清单；组合根将清单交给应用的 `record_delivery` 核对当前完本快照并事务留档；查询辅助、实体注册和证据校验有独立纯模块，避免从较高层借用私有方法。模板生成由 `result_templates` 负责，机械判据由 `drift`/`lint`/`ledger` 等纯模块执行。
+层级独立以可替换性为标准：存储、冻结编译、交付、时间和身份提供方可各自替换，核心规则与用例无需修改。`context` 依赖最小 `ContextStore`，交付与全书视图依赖只读 `PublicationReader`，完本交付也只生成文件与清单；组合根将清单交给应用的 `record_delivery` 核对当前完本快照并事务留档；查询辅助、实体注册和证据校验有独立纯模块，避免从较高层借用私有方法。模板生成由 `result_templates` 负责，机械判据由 `drift` 家族（`drift`/`drift_simulation`/`drift_validation`/`drift_reconcile`）与 `lint`/`ledger` 等纯模块执行。
 
-图中应用编排包含 `application`、`revision_service` 与 `contract_activation`；独立的 `verification` 服务只接收 `VerificationSources`（read_document 与 headers 两个能力），不持有可写 Repository。Application 保留公开用例、授权检查与事务入口；修订服务负责影响分析、分支建立、后缀处理与理解恢复，事实重放统一委托 verification；约定激活服务负责已采纳约定切换。两者在调用方事务内使用 Repository 端口；修订服务只额外接收明确的任务取消能力，不依赖 Application 或自行提交事务。
+图中应用编排包含 `application`、`revision_service`、`contract_activation` 与 `opening_service`；独立的 `verification` 服务只接收 `VerificationSources`（read_document 与 headers 两个能力），不持有可写 Repository。Application 保留公开用例、授权检查与事务入口；修订服务负责影响分析、分支建立、后缀处理与理解恢复，事实重放统一委托 verification；约定激活服务负责已采纳约定切换。两者在调用方事务内使用 Repository 端口；修订服务只额外接收明确的任务取消能力，不依赖 Application 或自行提交事务。
 
-图中“纯领域规则”汇总规则模块，略去逐域边以保持可读；`drift` 单列，因为它是判据前移的主入口，同时被 workflow 直接调用。完整依赖白名单、所有作用域的导入、核心 I/O 禁令和无环约束由 `tests/test_architecture.py` 强制。替换验证须通过实际用例观察结果：内存账本跑通生命周期、只读账本生成交付、替代宿主与运行工厂执行公开入口，真实组合根另验收事务与文件效果衔接。具体回归入口按 [改动类型选择验证](validation.md#按改动类型选择验证)，完整边集由 `validation/measure.py` 测量。
+图中“纯领域规则”汇总规则模块，略去逐域边以保持可读；`drift` 家族单列，因为判据前移的主入口在族内（共享词汇在 `drift`，模拟、校验与核算是三个相位模块），workflow 与 verification 直接调用其中的模拟与核算。完整依赖白名单、所有作用域的导入、核心 I/O 禁令和无环约束由 `tests/test_architecture.py` 强制。替换验证须通过实际用例观察结果：内存账本跑通生命周期、只读账本生成交付、替代宿主与运行工厂执行公开入口，真实组合根另验收事务与文件效果衔接。具体回归入口按 [改动类型选择验证](validation.md#按改动类型选择验证)，完整边集由 `validation/measure.py` 测量。
 
 架构图以 Mermaid 块形式存放在本文件（真源），快照存于 [docs/architecture.mmd](../docs/architecture.mmd) 与 README，三处逐字一致；**仓库不保存渲染件**，需要图片时从快照现场导出。图表与字段的说明各自引用对应真源，不在派生文件或其他文档中另立一套结构要求。
 
 | 文件 | 权威职责 |
 |---|---|
-| contracts | 协议标识、约定字段表与当前开书对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、开书枚举与共享数值默认（`DEFAULTS`，含 `world_ladder` 的位阶/阶梯条数下限与主题锚点上限）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
+| contracts | 协议标识、约定字段表与当前开书对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、共享数值默认（`DEFAULTS`，含 `world_ladder` 的位阶/阶梯条数下限与主题锚点上限）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
+| catalog | 开书内容目录：类型库、创意透镜、卷型转折、开书方向与门序、雷同戒律与档位板文案；纯数据无依赖，creation/briefs/delivery/bookpage 读取渲染选择板与简报 |
 | ports | 持久化、只读查询、冻结编译、交付与宿主用例的能力契约；只依赖 contracts，不持有具体资源 |
 | creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；只有当前门序（creation/6，13 门先定世界与格局），更早协议读取即拒；结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
 | world | 世界记录（支持 12 个领域，按档位要求填写）、关联、选择一致性，以及已声明的位阶、资源、格局与世界架构逐字绑定；保持设计与事实分离 |
 | planning | 作者约定、卷纲与章纲的落库校验、`new_entities` 与场景形状 |
-| drift | 卷纲/章纲的机械校验（含 v5 卷 `stage` 逐字取阶梯一级且只升不降）、卷内状态链模拟（`simulate`，含伏笔 `plant`/`payoff` 状态机）与执笔漂移核算（`reconcile`，产出 hook 事件）；依赖 facts/contracts/entities/narrative/spatial/ledger/world/evidence |
+| drift | 判据共享词汇：卷纲/章纲字段表、世界与投影助手、章纲增量提取、设计/执笔共用的状态归约 `_reduce` 与 `plan_rows`（把章纲冻结成执笔回执必须回答的条目）；briefs/result_templates 直接读它的字段表 |
+| drift_simulation | 卷内状态链模拟（`simulate`，含伏笔 `plant`/`payoff` 状态机）、卷末闭合与设计/执笔两相位共用的事件构造；依赖 drift |
+| drift_validation | 卷纲/章纲机械校验：字段形状、v5 卷 `stage` 逐字取阶梯一级且只升不降、篇幅策略、enter/exit 与规范化章形状；依赖 drift 与 drift_simulation |
+| drift_reconcile | 执笔漂移核算（`reconcile`，产出 hook 事件）与 `state_mismatch` 章行比对；依赖 drift 与 drift_simulation |
 | style | 文风代理指标的纯核心：`metrics`（句长/段长/对白占比/本章重复度/视角标记）、`baseline`（首章锚点）与 `examine`（按 `style_guard/style_window` 分开观察与 findings，`compare` 只取 findings）；零派工，只依赖 contracts |
 | narrative | 线路、节点、知情、人物当前状态与动态篇幅的纯规则 |
 | entities / evidence / design_queries | 实体注册、原文证据与设计节点查询的纯共享规则，领域模块直接复用 |
@@ -121,6 +129,7 @@ flowchart TD
 | application | 公开用例、作者与运行授权、准确方案授权和单一事务入口；组合领域及专项应用服务，不解析输入文件或生成交付文件 |
 | writing_service | 五章组的执行范围、会话绑定、逐章接续、材料哈希复用与停止；只创建当前一章的冻结任务，不修改章纲，不代行作者和主控决定 |
 | revision_service / contract_activation | 同事务内的历史修订、后缀重放、理解恢复及已采纳约定激活；依赖端口与纯规则，不反向调用应用用例 |
+| opening_service | 逐门开书的门内决策机制（choice/intake/regroup/back 的状态变更、冻结与留痕）；在调用方事务内工作，主控租约与加载/保存留在应用层 |
 | sqlite_store | 持久化、唯一 pending、幂等回执、不可变材料及分支；逐章历史来源与增量目录缓存；未达文档回收 |
 | presentation | 实现交付端口，组合任务目录、修复方案、世界及全书视图 |
 | workspace | 输出位置与受保护资源别名判定；保护路径由存储适配器经组合根注入 |
@@ -229,8 +238,8 @@ verification 是程序能力边界，不是操作系统安全沙箱。所有正�
 | 开书与试章 | 零输入逐门选择（主干自执，13 门：脑洞门问"多了什么规则"，世界门交位阶与硬通货，格局门交升格阶梯），完成后按档位要求创建世界模型并做机械校验与位阶、资源、格局及已声明的世界架构逐字绑定；完整约定也可导入，首章定调保持 |
 | 分卷与逐章设计 | 世界与约定生效后派发各卷卷纲（每卷 2000–3000 汉字，目标 2500，默认一次交全部卷；v5 项目每卷 `stage` 逐字取格局阶梯一级且只升不降；含伏笔账 `hooks` 与文风走向 `style.trend`）；进入每卷前交该卷章纲（每章约 150 汉字 + 漂移字段 + enter/exit + 伏笔 `plant`/`payoff` + 文风 `style`） |
 | 事实连续性 | 章纲状态链在设计期逐章模拟资源前值与守恒、时钟、知情、位置、人物变化与伏笔埋收，卷末核对结构化终值和 clock.to（容差 0）且 required 伏笔全 paid；自然语言 exit_state 只作说明 |
-| 执笔核账 | `drift_check` 逐项自比（覆盖、前态、去向、偏差理由与引文），引擎仅在所有项符合固定章纲时按既有事实判据入账；偏差留作本章返修，不自动改纲；伏笔事件由 `drift.reconcile` 产出 |
-| 文学质量 | **没有独立复核**：文风由作者约定、卷纲 `style.trend` 与章纲 `style` 提供依据；默认观察首章形状，作者选 strict 才执行锚点数值约束。显式对白目标与高重复继续检查；代词标签不能判实际视角。**不证明"好看、人物可信"**——文学判断靠作者抽读或离线评测工具（`scripts/quality_eval.py`） |
+| 执笔核账 | `drift_check` 逐项自比（覆盖、前态、去向、偏差理由与引文），引擎仅在所有项符合固定章纲时按既有事实判据入账；偏差留作本章返修，不自动改纲；伏笔事件由 `drift_reconcile.reconcile` 产出 |
+| 文学质量 | **没有独立复核**：文风由作者约定、卷纲 `style.trend` 与章纲 `style` 提供依据；默认观察首章形状，作者选 strict 才执行锚点数值约束。显式对白目标与高重复继续检查；章纲声明出场的人物由 `drift_reconcile.presence_notes` 以世界模型名做机械落实观察（severity=note，记入 draft.presence，不耗返修额度、不拒稿）；代词标签不能判实际视角。**不证明"好看、人物可信"**——文学判断靠作者抽读或离线评测工具（`scripts/quality_eval.py`） |
 | 修改恢复 | 冻结任务、候选稿、版本化改约、历史分支、合并撤销 |
 | 局部修复 | 冻结能力支持完整稿、版本补丁和原文复用；合成后重新过机械核算与 lint，不自动免检入库 |
 | 作品理解 | 按人物、话题与显式引用选取版本解释、原文表达样本与反证；候选稿隔离、依据失效和恢复 |
@@ -253,7 +262,7 @@ verification 是程序能力边界，不是操作系统安全沙箱。所有正�
 
 ## 状态转移与规划范围
 
-设计模拟、执笔核算的影子投影与正式提交共用 `facts.apply_event`。该函数只作用于调用者持有的临时投影；`facts.settle` 负责正文引文与时间表达检查，整章到期规则由 facts.check_deadlines 供模拟和正式结算共享，正式事实仍只由提交事务写入。卷纲窗口、章纲 enter/exit 和卷末闭合继续由 drift 检查。设计没有正文证据，模拟通过不能代替正文提交。路径拓扑的开放、方向、通行条件、携带关系与显式出发/抵达时间在设计期也按正式规则检查。
+设计模拟、执笔核算的影子投影与正式提交共用 `facts.apply_event`。该函数只作用于调用者持有的临时投影；`facts.settle` 负责正文引文与时间表达检查，整章到期规则由 facts.check_deadlines 供模拟和正式结算共享，正式事实仍只由提交事务写入。卷纲窗口、章纲 enter/exit 和卷末闭合继续由 drift 家族（drift_validation/drift_simulation）检查。设计没有正文证据，模拟通过不能代替正文提交。路径拓扑的开放、方向、通行条件、携带关系与显式出发/抵达时间在设计期也按正式规则检查。
 
 卷纲与章纲为必选阶段，策略解析统一由 planning.resolve_outline_policy 负责。缺省使用默认值；显式空对象、null 和不完整策略不能悄悄恢复成默认值。卷纲 scope 只接受 all/rolling，章纲只接受 volume/all；其余值明确拒绝。
 

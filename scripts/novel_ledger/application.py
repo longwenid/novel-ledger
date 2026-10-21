@@ -7,6 +7,7 @@ from .contracts import (CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, V
 from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint
 from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
+from .opening_service import OpeningService
 from .contract_activation import ContractActivation
 from .verification import VerificationService
 from .writing_service import WritingService
@@ -31,6 +32,7 @@ class Application:
         self.new_id = new_id
         self._revisions = RevisionService(repo, cancel_pending=self._cancel_pending)
         self._contracts = ContractActivation(repo)
+        self._opening = OpeningService(repo, cancel_pending=self._cancel_pending)
         self._verification = VerificationService(repo)
         self._writing = WritingService(repo, compile_task, clock, new_id)
 
@@ -491,33 +493,17 @@ class Application:
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self._load()
-            require(book['contract'] is None and book.get('creation') is not None, 'opening', '当前不是逐门开书阶段。')
-            book['creation'] = creation.pick(book['creation'], option, board_hash, source)
-            book['revision'] += 1
-            if book['creation']['phase'] == 'world':
-                book['status'] = 'running'
-            self.repo.document(book['creation'])
+            result = self._opening.choice(book, option, board_hash, source)
             self._save(book)
-            self.repo.record('opening_choice', {'option': option, 'board_hash': board_hash, 'source': source})
-        return {'selected': True, 'opening': creation.view(book['creation']), 'next': 'world_model' if book['creation']['phase'] == 'world' else 'opening_options'}
+        return result
 
     def intake(self, values, source, owner=None):
-        require(isinstance(values, dict), 'intake', '部分要求须为门 ID 到 value 的映射。')
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self._load()
-            require(book['contract'] is None and book.get('creation'), 'intake', '仅准备项目接受部分要求。')
-            require(self.repo.pending() is None, 'intake', '已有任务先按当前展示选择或 back，避免覆盖冻结任务。')
-            for gate, value in values.items():
-                planning.enforce(planning.policy_of(book), 'opening_options', {'value': value})
-            book['creation'] = creation.intake(book['creation'], values, source)
-            book['revision'] += 1
-            if book['creation']['phase'] == 'world':
-                book['status'] = 'running'
-            self.repo.document(book['creation'])
+            result = self._opening.intake(book, values, source)
             self._save(book)
-            self.repo.record('intake', {'source': source, 'gates': list(values)})
-        return {'opening': creation.view(book['creation'])}
+        return result
 
     def usage(self):
         return self.repo.usage()
@@ -545,27 +531,17 @@ class Application:
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self._load()
-            require(book['contract'] is None and book.get('creation') is not None, 'opening', '当前不是逐门开书阶段。')
-            book['creation'] = creation.regroup(book['creation'], board_hash, reason)
-            book['revision'] += 1
-            self.repo.document(book['creation'])
+            result = self._opening.regroup(book, board_hash, reason)
             self._save(book)
-            self.repo.record('opening_regroup', {'reason': reason, 'board_hash': board_hash})
-        return {'next': 'opening_options', 'opening': creation.view(book['creation'])}
+        return result
 
     def opening_back(self, gate, reason, owner=None):
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self._load()
-            require(book['contract'] is None and book.get('creation') is not None, 'opening', '有效约定已激活时使用 recontract，不覆盖旧选择。')
-            book['creation'] = creation.back(book['creation'], gate, reason)
-            book.update(status='preparing', world=None, revision=book['revision'] + 1)
-            book.pop('pending_contract', None)
-            self._cancel_pending(reason)
-            self.repo.document(book['creation'])
+            result = self._opening.back(book, gate, reason)
             self._save(book)
-            self.repo.record('opening_back', {'gate': gate, 'reason': reason})
-        return {'next': 'opening_options', 'opening': creation.view(book['creation'])}
+        return result
 
     def pause(self, reason, cancel=False, owner=None):
         require(text(reason), 'pause', '暂停须有原因。')
