@@ -253,6 +253,42 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(book['revision_run']['first'], 1)
         self.assertTrue(self.app.audit()['ok'])
 
+    def test_a_zero_progress_recontract_resets_the_spent_budget_and_keeps_the_candidate(self):
+        # The live 2026-10-21 run bricked chapter one: same-contract re-activations each carried
+        # the previous round's spent budget, until the chapter could neither write, repair nor
+        # answer. A re-contract with no settled chapter owes the fresh book a clean ledger.
+        book = self.repo.load()
+        book.update(draft={'chapter': 1, 'title': '第一章 落账', 'prose': '正文一句。', 'findings': [{'code': 'scene_identity'}]},
+                    rework={'1': {'repairs': 2, 'redesigns': 1, 'initial_used': True}},
+                    author_block={'id': 'repair-exhausted:chapter_repair', 'question': '额度用尽。', 'options': []},
+                    status='paused', pause_reason='额度用尽。')
+        self.repo.save(book)
+        changed = contract(6)
+        changed['reader_promise'] = '重新激活规划链。'
+        self.app.recontract(changed, '零进度重开。', self.owner)
+        handoff = self.app.advance(owner=self.owner)
+        self.assertEqual(handoff['task']['stage'], 'volume_outline')
+        new = self.repo.load()
+        self.assertEqual(new['rework'], {})
+        self.assertIsNone(new['draft'])
+        self.assertEqual(new['prior_candidate']['prose'], '正文一句。')
+        self.assertNotIn('author_block', new)
+        self.assertEqual(new['status'], 'running')
+        # The demoted candidate files its findings once, not once per code path.
+        self.assertEqual(new['carry_findings'].count({'code': 'scene_identity'}), 1)
+
+    def test_budget_reads_survive_a_book_without_a_rework_ledger(self):
+        # `rework` is a new-book invariant, but a book saved by an interim hot-fix dropped the
+        # key; spend recreates the ledger and choose reads through its absence.
+        book = self.repo.load()
+        del book['rework']
+        self.repo.save(book)
+        workflow.spend(book, 4, 'write')
+        self.assertTrue(book['rework']['4']['initial_used'])
+        del book['rework']
+        outcome = workflow.choose(book, self.repo.headers(book['branch']))
+        self.assertIsNotNone(outcome)
+
     def test_scene_binding_includes_other_volumes_and_retains_the_replan_prefix(self):
         repo = SQLiteRepository.initialize(Path(self.temp.name) / 'multi-volume', seeded_book(contract(6, 2)))
         self.addCleanup(repo.close)

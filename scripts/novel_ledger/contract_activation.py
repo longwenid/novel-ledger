@@ -42,9 +42,11 @@ class ContractActivation:
             book['remedy_exhausted'] = copy.deepcopy(old['remedy_exhausted'])
         book['carry_findings'] = copy.deepcopy(old.get('carry_findings', []))
         if old['draft']:
+            # An unsaved candidate demotes to prior_candidate so a fresh write round can reuse
+            # its prose instead of losing it.
             book['carry_findings'].extend(copy.deepcopy(old['draft'].get('findings', [])))
             book['prior_candidate'] = {k: old['draft'][k] for k in ('chapter', 'title', 'prose')}
-        book.update(rework=old['rework'], revision=old['revision'] + 1,
+        book.update(rework=old.get('rework') or {}, revision=old['revision'] + 1,
                     target=min(old['target'], book['contract']['volumes'][-1]['end']), finish=old['finish'])
         if rows:
             book['branch'] = self.repo.fork(old['branch'], 1)
@@ -54,6 +56,16 @@ class ContractActivation:
                                       'target': min(old['target'], book['contract']['volumes'][-1]['end']), 'finish': old['finish']})
         else:
             book['branch'] = old['branch']
+            # A re-contract with no settled chapter cannot carry a spent budget: a carried
+            # `initial_used` would brick the chapter (no write, no repair, no answer). The
+            # anti-abuse rule protects written books — those fork a branch above — not a
+            # zero-progress re-plan. The ledger is reset rather than dropped so every later
+            # reader keeps the new-book invariant that `rework` is always present.
+            book['rework'] = {}
+            book['draft'] = None
+            block = book.get('author_block')
+            if block and str(block.get('id', '')).startswith('repair-exhausted'):
+                book.pop('author_block', None)
         self.repo.save(book)
         self.repo.record('contract_activate', {'hash': digest(book['contract']), 'source': proposal['source']})
         return book

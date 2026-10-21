@@ -268,6 +268,16 @@ class ChapterOutlineTests(unittest.TestCase):
             with self.subTest(criterion=criterion):
                 self.assertRejected(criterion, broken)
 
+    def test_a_disclosure_row_without_a_reveal_tier_is_rejected_at_outline_time(self):
+        """Settlement has always applied this test when the prose arrives; skipping it at outline
+        time deadlocks the write stage against a frozen outline it may not fix (live 2026-10-21)."""
+        broken = copy.deepcopy(self.rows)
+        broken[0]['disclosures'] = [{'topic': '货箱来源', 'after': '也许大概'}]
+        self.assertRejected('drift_shape', broken)
+        valid = copy.deepcopy(self.rows)
+        valid[0]['disclosures'] = [{'topic': '货箱来源', 'after': 'hinted'}]
+        self.submit(valid)
+
     def test_a_node_cannot_be_advanced_twice(self):
         book = seeded_book(self.raw)
         book['contract']['narrative_tracking'] = True

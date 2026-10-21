@@ -411,6 +411,14 @@ def _deltas(chapter, findings):
                        'reason': row.get('reason') or '',
                        'detail': {'choice': row.get('choice'), 'cost': row.get('cost'),
                                   'change': row.get('change')}})
+    # The settlement side applies the same test when the chapter's prose arrives (reconcile step
+    # five); a row that cannot pass it here would deadlock the write stage against a frozen
+    # outline it is not allowed to fix.
+    for row in _rows_of(chapter, 'disclosures', findings):
+        topic, after = row.get('topic'), row.get('after')
+        if not text(topic) or after not in REVEALS:
+            findings.append(_finding(chapter_no, 'disclosures', topic, 'topic 与 ' + '|'.join(REVEALS), _safe(row),
+                                     '章纲的披露需要 topic 与档位。', 'drift_shape', 'blocker', 'outline'))
     clock = chapter.get('clock')
     if clock is None or not isinstance(clock, dict) or type(clock.get('advance_days')) is not int \
             or clock['advance_days'] < 0:
