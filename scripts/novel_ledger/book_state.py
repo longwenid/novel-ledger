@@ -18,7 +18,7 @@ PART_FIELDS = {
                   'pending_contract', 'controller_owner', 'opening_world_only', 'run_authorized',
                   'author_block', 'author_decision_history', 'carry_findings', 'accepted_findings',
                   'prior_candidate', 'repair_cases', 'remedy_exhausted', 'revision_directive',
-                  'design_drift', 'completed_at', 'completion_snapshot')}
+                  'design_drift', 'completed_at', 'completion_snapshot', 'writing_mode')}
 
 
 def split(book):
@@ -54,6 +54,9 @@ def check_state(book):
     read of the status, so the command that broke it is the command that reports it.
     """
     status = book.get('status')
+    require(book.get('writing_mode', 'standard') in ('standard', 'fast'), 'book_state', '未知写作模式。')
+    require(isinstance(book.get('rework'), dict), 'book_state',
+            '返修额度记录缺失或损坏，禁止把缺失解释为未消耗。')
     require(status in STATUSES, 'book_state', '未知的项目状态。', {'status': status, 'known': list(STATUSES)})
     reason = book.get('pause_reason')
     require(status != 'running' or not reason, 'book_state',

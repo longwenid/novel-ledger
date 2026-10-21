@@ -1,0 +1,3 @@
+# Keep source and documentation consistent across POSIX and Windows checkouts.
+*.py text eol=lf
+*.md text eol=lf

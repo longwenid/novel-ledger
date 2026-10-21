@@ -10,12 +10,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import bookpage, delivery
+from novel_ledger import bookpage, delivery, facts, workflow
 from novel_ledger.contracts import Error, digest, han_count
 from novel_ledger.presentation import LocalPresentation
 from novel_ledger.publication import publication
 from novel_ledger.workspace import LocalWorkspace
-from support import link_or_skip
+from support import contract, link_or_skip
 
 
 class MemoryReader:
@@ -147,35 +147,48 @@ class PresentationBoundaryTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'output')
         self.assertEqual(list(outside.iterdir()), [])
 
-    def test_publication_keeps_completed_content_frozen_without_storage_adapter(self):
-        frozen = copy.deepcopy(self.repo.book)
-        frozen.update(status='completed', completed_at=123, contract={'title': '冻结书名'})
-        self.repo.documents['snapshot'] = {'book': frozen, 'chapters': []}
+    def freeze_completed(self):
+        # Even a read-only adapter must supply a replayable completed source, not
+        # a status flag and a plausible title in place of an acceptance snapshot.
+        frozen = workflow.new_book(contract(1))
+        frozen['contract']['title'] = '冻结书名'
+        prose = self.repo.documents['prose']
+        events, plan = [], {'chapter': 1, 'clock': {'advance_days': 0}}
+        review = {'drift_check': {'items': [
+            {'kind': 'clock', 'key': 'clock', 'planned': {'advance_days': 0},
+             'actual': {'advance_days': 0}, 'status': 'kept',
+             'evidence': {'chapter': 1, 'quote': prose}}], 'unplanned': [], 'verdict': 'clean'},
+                  'self_check': '本章在同一夜班核对签字，无状态增量。'}
+        for value in (prose, events, plan, review):
+            self.repo.documents[digest(value)] = copy.deepcopy(value)
+        row = {'n': 1, 'title': '冻结章节', 'prose': digest(prose),
+               'events': digest(events), 'plan': digest(plan), 'review': digest(review),
+               'state_hash': digest(frozen['state']), 'han': han_count(prose), 'summary': '查明签字来源。'}
+        row['chain'] = facts.chain('genesis', row, digest(frozen['contract']))
+        frozen.update(status='completed', completed_at=123, written_han=han_count(prose),
+                      finish=True, target=1,
+                      pilot={'prose': row['prose'], 'contract': digest(frozen['contract']), 'source': '工程夹具作者认可。'})
+        self.repo.documents['snapshot'] = {'book': frozen, 'branch': 'main',
+                                           'contract': frozen['contract'], 'chapters': [row]}
         self.repo.book.update(status='completed', completed_at=123, completion_snapshot='snapshot',
-                              contract={'title': '后改书名'})
+                              contract={'title': '后来修改的书名'})
+        self.repo.rows = [{**row, 'title': '后来修改的章节'}]
+        return frozen, row, prose
+
+    def test_publication_keeps_completed_content_frozen_without_storage_adapter(self):
+        frozen, row, prose = self.freeze_completed()
         book, rows = publication(self.repo)
         self.assertEqual(book['contract']['title'], '冻结书名')
         self.assertEqual(book['status'], 'completed')
         self.assertEqual(book['completed_at'], 123)
-        self.assertEqual(rows, [])
+        self.assertEqual(rows, [row])
         self.assertEqual(self.repo.documents['snapshot']['book'], frozen)
         exported = delivery.export_book(self.repo, format='md', workspace=self.workspace)
-        self.assertEqual(Path(exported['path']).read_text(encoding='utf-8').strip(), '# 冻结书名')
+        self.assertIn('# 冻结书名', Path(exported['path']).read_text(encoding='utf-8'))
+        self.assertIn(prose, Path(exported['path']).read_text(encoding='utf-8'))
 
     def test_complete_delivery_uses_only_reader_and_preserves_frozen_content(self):
-        prose = self.repo.documents['prose']
-        frozen = copy.deepcopy(self.repo.book)
-        frozen.update(status='completed', completed_at=123, written_han=han_count(prose),
-                      contract={'title': '冻结书名', 'word_range': [1, 100], 'chapter_min': 1,
-                                'chapter_max': 100, 'chapter_aim': 50,
-                                'volumes': [{'id': 'v1', 'first': 1, 'end': 1, 'purpose': '查明来源。'}]})
-        row = {'n': 1, 'title': '冻结章节', 'prose': 'prose', 'review': 'review',
-               'han': han_count(prose), 'summary': '查明签字来源。'}
-        self.repo.documents.update(review={'facts': {}, 'reader': {}},
-                                   snapshot={'book': frozen, 'chapters': [row]})
-        self.repo.book.update(status='completed', completed_at=123, completion_snapshot='snapshot',
-                              contract={'title': '后来修改的书名'})
-        self.repo.rows = [{**row, 'title': '后来修改的章节'}]
+        frozen, row, prose = self.freeze_completed()
         before = copy.deepcopy(vars(self.repo))
         for name in ('transaction', 'put', 'record', 'project'):
             self.assertFalse(hasattr(self.repo, name), name)
@@ -193,7 +206,7 @@ class PresentationBoundaryTests(unittest.TestCase):
                              for name in ('book.md', 'book.html', 'delivery.json')))
         self.assertTrue(result['delivered'])
         self.assertEqual(result['snapshot_hash'], 'snapshot')
-        self.assertEqual(result['chapters'], [{'chapter': 1, 'prose_hash': 'prose'}])
+        self.assertEqual(result['chapters'], [{'chapter': 1, 'prose_hash': row['prose']}])
         self.assertEqual({Path(row['path']).name for row in result['files']}, {'book.md', 'book.html'})
         for file in result['files']:
             content = Path(file['path']).read_text(encoding='utf-8')

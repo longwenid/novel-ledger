@@ -45,6 +45,17 @@ class PublicApplication:
 
 
 class HostPortTests(unittest.TestCase):
+    def test_a_process_that_only_submits_the_first_chapter_has_not_finished_its_group(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            app = PublicApplication(Path(temporary))
+            original = app.task_status
+            def status(task_id):
+                return {**original(task_id), 'batch_active': True}
+            app.task_status = status
+            result = host.step(app, [sys.executable, '-c', 'pass'], timeout=10)
+            self.assertEqual(result['action'], 'needs_attention')
+            self.assertTrue(result['batch_active'])
+
     def test_process_uses_public_use_cases_and_delivered_locations(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
@@ -55,6 +66,7 @@ class HostPortTests(unittest.TestCase):
             result = host.step(app, [sys.executable, '-c', code], timeout=10)
             self.assertEqual(result['action'], 'worker_finished')
             self.assertTrue(result['submitted'])
+            self.assertEqual(result['context_isolation'], 'unverified')
             self.assertEqual(app.released, [('task', 'opaque-claim')])
             environment = json.loads((project / 'host.log').read_text(encoding='utf-8'))
             self.assertEqual(environment, {'NOVEL_PROJECT': str(project), 'NOVEL_TASK_PATH': str(project / 'task.json'),

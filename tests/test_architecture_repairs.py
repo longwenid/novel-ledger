@@ -157,15 +157,14 @@ class NarrowReplanTests(unittest.TestCase):
         self.owner = self.app.run(through=4, source='工程夹具授权。')['owner']
         drive(self.app, self.owner, until='write')
         self.original = copy.deepcopy(self.repo.load()['chapter_outlines']['v1'])
-        result = response(self.app)
-        resource = next(r for r in result['data']['drift_check']['items'] if r['kind'] == 'resources')
-        resource.update(status='deviated', actual={'from': 4, 'to': 5}, reason='核对后多领车费。')
-        result['data']['drift_check']['verdict'] = 'deviated'
-        self.app.submit(result)
+        drive(self.app, self.owner)
+        changes = {'mode': 'reading', 'reading_changes': [{'kind': 'character', 'key': 'shen'}]}
+        self.app.revise(2, '作者要求调整第二章的阅读安排。', self.owner, through=2, changes=changes)
+        proposal = self.repo.load().get('revision_directive')
+        if proposal:
+            self.app.revise(2, '作者采用完整修订方案。', self.owner,
+                            proposal_hash=proposal['plan_hash'], source='工程作者明确授权本次修订。')
         step = self.app.advance(owner=self.owner)
-        if step['action'] == 'await_author':
-            self.app.approve(step['prose_hash'], '夹具认可。', self.owner)
-            step = self.app.advance(owner=self.owner)
         self.assertEqual(step['task']['stage'], 'chapter_outline')
         work = self.repo.pending()['input']
         self.assertEqual(self.repo.read_document(work['records']['prior_chapter_outlines']), self.original[1:])
@@ -177,8 +176,7 @@ class NarrowReplanTests(unittest.TestCase):
     def repair(self, reconnect=True):
         result = response(self.app)
         row = copy.deepcopy(self.original[1])
-        row['resources'][0]['from'] = 5
-        next(e for e in row['enter'] if e['kind'] == 'resources')['expected'] = 5
+        row['synopsis'] += '按作者决定调整本章的阅读安排。'
         if not reconnect:
             row['resources'][0]['to'] = 4
             next(e for e in row['exit'] if e['kind'] == 'resources')['expected'] = 4
@@ -193,7 +191,7 @@ class NarrowReplanTests(unittest.TestCase):
         rows = self.repo.load()['chapter_outlines']['v1']
         self.assertEqual(rows[0], self.original[0])
         self.assertEqual(rows[2:], self.original[2:])
-        self.assertEqual(rows[1]['resources'][0]['from'], 5)
+        self.assertEqual(rows[1]['resources'][0]['from'], self.original[1]['resources'][0]['from'])
         drive(self.app, self.owner)
         self.assertEqual(len(self.repo.headers('main')), 4)
 

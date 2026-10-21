@@ -76,40 +76,26 @@ class EditorialTests(unittest.TestCase):
         raw = contract()
         self.assertCode('editorial_protocol', self.app.recontract, raw, '试图关闭编辑能力。')
 
-    def test_a_deviation_in_the_self_comparison_is_booked_and_replans_what_follows(self):
-        """Spec §5.7: the chapter still settles, but the rest of the volume is re-derived.
-
-        This is the path the deleted alignment stages used to own: a chapter that honestly reports
-        "my prose deviated here" is not refused — the deviation is booked with its reason, and the
-        next dispatch re-plans the volume's remaining chapter outlines from the state the book is
-        actually in.
-        """
+    def test_a_declared_deviation_requires_prose_repair_under_the_same_fixed_outline(self):
         owner = self.app.run(through=2, source='工程夹具：两章。')['owner']
         drive(self.app, owner, until='write')
+        original = copy.deepcopy(self.repo.load()['plans'])
         result = response(self.app)
         result['data']['drift_check']['items'][0].update(
             status='deviated', reason='正文只推进了一部分，剩下留到下一章。')
         result['data']['drift_check']['verdict'] = 'deviated'
-        outcome = self.app.submit(result)
-        self.assertEqual(outcome['committed_chapter'], 1)
-        drift = self.repo.load()['design_drift']
-        self.assertTrue(drift)
-        self.assertTrue(all(row.get('reason') for row in drift))
-        # Chapter one is the pilot: the author approves it before the rest of the volume moves.
+        self.assertIsNone(self.app.submit(result)['committed_chapter'])
+        book = self.repo.load()
+        self.assertEqual(book['plans'], original)
+        self.assertEqual(book['design_drift'], [])
+        self.assertIn('outline_alignment', {f['criterion'] for f in book['draft']['findings']})
+        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'repair')
+        self.assertEqual(self.app.submit(response(self.app))['committed_chapter'], 1)
         handoff = self.app.advance(owner=owner)
         self.assertEqual(handoff['action'], 'await_author')
-        self.app.approve(handoff['prose_hash'], '工程夹具认可首章。', owner)
-        handoff = self.app.advance(owner=owner)
-        self.assertEqual(handoff['task']['stage'], 'chapter_outline')
-        payload = self.repo.pending()['input']['payload']
-        self.assertTrue(payload['repair'])
-        self.assertTrue(payload['drift'])
-        # The re-plan absorbs the booked deviation: the row stays on record with its marker, and the
-        # next dispatch is not asked to re-plan the same ground again.
-        self.app.submit(response(self.app))
-        absorbed = self.repo.load()['design_drift']
-        self.assertTrue(all(row.get('absorbed_by') for row in absorbed))
-        self.assertTrue(all(row.get('reason') for row in absorbed))
+        self.app.approve(handoff['prose_hash'], '工程夹具认可修复后的首章。', owner)
+        self.assertEqual(self.app.advance(owner=owner)['task']['stage'], 'write')
+        self.assertEqual(self.repo.load()['plans'], original)
 
     def test_effective_contract_resolves_bounds_and_a_bounded_append(self):
         book = workflow.new_book(contract(4))

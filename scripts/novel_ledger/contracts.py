@@ -65,6 +65,7 @@ DEFAULTS = {
     'redesigns': 1,
     'stall_after_rounds': 2,
     'revision_limit': 3,
+    'fast_batch_chapters': 5,
     # opening/5's two new gates are the ones a web serial lives on, so their floors are numbers, not
     # prose: how many rungs the reader-visible ladder must show at each size class, how many stages
     # the 格局 ladder must walk, and how late the theme anchor may land. `anchor_max_chapter` is the
@@ -134,6 +135,7 @@ READING_DEPENDENCIES_CAPABILITY = 'reading-dependencies/1'
 VOLUME_OUTLINE_CAPABILITY = 'volume-outline/2'
 SCENE_MEMORY_CAPABILITY = 'scene-memory/1'
 HOOK_LINKS_CAPABILITY = 'hook-links/1'
+CONTINUOUS_WRITING_CAPABILITY = 'continuous-writing/1'
 CAPABILITIES = {
     'editorial': (EDITORIAL_CAPABILITY,),
     'understanding': (UNDERSTANDING_CAPABILITY,),
@@ -142,6 +144,7 @@ CAPABILITIES = {
     'volume_outline': (VOLUME_OUTLINE_CAPABILITY,),
     'scene_memory': (SCENE_MEMORY_CAPABILITY,),
     'hook_links': (HOOK_LINKS_CAPABILITY,),
+    'continuous_writing': (CONTINUOUS_WRITING_CAPABILITY,),
 }
 
 

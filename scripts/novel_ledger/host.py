@@ -67,8 +67,11 @@ def step(app: HostApplication, command, owner=None, timeout=300):
                         process.wait()
                 raise
         current = app.task_status(task['id'])
-        return {'action': 'worker_finished' if current['status'] == 'done' and process.returncode == 0 else 'needs_attention',
-                'task_id': task['id'], 'exit_code': process.returncode, 'submitted': current['status'] == 'done', 'log': str(log_path)}
+        return {'action': 'worker_finished' if current['status'] == 'done' and not current.get('batch_active')
+                         and process.returncode == 0 else 'needs_attention',
+                'task_id': task['id'], 'exit_code': process.returncode, 'submitted': current['status'] == 'done', 'log': str(log_path),
+                'batch_active': current.get('batch_active', False),
+                'context_isolation': 'unverified'}
     finally:
         app.release_claim(task['id'], claim['token'])
 

@@ -17,8 +17,8 @@ def _drift_item(kind, key, planned, chapter=''):
     """One planned delta as a blank self-comparison row: only the plan side is pre-filled.
 
     `actual` starts as null rather than an empty object: the writer either fills it with what the
-    prose actually did, or leaves it null and marks the row skipped. The engine projects the true
-    before-value itself, so the writer never has to guess it.
+    prose actually did. A skipped or deviated row diagnoses a draft that needs prose repair; it
+    cannot pass settlement. The engine projects the true before-value itself.
     """
     return {'kind': kind, 'key': key, 'planned': planned, 'actual': None,
             'status': '', 'reason': '', 'evidence': {'chapter': chapter, 'quote': ''}}
@@ -73,6 +73,9 @@ def drift_items(row):
                                      {'from': entry.get('from'), 'to': entry.get('to')}, chapter))
     clock = row.get('clock') if isinstance(row.get('clock'), dict) else {}
     items.append(_drift_item('clock', 'clock', {'advance_days': clock.get('advance_days') or 0}, chapter))
+    for entry in row.get('disclosures') or []:
+        if isinstance(entry, dict) and text(entry.get('topic')):
+            items.append(_drift_item('disclosure', entry['topic'], {'after': entry.get('after')}, chapter))
     return items
 
 

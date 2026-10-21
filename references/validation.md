@@ -39,11 +39,13 @@ python3 validation/measure.py --out /path/to/metrics.json
 | 改动类型 | 必查行为 | 回归入口（tests/ 下） |
 |---|---|---|
 | 提交、约定与恢复 | 原子初始化、幂等、预检回滚、有限返修和准确版本认可；改约优先完成机械校验，字面规则跨激活与撤销保留；畸形回执与评测清单不留下部分提交。 | test_runtime、test_output_repairs |
-| 章纲与漂移核算 | 卷 id 与 volumes 对齐、字数区间；enter/exit 冗余一致；卷内状态链拒绝人为漂移（资源为负、时钟倒退、位置未知、知情倒退、人物缺 choice/cost、节点重复推进）；卷末核对结构化人物终值与 clock.to、整卷推进天数；drift_check 漏项/多项被拒、`actual.from` 取投影而不取自报值、偏差挂账并触发下一章纲重排。 | test_outlines、test_narrative、test_longform、test_architecture_repairs |
+| 章纲与漂移核算 | 卷 id 与 volumes 对齐、字数区间；enter/exit 冗余一致；卷内状态链拒绝人为漂移（资源为负、时钟倒退、位置未知、知情倒退、人物缺 choice/cost、节点重复推进）；卷末核对结构化人物终值与 clock.to、整卷推进天数；drift_check 漏项/多项被拒、`actual.from` 取投影而不取自报值、偏差进入本章返修且正式事实与章纲保持原样；读者披露逐项自比；旧完本快照重新核验章纲与事实一致性。 | test_outlines、test_narrative、test_longform、test_architecture_repairs |
 | 伏笔账 | 卷纲 hooks 的 id 唯一/窗口合法/`text` 非空/跨卷必须 `continues:true` 且 `required:false`；章纲反例矩阵逐条被拒（未声明就 plant、payoff 早于 plant、同一 id plant 两次、payoff 两次、plant/payoff 越窗、卷末 required 未 paid、`hook_refs` 承接未埋的 hook）；`state.hooks` 非空、跨卷条目带入下一卷；`complete()` 因未兑现承诺拒绝，兑现后通过。 | test_outlines、test_longform |
 | 文风代理指标 | 默认 observe 记录句段与锚点对白差异，不耗返修；作者 strict 选择保留数值拒绝；`dialogue_ratio` 显式目标与高重复两档都核；人称只观察；混合/嵌套引号、句数、原文顺序重复率不误报；预检回滚、提交保存报告。 | test_style、test_style_voice、test_style_guard_flow、test_prose_lint |
 | 派工、身份与宿主 | compact 保留完整材料及已填表单；--after 拒绝未提交或旧回调；认领后故障释放租约，非文件交付在认领前拒绝。 | test_runtime、test_host_ports |
+| 快速无人值守 | 同一会话组内最多五章、逐章提交与返修；首章及卷界单独处理；跨组会话复用和过期回调拒绝；预检回滚组进度；同组材料哈希复用；暂停重开与真实子进程整组提交。 | test_fast_writing、test_application_ports、test_host_ports |
 | 模块依赖与端口 | 全作用域 import 白名单、无环与核心 I/O 禁令；用内存账本、替代交付、公开宿主能力和运行工厂实际完成用例。 | test_architecture、test_application_ports、test_domain_boundaries、test_presentation_boundaries、test_host_ports、test_cli_boundary |
+| 只读验收与信任边界 | 零章/已写投影被外部修改后拒绝继续派工与提交；状态变化在事务提交前核验；completed 与伪造 audit.ok 不能绕过线路闭合和历史重放；失败不覆盖正文与交付文件；改约不重置额度且保留可回答的作者问题；数字扰动长模板仍被识别。 | test_verification、test_workbench、test_prose_lint |
 | 存储与组合根 | 同根快照、结构共享与完整逻辑哈希复用、损坏/丢块及跨区字段拒绝；共享来源清理可达性、预检/异常回滚和返回值隔离；文件回收只在提交后执行；真实 SQLite、CLI 重开与冻结交付重试。 | test_storage_boundaries、test_storage_growth、test_snapshot_integrity、test_bootstrap、test_history |
 | 开书、卷纲与叙事 | 逐门作者决定、卷纲 all/rolling 覆盖、跨卷续接、跨卷线路 continues、场景来源与完本兑现。 | test_opening、test_outlines、test_narrative、test_longform |
 | 创作记忆与场景身份 | 执笔提交的理解增量绑定准确版本；原文失效与携带恢复，场景移动保留身份，阅读关联与章纲重排，初始化即建立理解结构，预检完整回滚。 | test_workbench |
@@ -73,7 +75,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_revisio
 | “题材和书名已定，继续补齐” | [逐门开书](opening.md#入口选择) | 合法部分选择经 intake 登记；不重问已有决定，不绕过已展示门板。 |
 | “继续这个已有项目” | [运行与恢复](runtime.md#主干循环默认执行路径) | 恢复同一任务及作者目标；有效认领等待，不重复派工。 |
 | “写这一卷的章纲” | [叙事推进](narrative.md#章纲)、当前冻结任务 | 按卷纲登记节点/线路与真实前态算清增量，填 enter/exit；状态链拒绝即按 `design_drift` 返修，不绕过。 |
-| “这一章的资源/位置对不上” | [叙事推进](narrative.md#执笔自比与引擎核算) | 先看引擎给的投影前态；漏项或前态不符被拒不重交原样候选，偏差如实登记并触发下一章纲重排。 |
+| “这一章的资源/位置对不上” | [叙事推进](narrative.md#执笔自比与引擎核算) | 先看引擎给的投影前态；漏项或前态不符被拒不重交原样候选，偏差如实诊断并返修本章正文，不能自动修改固定章纲。 |
 | “改旧章”或回改超界 | [修订影响分析](runtime.md#修订影响分析) | 先分析事实与阅读影响；保护正式稿，超界绑定准确方案授权。 |
 | “交付已完成的内容” | [运行与恢复](runtime.md#阶段结束与交付) | 区分实际覆盖与全书；完本先验收，导出失败只重试准确快照交付。 |
 | “优化这个 skill”或仅讨论架构 | [架构](architecture.md)、本页 | 修改或分析技能工程，不创建小说项目或派创作任务。 |

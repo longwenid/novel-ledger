@@ -11,11 +11,11 @@ from novel_ledger.contracts import CONTROLLER_STAGES, Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
-          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch'}
+          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
-WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check'}
+WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'worker-next'}
 # Prose and frozen records belong to a dispatched task; the controller role never executes them.
-WORKER_ONLY = {'read', 'recall', 'patch'}
+WORKER_ONLY = {'read', 'recall', 'patch', 'worker-next'}
 
 
 def load(path):
@@ -93,7 +93,7 @@ def parser():
         if command == 'advance':
             sub.add_argument('--after')
             sub.add_argument('--compact', action='store_true', help='只返回主干派工信息，完整任务保留在 task_path。')
-        if command in ('read', 'recall', 'claim', 'patch'):
+        if command in ('read', 'recall', 'claim', 'patch', 'worker-next'):
             sub.add_argument('--task', required=True)
         if command == 'patch':
             sub.add_argument('--old', required=True)
@@ -120,6 +120,10 @@ def parser():
             group.add_argument('--through', type=int)
             group.add_argument('--complete', action='store_true')
             sub.add_argument('--source', default='')
+            mode = sub.add_mutually_exclusive_group()
+            mode.add_argument('--fast', dest='mode', action='store_const', const='fast',
+                              help='快速无人值守：同一 Worker 最多连写五章，逐章验收。')
+            mode.add_argument('--standard', dest='mode', action='store_const', const='standard')
         if command == 'answer':
             sub.add_argument('--decision-id', required=True, help='待作者裁决的问题 id，与 status 的 author_decision.id 一致。')
             sub.add_argument('--option', required=True, help='作者选定的选项 label，须是已展示选项之一。')
@@ -212,7 +216,7 @@ def worker_guard(app, args):
                  'recover': '派工视图里 claim=null 表示本任务无需认领，直接读取与提交；'
                             '确需租约时回报主控，由主控执行 claim --task ' + ident + ' --session <会话>。'})
     require(args.command in WORKER, 'worker_boundary', 'Worker 不能执行主控或作者命令。')
-    if args.command not in ('submit', 'preflight'):
+    if args.command not in ('submit', 'preflight', 'worker-next'):
         app.authorize_worker(ident, os.environ.get('NOVEL_SESSION'), os.environ.get('NOVEL_EXECUTION_CLAIM'))
 
 
@@ -270,7 +274,10 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'claim':
             return app.claim(args.task, args.session, args.seconds)
         if command == 'run':
-            return app.run(args.through, args.complete, owner, args.seconds, args.source)
+            return app.run(args.through, args.complete, owner, args.seconds, args.source, mode=args.mode)
+        if command == 'worker-next':
+            return app.continue_writing(args.task, os.environ.get('NOVEL_SESSION'),
+                                        os.environ.get('NOVEL_EXECUTION_CLAIM'))
         if command == 'renew':
             return app.renew(owner, args.seconds)
         if command == 'approve':

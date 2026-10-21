@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 from .contracts import Error, digest, require
 from .ports import Repository
+from .verification import VerificationService
 from . import editorial, facts, narrative, revision_impact, store_keys, story_memory, understanding, workflow
 
 
@@ -18,19 +19,7 @@ class RevisionService:
         self.cancel_pending = cancel_pending
 
     def replay(self, branch, contract, through=None):
-        state, previous, number = facts.seed(contract), 'genesis', 0
-        rows = self.repo.headers(branch)
-        for row in rows:
-            if through is not None and row['n'] > through:
-                break
-            require(row['n'] == (1 if previous == 'genesis' else number + 1), 'chain', '章节链不连续。')
-            number = row['n']
-            prose = self.repo.read_document(row['prose'])
-            state, normalized = facts.settle(state, self.repo.read_document(row['events']), prose, number)
-            require(digest(normalized) == row['events'] and digest(state) == row['state_hash'], 'state_integrity', '事实重放与提交版本不一致。')
-            require(facts.chain(previous, row, digest(contract)) == row['chain'], 'chain', '章节事件链被修改。')
-            previous = row['chain']
-        return state
+        return VerificationService(self.repo).replay(branch, contract, through)
 
     def carry_suffix(self, book, revision):
         """Append the chapters past a narrow revision's end, unchanged, onto the candidate branch.

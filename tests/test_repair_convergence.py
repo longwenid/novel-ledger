@@ -58,11 +58,11 @@ class RepairConvergenceTests(unittest.TestCase):
         book = self.repo.load()
         self.assertEqual((book['status'], book['draft']['stage']), ('paused', 'stalled'))
         self.assertEqual(book['rework']['1']['repairs'], 2)
-        self.assertEqual(book['author_block']['id'], 'repair-stalled:chapter_repair')
+        self.assertTrue(book['author_block']['id'].startswith('repair-stalled:chapter_repair:'))
         self.assertIn('连续 2 轮', book['author_block']['question'])
         # The stall hands its decision up directly, so resume refuses to bypass it; the pending
         # question is already visible in status.
-        self.assertEqual(self.app.status()['author_decision']['id'], 'repair-stalled:chapter_repair')
+        self.assertEqual(self.app.status()['author_decision']['id'], book['author_block']['id'])
         with self.assertRaises(Error):
             self.app.resume()
 
@@ -102,7 +102,7 @@ class RepairConvergenceTests(unittest.TestCase):
         for _round in range(2):
             self.app.advance()
             self.app.submit(self.draft_with_a_stray_word())
-        granted = self.app.answer('repair-stalled:chapter_repair', workflow.REPAIR_AGAIN,
+        granted = self.app.answer(self.app.status()['author_decision']['id'], workflow.REPAIR_AGAIN,
                                   '这一轮真的改，改完再验。')
         self.assertEqual(granted['status'], 'running')
         book = self.repo.load()

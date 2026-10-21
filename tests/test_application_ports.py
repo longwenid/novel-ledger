@@ -60,6 +60,27 @@ class ControlledRuntime:
 
 
 class ApplicationPortsTests(unittest.TestCase):
+    def test_fast_continuation_works_with_memory_ports_without_file_or_database_access(self):
+        app, repo, _, _, _ = self.make_app(chapters=6)
+        with patch('builtins.open', side_effect=AssertionError('Application attempted filesystem I/O.')):
+            owner = app.run(finish=True, mode='fast')['owner']
+            drive(app, owner, until='write')
+            app.submit(response(app))
+            step = app.advance(owner=owner)
+            app.approve(step['prose_hash'], '作者认可首章。', owner)
+            task = app.advance(owner=owner)['task']
+            lease = app.claim(task['task_id'], 'memory-worker')
+            for chapter in range(2, 7):
+                receipt = response(app)
+                receipt.update(session='memory-worker', execution_claim=lease['token'])
+                result = app.submit(receipt)
+                self.assertEqual(result['committed_chapter'], chapter)
+                if result['worker_boundary'] == 'continue':
+                    step = app.continue_writing(task['task_id'], 'memory-worker', lease['token'])
+                    task, lease = step['task'], {'token': step['execution_claim']}
+            self.assertEqual(app.advance(owner=owner)['action'], 'ready_to_complete')
+            self.assertTrue(app.complete(owner)['completed'])
+
     def make_app(self, preparing=False, chapters=3):
         book = workflow.preparing_book('作者准备导入完整约定。') if preparing else workflow.new_book(contract(chapters))
         repo = MemoryRepository(book)

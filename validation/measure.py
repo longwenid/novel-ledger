@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import (OPENING_VERSION, PIPELINE_SHAPES, SCALE_TIERS, Job,
-                                    digest, dump)
+                                    digest, dump, policy_default)
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book, preparing_book
 from novel_ledger import context, creation, facts
@@ -128,6 +128,14 @@ def dispatch_ledger():
         shape = PIPELINE_SHAPES.get(tier['id'], {})
         merged = bool(shape.get('merge_chapter_outline'))
         chapters, volumes = tier['chapters'], tier['volume_count']
+        group_size = policy_default('fast_batch_chapters')
+        fast_prose_workers = 1  # The pilot remains its own worker.
+        first = 1
+        for index in range(volumes):
+            last = (index + 1) * chapters // volumes
+            remaining = last - first + 1 - (1 if first == 1 else 0)
+            fast_prose_workers += (remaining + group_size - 1) // group_size
+            first = last + 1
         for scope in ('all', 'rolling'):
             volume_dispatches = 1 if scope == 'all' else volumes
             chapter_dispatches = 0 if merged else volumes
@@ -137,11 +145,14 @@ def dispatch_ledger():
                          'chapter_outline': chapter_dispatches, 'write': chapters,
                          'before_prose': 2 + (0 if merged else 1),
                          'planning_total': 1 + volume_dispatches + chapter_dispatches,
+                         'fast_prose_workers': fast_prose_workers,
+                         'fast_total_workers': 1 + volume_dispatches + chapter_dispatches + fast_prose_workers,
                          'initial_volume_outlines': volumes if scope == 'all' else 1,
                          'total': 1 + volume_dispatches + chapter_dispatches + chapters})
     return {'gates': gates, 'by_tier': rows,
             'boundary': '依 PIPELINE_SHAPES 与 volume_outline.scope 的机械计数，chapter_outline.scope=volume；'
-                        'before_prose 只计首章前派工，planning_total 计全程规划；不含返修/重设计和真实模型用量。'}
+                        'before_prose 只计首章前派工，planning_total 计全程规划；fast 按首章独立、卷界与五章组计 Worker，'
+                        '逐章任务数不变；不含返修/重设计和真实模型用量或速度。'}
 
 
 def _built_bytes(repo, book, job):

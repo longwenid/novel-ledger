@@ -214,7 +214,7 @@
   "title": "…", "prose": "…", "summary": "…",
   "drift_check": {
     "items": [{
-      "kind": "resources|places|knowledge|characters|clock|node|thread|hook",
+      "kind": "resources|places|knowledge|characters|clock|node|thread|hook|disclosure",
       "key": "spirit-stone",
       "planned": {"from": 0, "to": 3},
       "actual":   {"from": 0, "to": 3},
@@ -231,15 +231,17 @@
 
 `kind='hook'` 的行用动作而不是前后值：`planned={'action':'plant'|'payoff'}`、`actual={'action':…}`，`evidence` 仍是正文引文。
 
+上例同时列出失败诊断字段。可入库稿须所有项为 `kept`、`unplanned=[]` 且 `verdict=clean`；发现偏差先按原章纲修正文，再按最终正文重新填写，不能只改回执结论。`disclosure` 用 `planned/actual={'after':披露档位}`。
+
 引擎核算（零派工）：
 
 1. `items` 必须**恰好覆盖**本章纲的全部计划增量（普通项按 kind+key，伏笔按 kind+key+action 区分）；漏项/多项 → `drift_coverage` 拒绝。
 2. 前态取自引擎投影；填写的 `actual.from` 必须与该值相等；不等 → `drift_before` 拒绝。
-3. `status=kept` 时 `actual.to` 必须等于 `planned.to`；`deviated`/`skipped` 必须给 `reason`，并写入 `book['design_drift']`。
-4. `unplanned` 支持 `resources/places/knowledge/characters` 四类，必须给 `actual.from/to`、原因与本章精确引文；资源还需可还原的持有人/资产/单位，位置需路径，人物需 choice/cost。按同一事实规则生成事件、更新投影并记偏差，不能只填 change 说明。情节、伏笔、披露与时钟须通过章纲契约处理，未开放的种类明确拒绝。
+3. 已生效章纲是固定契约。`status=kept` 时实际结果必须等于章纲的计划结果；`deviated`/`skipped` 即使给出理由也产生 `outline_alignment`，候选保留并返修当前正文，不能入库或自动改纲。
+4. `unplanned` 只报告待修正文中的计划外变化，不授予新增事实的权限。资源/位置/知情/人物变化仍需具体前后值、原因和引文供诊断；通过时必须为空。读者披露与其他计划增量一样逐项自比，不由引擎默认为已落实。
 5. `evidence.quote` 必须是正文原文片段，走精确引文校验。
 6. 通过后原子入账：复用事实、叙事与空间的既有机械判据（`facts.settle` 及其调用的叙事、空间规则），事件来源是 `drift_check.items`；伏笔事件由 `drift.reconcile` 产出。
-7. 存在 `deviated`/`skipped` 时：本章通过全部机械判据后入库，引擎把该偏差加入 `book['design_drift']`，并在下一章派工前对该卷剩余章纲派一次 `chapter_outline`（payload 带 `repair=True` 与偏差清单）重排。
+7. 通过时所有计划项均须落实、无跳过或计划外变化，`verdict=clean`。失败只沿本章有界返修推进，章纲、后文计划和正式事实保持原样。章纲确有矛盾时保留现场交作者决定；作者明确发起的改纲或历史修订才进入对应重排流程。
 8. 其余既有闸门保留：字数区间（`word_budget`）、`lint.draft_findings`、字面约定（`literal_policy`）、禁用名，以及文风代理指标（见 [文风](#文风)）。
 
 ## 篇幅与上下文

@@ -209,11 +209,9 @@ class RevisionBoundsTests(unittest.TestCase):
         spend.update(status='deviated', reason='本章多花了一趟车费，实际账面与章纲不同。')
         spend['actual'] = {**spend['actual'], 'to': spend['planned']['to'] - 1}
         candidate['data']['drift_check']['verdict'] = 'deviated'
-        with self.assertRaises(Error) as caught:
-            self.app.submit(candidate)
-        self.assertEqual(caught.exception.code, 'revision_carry')
-        # The refused carry rolls the submission back: the parent keeps five chapters, and the
-        # revision branch still holds only the prefix it forked from.
+        self.assertIsNone(self.app.submit(candidate)['committed_chapter'])
+        self.assertIn('outline_alignment', {f['criterion'] for f in self.repo.load()['draft']['findings']})
+        # The deviation stays a repair candidate: the formal parent and the revision prefix remain intact.
         self.assertEqual([r['n'] for r in self.repo.headers('main')], [1, 2, 3, 4, 5])
         branch = self.repo.load()['branch']
         self.assertNotEqual(branch, 'main')

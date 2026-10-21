@@ -1,0 +1,454 @@
+{
+  "metadata": {
+    "schema": "novel-ledger.measurements/1",
+    "generated_at": "2026-10-21T12:18:46+00:00",
+    "source_commit": "477f13134a781221daae54da936a62ba7c524ba7",
+    "source_sha256": "96012d76a6d0381034f8f52b9513ffe92e1d32bf835ba5849521e537ab524ac9",
+    "source_files": 117
+  },
+  "scope": "engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings",
+  "pipeline": "five steps: opening gates / world_model / volume_outline / chapter_outline / write",
+  "graph": {
+    "status": "ok",
+    "value": {
+      "modules": 42,
+      "runtime_lines_including_cli": 12481,
+      "cycles_including_deferred_imports": [],
+      "dependency_edges": 157
+    }
+  },
+  "dispatch": {
+    "status": "ok",
+    "value": {
+      "gates": {
+        "opening_version": 6,
+        "gates": [
+          "genre",
+          "premise",
+          "voice",
+          "scale",
+          "world",
+          "ladder",
+          "origin",
+          "edge",
+          "protagonist",
+          "relationships",
+          "opposition",
+          "payoff",
+          "title"
+        ],
+        "system_gates": [
+          "scale"
+        ],
+        "dispatched_opening_options": 12,
+        "note": "开书门由主干自执，不计子 agent 派工（spec §1/§7）；门数与系统门由 creation.gate_ids / SYSTEM_GATES 派生。"
+      },
+      "by_tier": [
+        {
+          "tier": "t0",
+          "chapters": 17,
+          "volumes": 1,
+          "volume_scope": "all",
+          "merge_chapter_outline": true,
+          "world_model": 1,
+          "volume_outline": 1,
+          "chapter_outline": 0,
+          "write": 17,
+          "before_prose": 2,
+          "planning_total": 2,
+          "fast_prose_workers": 5,
+          "fast_total_workers": 7,
+          "initial_volume_outlines": 1,
+          "total": 19
+        },
+        {
+          "tier": "t0",
+          "chapters": 17,
+          "volumes": 1,
+          "volume_scope": "rolling",
+          "merge_chapter_outline": true,
+          "world_model": 1,
+          "volume_outline": 1,
+          "chapter_outline": 0,
+          "write": 17,
+          "before_prose": 2,
+          "planning_total": 2,
+          "fast_prose_workers": 5,
+          "fast_total_workers": 7,
+          "initial_volume_outlines": 1,
+          "total": 19
+        },
+        {
+          "tier": "t1",
+          "chapters": 50,
+          "volumes": 2,
+          "volume_scope": "all",
+          "merge_chapter_outline": true,
+          "world_model": 1,
+          "volume_outline": 1,
+          "chapter_outline": 0,
+          "write": 50,
+          "before_prose": 2,
+          "planning_total": 2,
+          "fast_prose_workers": 11,
+          "fast_total_workers": 13,
+          "initial_volume_outlines": 2,
+          "total": 52
+        },
+        {
+          "tier": "t1",
+          "chapters": 50,
+          "volumes": 2,
+          "volume_scope": "rolling",
+          "merge_chapter_outline": true,
+          "world_model": 1,
+          "volume_outline": 2,
+          "chapter_outline": 0,
+          "write": 50,
+          "before_prose": 2,
+          "planning_total": 3,
+          "fast_prose_workers": 11,
+          "fast_total_workers": 14,
+          "initial_volume_outlines": 1,
+          "total": 53
+        },
+        {
+          "tier": "t2",
+          "chapters": 100,
+          "volumes": 4,
+          "volume_scope": "all",
+          "merge_chapter_outline": false,
+          "world_model": 1,
+          "volume_outline": 1,
+          "chapter_outline": 4,
+          "write": 100,
+          "before_prose": 3,
+          "planning_total": 6,
+          "fast_prose_workers": 21,
+          "fast_total_workers": 27,
+          "initial_volume_outlines": 4,
+          "total": 106
+        },
+        {
+          "tier": "t2",
+          "chapters": 100,
+          "volumes": 4,
+          "volume_scope": "rolling",
+          "merge_chapter_outline": false,
+          "world_model": 1,
+          "volume_outline": 4,
+          "chapter_outline": 4,
+          "write": 100,
+          "before_prose": 3,
+          "planning_total": 9,
+          "fast_prose_workers": 21,
+          "fast_total_workers": 30,
+          "initial_volume_outlines": 1,
+          "total": 109
+        },
+        {
+          "tier": "t3",
+          "chapters": 180,
+          "volumes": 6,
+          "volume_scope": "all",
+          "merge_chapter_outline": false,
+          "world_model": 1,
+          "volume_outline": 1,
+          "chapter_outline": 6,
+          "write": 180,
+          "before_prose": 3,
+          "planning_total": 8,
+          "fast_prose_workers": 37,
+          "fast_total_workers": 45,
+          "initial_volume_outlines": 6,
+          "total": 188
+        },
+        {
+          "tier": "t3",
+          "chapters": 180,
+          "volumes": 6,
+          "volume_scope": "rolling",
+          "merge_chapter_outline": false,
+          "world_model": 1,
+          "volume_outline": 6,
+          "chapter_outline": 6,
+          "write": 180,
+          "before_prose": 3,
+          "planning_total": 13,
+          "fast_prose_workers": 37,
+          "fast_total_workers": 50,
+          "initial_volume_outlines": 1,
+          "total": 193
+        },
+        {
+          "tier": "t4",
+          "chapters": 300,
+          "volumes": 8,
+          "volume_scope": "all",
+          "merge_chapter_outline": false,
+          "world_model": 1,
+          "volume_outline": 1,
+          "chapter_outline": 8,
+          "write": 300,
+          "before_prose": 3,
+          "planning_total": 10,
+          "fast_prose_workers": 65,
+          "fast_total_workers": 75,
+          "initial_volume_outlines": 8,
+          "total": 310
+        },
+        {
+          "tier": "t4",
+          "chapters": 300,
+          "volumes": 8,
+          "volume_scope": "rolling",
+          "merge_chapter_outline": false,
+          "world_model": 1,
+          "volume_outline": 8,
+          "chapter_outline": 8,
+          "write": 300,
+          "before_prose": 3,
+          "planning_total": 17,
+          "fast_prose_workers": 65,
+          "fast_total_workers": 82,
+          "initial_volume_outlines": 1,
+          "total": 317
+        },
+        {
+          "tier": "t5",
+          "chapters": 600,
+          "volumes": 10,
+          "volume_scope": "all",
+          "merge_chapter_outline": false,
+          "world_model": 1,
+          "volume_outline": 1,
+          "chapter_outline": 10,
+          "write": 600,
+          "before_prose": 3,
+          "planning_total": 12,
+          "fast_prose_workers": 121,
+          "fast_total_workers": 133,
+          "initial_volume_outlines": 10,
+          "total": 612
+        },
+        {
+          "tier": "t5",
+          "chapters": 600,
+          "volumes": 10,
+          "volume_scope": "rolling",
+          "merge_chapter_outline": false,
+          "world_model": 1,
+          "volume_outline": 10,
+          "chapter_outline": 10,
+          "write": 600,
+          "before_prose": 3,
+          "planning_total": 21,
+          "fast_prose_workers": 121,
+          "fast_total_workers": 142,
+          "initial_volume_outlines": 1,
+          "total": 621
+        }
+      ],
+      "boundary": "依 PIPELINE_SHAPES 与 volume_outline.scope 的机械计数，chapter_outline.scope=volume；before_prose 只计首章前派工，planning_total 计全程规划；fast 按首章独立、卷界与五章组计 Worker，逐章任务数不变；不含返修/重设计和真实模型用量或速度。"
+    }
+  },
+  "material": {
+    "status": "ok",
+    "value": {
+      "boundary": "字符量来自冻结信封与必读记录；不能换算成 token 或费用。本表走 seeded 路径（无 creation），因此不含 opening_basis/opening_choices 三项；world_model 另走当前版本逐门开书夹具测量。",
+      "volume_outline": {
+        "required_names": [
+          "contract",
+          "hooks",
+          "style",
+          "world_model"
+        ],
+        "required_records": 4,
+        "declared_records": 10,
+        "required_bytes": 5161,
+        "envelope_bytes": 7169
+      },
+      "chapter_outline": {
+        "required_names": [
+          "contract",
+          "state",
+          "hooks",
+          "style",
+          "world_model",
+          "volume_outline",
+          "previous_chapters"
+        ],
+        "required_records": 7,
+        "declared_records": 12,
+        "required_bytes": 14234,
+        "envelope_bytes": 6924
+      },
+      "write": {
+        "without_future_volume": {
+          "required_names": [
+            "contract",
+            "state",
+            "hooks",
+            "style",
+            "world_core",
+            "world_records",
+            "disclosure_boundary",
+            "chapter_outline",
+            "volume_outline",
+            "previous_chapters"
+          ],
+          "required_records": 10,
+          "declared_records": 16,
+          "required_bytes": 16393,
+          "envelope_bytes": 19706
+        },
+        "with_future_volume": {
+          "required_names": [
+            "contract",
+            "state",
+            "hooks",
+            "style",
+            "world_core",
+            "world_records",
+            "disclosure_boundary",
+            "chapter_outline",
+            "volume_outline",
+            "previous_chapters"
+          ],
+          "required_records": 10,
+          "declared_records": 16,
+          "required_bytes": 16393,
+          "envelope_bytes": 19706
+        },
+        "growth_bytes": 0,
+        "bounded_selection": true
+      },
+      "world_model": {
+        "status": "ok",
+        "opening_version": 6,
+        "required_names": [
+          "opening_basis",
+          "opening_choices"
+        ],
+        "required_bytes": 5127
+      }
+    }
+  },
+  "tracked": {
+    "status": "ok",
+    "value": [
+      {
+        "volume_chapters": 20,
+        "registered_nodes": 20,
+        "nodes_declared_by_this_chapter": [
+          "n1"
+        ],
+        "settled_story_nodes_in_slice": 0,
+        "state_record_bytes": 609,
+        "volume_outline_bytes": 7891,
+        "complete_volume_outline_bytes": 10504,
+        "envelope_bytes": 19454,
+        "required_bytes": 15895
+      },
+      {
+        "volume_chapters": 100,
+        "registered_nodes": 100,
+        "nodes_declared_by_this_chapter": [
+          "n1"
+        ],
+        "settled_story_nodes_in_slice": 0,
+        "state_record_bytes": 609,
+        "volume_outline_bytes": 4016,
+        "complete_volume_outline_bytes": 18473,
+        "envelope_bytes": 15579,
+        "required_bytes": 12027
+      },
+      {
+        "volume_chapters": 500,
+        "registered_nodes": 500,
+        "nodes_declared_by_this_chapter": [
+          "n1"
+        ],
+        "settled_story_nodes_in_slice": 0,
+        "state_record_bytes": 609,
+        "volume_outline_bytes": 1283,
+        "complete_volume_outline_bytes": 76540,
+        "envelope_bytes": 12846,
+        "required_bytes": 9295
+      }
+    ]
+  },
+  "memory": {
+    "status": "ok",
+    "value": [
+      {
+        "interpretations": 20,
+        "selected_interpretations": 3,
+        "required_record_bytes": 20224,
+        "complete_optional_source_preserved": true
+      },
+      {
+        "interpretations": 100,
+        "selected_interpretations": 3,
+        "required_record_bytes": 20224,
+        "complete_optional_source_preserved": true
+      },
+      {
+        "interpretations": 500,
+        "selected_interpretations": 3,
+        "required_record_bytes": 20224,
+        "complete_optional_source_preserved": true
+      }
+    ]
+  },
+  "history": {
+    "status": "ok",
+    "value": [
+      {
+        "synthetic_chapters": 20,
+        "synthetic_prose_han_at_least": 60000,
+        "history_source_bytes": 197,
+        "previous_full_catalog_and_event_index_bytes": 5846,
+        "first_build_ms": 0.182,
+        "six_repeated_snapshot_ms": 0.234,
+        "six_repeated_snapshot_document_reads": 6,
+        "repeated_snapshot_new_documents": 0,
+        "recent_five_match_event_pages_read": 6,
+        "missing_match_event_pages_read": 20,
+        "missing_match_ms": 1.478,
+        "oldest_prose_complete": true,
+        "observed_read_chars": 4237
+      },
+      {
+        "synthetic_chapters": 100,
+        "synthetic_prose_han_at_least": 300000,
+        "history_source_bytes": 198,
+        "previous_full_catalog_and_event_index_bytes": 29370,
+        "first_build_ms": 0.773,
+        "six_repeated_snapshot_ms": 0.242,
+        "six_repeated_snapshot_document_reads": 6,
+        "repeated_snapshot_new_documents": 0,
+        "recent_five_match_event_pages_read": 6,
+        "missing_match_event_pages_read": 100,
+        "missing_match_ms": 4.812,
+        "oldest_prose_complete": true,
+        "observed_read_chars": 4240
+      },
+      {
+        "synthetic_chapters": 500,
+        "synthetic_prose_han_at_least": 1500000,
+        "history_source_bytes": 198,
+        "previous_full_catalog_and_event_index_bytes": 148570,
+        "first_build_ms": 3.586,
+        "six_repeated_snapshot_ms": 0.259,
+        "six_repeated_snapshot_document_reads": 6,
+        "repeated_snapshot_new_documents": 0,
+        "recent_five_match_event_pages_read": 6,
+        "missing_match_event_pages_read": 500,
+        "missing_match_ms": 18.756,
+        "oldest_prose_complete": true,
+        "observed_read_chars": 4253
+      }
+    ]
+  }
+}

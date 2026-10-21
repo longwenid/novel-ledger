@@ -34,6 +34,7 @@ WORK_PAYLOAD_FIELDS = (
     # too so a dispatch that forwards either block inline — a re-plan naming the hooks to absorb, a
     # template that needs the effective window — is a declared shape instead of a rejected field.
     'hooks', 'style',
+    'worker_batch',                                            # bounded same-worker prose continuation
 )
 
 # Fields the local delivery adapter renders for one dispatch. Guides are attached
@@ -46,7 +47,7 @@ TASK_FIELDS = ('schema', 'task_id', 'input_hash', 'stage', 'chapter', 'scope', '
 # stages, so the envelope has one shape instead of two.
 TASK_OPTIONAL = ('brief', 'guides', 'input_path', 'template_path',
                  'records', 'required', 'brief_path', 'dispatch_path', 'stale_result_session',
-                 'catalog_path')
+                 'catalog_path', 'worker_batch')
 
 # Dispatch identity (`identity.json` in the work directory): the task's own copy of who it is,
 # written so a worker and the controller can cross-check the dispatched identity without guessing.
