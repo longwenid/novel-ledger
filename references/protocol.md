@@ -10,7 +10,7 @@
 
 ## 作者约定
 
-核心字段包括 title/reader_promise/ending/genre、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism，完整必填项按模板检查；`protagonist_origin` 由来历门产生，`core_premise`/`world_scale`/`world_ladder`/`world_tiers`/`world_resource`/`promise_anchor` 由对应门产生，`world_architecture` 由世界门产生，见下表。`tone`/`theme`/`pov` 由文风门选择并逐字保留；直接导入完整约定时，非必填的开书决定可缺省。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。总字数区间 word_range 是派生字段：由章数与每章区间算出，作者与派工材料都不填，也不参与开书对齐。
+核心字段包括 title/reader_promise/ending/genre、volumes、entities、protagonist_setup、story_engine、opposition、world_premise、voice、style_traits、relationships、chapter_min/chapter_max/chapter_aim、allow_special_mechanism，完整必填项按模板检查；`protagonist_origin` 由来历门产生，`core_premise`/`world_scale`/`world_ladder`/`world_tiers`/`world_resource`/`promise_anchor` 由对应门产生，`world_architecture` 由世界门产生，见下表。`tone`/`theme`/`pov` 分属题材门（genre）、兑现门（payoff）与视角门（voice）选择并逐字保留；直接导入完整约定时，非必填的开书决定可缺省。每卷 id/purpose 必填，end 为递增卷末章号，没有 end 时由 word_budget/chapter_aim 推导。总字数区间 word_range 是派生字段：由章数与每章区间算出，作者与派工材料都不填，也不参与开书对齐。
 
 | 设置 | 默认与作用 |
 |---|---|

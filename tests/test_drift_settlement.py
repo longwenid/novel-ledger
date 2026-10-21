@@ -77,6 +77,31 @@ class UnplannedSettlementTests(unittest.TestCase):
         state, _ = facts.settle(self.state, settled['events'], QUOTE, 1)
         self.assertEqual(state['resources'][key], '2')
 
+    def test_registration_events_without_writer_evidence_anchor_to_the_chapter(self):
+        """Registration rows come from the frozen chapter outline, not from the prose.
+
+        The live 2026-10-21 run lost its first chapter here: settlement demanded a prose quote for
+        every event, and the outline-generated registrations had none. They now anchor to the
+        chapter itself — to the registered name when the prose happens to carry it."""
+        events = [
+            {'op': 'entity', 'entity': {'id': 'porter', 'name': '挑夫', 'kind': 'person'}},
+            {'op': 'place', 'place': {'id': 'dock', 'name': '货栈渡口', 'parent': None}},
+            {'op': 'alias', 'entity': 'shen', 'alias': '沈师叔'},
+        ]
+        state, settled = facts.settle(self.state, events, '挑夫把沈砚领到货栈渡口。', 1)
+        self.assertEqual([event['evidence']['chapter'] for event in settled], [1, 1, 1])
+        self.assertEqual(settled[0]['evidence']['quote'], '挑夫')
+        self.assertEqual(settled[1]['evidence']['quote'], '货栈渡口')
+        # The alias never appears in the prose; its anchor is the chapter, not a refusal.
+        self.assertEqual(settled[2]['evidence'], {'chapter': 1, 'quote': '挑', 'start': 0})
+        self.assertIn('沈师叔', state['entities']['shen']['aliases'])
+        self.assertIn('porter', state['entities'])
+        self.assertIn('dock', state['places'])
+        # A registration the writer did evidence keeps its own quote untouched.
+        anchored = facts.settle(self.state, [{**events[0], 'evidence': {'chapter': 1, 'quote': '挑夫', 'start': 0}}],
+                                '挑夫把沈砚领到货栈渡口。', 1)[1][0]
+        self.assertEqual(anchored['evidence']['quote'], '挑夫')
+
     def test_unplanned_knowledge_carries_the_prior_claim_into_fact_settlement(self):
         """Both shapes of an unplanned knowledge step: an extra delta chain and a planned row whose
         reconciled `actual` supplies the claim — each keeps the prior claim as `before` when settling."""

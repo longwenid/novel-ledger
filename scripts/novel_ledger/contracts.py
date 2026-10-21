@@ -275,6 +275,13 @@ LENSES = (
     ('表层锚点', '选择与开局有关的底层设定，绑定一个读者能看见的载体（一件物、一个场景、一次冲突），'
                  '其余背景按揭示窗口展开；先展示异常或后果，再逐步说明原因。',
      '为开局关联的设定选一件物、一个场景或一次冲突，说明谁看见了什么、尚不知道什么。'),
+    # The mainstream counterweight (field feedback 2026-10-21: every method pool leaned toward
+    # high concepts, so an author asking for a normal book never saw a normal option). A proven
+    # classic frame executed well is a direction of its own, not a fallback.
+    ('主流正统', '走类型里被验证过的经典框架：读者熟悉的推进照常发生，新意放在执行、节奏与完成度上，'
+                 '不放在翻新设定上；为怪而怪、让读者看不懂规则不算。',
+     '写清采用哪条经典框架、这一版靠什么执行优势站住（节奏、人物、信息差、兑现密度），'
+     '以及与同类平均线的差异落在哪一环。'),
 )
 # Volume-level turn methods: what makes a volume mid-point change direction instead of
 # stacking everything on the finale. Used when planning the current volume.
@@ -544,7 +551,8 @@ OPTION_CONTRACT = ('每个方案给 id、title 短标题（真正可用的名字
                    'premise 写清这一版的结果与收益（读者拿到什么、将触及什么规则、历史或文明问题）、driver 这一版如何推进（只写故事动作）、'
                    'tradeoff 写清两半：确定要付出的代价，与可能发生的风险（与同组另外两案相比）、'
                    'fit_reason 与已选方向的具体接口（承接哪条选择、因此改变了什么）、value 按本门字段。'
-                   ' 同组方案在本门负责的规则、立场或体验上拉开差距；后门沿用已定世界，不靠推翻前门换方案。'
+                   ' 同组方案在本门负责的规则、立场或体验上拉开差距，但拉开差距不等于逐案变怪：'
+                   '每组至少一案走类型主流的常规路线，靠执行与完成度立住；后门沿用已定世界，不靠推翻前门换方案。'
                    ' 方案里出现的数字必须前后自洽：次数、每次的量与总量要对得上（每次扣三岁、全书六次，总量就是十八年），'
                    ' 不要断言别的门才决定的数量，也不要让观感描述冒充算术。')
 

@@ -63,7 +63,9 @@ def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
     lines.extend(['## 本轮创意透镜（用来想，不要写进方案文本）', lens_brief, ''])
     lines.extend(['## 换组纪律（本轮若是因为换组重新生成）',
                   '- 新一组必须与被拒的旧组方向实质不同：不得换名、改写收益或微调细节冒充新组；',
-                  '- 吸收作者随换组补充的偏好（原因里写了「格局太小」就把格局拉高一级：从个人困局追到历史成因、规则冲突与文明选择，不只放大地名）；',
+                  '- 吸收作者随换组补充的偏好（「格局太小」就把格局拉高一级：从个人困局追到历史成因、'
+                  '规则冲突与文明选择，不只放大地名；「太怪、要正常」就回到类型主流的经典框架——'
+                  '回到常规同样是实质不同的新组，不是偷懒）；',
                   '- 已拒方向见 opening_rejections 记录，逐条避开其思路而不只是避开其措辞。', ''])
     lines.extend(['## 交付契约', OPTION_CONTRACT])
     lines.append('')
@@ -373,6 +375,10 @@ def stage(name, payload=None):
                  '（actual.from 由引擎投影，不是你自报的前态）、status 取 kept|deviated|skipped，'
                  'deviated/skipped 必须写 reason，evidence.quote 必须是正文原文片段；'
                  '计划外资源/位置/知情/人物变化写进 unplanned，必须给 actual.from/to、reason 和本章 evidence；不接受只有 change 的说明，其他种类须回章纲契约处理。'
+                 'actual 按种类给形状：resources/places/knowledge/characters 一律 {"from": 可省, "to": 值}——'
+                 'resources 的 to 是数值字符串（如 "2"），characters 的 to 是 {desire,stance,relationship_focus}（不得用 after 键），'
+                 'knowledge 的 to 是档位，places 的 to 是地点 id；hook 用 {"action": "plant"|"payoff"}，'
+                 '节点/线路用 {"after": 状态}，clock 用 {"advance_days": n}。'
                  '以具体处境展开场景，保留有作用的心理与体验，删除重复解释。遵守 word_budget 的本章范围；'
                  '静章承担余波、恢复、关系或暗线作用。作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
                  '文风上照 style_anchor 的首章定调、本卷 style.trend 与本章 style 写：'

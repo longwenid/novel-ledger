@@ -85,7 +85,7 @@ def draft_exhaustion_stage(budget):
 
 
 def spend(book, chapter, stage):
-    budget = book['rework'].setdefault(str(chapter), {'repairs': 0, 'redesigns': 0})
+    budget = book.setdefault('rework', {}).setdefault(str(chapter), {'repairs': 0, 'redesigns': 0})
     if stage == 'write':
         require(not budget.get('initial_used'), 'repair_budget', '同一章不能通过重新开初稿重置修复轮次。')
         budget['initial_used'] = True
@@ -292,7 +292,7 @@ def choose(book, headers):
                if not d.get('absorbed_by') and d.get('chapter', 0) < chapter]
     if pending:
         return replan_volume_outline(book, contract, chapter, pending, '前一章的实际变化挂账，先重排本章纲。')
-    budget = book['rework'].get(str(chapter), {})
+    budget = (book.get('rework') or {}).get(str(chapter), {})
     if budget.get('initial_used'):
         stage = draft_exhaustion_stage(budget)
         if stage == 'exhausted':
@@ -302,7 +302,7 @@ def choose(book, headers):
 
 
 def route_repair(book, draft, findings, after_repair=False):
-    budget = book['rework'].setdefault(str(draft['chapter']), {'repairs': 0, 'redesigns': 0})
+    budget = book.setdefault('rework', {}).setdefault(str(draft['chapter']), {'repairs': 0, 'redesigns': 0})
     prior = {digest(f) for f in draft.get('findings', [])}
     combined = draft.get('findings', []) + copy.deepcopy(findings)
     draft['findings'] = list({digest(f): f for f in combined}.values())

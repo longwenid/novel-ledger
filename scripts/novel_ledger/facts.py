@@ -243,6 +243,19 @@ def settle(before, events, prose, chapter):
     for raw in events:
         require(isinstance(raw, dict), 'event', '事件须为对象。')
         event = copy.deepcopy(raw)
+        if event.get('op') in ('entity', 'alias', 'place'):
+            # Registration events are generated from the frozen chapter outline, not claimed by
+            # the prose; anchor them to the chapter itself when the writer filed no evidence.
+            ref = event.get('evidence')
+            valid = isinstance(ref, dict) and type(ref.get('chapter')) is int and text(ref.get('quote'))
+            if not valid:
+                source = event.get('entity') or event.get('place') or event.get('alias') or {}
+                name = source.get('name') if isinstance(source, dict) else None
+                anchor = prose.find(name) if text(name) else -1
+                if anchor >= 0:
+                    event['evidence'] = {'chapter': chapter, 'quote': name, 'start': anchor}
+                else:
+                    event['evidence'] = {'chapter': chapter, 'quote': prose[:1], 'start': 0}
         event['evidence'] = evidence(event.get('evidence'), {chapter: prose})
         if event.get('op') == 'clock':
             require(any(t in event['evidence']['quote'] for t in TIME_MARKERS),

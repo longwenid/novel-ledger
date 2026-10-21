@@ -359,7 +359,7 @@ class Application:
                         'task_id': task['id'], 'worker_boundary': 'finished',
                         'committed_chapter': outcome.chapter['n'] if outcome.chapter else None,
                         'next_stage': updated['draft']['stage'] if updated['draft'] else None,
-                        'rework': updated['rework'].get(str(work['chapter'])), 'status': updated['status']}
+                        'rework': (updated.get('rework') or {}).get(str(work['chapter'])), 'status': updated['status']}
             if outcome.style_report is not None:
                 response['style_report'] = outcome.style_report
         return response
@@ -762,7 +762,7 @@ class Application:
             parent = book['revision_run']['parent']
             restored = self.repo.get(store_keys.branch_book(parent))
             # Discard restores story state, never already spent editorial effort.
-            for chapter, spent in book['rework'].items():
+            for chapter, spent in (book.get('rework') or {}).items():
                 prior = restored['rework'].setdefault(chapter, {'repairs': 0, 'redesigns': 0})
                 for field in ('repairs', 'redesigns'):
                     prior[field] = max(prior.get(field, 0), spent.get(field, 0))
