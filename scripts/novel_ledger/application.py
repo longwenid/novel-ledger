@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 from .contracts import (CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION,
-                        execution_recovery,
+                        execution_recovery, policy_default,
                         digest, dump, require, text)
 from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint
 from .ports import Presentation, Repository, TaskCompiler
@@ -139,7 +139,7 @@ class Application:
         self._session(task, session, claim)
         return {'schema': EXECUTION, 'task_id': task_id, 'session': session, 'ready': True}
 
-    def prepare_worker(self, task_id, session, owner=None, seconds=300, reset_failures=False):
+    def prepare_worker(self, task_id, session, owner=None, seconds=None, reset_failures=False):
         """Controller binds the host-returned identity; no invented session or prose edits."""
         self.controller_guard(owner)
         task = self.repo.task(task_id)
@@ -222,6 +222,17 @@ class Application:
             require(lease['session'] == session and lease['token'] == claim and lease['until'] > self.clock(),
                     'worker_lease', 'Worker 租约或执行认领已过期。',
                     {'task_id': task['id'], 'lease_session': lease['session'], 'expired': lease['until'] <= self.clock()})
+
+    def _touch_lease(self, task_id, claim):
+        """Activity renewal: a worker that keeps calling the engine with its token keeps the lease.
+
+        Only a currently valid lease is extended — an expired one still goes through the
+        controller recovery path — and nothing is rejected here; a wrong token simply doesn't renew.
+        """
+        lease = self.repo.get(store_keys.claim(task_id))
+        if lease and claim and lease['token'] == claim and lease['until'] > self.clock():
+            lease['until'] = self.clock() + policy_default('worker_lease_seconds')
+            self.repo.put(store_keys.claim(task_id), lease)
 
     def _sources(self, work):
         """Frozen recent chapters; workflow adds the composed current draft as its own evidence."""
@@ -419,6 +430,9 @@ class Application:
             require(session == caller, 'session', '试算身份与会话不符。')
         self._session(task, session, check_lease=False)
         preview = self.submit({**payload, 'session': session}, preview=True)
+        # The preview rolled back, so the renewal lands as its own small write: a worker
+        # iterating on a draft checks repeatedly, and each successful check is a heartbeat.
+        self._touch_lease(task['id'], payload.get('execution_claim'))
         return {**preview, 'valid': True, 'session_used': session}
 
     def submit(self, result, preview=False):
@@ -443,6 +457,8 @@ class Application:
                     {'expected': task['input_hash'], 'got': result.get('input_hash'),
                      'recover': '信封字段不手写：从本任务目录的 result.template.json 复制起稿，只改 data。'})
             self._session(task, result.get('session'), result.get('execution_claim'))
+            if not preview:
+                self._touch_lease(task['id'], result.get('execution_claim'))
             work = copy.deepcopy(task['input'])
             # Mechanical prose defects are judged here, inside the same reconciliation that decides
             # whether the chapter commits; the producer sees the finding without spending a review
@@ -486,12 +502,17 @@ class Application:
                         'rework': (updated.get('rework') or {}).get(str(work['chapter'])), 'status': updated['status']}
             if outcome.style_report is not None:
                 response['style_report'] = outcome.style_report
+            if outcome.findings:
+                # One call answers every defect at once, so a producer fixes all findings in a
+                # single rewrite instead of discovering them one rework round at a time.
+                response['findings'] = outcome.findings
             # Includes fast-mode submissions: they need no controller advance
             # between chapters. Preview/rollback must leave the page untouched.
             self.repo.after_commit(lambda: self._refresh_book(response))
         return response
 
-    def claim(self, task_id, session, seconds=300):
+    def claim(self, task_id, session, seconds=None):
+        seconds = policy_default('worker_lease_seconds') if seconds is None else seconds
         require(text(session) and type(seconds) is int and seconds > 0, 'claim', '认领需要会话和正整数租期。')
         with self.repo.transaction():
             task = self.repo.task(task_id)
@@ -537,7 +558,18 @@ class Application:
             book.update(target=target, finish=finish, run_authorized=True, writing_mode=selected_mode)
             book['decisions'].append({'kind': 'run', 'target': target, 'finish': finish, 'source': source, 'mode': selected_mode})
             self._save(book)
-            return {'owner': owner, 'target': target, 'finish': finish, 'lease_seconds': seconds, 'writing_mode': selected_mode}
+            response = {'owner': owner, 'target': target, 'finish': finish, 'lease_seconds': seconds, 'writing_mode': selected_mode}
+            if selected_mode == 'fast' and not finish:
+                headers = self.repo.headers(book['branch'])
+                remaining = target - (headers[-1]['n'] if headers else 0)
+                batch = policy_default('fast_batch_chapters')
+                if 0 < remaining < batch:
+                    # Authorization semantics do not change; the controller just hears that the
+                    # group would be clipped to fewer chapters than a cold start amortizes over.
+                    response['fast_group_note'] = (
+                        '快速组将因授权终点只剩 %d 章（组大小 %d），单章组摊不掉一次冷启动；'
+                        '作者「一次五章」类意图应先对齐 run --through 再派工。' % (remaining, batch))
+            return response
 
     def continue_writing(self, task_id, session, claim=None):
         """A worker's bounded continuation capability, never a general advance or author command."""

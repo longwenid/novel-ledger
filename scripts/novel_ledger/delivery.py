@@ -184,11 +184,15 @@ def render_dispatch_card(envelope, identity):
              '2. 执行一次无参数 read（命令见下）把必读记录拿齐；确需某份再 read --record 名称。',
              '3. 复制 `result.template.json` 为 `result.json` 起稿，只改 data；'
              'Python worker 入口在内存中注入真实 session/execution_claim，不写回草稿；schema/task_id/input_hash 不手写。',
-             '4. 执行 commands.preflight 试算，按 details.expect 与 details.recovery 修正；不为确认格式读引擎源码。',
+             '4. 执行 commands.preflight 试算：findings 一次全量返回，把全部问题合并成一版修改——'
+             '以完整段落或场景为单位重写，不逐条小改反复试算（每轮试算都重读全部上下文，是最高成本动作）；'
+             '按 details.expect 与 details.recovery 修正；不为确认格式读引擎源码。',
              '5. `submit` 提交；worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令，不改写 commands/guides。']
     command_names = ('ready', 'read', 'check', 'preflight', 'submit')
     if envelope.get('worker_batch'):
         group = envelope['worker_batch']
+        steps[0] = ('1. 读 `task.json` 与 `brief.md`；本任务不是本组首章时，guides 与首章相同，'
+                    '已读可跳过，仅按需补读。')
         steps[-1] = ('5. 本组范围第 %s～%s 章：逐章落笔和提交，章纲固定、额度按章计算。'
                      'submit 返回 worker_boundary=continue 时执行 commands.worker_next；'
                      '只按返回任务更新 NOVEL_TASK_ID、NOVEL_TASK_PATH 与 NOVEL_EXECUTION_CLAIM，'

@@ -48,6 +48,20 @@ class FastWritingTests(unittest.TestCase):
         step = self.app.continue_writing(task['task_id'], session, lease['token'])
         return step['task'], {'token': step['execution_claim']}
 
+    def test_run_warns_when_the_target_would_clip_the_group(self):
+        task, lease = self.start_group()
+        for chapter in range(2, 7):
+            receipt, result = self.submit('fast-worker', lease)
+            self.assertEqual(result['committed_chapter'], chapter)
+            if result['worker_boundary'] == 'continue':
+                task, lease = self.next(task, lease)
+        # Six chapters stand: a target one past the head would strand a single-chapter group,
+        # so run says so; a target leaving a whole batch says nothing.
+        clipped = self.app.run(through=7, owner=self.owner, source='写到第七章。', mode='fast')
+        self.assertIn('只剩 1 章', clipped['fast_group_note'])
+        full = self.app.run(through=11, owner=self.owner, source='一次五章写下去。', mode='fast')
+        self.assertNotIn('fast_group_note', full)
+
     def test_same_worker_commits_five_chapters_then_a_new_group_requires_a_fresh_worker(self):
         task, lease = self.start_group()
         group_id = task['worker_batch']['id']
@@ -194,11 +208,18 @@ class FastWritingTests(unittest.TestCase):
         task, lease = self.start_group()
         receipt = response(self.app)
         receipt.update(session='fast-worker', execution_claim=lease['token'])
-        before = tuple(self.repo.db.iterdump())
+
+        def story_dump():
+            # A successful check renews the caller's own lease TTL; that execution bookkeeping
+            # is the one row a preview is allowed to touch, so it is excluded here.
+            return tuple(row for row in self.repo.db.iterdump()
+                         if not row.startswith('INSERT INTO "kv" VALUES(\'claim:'))
+
+        before = story_dump()
         checked = self.app.check(receipt)
         self.assertIsNotNone(checked['committed_chapter'])
         self.assertTrue(checked['checked'])
-        self.assertEqual(tuple(self.repo.db.iterdump()), before)
+        self.assertEqual(story_dump(), before)
         self.assertEqual(self.repo.pending()['id'], task['task_id'])
 
     def test_stalled_repairs_end_the_group_and_keep_the_per_chapter_budget(self):

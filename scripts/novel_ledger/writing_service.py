@@ -153,7 +153,7 @@ class WritingService:
             return None, None
         task = self.dispatch(book, choice, group=group)
         lease = {'session': session, 'token': self.new_id(),
-                 'until': self.clock() + group.get('lease_seconds', 300)}
+                 'until': self.clock() + (group.get('lease_seconds') or policy_default('worker_lease_seconds'))}
         self.repo.put(store_keys.claim(task['id']), lease)
         return task, lease
 

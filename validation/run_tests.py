@@ -22,6 +22,7 @@ FAST = (
     'test_context_growth', 'test_plot_precision',
     'test_snapshot_integrity', 'test_snapshot_probe', 'test_verification', 'test_outline_lock', 'test_fast_writing',
     'test_prose_lint.LintUnitTests',
+    'test_prose_lint.LintFlowTests.test_preview_answers_every_defect_in_one_call',
     'test_style_voice', 'test_style_guard_flow',
     'test_validation_runner', 'test_architecture_repairs', 'test_opening_architecture',
     # The fast gate pins automatic revision bounds with one end-to-end case; the full gate

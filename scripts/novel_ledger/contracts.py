@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 # The five-step pipeline is a protocol generation change: v2 removed every reviewer dispatch, so a
 # task frozen by v1 (checks_version, obligations, blind first read, plan/book_plan stages) can no
 # longer be executed by this build. The pipeline and storage carry independent version identifiers.
-VERSION = '2.0.1'
+VERSION = '2.0.2'
 
 
 SCHEMA = 'novel-ledger/5'
@@ -78,6 +78,10 @@ DEFAULTS = {
     'revision_limit': 3,
     'fast_batch_chapters': 5,
     'technical_retries': 2,
+    # Worker lease TTL. Every successful worker call carrying the claim token (submit, check)
+    # renews it, so a long repair loop stays leased while it keeps calling the engine and only
+    # silence — not working slowly — lets the lease expire.
+    'worker_lease_seconds': 300,
     # opening/5's two new gates are the ones a web serial lives on, so their floors are numbers, not
     # prose: how many rungs the reader-visible ladder must show at each size class, how many stages
     # the 格局 ladder must walk, and how late the theme anchor may land. `anchor_max_chapter` is the
@@ -669,3 +673,6 @@ class Outcome:
     book: Dict[str, Any]
     chapter: Optional[Dict[str, Any]] = None
     style_report: Optional[Dict[str, Any]] = None
+    # The full findings list when a prose receipt was routed to repair: surfaced so a
+    # preview can answer "everything wrong with this draft" in one call.
+    findings: Optional[list] = None

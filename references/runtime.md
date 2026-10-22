@@ -45,6 +45,8 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 首章仍单独写并取得准确版本认可；之后每组由一个真实 Worker 最多连写五章，不跨卷、不越过授权终点或缺失章纲。每章单独冻结、完整成稿、自比与提交，沿用固定章纲，事实只在该章通过后入库。不能一次交五章后跳过中间核验。返修仍使用本章有限额度，同一 Worker 只返修当前章，通过后才写下一章；暂停、停摆或需要作者决定时结束该组。
 
+建组前先核对授权终点与剩余章数：快速组的省费来自摊掉一次 Worker 冷启动，授权终点把组截断成单章时摊销完全不发生（2026-10-22 实测单章组约 6.8M tokens，见 [成本记录](../validation/dsh-session-45-cost-fix-2026-10-22.md)）。`run` 在快速模式下剩余章数不足一组时会返回 `fast_group_note` 提示；作者"一次五章"类授权意图应先按该意图对齐 `run --through` 再 advance 建组，不扩大作者未给的授权。Worker 租约由活动自动续租（每次成功的 check/submit 都是心跳）；预计单章返修很久时，主干可在 prepare-worker 用 `--seconds` 直接放宽租期。
+
 - 主干按原路径 advance 派出本组首任务，取得真实 Worker 会话 ID 后 prepare-worker 并注入返回的 worker_env；随后 `watch --owner ID` 等整组完成，不逐章另派 Worker。
 - Worker 提交返回 `worker_boundary=continue` 时，执行当前 task.json 的 `commands.worker_next`。该命令只允许从本人已提交的最新任务接续当前组，不授予 advance、认领主控、改纲或作者权限。
 - 返回下一任务后，按返回值更新 `NOVEL_TASK_ID`、`NOVEL_TASK_PATH`、`NOVEL_EXECUTION_CLAIM`，保留同一 `NOVEL_SESSION`；读取新 task.json、brief 和 read 返回的新增/变更必读材料。执行身份只在引擎授权的组内接续时更新。

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from novel_ledger.application import Application
-from novel_ledger import context, workflow
+from novel_ledger import context, workflow, store_keys
 from novel_ledger.contracts import Error, digest
 from novel_ledger.ports import Repository
 from memory_repository import MemoryRepository
@@ -192,6 +192,21 @@ class ApplicationPortsTests(unittest.TestCase):
         renewed = app.claim(pending, 'claimed-worker', seconds=30)
         self.assertEqual(renewed['until'], 1061.0)
         app.submit(expired)
+        self.assertEqual(repo.task(pending)['status'], 'done')
+
+    def test_worker_activity_renews_the_lease_while_silence_still_expires_it(self):
+        app, repo, _, runtime, _ = self.make_app()
+        pending = app.advance()['task']['task_id']
+        lease = app.claim(pending, 'claimed-worker', seconds=30)
+        candidate = response(app, session='claimed-worker', claim=lease['token'])
+        # 25s in, the lease is still valid: a successful check is a heartbeat and extends it,
+        # so a slow repair loop that keeps calling the engine never runs out of lease.
+        runtime.now = 1025.0
+        app.check(candidate, session='claimed-worker')
+        self.assertEqual(repo.get(store_keys.claim(pending))['until'], 1325.0)
+        # Past the original 1030 expiry, the renewed lease still admits the same receipt.
+        runtime.now = 1031.0
+        app.submit(candidate)
         self.assertEqual(repo.task(pending)['status'], 'done')
 
     def test_memory_adapter_implements_the_entire_application_repository_port(self):

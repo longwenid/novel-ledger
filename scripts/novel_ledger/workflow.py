@@ -497,6 +497,7 @@ def apply(book, task, data, actor, sources, priors=None):
     contract = editorial.effective_contract(book) if book.get('contract') else None
     row = None
     style_report = None
+    findings = None
     if stage == 'opening_options':
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         book['creation'] = creation.offer(book['creation'], data)
@@ -747,4 +748,4 @@ def apply(book, task, data, actor, sources, priors=None):
         book['understanding'] = understanding.update(book.get('understanding'), data.get('understanding'),
                                                      sources, evidence, actor)
     book['revision'] += 1
-    return Outcome(book, row, style_report)
+    return Outcome(book, row, style_report, findings)
