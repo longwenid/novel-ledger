@@ -1,0 +1,982 @@
+{
+  "scope": [
+    41,
+    78
+  ],
+  "read_complete": true,
+  "phase": "pure-reading-frozen-before-design-review",
+  "frozen_at": "2026-10-22T19:32:31.722558",
+  "findings": [
+    {
+      "id": "S01",
+      "kind": "continuity",
+      "severity": "critical",
+      "title": "渡鸦被连续击毙后又作为活口出现",
+      "description": "47已称击毙，48再次写成重创后首恶伏诛、残骸无生机；49没有任何复苏机制或叙述修正便能咳血、对答、被生擒。50、56、59沿用活口。这不是单纯敌人第二阶段，而是前章终局事实被后章覆盖。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 47,
+          "quote": "击毙这尊变异凶兽",
+          "start": 3757,
+          "end": 3765,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 149,
+          "prose_hash": "d4283070dca73a0fe5cfba2e4f7f2b290d517cc15f62560a6b680fcb63c9e933"
+        },
+        {
+          "chapter": 48,
+          "quote": "最终彻底化作了一具毫无生机的焦黑废铁与残骸。",
+          "start": 1585,
+          "end": 1607,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 77,
+          "prose_hash": "9824f0aeb3536d87ab0187f1f2cb0ac9d324bd5ef90e0d60b5308a640adfb6d0"
+        },
+        {
+          "chapter": 48,
+          "quote": "物证确凿，首恶伏诛。",
+          "start": 1827,
+          "end": 1837,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 89,
+          "prose_hash": "9824f0aeb3536d87ab0187f1f2cb0ac9d324bd5ef90e0d60b5308a640adfb6d0"
+        },
+        {
+          "chapter": 49,
+          "quote": "活口，彻底锁死。",
+          "start": 1546,
+          "end": 1554,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 51,
+          "prose_hash": "f96f83bd856c04c5295ba2ef149c55055a640fecd804a10e548e00942f7f3451"
+        },
+        {
+          "chapter": 50,
+          "quote": "不仅有完整的物理镜像与铅封母毒样本，还有渡鸦本人的供词。",
+          "start": 2153,
+          "end": 2181,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 53,
+          "prose_hash": "ffe2b8418123aaf8f4ac1e014ebfbc059b9aa1cad69c7fb8a02c01ad3039c974"
+        }
+      ]
+    },
+    {
+      "id": "S02",
+      "kind": "time",
+      "severity": "major",
+      "title": "同次泵房突入的日序被章序带着走",
+      "description": "41四十五秒破网后即奔核心；42、43开篇却每天跳一天，而43与44同为第四十三日。45又说44日暮色与陆巡决战同时，48离场却是44日晨。没有战术停留或倒叙标识支持。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 41,
+          "quote": "索拉里斯同心环轨的第四十一日黎明",
+          "start": 0,
+          "end": 16,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "93d00685a075f84db254a67076ff78ebbca634b49b9f58f02ec7275e1148d04c"
+        },
+        {
+          "chapter": 41,
+          "quote": "前后耗时不过短短四十五秒。",
+          "start": 2974,
+          "end": 2987,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 77,
+          "prose_hash": "93d00685a075f84db254a67076ff78ebbca634b49b9f58f02ec7275e1148d04c"
+        },
+        {
+          "chapter": 42,
+          "quote": "索拉里斯同心环轨的第四十二日晨光",
+          "start": 0,
+          "end": 16,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "a181fae426637552777afb886d7582383759566f00022109b73ff539def47725"
+        },
+        {
+          "chapter": 43,
+          "quote": "索拉里斯同心环轨的第四十三日破晓",
+          "start": 0,
+          "end": 16,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "687d083bf0a69df0dcf1953ee07dcb90fcafe7d9d6ecb3403925321f372fde67"
+        },
+        {
+          "chapter": 44,
+          "quote": "索拉里斯同心环轨迎来第四十三日的阴沉晨曦。",
+          "start": 0,
+          "end": 21,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "efc381a293997edd2681dbb244d0658deadcb44f75d4a70bc1142182932a7aa9"
+        },
+        {
+          "chapter": 45,
+          "quote": "索拉里斯同心环轨的第四十四日暮色昏沉",
+          "start": 0,
+          "end": 18,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "1fa57977e63dc028c17140d603440cb5066d0bd85abc178c74a60a11a3fb1b10"
+        },
+        {
+          "chapter": 45,
+          "quote": "就在陆巡深入旧净水泵房决战狂徒的同时",
+          "start": 84,
+          "end": 102,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 7,
+          "prose_hash": "1fa57977e63dc028c17140d603440cb5066d0bd85abc178c74a60a11a3fb1b10"
+        },
+        {
+          "chapter": 48,
+          "quote": "第四十四日微弱的人造晨曦",
+          "start": 3469,
+          "end": 3481,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 149,
+          "prose_hash": "9824f0aeb3536d87ab0187f1f2cb0ac9d324bd5ef90e0d60b5308a640adfb6d0"
+        }
+      ]
+    },
+    {
+      "id": "S03",
+      "kind": "scene-state",
+      "severity": "major",
+      "title": "离场、到场和取证在下一章重新发生",
+      "description": "48已完成取芯片、老莫入场、陆巡离场；49重做同一组事件。62已撤离火场且宪兵轰然踏至，63却又回火场取另一证再撤离，没有回返或时间倒置标识。73老莫撞入车间，74称陆巡孤身，末尾老莫再到。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 48,
+          "quote": "迈步向外走去。",
+          "start": 3336,
+          "end": 3343,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 143,
+          "prose_hash": "9824f0aeb3536d87ab0187f1f2cb0ac9d324bd5ef90e0d60b5308a640adfb6d0"
+        },
+        {
+          "chapter": 49,
+          "quote": "陆巡在防爆铁壁前两米处停下脚步。",
+          "start": 137,
+          "end": 153,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 7,
+          "prose_hash": "f96f83bd856c04c5295ba2ef149c55055a640fecd804a10e548e00942f7f3451"
+        },
+        {
+          "chapter": 62,
+          "quote": "瞬间滑入暗无天日的排污减压竖井深处。",
+          "start": 3155,
+          "end": 3173,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 123,
+          "prose_hash": "43a8d87755383f3dbe9c703aed4ef1836d82d8bee560262f054661146f444a8e"
+        },
+        {
+          "chapter": 63,
+          "quote": "陆巡反握战术手电，将光束压成一束极为锐利的平行光，贴着地面一寸寸向前推进。",
+          "start": 99,
+          "end": 136,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 7,
+          "prose_hash": "01c4f514fbb58e2a85244930da6a6b697e4669734b07db1c057c226fdbf8658a"
+        },
+        {
+          "chapter": 73,
+          "quote": "强行破障攻入车间腹地。",
+          "start": 3207,
+          "end": 3218,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 71,
+          "prose_hash": "739e01f907880d703cdb3b5ec964f8f3a463590533763741e38c404a3e3c5295"
+        },
+        {
+          "chapter": 74,
+          "quote": "此刻只剩下了陆巡孤身一人，以及六名杀气腾腾的机械死士。",
+          "start": 894,
+          "end": 921,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 31,
+          "prose_hash": "2569d41357b997cfd2d40f12f1ab797fb87c8c37694875d4924ab4b1b80cb701"
+        },
+        {
+          "chapter": 74,
+          "quote": "老莫那辆加装了双层防辐射铅板的工程救援车也已经轰鸣着驶入外围月台",
+          "start": 2598,
+          "end": 2630,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 99,
+          "prose_hash": "2569d41357b997cfd2d40f12f1ab797fb87c8c37694875d4924ab4b1b80cb701"
+        }
+      ]
+    },
+    {
+      "id": "S04",
+      "kind": "scene-state",
+      "severity": "major",
+      "title": "中环法庭大场面被跳过并改写为另一场听证",
+      "description": "52三人撞进法庭，证据刚提交；53开头强调这是同次余波，却让陆巡和老莫现身外环泵房，无返程和听证结果；54沈青在警备厅第七联席会议室从头进行技术听证，案件从公开法庭升级转成内部默认协查。可解释成两场会，但缺必要时序、结果与人物移动桥接，读者不能建立连续因果。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 52,
+          "quote": "陆巡神色沉稳冷冽，与身侧手捧铁证的沈青并肩踏上红地毯。",
+          "start": 3226,
+          "end": 3253,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 95,
+          "prose_hash": "363541e4641eda2f6ab8e63111cb5db9b16c02cf01f56a8a5d3ac4df084cb461"
+        },
+        {
+          "chapter": 53,
+          "quote": "中环第一大法院听证大厅的震撼余波",
+          "start": 0,
+          "end": 16,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "bd886f7500247ea90e4b532356718dec58931f0e6264526f808977aa62a6166e"
+        },
+        {
+          "chapter": 53,
+          "quote": "陆巡迈开沉稳坚定的步伐，自铁门深处的昏暗阴影中缓步走出。",
+          "start": 1052,
+          "end": 1080,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 37,
+          "prose_hash": "bd886f7500247ea90e4b532356718dec58931f0e6264526f808977aa62a6166e"
+        },
+        {
+          "chapter": 54,
+          "quote": "中环警备厅主控大楼第七联席会议室内",
+          "start": 0,
+          "end": 17,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "c4de3fccbe32e532bd17a326a47dc9e592288fb46348c23be3c4c83f8b394be1"
+        },
+        {
+          "chapter": 54,
+          "quote": "白夜事务所对外环现场的协查资质……警备厅暂时予以默认。",
+          "start": 3231,
+          "end": 3258,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 65,
+          "prose_hash": "c4de3fccbe32e532bd17a326a47dc9e592288fb46348c23be3c4c83f8b394be1"
+        }
+      ]
+    },
+    {
+      "id": "S05",
+      "kind": "deadline",
+      "severity": "critical",
+      "title": "两小时列车截击跨过整整一日仍是今晚",
+      "description": "69明确21:05截获指令，列车还有2h；70明确过去整整一日，又把同班23:05专列作为当晚尚未发生的窗口。66称火灾72h前，67、68、69、70连续各过一日，70又称火灾三天前。71–75端厂后，76次日转入查垃圾场，已锁死/必截的专列、120kg保管、老豺抓捕均无交接或结果。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 66,
+          "quote": "七十二小时前，旧港第三证物库值班室。",
+          "start": 2473,
+          "end": 2491,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 71,
+          "prose_hash": "be859cac6a364a9586119548d0aa77e5e0ad50beb30be750878a6241ff7f912c"
+        },
+        {
+          "chapter": 67,
+          "quote": "距离昨日黑市审讯过去整整二十四小时",
+          "start": 14,
+          "end": 31,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "263c9f898f5867cdb51f1c24727a09718d3cb424f6487f0f57e9d0719498d13e"
+        },
+        {
+          "chapter": 68,
+          "quote": "距离昨日追踪调度室惨案又过去整整一日",
+          "start": 5,
+          "end": 23,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "1f41534d5d345253c3c4f870d5ddfce56a7557ee246602e3202ff8fe38f22443"
+        },
+        {
+          "chapter": 69,
+          "quote": "距离昨夜水仓血战又过去整整一日",
+          "start": 18,
+          "end": 33,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "8bb9f43f3d4b90badc5223b2b1d790446b0679cd27804f33a86e68b7db7e7c93"
+        },
+        {
+          "chapter": 69,
+          "quote": "二十三点零五分……还有整整两个小时。",
+          "start": 2418,
+          "end": 2436,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 55,
+          "prose_hash": "8bb9f43f3d4b90badc5223b2b1d790446b0679cd27804f33a86e68b7db7e7c93"
+        },
+        {
+          "chapter": 70,
+          "quote": "距离截获灰鸦清洗密令已过去整整一日",
+          "start": 7,
+          "end": 24,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "221a79e800539d2649e698f57fca50a31903a9b491402dcd0f8ad1d521518f5e"
+        },
+        {
+          "chapter": 70,
+          "quote": "三天前证物库失窃的一百二十公斤原料",
+          "start": 1441,
+          "end": 1458,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 35,
+          "prose_hash": "221a79e800539d2649e698f57fca50a31903a9b491402dcd0f8ad1d521518f5e"
+        },
+        {
+          "chapter": 70,
+          "quote": "今晚二十三点零五分在十七号矿道月台停靠的专列",
+          "start": 1651,
+          "end": 1673,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 39,
+          "prose_hash": "221a79e800539d2649e698f57fca50a31903a9b491402dcd0f8ad1d521518f5e"
+        },
+        {
+          "chapter": 76,
+          "quote": "次日清晨的冷光无法穿透这处岩层深处的暗室",
+          "start": 74,
+          "end": 94,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 5,
+          "prose_hash": "b8887d8034011fbc9b2f2919d571129567cc24221bc9d51ca5b20810d786dd7c"
+        }
+      ]
+    },
+    {
+      "id": "S06",
+      "kind": "world-continuity",
+      "severity": "critical",
+      "title": "同一黑工厂由第七外环第十二矿井漂移为第四外环第七深井",
+      "description": "70给坐标第十二矿井负400m，71实地入口仍第七外环第十二井；75尾声突然第七深井，76事务所也随之处于第四外环，77实地确认第四外环第七井；中间没有新地点或迁址事件。工厂从三塔变十二塔再变三塔。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 70,
+          "quote": "第十二矿井负四百米处",
+          "start": 1341,
+          "end": 1351,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 35,
+          "prose_hash": "221a79e800539d2649e698f57fca50a31903a9b491402dcd0f8ad1d521518f5e"
+        },
+        {
+          "chapter": 71,
+          "quote": "第七外环第十二废弃深井的入口",
+          "start": 0,
+          "end": 14,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "cbd8ca029f4f007b5cbb56ac6568834bc8aa9289b4bd66edf48773291be0d79c"
+        },
+        {
+          "chapter": 75,
+          "quote": "在第七深井幽闭潮湿的岩壁顶端",
+          "start": 3105,
+          "end": 3119,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 77,
+          "prose_hash": "667c8fbfe9c58749713e69a51c0cc4137dd157017df3faa9843d72598d348875"
+        },
+        {
+          "chapter": 76,
+          "quote": "外头第四外环的喧嚣与尘暴",
+          "start": 48,
+          "end": 60,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 5,
+          "prose_hash": "b8887d8034011fbc9b2f2919d571129567cc24221bc9d51ca5b20810d786dd7c"
+        },
+        {
+          "chapter": 77,
+          "quote": "清晨的第四外环荒原上",
+          "start": 0,
+          "end": 10,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 3,
+          "prose_hash": "0bf4fc77790fb0877c0aa9949503178445d1cd876e3964b2b1aa84da9874a237"
+        },
+        {
+          "chapter": 77,
+          "quote": "第七深井的主结构与下层的三座非法晶髓提纯蒸馏塔依然完好。",
+          "start": 1458,
+          "end": 1486,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 25,
+          "prose_hash": "0bf4fc77790fb0877c0aa9949503178445d1cd876e3964b2b1aa84da9874a237"
+        },
+        {
+          "chapter": 71,
+          "quote": "三座高达十五米的重型高压分馏塔",
+          "start": 2868,
+          "end": 2883,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 59,
+          "prose_hash": "cbd8ca029f4f007b5cbb56ac6568834bc8aa9289b4bd66edf48773291be0d79c"
+        },
+        {
+          "chapter": 72,
+          "quote": "十二座重型高压蒸馏塔",
+          "start": 214,
+          "end": 224,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 9,
+          "prose_hash": "a7a6a14f5ad06d74b4907a0cea78ea2d9d7d0f5cca4f691f52077ef90290aae1"
+        }
+      ]
+    },
+    {
+      "id": "S07",
+      "kind": "time",
+      "severity": "major",
+      "title": "0.3秒开枪窗口中塞入多轮对话和旁白",
+      "description": "47已在窗口将闭时扣扳机，随后写最后0.005s，插入历史解释、两人多轮完整对话、弹药科普，最后又让0.3s结束才开枪。时间拉长/内心分析可由能力解释，但多轮出声对话与重复击发无该机制，属于明确动作时间矛盾。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 47,
+          "quote": "手指在零点三秒窗口即将关闭的最后一刻，决然扣动了扳机！",
+          "start": 2346,
+          "end": 2373,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 105,
+          "prose_hash": "d4283070dca73a0fe5cfba2e4f7f2b290d517cc15f62560a6b680fcb63c9e933"
+        },
+        {
+          "chapter": 47,
+          "quote": "在扳机击发的最后千分之五秒内",
+          "start": 2375,
+          "end": 2389,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 107,
+          "prose_hash": "d4283070dca73a0fe5cfba2e4f7f2b290d517cc15f62560a6b680fcb63c9e933"
+        },
+        {
+          "chapter": 47,
+          "quote": "你们所谓的飞升，自始至终只是一场被精心包装的生物残渣倾倒实验。",
+          "start": 2722,
+          "end": 2753,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 115,
+          "prose_hash": "d4283070dca73a0fe5cfba2e4f7f2b290d517cc15f62560a6b680fcb63c9e933"
+        },
+        {
+          "chapter": 47,
+          "quote": "零点三秒的时间窗口走到了最后的终点。",
+          "start": 3145,
+          "end": 3163,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 127,
+          "prose_hash": "d4283070dca73a0fe5cfba2e4f7f2b290d517cc15f62560a6b680fcb63c9e933"
+        }
+      ]
+    },
+    {
+      "id": "S08",
+      "kind": "narrative-interface",
+      "severity": "major",
+      "title": "策划/章回任务语进入角色和叙述",
+      "description": "52直接向读者验收核心伏笔；57老莫说第一卷；70陆巡念目标条目；75陆巡自称第二卷收网。与正常章回标识不同，这是人物不应拥有的编排视角进入故事世界。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 52,
+          "quote": "这一横跨三十年的核心伏笔与罪恶锁链，在这一刻得到了最畅快淋漓、亦是最惨烈沉重的彻底兑现。",
+          "start": 1824,
+          "end": 1868,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 47,
+          "prose_hash": "363541e4641eda2f6ab8e63111cb5db9b16c02cf01f56a8a5d3ac4df084cb461"
+        },
+        {
+          "chapter": 57,
+          "quote": "小子，第一卷的恶战总算是扛过来了。",
+          "start": 3476,
+          "end": 3493,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 87,
+          "prose_hash": "eddea28d65fcb6852a04589bdf74994417ddce917ac85bd6f495324973ffa061"
+        },
+        {
+          "chapter": 60,
+          "quote": "拒绝内环财阀的收买招安，坚守底层刑侦正义与独立反抗立场。",
+          "start": 2151,
+          "end": 2179,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 59,
+          "prose_hash": "8402e094184936ec2bd42b19ccee9206d31c6be4bc541e00d1489326da119762"
+        },
+        {
+          "chapter": 70,
+          "quote": "掌握废弃矿井地下提纯工厂坐标准确情报，确立突击并摧毁飞升派走私源头目标。",
+          "start": 2005,
+          "end": 2041,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 47,
+          "prose_hash": "221a79e800539d2649e698f57fca50a31903a9b491402dcd0f8ad1d521518f5e"
+        },
+        {
+          "chapter": 75,
+          "quote": "第二卷的收网之战，我们已经握紧了彻底掀翻铁幕的审判利剑！",
+          "start": 2171,
+          "end": 2199,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 59,
+          "prose_hash": "667c8fbfe9c58749713e69a51c0cc4137dd157017df3faa9843d72598d348875"
+        }
+      ]
+    },
+    {
+      "id": "S09",
+      "kind": "character-knowledge",
+      "severity": "major",
+      "title": "配角直接说出原身，穿越身份是否公开待前半核验",
+      "description": "58理事长与老莫都称原身，60老莫让查原身怎么死。即使身份已公开，也存在未叙述的解释与称谓跳层；若未公开即为知识越界。仅凭41–78不能证明早章没有公开，暂不定硬缺陷。",
+      "status": "needs-earlier-context",
+      "evidence": [
+        {
+          "chapter": 58,
+          "quote": "此前原身签下的债务清算抵押单据",
+          "start": 2307,
+          "end": 2322,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 63,
+          "prose_hash": "737844982a5a4e279b48b7d244dbb5937ff7cac5e943cac436e2babeb559daa9"
+        },
+        {
+          "chapter": 58,
+          "quote": "原身欠下的那笔烂账",
+          "start": 2438,
+          "end": 2447,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 65,
+          "prose_hash": "737844982a5a4e279b48b7d244dbb5937ff7cac5e943cac436e2babeb559daa9"
+        },
+        {
+          "chapter": 60,
+          "quote": "你想查清楚原身到底是怎么死的",
+          "start": 2554,
+          "end": 2568,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 67,
+          "prose_hash": "8402e094184936ec2bd42b19ccee9206d31c6be4bc541e00d1489326da119762"
+        }
+      ]
+    },
+    {
+      "id": "S10",
+      "kind": "character-continuity",
+      "severity": "moderate",
+      "title": "人物外形与义肢侧别漂移",
+      "description": "50沈青齐耳短发，78变长发束脑后；56、64老莫机械右腿，69忽为左腿。缺换装/义肢更换或长时间跨度支持。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 50,
+          "quote": "她那一头齐耳的短发",
+          "start": 404,
+          "end": 413,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 15,
+          "prose_hash": "ffe2b8418123aaf8f4ac1e014ebfbc059b9aa1cad69c7fb8a02c01ad3039c974"
+        },
+        {
+          "chapter": 78,
+          "quote": "她的长发简单束在脑后",
+          "start": 272,
+          "end": 282,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 7,
+          "prose_hash": "7b8c5477f0a5b3240157b7be48e00f304a942d8fbc0fc642f904176523bc779b"
+        },
+        {
+          "chapter": 56,
+          "quote": "机械右腿的液压杆",
+          "start": 626,
+          "end": 634,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 17,
+          "prose_hash": "8c44e732ce7044d3e911b1d1150f7d650d8497bb0381dbf8497d1f44fb779469"
+        },
+        {
+          "chapter": 69,
+          "quote": "老莫的左腿假肢稳稳卡进工作台底部的液压锁环",
+          "start": 256,
+          "end": 277,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 9,
+          "prose_hash": "8bb9f43f3d4b90badc5223b2b1d790446b0679cd27804f33a86e68b7db7e7c93"
+        }
+      ]
+    },
+    {
+      "id": "S11",
+      "kind": "causal-inference",
+      "severity": "major",
+      "title": "推理常跳过替代解释而由叙述直接认证唯一结论",
+      "description": "62拿到的是外壳残片却断言完整芯片永远无法底层校验，机制未提供；64私房胶质配方一比即唯一工坊；78冷却液残留直接推到飞艇具体接货/分装路线，前文却早已确立特权货运列车免检。问题不在科技术语真假，而在已见观察能否推出该唯一行为，缺中间验证。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 62,
+          "quote": "只要这枚残片在手，凶手盗走的完整晶片就永远无法通过中环的底层安全校验！",
+          "start": 2394,
+          "end": 2429,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 97,
+          "prose_hash": "43a8d87755383f3dbe9c703aed4ef1836d82d8bee560262f054661146f444a8e"
+        },
+        {
+          "chapter": 64,
+          "quote": "只有那个叫老豺的黑市枪匠，掌握着这种给军用脉冲设备违规加注活体胶质的私房绝活！",
+          "start": 1287,
+          "end": 1326,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 43,
+          "prose_hash": "a82a125bd9e81ed9749b0c4da4569f2aa8dfdb551bc5614e8b27eb3eec67144c"
+        },
+        {
+          "chapter": 78,
+          "quote": "甚至没有走常规的地面货运轨道。",
+          "start": 1302,
+          "end": 1317,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 21,
+          "prose_hash": "7b8c5477f0a5b3240157b7be48e00f304a942d8fbc0fc642f904176523bc779b"
+        },
+        {
+          "chapter": 78,
+          "quote": "飞艇在第七深井附近的无人区低空悬停，通过机降或者专用卷扬设备接收工坊提纯的晶髓原浆",
+          "start": 2139,
+          "end": 2180,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 33,
+          "prose_hash": "7b8c5477f0a5b3240157b7be48e00f304a942d8fbc0fc642f904176523bc779b"
+        }
+      ]
+    },
+    {
+      "id": "S12",
+      "kind": "theme-behavior",
+      "severity": "moderate",
+      "title": "绝对物证严谨的自我认证与行动后果未形成张力",
+      "description": "68把毒囊踩烂，74全厂电磁摧毁，77主动全毁物理现场；这些均可作类型小说选择，但文字仍反复宣告程序无可挑剔、物证不容丝毫移动，且不描写保全优先级、样本缺失风险或反方技术质疑。高压逼供以恐惧崩溃直接认证真话，也与只认物证口号形成未经意识到的张力。审稿不套现实司法法律，而要求作品内部处理自定原则。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 48,
+          "quote": "任何未经授权的人员，不得触碰一寸金属碎屑。",
+          "start": 3209,
+          "end": 3230,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 137,
+          "prose_hash": "9824f0aeb3536d87ab0187f1f2cb0ac9d324bd5ef90e0d60b5308a640adfb6d0"
+        },
+        {
+          "chapter": 68,
+          "quote": "将那枚致命的毒囊踩得稀烂",
+          "start": 2416,
+          "end": 2428,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 95,
+          "prose_hash": "1f41534d5d345253c3c4f870d5ddfce56a7557ee246602e3202ff8fe38f22443"
+        },
+        {
+          "chapter": 66,
+          "quote": "这是人在极度恐惧下吐露真言的典型生理特征。",
+          "start": 3270,
+          "end": 3291,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 85,
+          "prose_hash": "be859cac6a364a9586119548d0aa77e5e0ad50beb30be750878a6241ff7f912c"
+        },
+        {
+          "chapter": 77,
+          "quote": "所有的暗道与工坊设施在连环坍塌中化为乌有。",
+          "start": 3012,
+          "end": 3033,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 59,
+          "prose_hash": "0bf4fc77790fb0877c0aa9949503178445d1cd876e3964b2b1aa84da9874a237"
+        }
+      ]
+    },
+    {
+      "id": "S13",
+      "kind": "pacing-structure",
+      "severity": "major",
+      "title": "高潮后验收与预告重复，胜利没有层级",
+      "description": "44断流、48/49伏诛/活捉、53逼退、54听证、55通水、57合法、58挂牌、59再通水/归档、60第一卷终。数章反复宣称危机彻底解决、地基坚固、真正大战刚开始，重复奖励代替了新的阻力和人物代价。61–65同理重复确认内鬼和三十年真相已闭环，却又问同一谜题。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 55,
+          "quote": "水质达标，毒源全清。",
+          "start": 2333,
+          "end": 2343,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 61,
+          "prose_hash": "ec982b64c8b5c6e91b744f1dc3f375e4dc8382b8a3b42957612be80e7d1af9be"
+        },
+        {
+          "chapter": 58,
+          "quote": "第一卷的风暴在此刻圆满收官",
+          "start": 3404,
+          "end": 3417,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 85,
+          "prose_hash": "737844982a5a4e279b48b7d244dbb5937ff7cac5e943cac436e2babeb559daa9"
+        },
+        {
+          "chapter": 59,
+          "quote": "外环水源危机主线节点宣告彻底圆满解决。",
+          "start": 969,
+          "end": 988,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 23,
+          "prose_hash": "d507cdcb4be68a0772c8b5692adc7a20d699048476faecf92000925d22c051c8"
+        },
+        {
+          "chapter": 60,
+          "quote": "第一卷的风雷在此刻彻底落幕",
+          "start": 3584,
+          "end": 3597,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 99,
+          "prose_hash": "8402e094184936ec2bd42b19ccee9206d31c6be4bc541e00d1489326da119762"
+        },
+        {
+          "chapter": 65,
+          "quote": "三十年前第七开拓舰队究竟遭遇了什么？",
+          "start": 1901,
+          "end": 1919,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 65,
+          "prose_hash": "d3a1ffa2596cef60b4f8de250512c2faf206a48d6a8745bfd15d6235f6bfea3b"
+        },
+        {
+          "chapter": 51,
+          "quote": "三十年前，第七开拓舰队在柯伊伯带深空源点遭遇了这团深空实体，全舰被高维辐射同调吞噬，舰队神隐。",
+          "start": 1820,
+          "end": 1867,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 71,
+          "prose_hash": "65b5d44c9b744c12bb1ba777fa40cb9b7aef526f1f366c1c77f71398550e3400"
+        }
+      ]
+    },
+    {
+      "id": "S14",
+      "kind": "action-pattern",
+      "severity": "moderate",
+      "title": "主要解题套路连续复用使战斗悬念衰减",
+      "description": "41镜子、42脉冲、43液氮、44电路、47蒸汽、48镜子，73蒸汽加脉冲、74脉冲。环境解题本可形成标志风格；但每回对手厚甲→物理弱点→精准瞬杀→旁白认证神乎其神，代价多为血糖/小伤/喝糖即恢复，敌人几乎不针对既有技能调整。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 43,
+          "quote": "以敌之躯撞击泄压阀口，引极寒液氮封杀烈性殉爆！",
+          "start": 1901,
+          "end": 1924,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 59,
+          "prose_hash": "687d083bf0a69df0dcf1953ee07dcb90fcafe7d9d6ecb3403925321f372fde67"
+        },
+        {
+          "chapter": 48,
+          "quote": "致盲！彻底的致盲！",
+          "start": 871,
+          "end": 880,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 37,
+          "prose_hash": "9824f0aeb3536d87ab0187f1f2cb0ac9d324bd5ef90e0d60b5308a640adfb6d0"
+        },
+        {
+          "chapter": 74,
+          "quote": "体能与突触神经迅速恢复至巅峰状态。",
+          "start": 3143,
+          "end": 3160,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 107,
+          "prose_hash": "2569d41357b997cfd2d40f12f1ab797fb87c8c37694875d4924ab4b1b80cb701"
+        }
+      ]
+    },
+    {
+      "id": "S15",
+      "kind": "voice-style",
+      "severity": "moderate",
+      "title": "人物声线向同一冷酷宣言汇聚",
+      "description": "陆巡、沈青大多先冷声否定强权，再以物证/法理/闭环口号结句；老莫常用畜生、老命、这把骨头重复愤怒与赞叹，配角/群众主要提供敬畏欢呼。缺少关系中不同愿望、误判与语用差异。不是要求取消硬派调性，而是让同意价值观的人仍有各自代价和表达习惯。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 56,
+          "quote": "经典刑侦从不畏惧龙潭虎穴，只畏惧证据链的断裂。",
+          "start": 2601,
+          "end": 2624,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 59,
+          "prose_hash": "8c44e732ce7044d3e911b1d1150f7d650d8497bb0381dbf8497d1f44fb779469"
+        },
+        {
+          "chapter": 78,
+          "quote": "物证就是刑警的第二条生命，谁也别想从我手里夺走。",
+          "start": 3181,
+          "end": 3205,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 49,
+          "prose_hash": "7b8c5477f0a5b3240157b7be48e00f304a942d8fbc0fc642f904176523bc779b"
+        },
+        {
+          "chapter": 69,
+          "quote": "今天就算把这条老命搭进去，我也要扯下灰鸦脸上的遮羞布！",
+          "start": 2929,
+          "end": 2956,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 67,
+          "prose_hash": "8bb9f43f3d4b90badc5223b2b1d790446b0679cd27804f33a86e68b7db7e7c93"
+        }
+      ]
+    },
+    {
+      "id": "S16",
+      "kind": "prose-style",
+      "severity": "moderate",
+      "title": "最高级形容与作者判词替代读者判断",
+      "description": "大量极其/精准/冷冽/狂暴/彻底，以及每章末风暴、利剑、铁幕、曙光的收束持续高强度。普通观察、休息、战斗都用同一峰值语域，减少轻重对比。作者常直接宣布顶尖、神迹、绝对闭环，读者缺少先观察后判断空间。属于有证据的编辑判断，不主张用词频硬门禁。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 41,
+          "quote": "这手精妙绝伦的光学欺骗",
+          "start": 1577,
+          "end": 1588,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 39,
+          "prose_hash": "93d00685a075f84db254a67076ff78ebbca634b49b9f58f02ec7275e1148d04c"
+        },
+        {
+          "chapter": 43,
+          "quote": "这手近乎神迹般的物理轨迹借力截杀",
+          "start": 1926,
+          "end": 1942,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 61,
+          "prose_hash": "687d083bf0a69df0dcf1953ee07dcb90fcafe7d9d6ecb3403925321f372fde67"
+        },
+        {
+          "chapter": 64,
+          "quote": "所有的物证链条在这一刻彻底形成了逻辑闭环。",
+          "start": 1354,
+          "end": 1375,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 47,
+          "prose_hash": "a82a125bd9e81ed9749b0c4da4569f2aa8dfdb551bc5614e8b27eb3eec67144c"
+        },
+        {
+          "chapter": 71,
+          "quote": "目标已经彻底锁定。证据链的物理闭环正在眼前严丝合缝地成型。",
+          "start": 3474,
+          "end": 3503,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 73,
+          "prose_hash": "cbd8ca029f4f007b5cbb56ac6568834bc8aa9289b4bd66edf48773291be0d79c"
+        }
+      ]
+    },
+    {
+      "id": "S17",
+      "kind": "copyediting",
+      "severity": "minor",
+      "title": "局部可机械定位的数字与复字错误",
+      "description": "44三道钢绳随后两道；58称六字实际白夜刑侦事务所七字；75先提气割枪进门又向老莫要同类工具（可能不同规格，弱提示）；45重复呼啸；44死死死；55结尾扶人动作在插入办公室取证后悬空续接。",
+      "status": "confirmed",
+      "evidence": [
+        {
+          "chapter": 44,
+          "quote": "三道粗壮的高拉力钢丝绳",
+          "start": 1528,
+          "end": 1539,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 45,
+          "prose_hash": "efc381a293997edd2681dbb244d0658deadcb44f75d4a70bc1142182932a7aa9"
+        },
+        {
+          "chapter": 44,
+          "quote": "那两道被焊死的钢丝绳",
+          "start": 1916,
+          "end": 1926,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 55,
+          "prose_hash": "efc381a293997edd2681dbb244d0658deadcb44f75d4a70bc1142182932a7aa9"
+        },
+        {
+          "chapter": 44,
+          "quote": "死死死地锁死",
+          "start": 2325,
+          "end": 2331,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 69,
+          "prose_hash": "efc381a293997edd2681dbb244d0658deadcb44f75d4a70bc1142182932a7aa9"
+        },
+        {
+          "chapter": 45,
+          "quote": "呼啸呼啸射入大厅",
+          "start": 319,
+          "end": 327,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 13,
+          "prose_hash": "1fa57977e63dc028c17140d603440cb5066d0bd85abc178c74a60a11a3fb1b10"
+        },
+        {
+          "chapter": 58,
+          "quote": "六个苍劲有力的大字",
+          "start": 1262,
+          "end": 1271,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 37,
+          "prose_hash": "737844982a5a4e279b48b7d244dbb5937ff7cac5e943cac436e2babeb559daa9"
+        },
+        {
+          "chapter": 58,
+          "quote": "白夜刑侦事务所。",
+          "start": 1274,
+          "end": 1282,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 39,
+          "prose_hash": "737844982a5a4e279b48b7d244dbb5937ff7cac5e943cac436e2babeb559daa9"
+        },
+        {
+          "chapter": 55,
+          "quote": "陆巡伸出双手将他们扶起",
+          "start": 3751,
+          "end": 3762,
+          "offset_basis": "Unicode code points of immutable original prose document",
+          "export_line": 93,
+          "prose_hash": "ec982b64c8b5c6e91b744f1dc3f375e4dc8382b8a3b42957612be80e7d1af9be"
+        }
+      ]
+    }
+  ]
+}

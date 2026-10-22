@@ -1,0 +1,145 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 14166,
+      "sha256": "7ced6f67e0b4b7c68f9f8ec41a3326456fbbfdbd2f2c31e57a2865338274e954"
+    },
+    {
+      "path": "architecture-plan.md",
+      "bytes": 16156,
+      "sha256": "5f5069326568b82349cd15e0c444a1387651f1d4fee244a97e58bdec823838c5"
+    },
+    {
+      "path": "evidence/architecture-repros.json",
+      "bytes": 6713,
+      "sha256": "6bd511f90ac1731bb15777cf71df9c1761f3be584a50f6f12dbafde395f65cda"
+    },
+    {
+      "path": "evidence/chapters.json",
+      "bytes": 88323,
+      "sha256": "91d81ee79869b87fbcabce16d57537dcde902531c80d724abf36d79e51a97cfe"
+    },
+    {
+      "path": "evidence/current-release-review.json",
+      "bytes": 76398,
+      "sha256": "ff1648e118c0e4be2c865e2c6590503ead58609a553e9d8db006312b70d9f98f"
+    },
+    {
+      "path": "evidence/current-release-review.md",
+      "bytes": 5794,
+      "sha256": "10a9176b546e073c55c774db8a364fd99f3aea6f49393576a5a54381e86eadae"
+    },
+    {
+      "path": "evidence/export-note.json",
+      "bytes": 488,
+      "sha256": "0a4c69bc7e939e742f0a53e01a7009702d7cdbb3d257dd5155542772a00defb0"
+    },
+    {
+      "path": "evidence/literary-001-040-provenance.json",
+      "bytes": 16249,
+      "sha256": "8e07f54436bf4d811e57f267a6ddaa6e1a4db176684090494a95d12fdfa254e7"
+    },
+    {
+      "path": "evidence/literary-001-040-skill.md",
+      "bytes": 6951,
+      "sha256": "d63432f51a75bfebb0b72151e4af3f6b9db363ab343c266e827a24da7ff88ffa"
+    },
+    {
+      "path": "evidence/literary-001-040.json",
+      "bytes": 31296,
+      "sha256": "ebd29659ee591d9eae5cce46b307eae15463937b2751e220fe40370d2db7d50b"
+    },
+    {
+      "path": "evidence/literary-001-040.md",
+      "bytes": 17690,
+      "sha256": "048bf3980826e0be3de0d52721e44ff2f434669fdc3ca74a0546b6282bd6b5e6"
+    },
+    {
+      "path": "evidence/literary-041-078-skill-analysis.md",
+      "bytes": 8679,
+      "sha256": "d040fd411ee426a043ebe101ccc1c51bdaab6bbafd0a0d1b800ec54c321f75d5"
+    },
+    {
+      "path": "evidence/literary-041-078.json",
+      "bytes": 42901,
+      "sha256": "bf4388255a658d70493ebbd01e48ef2e4e4398618b06399ba43c3dc3071e703a"
+    },
+    {
+      "path": "evidence/literary-041-078.md",
+      "bytes": 17107,
+      "sha256": "bfe8b6a2d00c30434bb76313ed193b53cf1df5ce55457d3cf2df496b99a2ba33"
+    },
+    {
+      "path": "evidence/literary-cross-check-supplement.json",
+      "bytes": 5291,
+      "sha256": "c4ddc209d47b10ceb5c0cb03f1aa08aac479d1926032a90d176e4f1b1aef471b"
+    },
+    {
+      "path": "evidence/manifest.json",
+      "bytes": 8138,
+      "sha256": "7a6763f4f0c076f17a77a43d279d4ce62e5c97cc8e59e42bf8a66e0d94aabe48"
+    },
+    {
+      "path": "evidence/material-state-coverage.json",
+      "bytes": 11244,
+      "sha256": "73b32877c03e1e6cbb8d3886ebc7d5a3d69fec4a8b3e5b70b85ad876424250a8"
+    },
+    {
+      "path": "evidence/pause-tail-new-session-evidence.json",
+      "bytes": 84048,
+      "sha256": "77eb905d4c762c9fe91e5c5d8ff7c5689e86d26c6c1b4cc37111ca859873a720"
+    },
+    {
+      "path": "evidence/pause-tail-review.json",
+      "bytes": 65288,
+      "sha256": "f5233d38cb471eda96df454fc5dd8e5dcc22d15fd0082030d6aaa2168ff2ed2e"
+    },
+    {
+      "path": "evidence/pause-tail-review.md",
+      "bytes": 3720,
+      "sha256": "0965a311266044589abe89df595e1ab08ba0dbc339b6194918c0584ab5c419c9"
+    },
+    {
+      "path": "evidence/portable-probe-rerun.json",
+      "bytes": 103215,
+      "sha256": "527c24cb110e6fbefe474e4b1d210e3aaaf0ce188f71d285cab3749555fbdc75"
+    },
+    {
+      "path": "evidence/read-coverage.json",
+      "bytes": 29696,
+      "sha256": "bc51a66d75184b76a4b063729224cd8a9f5e370a7a7e000e00a2d113dfc45401"
+    },
+    {
+      "path": "evidence/token-usage.json",
+      "bytes": 101978,
+      "sha256": "e6c4dcd6b80854af23271f8b58cc4cc465667e28d0efeaae0763ba0e9c34cba5"
+    },
+    {
+      "path": "evidence/verification.json",
+      "bytes": 1314,
+      "sha256": "08b3f3f985eefde4a339f214c796c0ee88c200da68fcf8cd4d5dbba88aba7968"
+    },
+    {
+      "path": "evidence/workflow-findings.json",
+      "bytes": 134893,
+      "sha256": "d9bb0f0ce1d4f3a9d9d55e77ab07a70926fa699395b230051e9ca895d2008373"
+    },
+    {
+      "path": "evidence/workflow-findings.md",
+      "bytes": 19016,
+      "sha256": "f9dad700b17c0287708d504662aa6d04114c259734b1d68c285451e17a757282"
+    },
+    {
+      "path": "reproduce_protocol.py",
+      "bytes": 6490,
+      "sha256": "c9d1336aad7814f0a5c49dc382440ba85664f9d1d55e3a6a3027cec12aadb463"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 4899,
+      "sha256": "981f826a381788bdde1a1ad372080fdc0f94739e80c350cb5ee04c7b946a97a1"
+    }
+  ],
+  "scope": "仅审计包文件，不含本清单自身；原始小说和完整转录未打包"
+}

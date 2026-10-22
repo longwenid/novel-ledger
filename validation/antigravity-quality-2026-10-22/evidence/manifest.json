@@ -1,0 +1,165 @@
+{
+  "snapshot": "2026-10-22",
+  "database_source": "/Users/longwen/AiGit/15_skill_xiaoshuo/项目1021/novel.sqlite3",
+  "database_sha256": "0b6956faefa4ec53cb0b338e76d45328709791f87a4b2fefabc5bb06dc60158d",
+  "book_status": "running",
+  "branch": "main",
+  "chapters": 78,
+  "han": 267338,
+  "sessions": [
+    {
+      "session": "2aeca987-917e-4658-81db-03652706cdee",
+      "source": "/Users/longwen/.gemini/antigravity/brain/2aeca987-917e-4658-81db-03652706cdee/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "b3760013b5281fb11d3d3d40ae9ab8c616de2e3050ee1ddc52508a629a49cf36",
+      "steps": 690,
+      "last_at": "2026-10-22T11:06:33Z"
+    },
+    {
+      "session": "3ae838b5-0266-4bc3-a95a-e70eaf8c57c8",
+      "source": "/Users/longwen/.gemini/antigravity/brain/3ae838b5-0266-4bc3-a95a-e70eaf8c57c8/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "580a157c3b4057458ad9720ed34263fbfdba21f3bb78ccc5d8e3c50b1dcfbe7b",
+      "steps": 88,
+      "last_at": "2026-10-21T12:33:27Z"
+    },
+    {
+      "session": "0ae8f334-d658-4449-ac24-17aee1c44288",
+      "source": "/Users/longwen/.gemini/antigravity/brain/0ae8f334-d658-4449-ac24-17aee1c44288/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "d85d87b9f06f7a664bb0c5b3dc2572663b44d406a4219573c41854a0c88db1f3",
+      "steps": 85,
+      "last_at": "2026-10-22T01:53:12Z"
+    },
+    {
+      "session": "1592c352-5d69-4daa-b7cd-d6c43e1dc9bd",
+      "source": "/Users/longwen/.gemini/antigravity/brain/1592c352-5d69-4daa-b7cd-d6c43e1dc9bd/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "dc4d0846fb5e9f68deb061d1b8eea2d3c59b054692279a16d3eb338d7ec61f1f",
+      "steps": 178,
+      "last_at": "2026-10-22T02:05:45Z"
+    },
+    {
+      "session": "9db7f912-e68c-465e-b9d0-35d98e5ff239",
+      "source": "/Users/longwen/.gemini/antigravity/brain/9db7f912-e68c-465e-b9d0-35d98e5ff239/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "35a05410252738aab7f5974d2cd720e373fe772a1dd9433b3d3101f2a74a9107",
+      "steps": 70,
+      "last_at": "2026-10-22T02:11:05Z"
+    },
+    {
+      "session": "1f82d86f-0719-412e-921c-cb19c6f41e25",
+      "source": "/Users/longwen/.gemini/antigravity/brain/1f82d86f-0719-412e-921c-cb19c6f41e25/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "9c68e66beb8b0b6bfe838d443deadd8131e5b5372c3620d84e7cc351d3044ba2",
+      "steps": 308,
+      "last_at": "2026-10-22T07:27:54Z"
+    },
+    {
+      "session": "214fde3e-9b9f-4185-8103-ef3b3fd9b006",
+      "source": "/Users/longwen/.gemini/antigravity/brain/214fde3e-9b9f-4185-8103-ef3b3fd9b006/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "8214aeb1523ea3efe956c96c045e27ffbc0822fb51a849bd1f31145b0985b0ef",
+      "steps": 138,
+      "last_at": "2026-10-22T07:39:05Z"
+    },
+    {
+      "session": "7e7e86d6-1ef5-4983-bc78-993f17b7284d",
+      "source": "/Users/longwen/.gemini/antigravity/brain/7e7e86d6-1ef5-4983-bc78-993f17b7284d/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "a8319afbf74ff7a8d82ca8c1894f43e0d27f0bd7f468d1ce95fbd1f7940bfd04",
+      "steps": 324,
+      "last_at": "2026-10-22T07:59:45Z"
+    },
+    {
+      "session": "a670a592-c98b-44a6-9fe2-c4701a1316a3",
+      "source": "/Users/longwen/.gemini/antigravity/brain/a670a592-c98b-44a6-9fe2-c4701a1316a3/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "2b7514e45f30b3c173365fc20b123567f20c94c04cfa8b444a97b49e6b79b955",
+      "steps": 184,
+      "last_at": "2026-10-22T08:12:11Z"
+    },
+    {
+      "session": "549b0d3e-7cbe-4a7b-b251-e80be8ab97de",
+      "source": "/Users/longwen/.gemini/antigravity/brain/549b0d3e-7cbe-4a7b-b251-e80be8ab97de/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "f2b2c3c5035d5fe9148b813d80f1d9eac84bb8e28d6ed6f6dc8d4c967a2c7ef9",
+      "steps": 202,
+      "last_at": "2026-10-22T08:37:55Z"
+    },
+    {
+      "session": "b0b5a3cb-431f-4944-8bf8-ec8a5a145749",
+      "source": "/Users/longwen/.gemini/antigravity/brain/b0b5a3cb-431f-4944-8bf8-ec8a5a145749/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "01ec9edbe131ada6deb9b995f104373849a54bbf4f136ba6edf0f231af934f47",
+      "steps": 176,
+      "last_at": "2026-10-22T08:50:22Z"
+    },
+    {
+      "session": "e904e40b-f0eb-4396-871a-25257019f5d5",
+      "source": "/Users/longwen/.gemini/antigravity/brain/e904e40b-f0eb-4396-871a-25257019f5d5/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "4793ca2135ec69dee7b801e7d83503873c0edb00829b044f8e0eed28cde5b16b",
+      "steps": 110,
+      "last_at": "2026-10-22T09:00:09Z"
+    },
+    {
+      "session": "4b2eff78-e956-4213-9689-1ea34772792f",
+      "source": "/Users/longwen/.gemini/antigravity/brain/4b2eff78-e956-4213-9689-1ea34772792f/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "72d6bf89c96064140eed87fea09e69bafb067c813f1779069c577128b430c305",
+      "steps": 124,
+      "last_at": "2026-10-22T09:12:28Z"
+    },
+    {
+      "session": "ef58d0f6-c04e-4345-b57b-ec79a305d679",
+      "source": "/Users/longwen/.gemini/antigravity/brain/ef58d0f6-c04e-4345-b57b-ec79a305d679/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "f24ae7759dcec7a9057be6979e0b37e71b90348983b4ee66c5049548556b87bc",
+      "steps": 151,
+      "last_at": "2026-10-22T09:24:18Z"
+    },
+    {
+      "session": "e756e711-52d6-4537-9e43-cefc024d4217",
+      "source": "/Users/longwen/.gemini/antigravity/brain/e756e711-52d6-4537-9e43-cefc024d4217/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "c3cbb512ab41d88387d6ffb301e784261bd8bef87571fbe61c388079e6c8c961",
+      "steps": 164,
+      "last_at": "2026-10-22T09:35:38Z"
+    },
+    {
+      "session": "0ecdc930-5ed1-4a94-8e7e-ea65ddbd6176",
+      "source": "/Users/longwen/.gemini/antigravity/brain/0ecdc930-5ed1-4a94-8e7e-ea65ddbd6176/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "219b576c4e65d8e19f3e1d4cc8e437954f57c2c4dc3338a6889c42a7c85a69bc",
+      "steps": 188,
+      "last_at": "2026-10-22T09:51:05Z"
+    },
+    {
+      "session": "b80d56b0-8c92-49d9-b975-c06d2de460cd",
+      "source": "/Users/longwen/.gemini/antigravity/brain/b80d56b0-8c92-49d9-b975-c06d2de460cd/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "f3999a23ae465fa5e68e83086450b6d2a22d62bdd485aaff6bec49a03c84684a",
+      "steps": 124,
+      "last_at": "2026-10-22T10:00:18Z"
+    },
+    {
+      "session": "e150579f-4201-44d2-8499-f285b591bbd4",
+      "source": "/Users/longwen/.gemini/antigravity/brain/e150579f-4201-44d2-8499-f285b591bbd4/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "7b3cf16b5da6f1fea8cd2fcb6ee11e96b68be1bc6d290096173470f693744f3c",
+      "steps": 60,
+      "last_at": "2026-10-22T10:04:25Z"
+    },
+    {
+      "session": "9b827839-398b-47cf-a4c1-67a1dc197f31",
+      "source": "/Users/longwen/.gemini/antigravity/brain/9b827839-398b-47cf-a4c1-67a1dc197f31/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "bfca970aff22fd4d7eca396c93e6745b960ac1d1fc620774ff1324f1eb2e7626",
+      "steps": 140,
+      "last_at": "2026-10-22T10:12:40Z"
+    },
+    {
+      "session": "34233e10-d946-49cc-a72a-d33732b80eac",
+      "source": "/Users/longwen/.gemini/antigravity/brain/34233e10-d946-49cc-a72a-d33732b80eac/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "a0c164491ee34d6c7e12668bdb49b5bffc41d6c39878bd676896da60d7c7dc29",
+      "steps": 390,
+      "last_at": "2026-10-22T10:37:22Z"
+    },
+    {
+      "session": "7324c776-c832-4bd6-af44-cb2ce7cfabb4",
+      "source": "/Users/longwen/.gemini/antigravity/brain/7324c776-c832-4bd6-af44-cb2ce7cfabb4/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "da2710488bb76a3c005c3511e9e06c4f9a482858d271851ba9e030e862726d98",
+      "steps": 118,
+      "last_at": "2026-10-22T10:48:57Z"
+    },
+    {
+      "session": "a09b8b90-1a9d-4260-95a7-d351566061a9",
+      "source": "/Users/longwen/.gemini/antigravity/brain/a09b8b90-1a9d-4260-95a7-d351566061a9/.system_generated/logs/transcript_full.jsonl",
+      "sha256": "55950436397dceda93ca571e206a0d606ef1b286037ec0f9eb14c9403465d620",
+      "steps": 206,
+      "last_at": "2026-10-22T11:06:08Z"
+    }
+  ]
+}

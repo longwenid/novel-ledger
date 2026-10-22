@@ -1,0 +1,1433 @@
+{
+  "review_scope": {
+    "commit": "54c0047",
+    "version": "2.0.1",
+    "mode": "当前发布独立代码审查，未修改仓库/真实小说项目；使用tests.support的contract/drive/response在/tmp隔离工程复现。",
+    "isolated_project_root": "/tmp/novel-handoff-review-a80mmwoz",
+    "repro_script": "/tmp/novel-ledger-quality-20261022/reproduce_current_handoff.py",
+    "raw_evidence": "/tmp/novel-ledger-quality-20261022/current-handoff-repro.json",
+    "limitations": "未将同账户直改数据库/引擎的已知安全边界算作新缺陷；未执行真实模型写作，也不宣称工程夹具证明文学质量。"
+  },
+  "findings": [
+    {
+      "id": "CR-01",
+      "priority": "P2",
+      "title": "Python worker 的就绪预检挡住已提交回执的幂等重试",
+      "location": {
+        "file": "/Users/longwen/AndroidStudioProjects/skills/novel-ledger/scripts/novel.py",
+        "start": 294,
+        "end": 295
+      },
+      "related_locations": [
+        {
+          "file": "scripts/novel_ledger/application.py",
+          "lines": [
+            131,
+            134,
+            424,
+            436
+          ]
+        }
+      ],
+      "trigger": "真实Worker依生成commands.submit完成提交，第一次响应丢失或宿主重试原命令；项目和任务身份未更换，result.json未改。",
+      "expected": "相同回执返回已提交的幂等确认，保持章节数、稿件和轮次不变；冲突内容才报replay_conflict。",
+      "actual": "首条生成命令code0、committed_chapter=1；完全相同的生成命令第二次code2/stale_task，retry_allowed=false，要求主控prepare-worker --reset-failures。应用层用数据库已保存的同一canonical receipt重试却正常idempotent=true。",
+      "cause": "portable入口对除worker-next外所有命令先执行worker_ready；worker_ready调用_live，要求task.pending。它在Application.submit的done/hash幂等分支之前拒绝已提交任务。prepare-worker也要求_live，因此错误建议的重置操作不能恢复这次已成功的提交。",
+      "impact": "新默认执行入口破坏旧提交接口的幂等承诺；宿主重试把已经成功的写作误报失败，强制主控介入。无证据显示重复章节或数据损失，问题是可恢复性和准确提交确认。",
+      "evidence": [
+        {
+          "label": "first portable submit",
+          "argv": [
+            "/Users/longwen/.pyenv/versions/3.10.12/bin/python3",
+            "/Users/longwen/AndroidStudioProjects/skills/novel-ledger/scripts/novel.py",
+            "--project",
+            "/private/tmp/novel-handoff-review-a80mmwoz/repeat-submit",
+            "worker",
+            "--task",
+            "d84537034c1b41318be1aa979a5ba075",
+            "--",
+            "submit",
+            "--file",
+            "/private/tmp/novel-handoff-review-a80mmwoz/repeat-submit/work/d84537034c1b41318be1aa979a5ba075/result.json"
+          ],
+          "exit_code": 0,
+          "result": {
+            "valid": true,
+            "accepted": true,
+            "checked": false,
+            "committed": true,
+            "task_id": "d84537034c1b41318be1aa979a5ba075",
+            "worker_boundary": "finished",
+            "committed_chapter": 1,
+            "next_stage": null,
+            "rework": {
+              "repairs": 0,
+              "redesigns": 0,
+              "initial_used": true
+            },
+            "status": "running",
+            "style_report": {
+              "metrics": {
+                "han": 75,
+                "sentences": 2,
+                "sentence_mean": 37.5,
+                "sentence_short_share": 0.0,
+                "paragraph_mean": 75.0,
+                "paragraph_max": 75,
+                "dialogue_share": 0.0,
+                "repetition_share": 0.0,
+                "repetition_grams": 72,
+                "person": "third"
+              },
+              "observations": [],
+              "findings": []
+            },
+            "book_view": {
+              "path": "/private/tmp/novel-handoff-review-a80mmwoz/repeat-submit/book.html",
+              "chars": 53089,
+              "chapters": 1,
+              "inside_project": true
+            }
+          }
+        },
+        {
+          "label": "identical portable submit retry",
+          "argv": [
+            "/Users/longwen/.pyenv/versions/3.10.12/bin/python3",
+            "/Users/longwen/AndroidStudioProjects/skills/novel-ledger/scripts/novel.py",
+            "--project",
+            "/private/tmp/novel-handoff-review-a80mmwoz/repeat-submit",
+            "worker",
+            "--task",
+            "d84537034c1b41318be1aa979a5ba075",
+            "--",
+            "submit",
+            "--file",
+            "/private/tmp/novel-handoff-review-a80mmwoz/repeat-submit/work/d84537034c1b41318be1aa979a5ba075/result.json"
+          ],
+          "exit_code": 2,
+          "result": {
+            "error": "stale_task",
+            "message": "任务已失效，恢复当前任务；不可改身份重投旧结果。",
+            "details": {
+              "recovery": {
+                "actor": "controller",
+                "action": "resync_task",
+                "retry_allowed": false,
+                "failures": 0,
+                "limit": 2
+              },
+              "recover": "主控核对 status 与当前任务；不修改旧任务身份重投稿件。保留任务与已填稿件，将 task_id、真实会话和错误码交回主控；由主控 prepare-worker 绑定 NOVEL_TASK_ID/NOVEL_SESSION 并注入凭据。Worker 不执行 claim/advance/run。 修复原因后由主控 prepare-worker --reset-failures。"
+            }
+          }
+        },
+        {
+          "label": "same canonical receipt API retry",
+          "result": {
+            "valid": true,
+            "accepted": true,
+            "checked": false,
+            "committed": true,
+            "idempotent": true,
+            "task_id": "d84537034c1b41318be1aa979a5ba075",
+            "worker_boundary": "finished",
+            "book_view": {
+              "path": "/private/tmp/novel-handoff-review-a80mmwoz/repeat-submit/book.html",
+              "chars": 53089,
+              "chapters": 1,
+              "inside_project": true
+            }
+          }
+        }
+      ],
+      "fix": "在读取回执并注入本次身份之后，由submit统一处理terminal replay：允许精确匹配的已提交回执进入幂等分支；对pending继续执行准备/租约/失败阻断检查。不要对read等材料入口全面放宽_live。返回稳定的提交确认及原committed_chapter，让宿主无须猜成功与否。",
+      "tests": [
+        "经真实生成的Python worker命令连续submit两次同文件：两次code0，第二次idempotent=true，章节/轮次只有一次。",
+        "快组当前章已提交、worker-next已经建立下一章、原组已结束三种状态均可确认旧回执，不能分叉或跳章。",
+        "同task改正文/身份/凭据后重放应replay_conflict或相应身份错误；过期未提交任务依旧拒绝。"
+      ]
+    },
+    {
+      "id": "CR-02",
+      "priority": "P1",
+      "title": "更换普通任务 Worker 后首读沿用前执行者缓存，空历史 Worker 得不到必读材料",
+      "location": {
+        "file": "/Users/longwen/AndroidStudioProjects/skills/novel-ledger/scripts/novel_ledger/application.py",
+        "start": 355,
+        "end": 365
+      },
+      "related_locations": [
+        {
+          "file": "scripts/novel_ledger/application.py",
+          "lines": [
+            142,
+            155,
+            385,
+            389
+          ]
+        },
+        {
+          "file": "scripts/novel_ledger/sqlite_store.py",
+          "lines": [
+            "read_names"
+          ]
+        }
+      ],
+      "trigger": "普通pending任务中，Worker A已经read，随后停止且租约过期；主控按恢复顺序status→advance --compact，再prepare-worker把同task绑定真实新Worker B。",
+      "expected": "B作为空历史执行者，生成的首条read交付本任务全部required；同执行者重复read仍可复用已读缓存。保留同task/result和文学预算。",
+      "actual": "A首读7项。确认租约过期后主控status/advance、prepare B都成功，B首条生成read code0，但records={}、already_read列出7项、complete_records=true。B用read --all才重新得到7项。",
+      "cause": "Application.read按repo.read_names(task_id)跳过记录，历史read日志只绑定task，不绑定session/执行世代；prepare_worker换session时保留相同task却不改变此缓存。新入口的身份ready检查与阅读交付使用不同粒度。",
+      "impact": "最短自举流程让新Worker在缺全部冻结设定/章纲/前态时收到“材料完整”成功响应。即使Worker根据already_read_note主动--all可绕过，也违反新Worker完整读取约束，且不能指望空历史Worker知道前执行者读过的材料自己没有。",
+      "evidence": [
+        {
+          "label": "old worker read",
+          "argv": [
+            "/Users/longwen/.pyenv/versions/3.10.12/bin/python3",
+            "/Users/longwen/AndroidStudioProjects/skills/novel-ledger/scripts/novel.py",
+            "--project",
+            "/private/tmp/novel-handoff-review-a80mmwoz/replace-after-read",
+            "worker",
+            "--task",
+            "b6d15d3f7b7c4e5fafb235bf645f126b",
+            "--",
+            "read",
+            "--task",
+            "b6d15d3f7b7c4e5fafb235bf645f126b"
+          ],
+          "exit_code": 0,
+          "result": {
+            "task_id": "b6d15d3f7b7c4e5fafb235bf645f126b",
+            "input_hash": "2c8eda90c9214e9e31b5ed6b6de177cb958c8bd233269413f578f392540ca9ab",
+            "complete_records": true,
+            "stage": "write",
+            "chapter": 1,
+            "records": {
+              "contract": {
+                "hash": "cecd1570004139656c7a9e0572645408c1acb8a1277dd95a8edbf2003a94e1d5",
+                "value": {
+                  "editorial_features": false,
+                  "entities": [
+                    {
+                      "id": "shen",
+                      "kind": "person",
+                      "name": "沈桐"
+                    }
+                  ],
+                  "placements": {
+                    "shen": "office"
+                  },
+                  "story_engine": "核对退件来源，追查签字责任。",
+                  "volumes": [
+                    {
+                      "end": 2,
+                      "first": 1,
+                      "id": "v1",
+                      "purpose": "查明来源并面对后果。"
+                    }
+                  ],
+                  "word_range": [
+                    24,
+                    180
+                  ],
+                  "reader_promise": "一个夜班工人查清退件来源并承担自己的选择。",
+                  "allow_special_mechanism": false,
+                  "opposition": "主管担心调查影响考核。",
+                  "world_premise": "一座仓库的夜班退件纠纷。",
+                  "links": [],
+                  "chapter_max": 90,
+                  "initial_resources": [
+                    {
+                      "asset": "车费",
+                      "holder": "shen",
+                      "quantity": "4",
+                      "unit": "元"
+                    }
+                  ],
+                  "narrative_tracking": false,
+                  "style_window": {
+                    "dialogue": 0.4,
+                    "paragraph": 0.35,
+                    "person": 1,
+                    "repetition": 0.12,
+                    "sentence": 0.35
+                  },
+                  "chapter_outline": {
+                    "scope": "volume",
+                    "tolerance": 60,
+                    "words": 150
+                  },
+                  "genre": "都市生活",
+                  "protagonist_setup": {
+                    "desire": "查清责任。",
+                    "id": "shen",
+                    "identity": "夜班工人",
+                    "limit": "不牵连无关同事。",
+                    "name": "沈桐"
+                  },
+                  "relationships": [
+                    "同事互相依赖，却各自担心承担责任。"
+                  ],
+                  "scope_append_limit": 3,
+                  "style_guard": "observe",
+                  "initial_facts": [],
+                  "title": "夜班退件",
+                  "world_rules": [
+                    "夜班退件必须登记负责人。"
+                  ],
+                  "arcs": [],
+                  "ending": "退件来源公开，工人承担违规开箱的后果。",
+                  "anchors": [],
+                  "red_lines": [],
+                  "volume_outline": {
+                    "scope": "all",
+                    "tolerance": 500,
+                    "words": 2500
+                  },
+                  "style_traits": [
+                    "少重复解释。",
+                    "因果承接完整。"
+                  ],
+                  "chapter_aim": 60,
+                  "revision_limit": 3,
+                  "chapter_min": 12,
+                  "places": [
+                    {
+                      "id": "office",
+                      "name": "值班室"
+                    },
+                    {
+                      "id": "yard",
+                      "name": "仓库后院"
+                    }
+                  ],
+                  "voice": "以动作、物件、对白和后果呈现夜班人情。"
+                }
+              },
+              "state": {
+                "hash": "a3b2dd7ee7bb2fc158528f8064a3c8828e8bd8bd6af27b9be24b525fe1a04c4b",
+                "value": {
+                  "clock": 0,
+                  "clock_threads": {},
+                  "developments": {},
+                  "entities": {
+                    "shen": {
+                      "id": "shen",
+                      "kind": "person",
+                      "name": "沈桐"
+                    }
+                  },
+                  "facts": {},
+                  "historical_assertions": {},
+                  "hooks": {},
+                  "knowledge": {},
+                  "placements": {
+                    "shen": "office"
+                  },
+                  "places": {
+                    "office": {
+                      "id": "office",
+                      "name": "值班室"
+                    },
+                    "yard": {
+                      "id": "yard",
+                      "name": "仓库后院"
+                    }
+                  },
+                  "relations": {},
+                  "resources": {
+                    "[\"shen\",\"车费\",\"元\"]": "4"
+                  }
+                }
+              },
+              "hooks": {
+                "hash": "2f2aab03c8ec5a1fe50e464fa646be29c0c2c60c5f3a5c790b33861051ec4b87",
+                "value": {
+                  "declared": [
+                    {
+                      "continues": false,
+                      "id": "hook-v1-required",
+                      "payoff": [
+                        2,
+                        2
+                      ],
+                      "plant": [
+                        1,
+                        1
+                      ],
+                      "required": true,
+                      "text": "读者看到退回凭据的来历，并要知道它最终由谁负责。",
+                      "volume": "v1"
+                    }
+                  ],
+                  "open": [],
+                  "source": "伏笔账：卷纲声明（plant/payoff 窗口、required、continues），章纲只做 plant/payoff；中途再提一次用 hook_refs 承接，不新增动作。open 是引擎投影里仍未兑现的条目。完整历史声明见 complete_hooks，未选择不代表不存在。",
+                  "volume": [
+                    {
+                      "continues": false,
+                      "id": "hook-v1-required",
+                      "payoff": [
+                        2,
+                        2
+                      ],
+                      "plant": [
+                        1,
+                        1
+                      ],
+                      "required": true,
+                      "text": "读者看到退回凭据的来历，并要知道它最终由谁负责。"
+                    }
+                  ]
+                }
+              },
+              "style": {
+                "hash": "62f9075ff4635ffda294fc92259cad26231c2d9f4836ce713d3be91d8af74708",
+                "value": {
+                  "anchor": null,
+                  "chapter": {
+                    "pov": "第三人称限知",
+                    "rhythm": "短句交代动作，核对结果后用完整句说明后果。"
+                  },
+                  "guard": "observe",
+                  "pov": "",
+                  "source": "文风规格：契约 voice/tone/pov/style_traits 是底线，anchor 是作者认可首章的实测指标，volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。guard=observe 默认只观察首章形状变化，strict 才执行锚点容差；显式对白目标和高重复检查仍生效，实际视角须结合正文自比。",
+                  "style_traits": [
+                    "少重复解释。",
+                    "因果承接完整。"
+                  ],
+                  "tone": "",
+                  "voice": "以动作、物件、对白和后果呈现夜班人情。",
+                  "volume": {
+                    "trend": "以短句、动作与凭据核对推进，卷末用较长段落交代责任后果。"
+                  },
+                  "window": {
+                    "dialogue": 0.4,
+                    "paragraph": 0.35,
+                    "person": 1.0,
+                    "repetition": 0.12,
+                    "sentence": 0.35
+                  }
+                }
+              },
+              "chapter_outline": {
+                "hash": "8577512763671a22246e1d01edb2c0c0e594356f31a689c9e302e6e8d94fde7a",
+                "value": {
+                  "plot": {
+                    "beat": "沈桐核对封条与签字，逼出下一处矛盾。",
+                    "nodes": [],
+                    "threads": []
+                  },
+                  "history_refs": [],
+                  "knowledge": [
+                    {
+                      "from": null,
+                      "reason": "本章核对让沈桐对来源多了一层判断。",
+                      "to": "hinted",
+                      "topic": "source",
+                      "who": "shen"
+                    }
+                  ],
+                  "node_actions": [],
+                  "exit": [
+                    {
+                      "expected": 1,
+                      "key": "main",
+                      "kind": "clock"
+                    },
+                    {
+                      "expected": 3,
+                      "key": "[\"shen\",\"车费\",\"元\"]",
+                      "kind": "resources"
+                    },
+                    {
+                      "expected": "yard",
+                      "key": "shen",
+                      "kind": "places"
+                    },
+                    {
+                      "expected": "hinted",
+                      "key": "shen:source",
+                      "kind": "knowledge"
+                    }
+                  ],
+                  "clock": {
+                    "advance_days": 1
+                  },
+                  "disclosures": [],
+                  "node_ids": [],
+                  "participants": [
+                    "shen"
+                  ],
+                  "hook_refs": [],
+                  "obstacle": "沈桐核对封条与签字，逼出下一处矛盾。",
+                  "schedule": [],
+                  "world_refs": [],
+                  "chapter": 1,
+                  "reading_schema": "reading-dependencies/1",
+                  "ending": "",
+                  "hooks": [
+                    {
+                      "action": "plant",
+                      "hook": "hook-v1-required",
+                      "note": "本卷开篇埋下对读者的具体承诺。"
+                    }
+                  ],
+                  "choice": "沈桐核对封条与签字，逼出下一处矛盾。",
+                  "cost": "",
+                  "dependency_coverage": "partial",
+                  "enter": [
+                    {
+                      "expected": 0,
+                      "key": "main",
+                      "kind": "clock"
+                    },
+                    {
+                      "expected": 4,
+                      "key": "[\"shen\",\"车费\",\"元\"]",
+                      "kind": "resources"
+                    },
+                    {
+                      "expected": "office",
+                      "key": "shen",
+                      "kind": "places"
+                    },
+                    {
+                      "expected": null,
+                      "key": "shen:source",
+                      "kind": "knowledge"
+                    }
+                  ],
+                  "hook_contracts": {
+                    "hook-v1-required": {
+                      "continues": false,
+                      "id": "hook-v1-required",
+                      "payoff": [
+                        2,
+                        2
+                      ],
+                      "plant": [
+                        1,
+                        1
+                      ],
+                      "required": true,
+                      "text": "读者看到退回凭据的来历，并要知道它最终由谁负责。"
+                    }
+                  },
+                  "pacing": {},
+                  "scenes": [],
+                  "characters": [],
+                  "style": {
+                    "pov": "第三人称限知",
+                    "rhythm": "短句交代动作，核对结果后用完整句说明后果。"
+                  },
+                  "goal": "沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追",
+                  "node_contracts": {},
+                  "preconditions": [
+                    {
+                      "expected": 0,
+                      "key": "main",
+                      "kind": "clock"
+                    },
+                    {
+                      "expected": 4,
+                      "key": "[\"shen\",\"车费\",\"元\"]",
+                      "kind": "resources"
+                    },
+                    {
+                      "expected": "office",
+                      "key": "shen",
+                      "kind": "placements"
+                    },
+                    {
+                      "expected": null,
+                      "key": "shen:source",
+                      "kind": "knowledge"
+                    }
+                  ],
+                  "new_entities": [],
+                  "places": [
+                    {
+                      "entity": "shen",
+                      "from": "office",
+                      "reason": "从值班室走到后院核对退件。",
+                      "to": "yard"
+                    }
+                  ],
+                  "reader_refs": [],
+                  "scene_schema": "scene-identity/2",
+                  "change": "沈桐核对封条与签字，逼出下一处矛盾。",
+                  "resources": [
+                    {
+                      "from": 4,
+                      "key": "[\"shen\",\"车费\",\"元\"]",
+                      "reason": "核对退件时花掉一趟车费。",
+                      "to": 3
+                    }
+                  ],
+                  "synopsis": "沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追"
+                }
+              },
+              "volume_outline": {
+                "hash": "2b50d7ce69a02b34da901e39b2126b99b3b4cbe3e516b653ba0302b6fd3f741d",
+                "value": {
+                  "arc": "本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写",
+                  "characters": [],
+                  "climax": "公开来源与签字矛盾，沈桐承担违规开箱的后果。",
+                  "clock": {
+                    "advance_days": 2,
+                    "to": 2
+                  },
+                  "exit_state": "卷末：车费结余；沈桐在后院；对来源仅到怀疑；主线推进到登记责任。",
+                  "hooks": [
+                    {
+                      "continues": false,
+                      "id": "hook-v1-required",
+                      "payoff": [
+                        2,
+                        2
+                      ],
+                      "plant": [
+                        1,
+                        1
+                      ],
+                      "required": true,
+                      "text": "读者看到退回凭据的来历，并要知道它最终由谁负责。"
+                    }
+                  ],
+                  "id": "v1",
+                  "knowledge": [],
+                  "nodes": [
+                    {
+                      "ending_condition": "本章核对有结论。",
+                      "id": "n1",
+                      "kind": "main",
+                      "purpose": "第1章推进来源核对。",
+                      "required": true,
+                      "window": [
+                        1,
+                        1
+                      ]
+                    }
+                  ],
+                  "places": [],
+                  "purpose": "把退件来源从个人纠纷推到制度责任。",
+                  "resources": [],
+                  "source": {
+                    "chapter": 1,
+                    "hash": "669f67b280756fd0839bbdf79d2021b319e34478dbee38f29d3b583853824ba3",
+                    "note": "仅筛选本章节点、前置依赖与所在线路；方向、转折、伏笔、文风及卷末声明保留完整。未选记录仍可按 complete_volume_outline 补读。",
+                    "record": "complete_volume_outline"
+                  },
+                  "stage": "",
+                  "style": {
+                    "trend": "以短句、动作与凭据核对推进，卷末用较长段落交代责任后果。"
+                  },
+                  "threads": [],
+                  "turns": [
+                    {
+                      "at": "卷中",
+                      "turn": "旧凭据暴露出签字矛盾。"
+                    },
+                    {
+                      "at": "卷尾",
+                      "turn": "沈桐公开来源并接受处理。"
+                    }
+                  ]
+                }
+              },
+              "previous_chapters": {
+                "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "value": []
+              }
+            },
+            "records_hash": "b91824c604d6322aa7225a80d33e3cbb4bc967f33b550caaffc1e4f37e01c508",
+            "on_demand": {
+              "complete_hooks": "da19fe497d17f2882b09d4334ef63fe6d3dfad0b0caed324b1af6ea3601a145d",
+              "complete_state": "a3b2dd7ee7bb2fc158528f8064a3c8828e8bd8bd6af27b9be24b525fe1a04c4b",
+              "complete_understanding": "0de8ce214ba200c1cece4f5828b3591b5cf2f9497efcf3ced9b040ee3998966d",
+              "complete_volume_outline": "669f67b280756fd0839bbdf79d2021b319e34478dbee38f29d3b583853824ba3",
+              "history_source": "ff0d59a1ce3131c7952925be8ee25f1d92235008f424c08438ea9a037f9cc06b"
+            }
+          }
+        },
+        {
+          "label": "replacement controller standard resync",
+          "status": {
+            "version": "2.0.1",
+            "status": "running",
+            "branch": "main",
+            "formal_branch": "main",
+            "accepted_chapters": 0,
+            "formal_chapters": 0,
+            "candidate_chapter": null,
+            "target": 1,
+            "written_han": 0,
+            "finish": false,
+            "writing_mode": "standard",
+            "worker_batch": null,
+            "pending_task": "b6d15d3f7b7c4e5fafb235bf645f126b",
+            "stage": "write",
+            "execution_failure": null,
+            "pause_reason": null,
+            "author_decision": null,
+            "accepted_findings": [],
+            "workbench": {
+              "enabled": true
+            },
+            "opening": null,
+            "revision_run": null,
+            "revision_proposal": null
+          },
+          "advance": {
+            "action": "task_ready",
+            "task": {
+              "schema": "novel-ledger.task/1",
+              "version": "2.0.1",
+              "task_id": "b6d15d3f7b7c4e5fafb235bf645f126b",
+              "input_hash": "2c8eda90c9214e9e31b5ed6b6de177cb958c8bd233269413f578f392540ca9ab",
+              "stage": "write",
+              "chapter": 1,
+              "scope": "chapter",
+              "delivery_phase": "formal",
+              "requires_new_worker": false,
+              "review_session": "real-host-A",
+              "task_path": "/private/tmp/novel-handoff-review-a80mmwoz/replace-after-read/work/b6d15d3f7b7c4e5fafb235bf645f126b/task.json",
+              "identity_path": "/private/tmp/novel-handoff-review-a80mmwoz/replace-after-read/work/b6d15d3f7b7c4e5fafb235bf645f126b/identity.json",
+              "brief_path": "/private/tmp/novel-handoff-review-a80mmwoz/replace-after-read/work/b6d15d3f7b7c4e5fafb235bf645f126b/brief.md",
+              "dispatch_path": "/private/tmp/novel-handoff-review-a80mmwoz/replace-after-read/work/b6d15d3f7b7c4e5fafb235bf645f126b/dispatch.md",
+              "claim": {
+                "session": "real-host-A",
+                "expired": true
+              },
+              "redispatch_count": 3,
+              "execution": {
+                "schema": "novel-ledger.execution/1",
+                "state": "await_worker_identity",
+                "session": "real-host-A",
+                "recovery": {
+                  "actor": "worker",
+                  "action": "correct_from_template",
+                  "retry_allowed": true,
+                  "failures": 0,
+                  "limit": 2
+                }
+              }
+            },
+            "status": {
+              "version": "2.0.1",
+              "status": "running",
+              "branch": "main",
+              "formal_branch": "main",
+              "accepted_chapters": 0,
+              "formal_chapters": 0,
+              "candidate_chapter": null,
+              "target": 1,
+              "written_han": 0,
+              "finish": false,
+              "writing_mode": "standard",
+              "worker_batch": null,
+              "pending_task": "b6d15d3f7b7c4e5fafb235bf645f126b",
+              "stage": "write",
+              "execution_failure": null,
+              "pause_reason": null,
+              "author_decision": null,
+              "accepted_findings": [],
+              "workbench": {
+                "enabled": true
+              },
+              "opening": null,
+              "revision_run": null,
+              "revision_proposal": null
+            },
+            "book_view": {
+              "path": "/private/tmp/novel-handoff-review-a80mmwoz/replace-after-read/book.html",
+              "chars": 50475,
+              "chapters": 0,
+              "inside_project": true
+            }
+          }
+        },
+        {
+          "label": "replacement worker first read",
+          "argv": [
+            "/Users/longwen/.pyenv/versions/3.10.12/bin/python3",
+            "/Users/longwen/AndroidStudioProjects/skills/novel-ledger/scripts/novel.py",
+            "--project",
+            "/private/tmp/novel-handoff-review-a80mmwoz/replace-after-read",
+            "worker",
+            "--task",
+            "b6d15d3f7b7c4e5fafb235bf645f126b",
+            "--",
+            "read",
+            "--task",
+            "b6d15d3f7b7c4e5fafb235bf645f126b"
+          ],
+          "exit_code": 0,
+          "result": {
+            "task_id": "b6d15d3f7b7c4e5fafb235bf645f126b",
+            "input_hash": "2c8eda90c9214e9e31b5ed6b6de177cb958c8bd233269413f578f392540ca9ab",
+            "complete_records": true,
+            "stage": "write",
+            "chapter": 1,
+            "records": {},
+            "records_hash": "b91824c604d6322aa7225a80d33e3cbb4bc967f33b550caaffc1e4f37e01c508",
+            "on_demand": {
+              "chapter_outline": "8577512763671a22246e1d01edb2c0c0e594356f31a689c9e302e6e8d94fde7a",
+              "complete_hooks": "da19fe497d17f2882b09d4334ef63fe6d3dfad0b0caed324b1af6ea3601a145d",
+              "complete_state": "a3b2dd7ee7bb2fc158528f8064a3c8828e8bd8bd6af27b9be24b525fe1a04c4b",
+              "complete_understanding": "0de8ce214ba200c1cece4f5828b3591b5cf2f9497efcf3ced9b040ee3998966d",
+              "complete_volume_outline": "669f67b280756fd0839bbdf79d2021b319e34478dbee38f29d3b583853824ba3",
+              "contract": "cecd1570004139656c7a9e0572645408c1acb8a1277dd95a8edbf2003a94e1d5",
+              "history_source": "ff0d59a1ce3131c7952925be8ee25f1d92235008f424c08438ea9a037f9cc06b",
+              "hooks": "2f2aab03c8ec5a1fe50e464fa646be29c0c2c60c5f3a5c790b33861051ec4b87",
+              "previous_chapters": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "state": "a3b2dd7ee7bb2fc158528f8064a3c8828e8bd8bd6af27b9be24b525fe1a04c4b",
+              "style": "62f9075ff4635ffda294fc92259cad26231c2d9f4836ce713d3be91d8af74708",
+              "volume_outline": "2b50d7ce69a02b34da901e39b2126b99b3b4cbe3e516b653ba0302b6fd3f741d"
+            },
+            "already_read": [
+              "chapter_outline",
+              "contract",
+              "hooks",
+              "previous_chapters",
+              "state",
+              "style",
+              "volume_outline"
+            ],
+            "already_read_note": "这些记录此前已交给本任务；需要原文时用 read --record 名称重取，或用 read --all 取回全部必读记录。"
+          }
+        },
+        {
+          "label": "replacement explicit all read workaround",
+          "argv": [
+            "/Users/longwen/.pyenv/versions/3.10.12/bin/python3",
+            "/Users/longwen/AndroidStudioProjects/skills/novel-ledger/scripts/novel.py",
+            "--project",
+            "/private/tmp/novel-handoff-review-a80mmwoz/replace-after-read",
+            "worker",
+            "--task",
+            "b6d15d3f7b7c4e5fafb235bf645f126b",
+            "--",
+            "read",
+            "--task",
+            "b6d15d3f7b7c4e5fafb235bf645f126b",
+            "--all"
+          ],
+          "exit_code": 0,
+          "result": {
+            "task_id": "b6d15d3f7b7c4e5fafb235bf645f126b",
+            "input_hash": "2c8eda90c9214e9e31b5ed6b6de177cb958c8bd233269413f578f392540ca9ab",
+            "complete_records": true,
+            "stage": "write",
+            "chapter": 1,
+            "records": {
+              "contract": {
+                "hash": "cecd1570004139656c7a9e0572645408c1acb8a1277dd95a8edbf2003a94e1d5",
+                "value": {
+                  "editorial_features": false,
+                  "entities": [
+                    {
+                      "id": "shen",
+                      "kind": "person",
+                      "name": "沈桐"
+                    }
+                  ],
+                  "placements": {
+                    "shen": "office"
+                  },
+                  "story_engine": "核对退件来源，追查签字责任。",
+                  "volumes": [
+                    {
+                      "end": 2,
+                      "first": 1,
+                      "id": "v1",
+                      "purpose": "查明来源并面对后果。"
+                    }
+                  ],
+                  "word_range": [
+                    24,
+                    180
+                  ],
+                  "reader_promise": "一个夜班工人查清退件来源并承担自己的选择。",
+                  "allow_special_mechanism": false,
+                  "opposition": "主管担心调查影响考核。",
+                  "world_premise": "一座仓库的夜班退件纠纷。",
+                  "links": [],
+                  "chapter_max": 90,
+                  "initial_resources": [
+                    {
+                      "asset": "车费",
+                      "holder": "shen",
+                      "quantity": "4",
+                      "unit": "元"
+                    }
+                  ],
+                  "narrative_tracking": false,
+                  "style_window": {
+                    "dialogue": 0.4,
+                    "paragraph": 0.35,
+                    "person": 1,
+                    "repetition": 0.12,
+                    "sentence": 0.35
+                  },
+                  "chapter_outline": {
+                    "scope": "volume",
+                    "tolerance": 60,
+                    "words": 150
+                  },
+                  "genre": "都市生活",
+                  "protagonist_setup": {
+                    "desire": "查清责任。",
+                    "id": "shen",
+                    "identity": "夜班工人",
+                    "limit": "不牵连无关同事。",
+                    "name": "沈桐"
+                  },
+                  "relationships": [
+                    "同事互相依赖，却各自担心承担责任。"
+                  ],
+                  "scope_append_limit": 3,
+                  "style_guard": "observe",
+                  "initial_facts": [],
+                  "title": "夜班退件",
+                  "world_rules": [
+                    "夜班退件必须登记负责人。"
+                  ],
+                  "arcs": [],
+                  "ending": "退件来源公开，工人承担违规开箱的后果。",
+                  "anchors": [],
+                  "red_lines": [],
+                  "volume_outline": {
+                    "scope": "all",
+                    "tolerance": 500,
+                    "words": 2500
+                  },
+                  "style_traits": [
+                    "少重复解释。",
+                    "因果承接完整。"
+                  ],
+                  "chapter_aim": 60,
+                  "revision_limit": 3,
+                  "chapter_min": 12,
+                  "places": [
+                    {
+                      "id": "office",
+                      "name": "值班室"
+                    },
+                    {
+                      "id": "yard",
+                      "name": "仓库后院"
+                    }
+                  ],
+                  "voice": "以动作、物件、对白和后果呈现夜班人情。"
+                }
+              },
+              "state": {
+                "hash": "a3b2dd7ee7bb2fc158528f8064a3c8828e8bd8bd6af27b9be24b525fe1a04c4b",
+                "value": {
+                  "clock": 0,
+                  "clock_threads": {},
+                  "developments": {},
+                  "entities": {
+                    "shen": {
+                      "id": "shen",
+                      "kind": "person",
+                      "name": "沈桐"
+                    }
+                  },
+                  "facts": {},
+                  "historical_assertions": {},
+                  "hooks": {},
+                  "knowledge": {},
+                  "placements": {
+                    "shen": "office"
+                  },
+                  "places": {
+                    "office": {
+                      "id": "office",
+                      "name": "值班室"
+                    },
+                    "yard": {
+                      "id": "yard",
+                      "name": "仓库后院"
+                    }
+                  },
+                  "relations": {},
+                  "resources": {
+                    "[\"shen\",\"车费\",\"元\"]": "4"
+                  }
+                }
+              },
+              "hooks": {
+                "hash": "2f2aab03c8ec5a1fe50e464fa646be29c0c2c60c5f3a5c790b33861051ec4b87",
+                "value": {
+                  "declared": [
+                    {
+                      "continues": false,
+                      "id": "hook-v1-required",
+                      "payoff": [
+                        2,
+                        2
+                      ],
+                      "plant": [
+                        1,
+                        1
+                      ],
+                      "required": true,
+                      "text": "读者看到退回凭据的来历，并要知道它最终由谁负责。",
+                      "volume": "v1"
+                    }
+                  ],
+                  "open": [],
+                  "source": "伏笔账：卷纲声明（plant/payoff 窗口、required、continues），章纲只做 plant/payoff；中途再提一次用 hook_refs 承接，不新增动作。open 是引擎投影里仍未兑现的条目。完整历史声明见 complete_hooks，未选择不代表不存在。",
+                  "volume": [
+                    {
+                      "continues": false,
+                      "id": "hook-v1-required",
+                      "payoff": [
+                        2,
+                        2
+                      ],
+                      "plant": [
+                        1,
+                        1
+                      ],
+                      "required": true,
+                      "text": "读者看到退回凭据的来历，并要知道它最终由谁负责。"
+                    }
+                  ]
+                }
+              },
+              "style": {
+                "hash": "62f9075ff4635ffda294fc92259cad26231c2d9f4836ce713d3be91d8af74708",
+                "value": {
+                  "anchor": null,
+                  "chapter": {
+                    "pov": "第三人称限知",
+                    "rhythm": "短句交代动作，核对结果后用完整句说明后果。"
+                  },
+                  "guard": "observe",
+                  "pov": "",
+                  "source": "文风规格：契约 voice/tone/pov/style_traits 是底线，anchor 是作者认可首章的实测指标，volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。guard=observe 默认只观察首章形状变化，strict 才执行锚点容差；显式对白目标和高重复检查仍生效，实际视角须结合正文自比。",
+                  "style_traits": [
+                    "少重复解释。",
+                    "因果承接完整。"
+                  ],
+                  "tone": "",
+                  "voice": "以动作、物件、对白和后果呈现夜班人情。",
+                  "volume": {
+                    "trend": "以短句、动作与凭据核对推进，卷末用较长段落交代责任后果。"
+                  },
+                  "window": {
+                    "dialogue": 0.4,
+                    "paragraph": 0.35,
+                    "person": 1.0,
+                    "repetition": 0.12,
+                    "sentence": 0.35
+                  }
+                }
+              },
+              "chapter_outline": {
+                "hash": "8577512763671a22246e1d01edb2c0c0e594356f31a689c9e302e6e8d94fde7a",
+                "value": {
+                  "plot": {
+                    "beat": "沈桐核对封条与签字，逼出下一处矛盾。",
+                    "nodes": [],
+                    "threads": []
+                  },
+                  "history_refs": [],
+                  "knowledge": [
+                    {
+                      "from": null,
+                      "reason": "本章核对让沈桐对来源多了一层判断。",
+                      "to": "hinted",
+                      "topic": "source",
+                      "who": "shen"
+                    }
+                  ],
+                  "node_actions": [],
+                  "exit": [
+                    {
+                      "expected": 1,
+                      "key": "main",
+                      "kind": "clock"
+                    },
+                    {
+                      "expected": 3,
+                      "key": "[\"shen\",\"车费\",\"元\"]",
+                      "kind": "resources"
+                    },
+                    {
+                      "expected": "yard",
+                      "key": "shen",
+                      "kind": "places"
+                    },
+                    {
+                      "expected": "hinted",
+                      "key": "shen:source",
+                      "kind": "knowledge"
+                    }
+                  ],
+                  "clock": {
+                    "advance_days": 1
+                  },
+                  "disclosures": [],
+                  "node_ids": [],
+                  "participants": [
+                    "shen"
+                  ],
+                  "hook_refs": [],
+                  "obstacle": "沈桐核对封条与签字，逼出下一处矛盾。",
+                  "schedule": [],
+                  "world_refs": [],
+                  "chapter": 1,
+                  "reading_schema": "reading-dependencies/1",
+                  "ending": "",
+                  "hooks": [
+                    {
+                      "action": "plant",
+                      "hook": "hook-v1-required",
+                      "note": "本卷开篇埋下对读者的具体承诺。"
+                    }
+                  ],
+                  "choice": "沈桐核对封条与签字，逼出下一处矛盾。",
+                  "cost": "",
+                  "dependency_coverage": "partial",
+                  "enter": [
+                    {
+                      "expected": 0,
+                      "key": "main",
+                      "kind": "clock"
+                    },
+                    {
+                      "expected": 4,
+                      "key": "[\"shen\",\"车费\",\"元\"]",
+                      "kind": "resources"
+                    },
+                    {
+                      "expected": "office",
+                      "key": "shen",
+                      "kind": "places"
+                    },
+                    {
+                      "expected": null,
+                      "key": "shen:source",
+                      "kind": "knowledge"
+                    }
+                  ],
+                  "hook_contracts": {
+                    "hook-v1-required": {
+                      "continues": false,
+                      "id": "hook-v1-required",
+                      "payoff": [
+                        2,
+                        2
+                      ],
+                      "plant": [
+                        1,
+                        1
+                      ],
+                      "required": true,
+                      "text": "读者看到退回凭据的来历，并要知道它最终由谁负责。"
+                    }
+                  },
+                  "pacing": {},
+                  "scenes": [],
+                  "characters": [],
+                  "style": {
+                    "pov": "第三人称限知",
+                    "rhythm": "短句交代动作，核对结果后用完整句说明后果。"
+                  },
+                  "goal": "沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追",
+                  "node_contracts": {},
+                  "preconditions": [
+                    {
+                      "expected": 0,
+                      "key": "main",
+                      "kind": "clock"
+                    },
+                    {
+                      "expected": 4,
+                      "key": "[\"shen\",\"车费\",\"元\"]",
+                      "kind": "resources"
+                    },
+                    {
+                      "expected": "office",
+                      "key": "shen",
+                      "kind": "placements"
+                    },
+                    {
+                      "expected": null,
+                      "key": "shen:source",
+                      "kind": "knowledge"
+                    }
+                  ],
+                  "new_entities": [],
+                  "places": [
+                    {
+                      "entity": "shen",
+                      "from": "office",
+                      "reason": "从值班室走到后院核对退件。",
+                      "to": "yard"
+                    }
+                  ],
+                  "reader_refs": [],
+                  "scene_schema": "scene-identity/2",
+                  "change": "沈桐核对封条与签字，逼出下一处矛盾。",
+                  "resources": [
+                    {
+                      "from": 4,
+                      "key": "[\"shen\",\"车费\",\"元\"]",
+                      "reason": "核对退件时花掉一趟车费。",
+                      "to": 3
+                    }
+                  ],
+                  "synopsis": "沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追查下一批退件。沈桐为核对封条追问经手人，主管以签字制度阻拦，他选择对照旧凭据并承担保管责任，发现笔迹矛盾后决定追"
+                }
+              },
+              "volume_outline": {
+                "hash": "2b50d7ce69a02b34da901e39b2126b99b3b4cbe3e516b653ba0302b6fd3f741d",
+                "value": {
+                  "arc": "本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写起，沈桐先被制度挡在门外，随后用旧凭据撬开缺口，中段以责任逐层扩散换取更深的证据，卷末由他公开来源并承担违规的代价。本卷从一次退回的箱子写",
+                  "characters": [],
+                  "climax": "公开来源与签字矛盾，沈桐承担违规开箱的后果。",
+                  "clock": {
+                    "advance_days": 2,
+                    "to": 2
+                  },
+                  "exit_state": "卷末：车费结余；沈桐在后院；对来源仅到怀疑；主线推进到登记责任。",
+                  "hooks": [
+                    {
+                      "continues": false,
+                      "id": "hook-v1-required",
+                      "payoff": [
+                        2,
+                        2
+                      ],
+                      "plant": [
+                        1,
+                        1
+                      ],
+                      "required": true,
+                      "text": "读者看到退回凭据的来历，并要知道它最终由谁负责。"
+                    }
+                  ],
+                  "id": "v1",
+                  "knowledge": [],
+                  "nodes": [
+                    {
+                      "ending_condition": "本章核对有结论。",
+                      "id": "n1",
+                      "kind": "main",
+                      "purpose": "第1章推进来源核对。",
+                      "required": true,
+                      "window": [
+                        1,
+                        1
+                      ]
+                    }
+                  ],
+                  "places": [],
+                  "purpose": "把退件来源从个人纠纷推到制度责任。",
+                  "resources": [],
+                  "source": {
+                    "chapter": 1,
+                    "hash": "669f67b280756fd0839bbdf79d2021b319e34478dbee38f29d3b583853824ba3",
+                    "note": "仅筛选本章节点、前置依赖与所在线路；方向、转折、伏笔、文风及卷末声明保留完整。未选记录仍可按 complete_volume_outline 补读。",
+                    "record": "complete_volume_outline"
+                  },
+                  "stage": "",
+                  "style": {
+                    "trend": "以短句、动作与凭据核对推进，卷末用较长段落交代责任后果。"
+                  },
+                  "threads": [],
+                  "turns": [
+                    {
+                      "at": "卷中",
+                      "turn": "旧凭据暴露出签字矛盾。"
+                    },
+                    {
+                      "at": "卷尾",
+                      "turn": "沈桐公开来源并接受处理。"
+                    }
+                  ]
+                }
+              },
+              "previous_chapters": {
+                "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "value": []
+              }
+            },
+            "records_hash": "b91824c604d6322aa7225a80d33e3cbb4bc967f33b550caaffc1e4f37e01c508",
+            "on_demand": {
+              "complete_hooks": "da19fe497d17f2882b09d4334ef63fe6d3dfad0b0caed324b1af6ea3601a145d",
+              "complete_state": "a3b2dd7ee7bb2fc158528f8064a3c8828e8bd8bd6af27b9be24b525fe1a04c4b",
+              "complete_understanding": "0de8ce214ba200c1cece4f5828b3591b5cf2f9497efcf3ced9b040ee3998966d",
+              "complete_volume_outline": "669f67b280756fd0839bbdf79d2021b319e34478dbee38f29d3b583853824ba3",
+              "history_source": "ff0d59a1ce3131c7952925be8ee25f1d92235008f424c08438ea9a037f9cc06b"
+            }
+          }
+        },
+        {
+          "label": "replacement read counts",
+          "old": 7,
+          "replacement": 0,
+          "all": 7,
+          "same_task": true
+        }
+      ],
+      "fix": "把材料交付缓存绑定受控execution_id/session及名称+hash；同task换执行者时启用新阅读世代，首读完整交付。仅同一真实Worker的受限快组允许跨task复用。短期可在prepare-worker检测session变化时显式给新派工首读--all，但需避免把任务级历史统计伪装为当前执行者已读。",
+      "tests": [
+        "A读取全部后停止，租约过期，status/advance→prepare B：B首读records名称必须恰等于required。",
+        "A只读取单个record后换B：B仍拿全部required；保留同task/input_hash/result不变。",
+        "同session恢复且模型历史保留时可复用；主控明确空历史重开时即使session标签复用也要新execution世代。",
+        "快组内同Worker复用未变hash仍有效；新组/换Worker不得继承旧read_hashes或task日志。"
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "id": "OBS-01",
+      "title": "旧worker-next重试的顶层action与当前阻断状态不一致",
+      "evidence": [
+        {
+          "label": "repeat previous worker-next while current task blocked",
+          "argv": [
+            "/Users/longwen/.pyenv/versions/3.10.12/bin/python3",
+            "/Users/longwen/AndroidStudioProjects/skills/novel-ledger/scripts/novel.py",
+            "--project",
+            "/private/tmp/novel-handoff-review-a80mmwoz/next-blocked",
+            "worker",
+            "--task",
+            "26ef4e2860cb4095b47e54897d8c6a48",
+            "--",
+            "worker-next",
+            "--task",
+            "26ef4e2860cb4095b47e54897d8c6a48"
+          ],
+          "exit_code": 0,
+          "result": {
+            "action": "task_ready",
+            "worker_boundary": "continue",
+            "task": {
+              "schema": "novel-ledger.task/1",
+              "version": "2.0.1",
+              "task_id": "6538c12492ee4edc87042838b76d6540",
+              "input_hash": "59ee66200c46c6679e8899966568a127297e7e19127b746eda826b1df1225bbf",
+              "stage": "write",
+              "chapter": 3,
+              "scope": "chapter",
+              "delivery_phase": "formal",
+              "requires_new_worker": false,
+              "review_session": "real-fast-host",
+              "task_path": "/private/tmp/novel-handoff-review-a80mmwoz/next-blocked/work/6538c12492ee4edc87042838b76d6540/task.json",
+              "identity_path": "/private/tmp/novel-handoff-review-a80mmwoz/next-blocked/work/6538c12492ee4edc87042838b76d6540/identity.json",
+              "brief_path": "/private/tmp/novel-handoff-review-a80mmwoz/next-blocked/work/6538c12492ee4edc87042838b76d6540/brief.md",
+              "dispatch_path": "/private/tmp/novel-handoff-review-a80mmwoz/next-blocked/work/6538c12492ee4edc87042838b76d6540/dispatch.md",
+              "claim": {
+                "session": "real-fast-host",
+                "expired": false
+              },
+              "redispatch_count": 2,
+              "worker_batch": {
+                "first": 2,
+                "id": "fe4f8d7b75524d8fb82137cd49d9dd9c",
+                "last": 4
+              },
+              "execution": {
+                "schema": "novel-ledger.execution/1",
+                "state": "blocked",
+                "session": "real-fast-host",
+                "recovery": {
+                  "actor": "controller",
+                  "action": "prepare_worker",
+                  "retry_allowed": false,
+                  "failures": 2,
+                  "limit": 2
+                }
+              }
+            },
+            "execution_claim": "REDACTED_d73fa7c5"
+          }
+        },
+        {
+          "label": "blocked new task truth",
+          "task_status": {
+            "id": "6538c12492ee4edc87042838b76d6540",
+            "status": "pending",
+            "reviewer": null,
+            "batch_active": true,
+            "batch_task": "6538c12492ee4edc87042838b76d6540",
+            "execution_blocked": true,
+            "recovery": {
+              "actor": "controller",
+              "action": "prepare_worker",
+              "retry_allowed": false,
+              "failures": 2,
+              "limit": 2
+            }
+          },
+          "advance": {
+            "action": "worker_blocked",
+            "task_id": "6538c12492ee4edc87042838b76d6540",
+            "recovery": {
+              "actor": "controller",
+              "action": "prepare_worker",
+              "retry_allowed": false,
+              "failures": 2,
+              "limit": 2
+            },
+            "status": {
+              "version": "2.0.1",
+              "status": "running",
+              "branch": "main",
+              "formal_branch": "main",
+              "accepted_chapters": 2,
+              "formal_chapters": 2,
+              "candidate_chapter": null,
+              "target": 4,
+              "written_han": 150,
+              "finish": true,
+              "writing_mode": "fast",
+              "worker_batch": {
+                "id": "fe4f8d7b75524d8fb82137cd49d9dd9c",
+                "first": 2,
+                "last": 4,
+                "task_id": "6538c12492ee4edc87042838b76d6540",
+                "session": "real-fast-host",
+                "active": true,
+                "stop_reason": null
+              },
+              "pending_task": "6538c12492ee4edc87042838b76d6540",
+              "stage": "write",
+              "execution_failure": {
+                "blocked": true,
+                "code": "file",
+                "failures": 2,
+                "operation": "preflight",
+                "session": "real-fast-host",
+                "task": "6538c12492ee4edc87042838b76d6540"
+              },
+              "pause_reason": null,
+              "author_decision": null,
+              "accepted_findings": [],
+              "workbench": {
+                "enabled": true
+              },
+              "opening": null,
+              "revision_run": null,
+              "revision_proposal": null
+            },
+            "book_view": {
+              "path": "/private/tmp/novel-handoff-review-a80mmwoz/next-blocked/book.html",
+              "chars": 71112,
+              "chapters": 2,
+              "inside_project": true
+            }
+          }
+        }
+      ],
+      "assessment": "当前章经两次file错误已经blocked。重复上一章worker-next仍返回action=task_ready/worker_boundary=continue，并携execution.state=blocked；advance正确给worker_blocked。后续read仍会technical_blocked，因此没有绕过阻断，仅多一次无效交接；列为一致性改进，不另报高优先级缺陷。",
+      "suggestion": "重试回调发现pending task blocked时，返回统一worker_blocked与controller恢复动作，同时保留当前task身份。"
+    }
+  ]
+}

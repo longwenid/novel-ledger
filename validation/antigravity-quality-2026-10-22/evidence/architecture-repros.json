@@ -1,0 +1,242 @@
+{
+  "new_worker_read_cache": {
+    "task_stage": "volume_outline",
+    "first_records": [
+      "contract",
+      "hooks",
+      "style"
+    ],
+    "new_worker_records": [],
+    "already_read": [
+      "contract",
+      "hooks",
+      "style"
+    ],
+    "source": "Application.read -> repo.read_names(task_id), not execution-session keyed"
+  },
+  "portable_submit_replay": {
+    "first": {
+      "exit_code": 0,
+      "result": {
+        "valid": true,
+        "accepted": true,
+        "checked": false,
+        "committed": true,
+        "task_id": "63014fcbbf044be7bc99f6feabd77bea",
+        "worker_boundary": "finished",
+        "committed_chapter": 1,
+        "next_stage": null,
+        "rework": {
+          "repairs": 0,
+          "redesigns": 0,
+          "initial_used": true
+        },
+        "status": "running",
+        "style_report": {
+          "metrics": {
+            "han": 75,
+            "sentences": 2,
+            "sentence_mean": 37.5,
+            "sentence_short_share": 0.0,
+            "paragraph_mean": 75.0,
+            "paragraph_max": 75,
+            "dialogue_share": 0.0,
+            "repetition_share": 0.0,
+            "repetition_grams": 72,
+            "person": "third"
+          },
+          "observations": [],
+          "findings": []
+        },
+        "book_view": {
+          "path": "/private/var/folders/th/18knh75n0v52mdyvgzpt21fh0000gn/T/tmpngj47fm_/p/book.html",
+          "chars": 53089,
+          "chapters": 1,
+          "inside_project": true
+        }
+      }
+    },
+    "same_command_replay": {
+      "exit_code": 2,
+      "result": {
+        "error": "stale_task",
+        "message": "任务已失效，恢复当前任务；不可改身份重投旧结果。",
+        "details": {
+          "recovery": {
+            "actor": "controller",
+            "action": "resync_task",
+            "retry_allowed": false,
+            "failures": 0,
+            "limit": 2
+          },
+          "recover": "主控核对 status 与当前任务；不修改旧任务身份重投稿件。保留任务与已填稿件，将 task_id、真实会话和错误码交回主控；由主控 prepare-worker 绑定 NOVEL_TASK_ID/NOVEL_SESSION 并注入凭据。Worker 不执行 claim/advance/run。 修复原因后由主控 prepare-worker --reset-failures。"
+        }
+      }
+    },
+    "formal_chapters": 1
+  },
+  "technical_retry_without_progress": {
+    "cycles": [
+      {
+        "failure_code": "file",
+        "recovery": {
+          "actor": "worker",
+          "action": "correct_from_template",
+          "retry_allowed": true,
+          "failures": 1,
+          "limit": 2,
+          "task_id": "09aa51d95c8c42b4932bc15d191fbdda"
+        },
+        "reread_code": 0,
+        "delivered_records": 7,
+        "counter_after_read": null
+      },
+      {
+        "failure_code": "file",
+        "recovery": {
+          "actor": "worker",
+          "action": "correct_from_template",
+          "retry_allowed": true,
+          "failures": 1,
+          "limit": 2,
+          "task_id": "09aa51d95c8c42b4932bc15d191fbdda"
+        },
+        "reread_code": 0,
+        "delivered_records": 0,
+        "counter_after_read": null
+      },
+      {
+        "failure_code": "file",
+        "recovery": {
+          "actor": "worker",
+          "action": "correct_from_template",
+          "retry_allowed": true,
+          "failures": 1,
+          "limit": 2,
+          "task_id": "09aa51d95c8c42b4932bc15d191fbdda"
+        },
+        "reread_code": 0,
+        "delivered_records": 0,
+        "counter_after_read": null
+      },
+      {
+        "failure_code": "file",
+        "recovery": {
+          "actor": "worker",
+          "action": "correct_from_template",
+          "retry_allowed": true,
+          "failures": 1,
+          "limit": 2,
+          "task_id": "09aa51d95c8c42b4932bc15d191fbdda"
+        },
+        "reread_code": 0,
+        "delivered_records": 0,
+        "counter_after_read": null
+      },
+      {
+        "failure_code": "file",
+        "recovery": {
+          "actor": "worker",
+          "action": "correct_from_template",
+          "retry_allowed": true,
+          "failures": 1,
+          "limit": 2,
+          "task_id": "09aa51d95c8c42b4932bc15d191fbdda"
+        },
+        "reread_code": 0,
+        "delivered_records": 0,
+        "counter_after_read": null
+      }
+    ],
+    "final_action": "task_ready",
+    "formal_chapters": 0
+  },
+  "candidate_diagnostics": {
+    "preview": {
+      "valid": true,
+      "accepted": false,
+      "checked": true,
+      "committed": false,
+      "task_id": "9a95b6e3e0b4429d9d4e4a6459475cef",
+      "worker_boundary": "finished",
+      "committed_chapter": null,
+      "next_stage": "repair",
+      "rework": {
+        "repairs": 0,
+        "redesigns": 0,
+        "initial_used": true
+      },
+      "status": "running",
+      "style_report": {
+        "metrics": {
+          "han": 125,
+          "sentences": 4,
+          "sentence_mean": 31.25,
+          "sentence_short_share": 0.0,
+          "paragraph_mean": 125.0,
+          "paragraph_max": 125,
+          "dialogue_share": 0.0,
+          "repetition_share": 0.0,
+          "repetition_grams": 122,
+          "person": "third"
+        },
+        "observations": [],
+        "findings": []
+      }
+    },
+    "submit": {
+      "valid": true,
+      "accepted": true,
+      "checked": false,
+      "committed": true,
+      "task_id": "9a95b6e3e0b4429d9d4e4a6459475cef",
+      "worker_boundary": "finished",
+      "committed_chapter": null,
+      "next_stage": "repair",
+      "rework": {
+        "repairs": 0,
+        "redesigns": 0,
+        "initial_used": true
+      },
+      "status": "running",
+      "style_report": {
+        "metrics": {
+          "han": 125,
+          "sentences": 4,
+          "sentence_mean": 31.25,
+          "sentence_short_share": 0.0,
+          "paragraph_mean": 125.0,
+          "paragraph_max": 125,
+          "dialogue_share": 0.0,
+          "repetition_share": 0.0,
+          "repetition_grams": 122,
+          "person": "third"
+        },
+        "observations": [],
+        "findings": []
+      },
+      "book_view": {
+        "path": "/private/var/folders/th/18knh75n0v52mdyvgzpt21fh0000gn/T/tmpq9ru6dqy/p/book.html",
+        "chars": 50475,
+        "chapters": 0,
+        "inside_project": true
+      }
+    },
+    "stored_findings": [
+      {
+        "actual_han": 125,
+        "allowed": [
+          12,
+          90
+        ],
+        "criterion": "substance",
+        "reason": "汉字篇幅不在本章可完成全书的区间。",
+        "repair_scope": "chapter",
+        "severity": "quality",
+        "target_chapter": 1
+      }
+    ],
+    "response_has_unified_findings": false,
+    "formal_chapters": 0
+  }
+}

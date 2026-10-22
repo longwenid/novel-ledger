@@ -1,0 +1,657 @@
+{
+  "chapters": 78,
+  "plan_nonempty_coverage": {
+    "knowledge": 2,
+    "hooks": 4,
+    "characters": 1
+  },
+  "plan_details": [
+    {
+      "chapter": 1,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 2,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 3,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 4,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 5,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 6,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 7,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 8,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": [
+        "knowledge"
+      ]
+    },
+    {
+      "chapter": 9,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 10,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 11,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 12,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 13,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 14,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 15,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 16,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": [
+        "hooks"
+      ]
+    },
+    {
+      "chapter": 17,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 18,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 19,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 20,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 21,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 22,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 23,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 24,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 25,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": [
+        "knowledge"
+      ]
+    },
+    {
+      "chapter": 26,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 27,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 28,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 29,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 30,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 31,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 32,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 33,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 34,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 35,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 36,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": [
+        "hooks"
+      ]
+    },
+    {
+      "chapter": 37,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 38,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 39,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 40,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 41,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 42,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 43,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 44,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 45,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 46,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 47,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 48,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 49,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 50,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 51,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 52,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": [
+        "hooks"
+      ]
+    },
+    {
+      "chapter": 53,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 54,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 55,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 56,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 57,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 58,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 59,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 60,
+      "clock": {
+        "advance_days": 0
+      },
+      "delta_kinds": [
+        "characters"
+      ]
+    },
+    {
+      "chapter": 61,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 62,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 63,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 64,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 65,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 66,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 67,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 68,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 69,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 70,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 71,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 72,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 73,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 74,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 75,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": [
+        "hooks"
+      ]
+    },
+    {
+      "chapter": 76,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 77,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    },
+    {
+      "chapter": 78,
+      "clock": {
+        "advance_days": 1
+      },
+      "delta_kinds": []
+    }
+  ],
+  "registered_entities": {
+    "item_crystal": {
+      "id": "item_crystal",
+      "kind": "item",
+      "name": "蓝磷晶髓"
+    },
+    "org_corps": {
+      "id": "org_corps",
+      "kind": "org",
+      "name": "环轨能源托拉斯联合体"
+    },
+    "org_office": {
+      "id": "org_office",
+      "kind": "org",
+      "name": "白夜事务所"
+    },
+    "org_police": {
+      "id": "org_police",
+      "kind": "org",
+      "name": "中环警备厅"
+    },
+    "person_lao_mo": {
+      "id": "person_lao_mo",
+      "kind": "person",
+      "name": "老莫"
+    },
+    "person_lu_xun": {
+      "id": "person_lu_xun",
+      "kind": "person",
+      "name": "陆巡"
+    },
+    "person_shen_qing": {
+      "id": "person_shen_qing",
+      "kind": "person",
+      "name": "沈青"
+    },
+    "place_solaris": {
+      "id": "place_solaris",
+      "kind": "place",
+      "name": "索拉里斯同心环轨"
+    }
+  },
+  "registered_places": {
+    "place_engine_core": {
+      "id": "place_engine_core",
+      "name": "主发电机芯",
+      "parent": null
+    },
+    "place_kuiper_source": {
+      "id": "place_kuiper_source",
+      "name": "柯伊伯带深空源点",
+      "parent": null
+    },
+    "place_mid_hub": {
+      "id": "place_mid_hub",
+      "name": "枢纽档案库",
+      "parent": null
+    },
+    "place_outer_ring": {
+      "id": "place_outer_ring",
+      "name": "旧港街区",
+      "parent": null
+    }
+  },
+  "resources": {
+    "[\"person_lu_xun\",\"劣质蓝磷晶髓\",\"克\"]": "3"
+  },
+  "facts": {
+    "org_corps:secret": "三十年前掩盖先驱舰队神隐真相，将污染核心改建为主发电机",
+    "person_lu_xun:status": "前世重案刑警意识魂穿至外环黑户青年躯体，负债累累且神经受创"
+  },
+  "character_current": {
+    "person_lu_xun": {
+      "chapter": 60,
+      "evidence": {
+        "chapter": 60,
+        "quote": "拒绝内环财阀的收买招安，坚守底层刑侦正义与独立反抗立场。老莫，你很清楚我的原则。",
+        "start": 2151
+      },
+      "value": {
+        "desire": "深挖特种晶片来源并查清原身身亡真相",
+        "relationship_focus": "与沈青互通物证情报，倚重老莫黑市人脉与义体维保",
+        "stance": "保持冷峻中立并坚决抗拒财阀与邪教的渗透"
+      }
+    }
+  },
+  "understanding_versions": 0
+}

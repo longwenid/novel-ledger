@@ -1,0 +1,407 @@
+{
+  "database_source": "/Users/longwen/AiGit/15_skill_xiaoshuo/项目1021/novel.sqlite3",
+  "database_sha256": "0b6956faefa4ec53cb0b338e76d45328709791f87a4b2fefabc5bb06dc60158d",
+  "chapters": [
+    {
+      "chapter": 1,
+      "prose_hash": "d3944648b5c6bfd88060e2f0cad8b9360975cf321c93ee7a8a277d4068246948",
+      "plan_hash": "4779d63c7cfb2cd357957b470050447e6373be0dc2a1f5c845ae1cd634d18bd2",
+      "review_hash": "3075f1bff193c6a4b4df0e3dc5363c3d40d637827006569368b299f88d10c8e6",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 2,
+      "prose_hash": "0397c5ccf6a33e1cce28566b7b729febf8bbd41d3ec73e798f67f31e9406c857",
+      "plan_hash": "0633d9d0aeb5378862891637eb40230d0364de3a4d9e32e3a76dbe4f2994446e",
+      "review_hash": "0ee4431e6f2114afd7897e4e6229085085b4ca29bc59ce00d6aff1dea4a9e538",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 3,
+      "prose_hash": "06f3ce3668f2371b716ef2f986617db22e4e182e28a2fc77fb384bc03047808e",
+      "plan_hash": "487ab1b129d8b06ad5da1486d38fd6d2c1c8bb821bb5d6a82d2554a303db63c0",
+      "review_hash": "a5c02e371de82d0f57e9b3905b997e6d863194738a1419e5c8d6498540cbcb44",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 4,
+      "prose_hash": "a63d88e6d0410077dcabaf95b5c1982d05650bc9bf9c29acd5501861796753a0",
+      "plan_hash": "0ef61b1aba9000578b9662f076aed98ccb4394641cd76ff75e8a113db953db12",
+      "review_hash": "bd7075ceb22d3c3cf6287543db4b3273341fecbf6d58db3d51e4514793c64401",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 5,
+      "prose_hash": "9f6807a1c78be3534dbcef8c5a9d17d046bcfb1c5152f2cad15b714d5846b258",
+      "plan_hash": "1981751919c11cf2c0130b83c8965facc82c389c52f986dbf513a39c86f9ed22",
+      "review_hash": "e22bb1134519cdc5205acb933ad82b2ff949c4536b331d594be3007a9e033f62",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 6,
+      "prose_hash": "ce98d8e480065866dbbc9d270f7f87ac7183c61d8353f287d7fa0b52b757e46f",
+      "plan_hash": "5d43336a283b6b682c7dc5d92eff8aea697f197b8c3431c0a59bffc0750e828e",
+      "review_hash": "f2aeed2348f53494e1ba838061b0742833966fdd7172f9ab3fa9f58f144308d8",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 7,
+      "prose_hash": "a2d7dfa10ea2f2b70179140cddd78aa8df84037d091ed0f0f6502a20bcdd56f8",
+      "plan_hash": "e0d4d4dd4ada8974f34bebcff44a069a5d9f1e478ea7b02a06e9fef2e93ad246",
+      "review_hash": "5281f25b44b81f221e80c6ed2d4e2ed874582998b48c0a35db7deb5b0d233c93",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 8,
+      "prose_hash": "55941e28f85a29fa2dd99031bcceb1bc3a30f6697fae6aee2bf8994903edb2f9",
+      "plan_hash": "c54f2c68bcefe64d3292e03700eb04b2bf6c447582be1e0cafe4cd5620fea3e5",
+      "review_hash": "6ad946d1eb7467e7b24bbec04250753ede095186a3bbcb686f71f8073ae05097",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 9,
+      "prose_hash": "a6d6b4575cadb7834e8f7b04d2d826e658034f4a824d1ae3814450d7f3a770b8",
+      "plan_hash": "bd88c326ffef546cb1a906544a2b2bd4767b352b15a87deca400504d83b92a62",
+      "review_hash": "d259da7670f1fe2f01c2981db97eef9ef0ec51d29c6d28e26e49604c65081f7d",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 10,
+      "prose_hash": "6872f4f08fb72b9f060d71a4b741527105d9cd1e597536f4ed725cfc04b90c25",
+      "plan_hash": "0ee5252cb6dff9721eb1d9240d0556ba8ba78d8d9f196fb4a84ae50b30f4ca82",
+      "review_hash": "1cc386d2ba4d696101301269ceb6d469dd4d70dd75f6fc0c136d126f5d5da179",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 11,
+      "prose_hash": "9052e61aa0adfe1bf8ac7d58a272aa621ee78b3a55149046d4207478d8780a48",
+      "plan_hash": "bf2cda5b6c8a1a812ed7ef25b80a2b3fa28b3db5a72b1544666e8dfb9acec259",
+      "review_hash": "1df969a507ffeebdc1a3457b94cf63c4807387e9ce0e4d746152e747c23d47b2",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 12,
+      "prose_hash": "de68ade3464ba92f67f0621d9cd9620f8a10eb9f7c3be5179a4b7568e2aacc25",
+      "plan_hash": "0a97cf07e78b74fb425aca5e232655583fab7afd25cea5d03c0ffcace8a262bb",
+      "review_hash": "b98215ef73b0eb580bcc9ef68d0a8540b5a8fea839b1cf5b98ce20db7accee82",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 13,
+      "prose_hash": "66ffcb108428caf66daa4d88f9a7598082c7c1bdc245c1e4365c5eb72a530cae",
+      "plan_hash": "bc238483a50686f22c1fd60612c241354717024f584daa95119661ffc6bb4692",
+      "review_hash": "c71de9876e47468b6531d1bd2db3e87623ccb0f4a53976c376fbe728fdf5fd0f",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 14,
+      "prose_hash": "1695565dd37b6e4c53097844f86a8210159d2ae635ac001240e849cbbab02f70",
+      "plan_hash": "7877f09a6e91ced762cdba72cf29f7b2ba3484fd54b936f0519d69f994c1d0d9",
+      "review_hash": "0f575d0d8ab26e219bce087f78db720935bd40452f23c60dd71b311916d0d4fa",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 15,
+      "prose_hash": "7ce146761a2c2a6d24fd9db414da70da565553e1d47c247b1e835774d3c31fd7",
+      "plan_hash": "e930f07dda14c21da324cc2bab2308051ab38c39403c9bf03c85443a9b6911bf",
+      "review_hash": "3dbb2e1d59f08e29851949d34f6acda187ff18cd2a86fca1493d785cfa892413",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 16,
+      "prose_hash": "5117466050fd70a3dfa7bec4885f7c26acacc7f01251ffdf9c8fb205c4d678c9",
+      "plan_hash": "d590d604a6d542345c08fc68703ef0531adc416d2e76a843d2bdf82002076270",
+      "review_hash": "d3485fa26655e8f4c5d2487dee92e28a9a1002d56fb8776eb8cf6aaaef88d0a0",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 17,
+      "prose_hash": "c1d39a6ae7883d0358de278191b30f5b94c4cf218228d3aa8daa10518771c0a4",
+      "plan_hash": "f05485c330a2f6fba8b06e0ef7d9275663d8fc8a67dda6b2b75df9e57e9690f1",
+      "review_hash": "55b2cd6ad82ca93ed03848d54f5d46e3f66c2544398fc9f73ce4e7a706b8fdba",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 18,
+      "prose_hash": "cd7c6d354ae67f610629da5741f96c988d0b865103c984761fe0bc2b88d17f45",
+      "plan_hash": "7b8cf25dc285fe766a2669667ccce63ae0f1d397cd09620bc9d98cefff33d114",
+      "review_hash": "d842ee0942cd52dfc540b7570ee0679ab015f4d66f0cd0f5d64008be1c8b1ef5",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 19,
+      "prose_hash": "e7ea5b8f16fac411b3a3ee7081b0089ea87d175ca9b1a03033de57e5ef9672ab",
+      "plan_hash": "8ed71c0b58ff6b65a730ebd81c3d8d098a05dcd6c183b7ecaca81e09843deab6",
+      "review_hash": "4274bdd5c6c4737771bc8493264328109d229ac3a00d44d96295e689901bb571",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 20,
+      "prose_hash": "5d39f56a1f6c00e677d77c275aa025d0d8cebacbeb60dcd3ab937bb2e56e5c81",
+      "plan_hash": "3f3068da77f01687c901c6e78677d2882ec1f54d062424ff0a0052ba41f576b8",
+      "review_hash": "eb74cabd7bcfdccb76e011f4d54c1b3c5e4093f5f2c5529affe355054ef2fbd1",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 21,
+      "prose_hash": "dffac53d522438f3c7a775243d47fd17b35407eef5e98fe33e056e84dbac962e",
+      "plan_hash": "b53f8d5761942e1c57f59460f7c67b2d70aaa0e7ba767d8a4cbbc3846c5786f8",
+      "review_hash": "f1ea0897258fa71566c145c787acbd087296f1bba702b4bfc1d4a75c26390e75",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 22,
+      "prose_hash": "8e580fe6b855d09c9fdf1b31db88d5cfcd201b9be98f57d2b2cfca52209385fe",
+      "plan_hash": "6630854ad475698a0cce897852cae8aef409fe0a5c74511db51ba8643f8e68cc",
+      "review_hash": "ddcf1fd672a4513aaade6ad683acf22df7e7dcf9eb4896d6734f8df3acbe0d07",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 23,
+      "prose_hash": "10051b940fbfe44e6bddb229114ccfcd0d772bc09bf2f9ed55de29c897b8be4e",
+      "plan_hash": "4d0f717523e7348a6b24a3726c770b68941a1cc5da137562f614f88655cfe1fa",
+      "review_hash": "8200e239af8fbf02f26301d825897ab8e1b7793dc2391e5e9e6efd556d34a597",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 24,
+      "prose_hash": "323de9a5018f661fd2005d7638f1b9d8c213312399ae586cb1251da1c6dc0388",
+      "plan_hash": "850ddb19f8413d6d3f8a10685bf7f2349333bf9defee81d463a2437223e86133",
+      "review_hash": "d691751975196f309e7d2095094f716918e7bb00a2ebdfe86cb479a646eca96e",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 25,
+      "prose_hash": "38a026b84369883b6ebce7e5bde266266405bb9c1c3f47b9e10740466cac21b7",
+      "plan_hash": "45b4e47260b20e1dc692859f04001530d0e33e0ea38334d5593a57dab87f1282",
+      "review_hash": "7fb6089133af614de299098ae7109b703eaefa86aa06e6a97432acd6e4459dad",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 26,
+      "prose_hash": "015ee4c7820a789224413a3c3832721b18fdb61c4a4c9cb42cc2a651c7bba37f",
+      "plan_hash": "b4ce17108b2298d7f86c2eb186f14871797fa0c40666825fe102d31607f9c088",
+      "review_hash": "48c96b2206e250c30f8dea2757a4c5c96faf61e3d000acb9b0851151a86ff446",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 27,
+      "prose_hash": "266d4cef7d1a863f429c4ea9c4bda9468102fc006cc963d2b131adac6930e96a",
+      "plan_hash": "b5e4931c94c6b40190b8b861e468572f996956a4185815700ebd2def8594d43d",
+      "review_hash": "092941d891be20dc15d7041c5f3e079cfcc0cc3ca2494b1063e4edcbceac6a73",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 28,
+      "prose_hash": "0f7cf45cd4f2dc5a383058326b4abf95836f09d5db88308c727b5246fbc35804",
+      "plan_hash": "b91103ee06230b6f83182facb4ffb1e15495bd355d046f1c7b0e01b95d04cc04",
+      "review_hash": "910c324db85de99e6d0650fad58ac4db4383b02a50ea5b5ee56d92203668418e",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 29,
+      "prose_hash": "3232c61a67950ee343091e9a32f7ac987d2433289db653736593c631c5383ad4",
+      "plan_hash": "f553db350ae9269b4107aa65d7d271b42e7f0b4a845158c5c4a4f558824fe6b3",
+      "review_hash": "48ec879514c445342f6f19938b26d9f8bd5262f6c58f7ec3b2701d290aea49b3",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 30,
+      "prose_hash": "ca9d60ac1c6436fd4ff68d024c0f2cfa5a588e21f11a52cab29f706e527efb92",
+      "plan_hash": "40a1585749a6afb3204c1a0149408f5308bd5492cdee3d56179fd960776ae2f9",
+      "review_hash": "7282626cc2d8b3233f68304883a994b9e854ded5b983dcb4bc0f473176bb66d5",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 31,
+      "prose_hash": "767207cc668a2da7e6ffd154d3cfb26771732ca4b38f23e11019cc3d62a531b0",
+      "plan_hash": "937f44f8bd3346aa3be79ec3665fe66710b7fa465e0606681fa642f08fcffed9",
+      "review_hash": "7e58e19079a0a31133236e3f8ec42dc96c3df98ba2c61544e06800959da4f895",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 32,
+      "prose_hash": "caa88e30ecea06dfebc560887d050c09dc56ed682bfa25f9ad540903cc24f5b2",
+      "plan_hash": "3d2a0e077be81ac4791aa7f9d2ffbb18407208b80ee08c3bb14b31ca00a334d8",
+      "review_hash": "af0805cc4a4e2f3242c9e8348320cd978f907a079a3f4d96d45f547f1babbfee",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 33,
+      "prose_hash": "e49fc90cae4ada7a333c1cdbae5d546c2c883f1d32752869142e81985eec293e",
+      "plan_hash": "fa096bb787d3bf417b41b44d237b774ca9205b37582d9406d22cc7a5a92b7377",
+      "review_hash": "c8f7f2aca873e74fe7ab550c57eafc067e0455e503d93da1d91f7975dd518843",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 34,
+      "prose_hash": "39be845ff00e1ef17121156e0457d2f13365542e069b889fd733c8e20dced55e",
+      "plan_hash": "d7f03e03d950a25e879ab51af2bdc12b867d94c5e3ca03c0bebfbdddb3a3090d",
+      "review_hash": "6d3035ad9f58957e6c81d0b596204a21c8262b7c34001d77a1da55909084a96a",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 35,
+      "prose_hash": "bd0b68eb928d7e10f70579e37d1346de8eadafe7776d4f8e6c63fdd83f23931f",
+      "plan_hash": "60aeb80458438040fc1a36a70dd6066f0305b65ca0d8a40fba447a359fb80000",
+      "review_hash": "1316f14425e55c70d789f406938b504dc2c6a44b42ec3196b9862d2f1fc69d9c",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 36,
+      "prose_hash": "0e56c4be1e90cbbb006cacaa69086fc355ef23cd8b7a1f2cb5327bb53095559b",
+      "plan_hash": "f04531f05bd368e9d64244957b0780bae574ab0760a0d6a9f1e23550cde2aaea",
+      "review_hash": "bc801b807206ebecb96012a7a95ddaba54508a863db78f01b8be8e06967f494b",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 37,
+      "prose_hash": "d45443a54894071e6a01dd365cb6dc3031037514775623d7924bfab2e2d2eb47",
+      "plan_hash": "13414d2bb277bf31e71eb996735f6dd182a37059152f05a30bd86a3c4134e7d1",
+      "review_hash": "a063ffb2b8822556a8462d7c0e12484f5fc90af68c072cad8239be24cccdd747",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 38,
+      "prose_hash": "b3fbb0e9ef380852e97287012d2c07e54062ff2f0a5c9fe0f08e8b1305069494",
+      "plan_hash": "04bae8d816de5c41f6bf9805d16330e71554b4c156c5aa5e9fb5ba59719c06dc",
+      "review_hash": "39086a4ecc6bcc5e5bff056df26b67f32a49a1d3896c898eb061e9792233239a",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 39,
+      "prose_hash": "0bfc753e08422ab7fffbe0edf1f3fc569569bb52f4b720436ca2a2114a3e1884",
+      "plan_hash": "6f2dfe14a10b9f62ffd4a84e6de889ebf6b8404aaf85955a53a1e0551e8d3b26",
+      "review_hash": "78ccf76dcc7e54bfa3861e1c8be9b61dd93e6d682ea04e0af71c3f4418432cd8",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    },
+    {
+      "chapter": 40,
+      "prose_hash": "727324ce911c7c5ed90005b527903542cf7550eb3d997dca7dff91cfdf6bddd8",
+      "plan_hash": "4b60adfc8196efb1c0ec9d41ffe8420a86b986473046d9bd6bb71eae603cb0f5",
+      "review_hash": "2a05291c894df3beaa5b28efa5e97081059c3457e873bfd59d075c5f1004be8d",
+      "export_equals_committed_prose": true,
+      "plan_clock": {
+        "advance_days": 1
+      }
+    }
+  ],
+  "note": "Post-freeze verification. Read-only SQLite access. No repository or project mutation."
+}

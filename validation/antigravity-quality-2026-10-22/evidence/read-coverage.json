@@ -1,0 +1,704 @@
+[
+  {
+    "chapter": 1,
+    "prose_hash": "d3944648b5c6bfd88060e2f0cad8b9360975cf321c93ee7a8a277d4068246948",
+    "body_sha256": "d2d6fc3d719b679c92cd4cba6ac65d33ed62ced7f39dd9a5e6e5fac4416ed24f",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 2,
+    "prose_hash": "0397c5ccf6a33e1cce28566b7b729febf8bbd41d3ec73e798f67f31e9406c857",
+    "body_sha256": "1541f4168fe0fee0e61abe1eccc8fd7b9211ab810498a6d8b8bdcdd9d1f8bbc5",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 3,
+    "prose_hash": "06f3ce3668f2371b716ef2f986617db22e4e182e28a2fc77fb384bc03047808e",
+    "body_sha256": "0338eff8638f2f5d9e1a97e7981c97017e4e6e75cc6d1f8b94275853ca1aba13",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 4,
+    "prose_hash": "a63d88e6d0410077dcabaf95b5c1982d05650bc9bf9c29acd5501861796753a0",
+    "body_sha256": "4cfb6bad297562875608005f7257bed81d6bb0e4e5cf781d0d26589d4995d4ac",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 5,
+    "prose_hash": "9f6807a1c78be3534dbcef8c5a9d17d046bcfb1c5152f2cad15b714d5846b258",
+    "body_sha256": "3c46863c2e9dfb668da19749943759aaeb3ba0b9c8daba635251aa7b75492f37",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 6,
+    "prose_hash": "ce98d8e480065866dbbc9d270f7f87ac7183c61d8353f287d7fa0b52b757e46f",
+    "body_sha256": "8b46fe2e4ed4d35bd7b1f80ebcb1acc0ccc3128da33a396acac0c9892048373f",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 7,
+    "prose_hash": "a2d7dfa10ea2f2b70179140cddd78aa8df84037d091ed0f0f6502a20bcdd56f8",
+    "body_sha256": "879015fb7f972533ea7bf1e8a3b108dd0a6f0ec0f98a8ba1463804eb383d46b5",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 8,
+    "prose_hash": "55941e28f85a29fa2dd99031bcceb1bc3a30f6697fae6aee2bf8994903edb2f9",
+    "body_sha256": "273c6bb6976a5a7fa19494cb1d1fb73327d183be4c14ee7248cbb207e2526da5",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 9,
+    "prose_hash": "a6d6b4575cadb7834e8f7b04d2d826e658034f4a824d1ae3814450d7f3a770b8",
+    "body_sha256": "9e213b1e6fc957ae1ee0df136047c0a54879237f4381d08d956412876ca643d2",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 10,
+    "prose_hash": "6872f4f08fb72b9f060d71a4b741527105d9cd1e597536f4ed725cfc04b90c25",
+    "body_sha256": "7e9802d248ce36e51a48f1dafc96cb326ddb694fda6025516accd0eb3cb59429",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 11,
+    "prose_hash": "9052e61aa0adfe1bf8ac7d58a272aa621ee78b3a55149046d4207478d8780a48",
+    "body_sha256": "1dd6f90d15dcdc67cdadbaaececc3cea0f70f5b9e563d36b4c7479eba3f1d7e4",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 12,
+    "prose_hash": "de68ade3464ba92f67f0621d9cd9620f8a10eb9f7c3be5179a4b7568e2aacc25",
+    "body_sha256": "de1e95ae6c0c356a056831a9dac9738c7e03d2850d25d257de9e71e62c04f1ca",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 13,
+    "prose_hash": "66ffcb108428caf66daa4d88f9a7598082c7c1bdc245c1e4365c5eb72a530cae",
+    "body_sha256": "4bf8684a62e1d8c0fcef51f1551ef852d728d8273d8b1615edbab55302ce9ce6",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 14,
+    "prose_hash": "1695565dd37b6e4c53097844f86a8210159d2ae635ac001240e849cbbab02f70",
+    "body_sha256": "69f0f312feb3d28f180f5c27c3a49299fe3d2c3b153fb4684f9d3d260576e211",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 15,
+    "prose_hash": "7ce146761a2c2a6d24fd9db414da70da565553e1d47c247b1e835774d3c31fd7",
+    "body_sha256": "fd791fc8bfaa891e63d5dd417023a278bea6972b7133b43d19f56d9459a96745",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 16,
+    "prose_hash": "5117466050fd70a3dfa7bec4885f7c26acacc7f01251ffdf9c8fb205c4d678c9",
+    "body_sha256": "08c8bf87ee9f2ff45fefd010d2f6777d1b34d6a27f87ef65627bae766b3192a9",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 17,
+    "prose_hash": "c1d39a6ae7883d0358de278191b30f5b94c4cf218228d3aa8daa10518771c0a4",
+    "body_sha256": "f20169fb7644e216afb97c2cef6694bafdf11a432ec8b83672bfe10cd20f8b6f",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 18,
+    "prose_hash": "cd7c6d354ae67f610629da5741f96c988d0b865103c984761fe0bc2b88d17f45",
+    "body_sha256": "2101d49896766f4578eefee435ac1f6447322449b319a3ab719b8b92a7409c5c",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 19,
+    "prose_hash": "e7ea5b8f16fac411b3a3ee7081b0089ea87d175ca9b1a03033de57e5ef9672ab",
+    "body_sha256": "b55b8d3c64a564c349960603bf100102ec26383045466bc4a9ed39a073cd159e",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 20,
+    "prose_hash": "5d39f56a1f6c00e677d77c275aa025d0d8cebacbeb60dcd3ab937bb2e56e5c81",
+    "body_sha256": "7dd6a428a87c02e5d0859917001137c65fee31cb984b28fb939d5e19f7f3c727",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 21,
+    "prose_hash": "dffac53d522438f3c7a775243d47fd17b35407eef5e98fe33e056e84dbac962e",
+    "body_sha256": "39d96c94494b1d4af80f0ba2815fb3a53feb741158990099f700a97364cfb248",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 22,
+    "prose_hash": "8e580fe6b855d09c9fdf1b31db88d5cfcd201b9be98f57d2b2cfca52209385fe",
+    "body_sha256": "40a1c27b437d53e9d88d6be2da4fe5779f8df73a39b16a9956f312551173d75d",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 23,
+    "prose_hash": "10051b940fbfe44e6bddb229114ccfcd0d772bc09bf2f9ed55de29c897b8be4e",
+    "body_sha256": "c983a9c1a0594358a706f2978b96e6e6b98348850cef99fb96870d26ed050114",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 24,
+    "prose_hash": "323de9a5018f661fd2005d7638f1b9d8c213312399ae586cb1251da1c6dc0388",
+    "body_sha256": "4c74df6f5b09211792046cd143ddea6fe19130b8b0095bb895c00df43340d64e",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 25,
+    "prose_hash": "38a026b84369883b6ebce7e5bde266266405bb9c1c3f47b9e10740466cac21b7",
+    "body_sha256": "c252233ce1314b7211f03901f4c39cc39fa11e1783fb2dc91930f51c3c80a93e",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 26,
+    "prose_hash": "015ee4c7820a789224413a3c3832721b18fdb61c4a4c9cb42cc2a651c7bba37f",
+    "body_sha256": "75492cdb5a2a9f64d82b68fb93766f99e6bfd1407cf38546f035edb753772c33",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 27,
+    "prose_hash": "266d4cef7d1a863f429c4ea9c4bda9468102fc006cc963d2b131adac6930e96a",
+    "body_sha256": "b69c17b1a7be7873204baed92831952921f8e61c95804483e45c39b303d998fd",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 28,
+    "prose_hash": "0f7cf45cd4f2dc5a383058326b4abf95836f09d5db88308c727b5246fbc35804",
+    "body_sha256": "1ca05bd08f3d804bd873cbb2f5f15b5e5db009a49a2f61d0caf1d211c4453c1b",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 29,
+    "prose_hash": "3232c61a67950ee343091e9a32f7ac987d2433289db653736593c631c5383ad4",
+    "body_sha256": "7b1df0cb386be39173a69adee03e5f3ab052cb4446a969b9b0ab9d6205c45034",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 30,
+    "prose_hash": "ca9d60ac1c6436fd4ff68d024c0f2cfa5a588e21f11a52cab29f706e527efb92",
+    "body_sha256": "8a107b1e586a4cf4826fcdd3313061b50e93d186e24a534af1407973af904b52",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 31,
+    "prose_hash": "767207cc668a2da7e6ffd154d3cfb26771732ca4b38f23e11019cc3d62a531b0",
+    "body_sha256": "d23d99ce06f29f4e524c2baf4036ecd0d1eda32eac4b8ac11e664e547b3b39f9",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 32,
+    "prose_hash": "caa88e30ecea06dfebc560887d050c09dc56ed682bfa25f9ad540903cc24f5b2",
+    "body_sha256": "2a06d0e6dface409a156d2810af6fde7a59f4d42daae4627a8ad7ac9afb53b81",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 33,
+    "prose_hash": "e49fc90cae4ada7a333c1cdbae5d546c2c883f1d32752869142e81985eec293e",
+    "body_sha256": "ca422eb35f1f3ab7ecab70216cd2d21dee71c9774c397026fba6e83dd02de4a2",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 34,
+    "prose_hash": "39be845ff00e1ef17121156e0457d2f13365542e069b889fd733c8e20dced55e",
+    "body_sha256": "6d26e6e3ff6f18a6fdd5f07d2f2fbbf7660187f1b15a8969a817e8856f3b1711",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 35,
+    "prose_hash": "bd0b68eb928d7e10f70579e37d1346de8eadafe7776d4f8e6c63fdd83f23931f",
+    "body_sha256": "71b3c80e96f28d77980118f93cf28926a110e42dd913710c1e727f043cf720c7",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 36,
+    "prose_hash": "0e56c4be1e90cbbb006cacaa69086fc355ef23cd8b7a1f2cb5327bb53095559b",
+    "body_sha256": "0d483dc73d7073749c61fb3f2fb8c8edbbe6c06f1fd00a0c44092b3b297ae5bd",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 37,
+    "prose_hash": "d45443a54894071e6a01dd365cb6dc3031037514775623d7924bfab2e2d2eb47",
+    "body_sha256": "5b80c762249bc2810abb1cab07260d2a6497513358ebc184fe0aeadd10c2fd24",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 38,
+    "prose_hash": "b3fbb0e9ef380852e97287012d2c07e54062ff2f0a5c9fe0f08e8b1305069494",
+    "body_sha256": "0a9af3a365bcb7fb83e3651aef9cd53ecc185df0459989dfe428ce5a3cdcbcdf",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 39,
+    "prose_hash": "0bfc753e08422ab7fffbe0edf1f3fc569569bb52f4b720436ca2a2114a3e1884",
+    "body_sha256": "98a950c515fef94c09d7a9a91db07b2732fd41a920749fbe7db9b5b72ad2fe23",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 40,
+    "prose_hash": "727324ce911c7c5ed90005b527903542cf7550eb3d997dca7dff91cfdf6bddd8",
+    "body_sha256": "6cc84a4ef78132b6011c600b6ffd84400002bc05888f2f09ae1f7e15c6c4c3d5",
+    "reader": "prose_first_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 41,
+    "prose_hash": "93d00685a075f84db254a67076ff78ebbca634b49b9f58f02ec7275e1148d04c",
+    "body_sha256": "f627de28f1a1e65115c2912a68b5b7a187b7201cdfd95e923cfa738a52c2b7fc",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 42,
+    "prose_hash": "a181fae426637552777afb886d7582383759566f00022109b73ff539def47725",
+    "body_sha256": "28c5b90a330d301a48c153994c012cd1ff6656adfe79d9e55ace0f6e2e71b6e9",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 43,
+    "prose_hash": "687d083bf0a69df0dcf1953ee07dcb90fcafe7d9d6ecb3403925321f372fde67",
+    "body_sha256": "b14b94cee92657c2e38bd1bd35def871e620009eaec97b90bae6438b097bb55c",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 44,
+    "prose_hash": "efc381a293997edd2681dbb244d0658deadcb44f75d4a70bc1142182932a7aa9",
+    "body_sha256": "792d965aadd99375145bf0893fc3cec9ee3d017483f64b1c1074d7ede67aae9d",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 45,
+    "prose_hash": "1fa57977e63dc028c17140d603440cb5066d0bd85abc178c74a60a11a3fb1b10",
+    "body_sha256": "be87854f1d42780b87e35794753e332f87ed2373443d9512d5c3e8342778deb5",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 46,
+    "prose_hash": "aa3d279edeb03a023ed0cdad3926d9936f6a21237ca2e4a2539e2644c01423dd",
+    "body_sha256": "c6709face2a178d4b53cc224341fde9203dc0f1a8d6e3cf90df7be99b8d39b70",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 47,
+    "prose_hash": "d4283070dca73a0fe5cfba2e4f7f2b290d517cc15f62560a6b680fcb63c9e933",
+    "body_sha256": "944546d8ff823f23b4d22420befa6e6f33679d4df6b2908ecf7883bbe3daf8a1",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 48,
+    "prose_hash": "9824f0aeb3536d87ab0187f1f2cb0ac9d324bd5ef90e0d60b5308a640adfb6d0",
+    "body_sha256": "d43bd16b53aa9dceb4577faa791bfbd1edcb52ae2c292800a4421f6d61b77d36",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 49,
+    "prose_hash": "f96f83bd856c04c5295ba2ef149c55055a640fecd804a10e548e00942f7f3451",
+    "body_sha256": "53328886b6e34681cb662598a4352b8e0eeced62923c366f2178ea8e36baa2fc",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 50,
+    "prose_hash": "ffe2b8418123aaf8f4ac1e014ebfbc059b9aa1cad69c7fb8a02c01ad3039c974",
+    "body_sha256": "c8be533957ecc74fc70496018b555d08dc28834b79bc688f62ed3e063f523eb8",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 51,
+    "prose_hash": "65b5d44c9b744c12bb1ba777fa40cb9b7aef526f1f366c1c77f71398550e3400",
+    "body_sha256": "47e2f22a7f6a4086aba62c699c1c191fc9344f8637ab53d2955e4b84cff434fc",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 52,
+    "prose_hash": "363541e4641eda2f6ab8e63111cb5db9b16c02cf01f56a8a5d3ac4df084cb461",
+    "body_sha256": "f451fbdacb6542c97129e310ba8e869032a43db1648ecb72cf8599fafbbedd84",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 53,
+    "prose_hash": "bd886f7500247ea90e4b532356718dec58931f0e6264526f808977aa62a6166e",
+    "body_sha256": "fd44aa332e283009a303fa40ae91665f04373e6d6b889cfe075835ce3bd74821",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 54,
+    "prose_hash": "c4de3fccbe32e532bd17a326a47dc9e592288fb46348c23be3c4c83f8b394be1",
+    "body_sha256": "5c108710d71a429df7b8258645b1c7f5c1a89df5b3e3ae21edad5fb0f9374c61",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 55,
+    "prose_hash": "ec982b64c8b5c6e91b744f1dc3f375e4dc8382b8a3b42957612be80e7d1af9be",
+    "body_sha256": "60cfada50dcbf23c1f52e9c46eb766a369c36f70bbbf2af03125a9e7510db8f8",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 56,
+    "prose_hash": "8c44e732ce7044d3e911b1d1150f7d650d8497bb0381dbf8497d1f44fb779469",
+    "body_sha256": "7e9a36c0801529119abfcf1279e2b62aa7537d0b2edea6ac3228870f908fdde7",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 57,
+    "prose_hash": "eddea28d65fcb6852a04589bdf74994417ddce917ac85bd6f495324973ffa061",
+    "body_sha256": "ee86fc3b11d57998380be6813a08b144816f6fccec8ba5d193ba4ad3592b44d8",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 58,
+    "prose_hash": "737844982a5a4e279b48b7d244dbb5937ff7cac5e943cac436e2babeb559daa9",
+    "body_sha256": "de01fc9766f3362eda6b976d482875cba7a147ce566a88ea1bf1bf2343cfba31",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 59,
+    "prose_hash": "d507cdcb4be68a0772c8b5692adc7a20d699048476faecf92000925d22c051c8",
+    "body_sha256": "385dca9b7a9d3460cfa698f9fcfdacab81727d8bbac14efc94ed3e5550c1de41",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 60,
+    "prose_hash": "8402e094184936ec2bd42b19ccee9206d31c6be4bc541e00d1489326da119762",
+    "body_sha256": "e2edec8d731b04593f8ceb380dd42a1d593edb382459e13ccadc59802e0aaad9",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 61,
+    "prose_hash": "ca475a77f99c018514e0b3ff518f9854067a253f86540555545451788399ac92",
+    "body_sha256": "0cf2efae4a80aa951fa665bc017b070876b4b8160052e1692dcc5d5f7d29ed30",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 62,
+    "prose_hash": "43a8d87755383f3dbe9c703aed4ef1836d82d8bee560262f054661146f444a8e",
+    "body_sha256": "eddbe65ff8e623be258a5ea51c7184c144c2841cfb20fb226d1f7097e15dc31c",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 63,
+    "prose_hash": "01c4f514fbb58e2a85244930da6a6b697e4669734b07db1c057c226fdbf8658a",
+    "body_sha256": "7530fb820e795ea5d2ff3f420992cb2ca656f4a14e77d8c677a3cd9695c5aec0",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 64,
+    "prose_hash": "a82a125bd9e81ed9749b0c4da4569f2aa8dfdb551bc5614e8b27eb3eec67144c",
+    "body_sha256": "bf8f96200c960024d4650802013a23c45802582b3c30c99189c14da3405850e5",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 65,
+    "prose_hash": "d3a1ffa2596cef60b4f8de250512c2faf206a48d6a8745bfd15d6235f6bfea3b",
+    "body_sha256": "a889065d8ec524c87938e43cf340e55f0151f4ddaea51397257394de8d88f519",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 66,
+    "prose_hash": "be859cac6a364a9586119548d0aa77e5e0ad50beb30be750878a6241ff7f912c",
+    "body_sha256": "3520ea6939d38397001fad5c9162661c174cf237a7ec28102e815d841fc3f785",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 67,
+    "prose_hash": "263c9f898f5867cdb51f1c24727a09718d3cb424f6487f0f57e9d0719498d13e",
+    "body_sha256": "f219e6750fe4c8712b4f7f2eec6739585e0271d832c0df11499e42d49d36038f",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 68,
+    "prose_hash": "1f41534d5d345253c3c4f870d5ddfce56a7557ee246602e3202ff8fe38f22443",
+    "body_sha256": "3db5b165cdb755f3a124666fef84b43f756b676d6e0642ebcaa396e07d75014c",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 69,
+    "prose_hash": "8bb9f43f3d4b90badc5223b2b1d790446b0679cd27804f33a86e68b7db7e7c93",
+    "body_sha256": "1e630c14ec57a084efab5226357c2e2fcb785257f406af85e738b78bfe198891",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 70,
+    "prose_hash": "221a79e800539d2649e698f57fca50a31903a9b491402dcd0f8ad1d521518f5e",
+    "body_sha256": "329dbcfb48e350a43a34be531fe1a1f4aebf821e0f1d6fbfaf0adf60b309cf69",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 71,
+    "prose_hash": "cbd8ca029f4f007b5cbb56ac6568834bc8aa9289b4bd66edf48773291be0d79c",
+    "body_sha256": "8bcd1c0f1ae640cf774d7d28c916f9ed498d32e86311c157f5c979905785c83d",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 72,
+    "prose_hash": "a7a6a14f5ad06d74b4907a0cea78ea2d9d7d0f5cca4f691f52077ef90290aae1",
+    "body_sha256": "9051a4fdb33320d702fb7cc96fe79b653d077a3d3893d91602eee0c3859bdc8d",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 73,
+    "prose_hash": "739e01f907880d703cdb3b5ec964f8f3a463590533763741e38c404a3e3c5295",
+    "body_sha256": "4e88b8f4e2f1a5b2228e440da25f6c4e7facfe6fd04b45316b8ec05987a4982e",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 74,
+    "prose_hash": "2569d41357b997cfd2d40f12f1ab797fb87c8c37694875d4924ab4b1b80cb701",
+    "body_sha256": "ad67625002ea7b8d0dc866b24d288471701f137ee7380bffdeda3c81c785677d",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 75,
+    "prose_hash": "667c8fbfe9c58749713e69a51c0cc4137dd157017df3faa9843d72598d348875",
+    "body_sha256": "2cb37a7f814897b25be9d2e22d8945c5f4fdf455cd6076c152b24e9d1c948a97",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "original_session"
+  },
+  {
+    "chapter": 76,
+    "prose_hash": "b8887d8034011fbc9b2f2919d571129567cc24221bc9d51ca5b20810d786dd7c",
+    "body_sha256": "a5c810f6f15b90eb170ca5dfaa3fe49c80773c7f34eaf10611c302a76cba9701",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "later_authorized_session"
+  },
+  {
+    "chapter": 77,
+    "prose_hash": "0bf4fc77790fb0877c0aa9949503178445d1cd876e3964b2b1aa84da9874a237",
+    "body_sha256": "57c113e0cb02521304f170c8086d8ae0481fd0c6eca5918e2e71105c636a75a7",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "later_authorized_session"
+  },
+  {
+    "chapter": 78,
+    "prose_hash": "7b8c5477f0a5b3240157b7be48e00f304a942d8fbc0fc642f904176523bc779b",
+    "body_sha256": "cdd21b8fe69d7339c8ad6b8339b2361c57a627f0ab1d7e9199708340a063fb5d",
+    "reader": "prose_second_half",
+    "read_status": "complete_in_order",
+    "phase": "prose_only_then_frozen_before_design_comparison",
+    "workflow_scope": "later_authorized_session"
+  }
+]

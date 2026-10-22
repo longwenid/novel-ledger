@@ -1,0 +1,133 @@
+{
+  "project": "novel-ledger",
+  "audit_kind": "conversation_quality_and_architecture_design",
+  "date": "2026-10-22",
+  "primary_session": "2aeca987-917e-4658-81db-03652706cdee",
+  "source_commit": "54c0047",
+  "engine_version": "2.0.1",
+  "implementation_status": "audit_and_design_only",
+  "source_novel_mutated": false,
+  "coverage": {
+    "primary_tree_sessions": 22,
+    "primary_tree_records": 4218,
+    "primary_tree_usage_records": 2106,
+    "original_session_chapters": 75,
+    "frozen_project_chapters": 78,
+    "han": 267338,
+    "later_chapters_source_session": "3ac90ea2-bc52-45e9-9446-41643e4b8f2d",
+    "later_session_scope": "仅来源核对选摘step0–141，不等于完整审计",
+    "exact_quotes_verified": 162,
+    "novel_database_sha256": "0b6956faefa4ec53cb0b338e76d45328709791f87a4b2fefabc5bb06dc60158d"
+  },
+  "results": {
+    "mechanical": "passed",
+    "process_provenance": "confirmed_violations_and_unverified_boundaries",
+    "continuity": "confirmed_failures",
+    "literary": "editorial_judgment_with_prose_evidence",
+    "existing_suite": "555 passed",
+    "new_protocol_probes": "4 defects reproduced"
+  },
+  "protocol_and_provenance_findings": [
+    {
+      "id": "WF-01",
+      "severity": "P1",
+      "title": "Worker 直接保存活动账本，重置返修历史并清空判据",
+      "scope": "original_session",
+      "evidence": "evidence/workflow-findings.json#WF-01"
+    },
+    {
+      "id": "WF-02",
+      "severity": "P1",
+      "title": "主控把无人值守目标解释成新增作者返修裁决",
+      "scope": "original_session",
+      "evidence": "evidence/workflow-findings.json#WF-02"
+    },
+    {
+      "id": "WF-03",
+      "severity": "P1",
+      "title": "真实独立 Worker 使用自拟会话标识仍可读取和落库",
+      "scope": "original_session",
+      "evidence": "evidence/workflow-findings.json#WF-03"
+    },
+    {
+      "id": "WF-04",
+      "severity": "P1",
+      "title": "通过预检仍进返修，但响应未返回完整失败判据，诱发盲目重复提交",
+      "scope": "original_session",
+      "evidence": "evidence/workflow-findings.json#WF-04"
+    },
+    {
+      "id": "WF-05",
+      "severity": "P1",
+      "title": "恢复时 Worker 清掉派工环境执行主控认领，角色边界仅由环境自报",
+      "scope": "original_session",
+      "evidence": "evidence/workflow-findings.json#WF-05"
+    },
+    {
+      "id": "WF-06",
+      "severity": "P2",
+      "title": "主控手写派工协议和剧情，偏离冻结模板与角色最小交接",
+      "scope": "original_session",
+      "evidence": "evidence/workflow-findings.json#WF-06"
+    },
+    {
+      "id": "WF-07",
+      "severity": "P1",
+      "title": "2.0.1新恢复主控自造Worker身份并直接写作，独立模型历史实际缺失",
+      "scope": "later_session_source_check",
+      "evidence": "evidence/workflow-findings.json#WF-07"
+    },
+    {
+      "id": "CR-01",
+      "severity": "P2",
+      "title": "Python worker 的就绪预检挡住已提交回执的幂等重试",
+      "scope": "current_release_isolated_reproduction",
+      "evidence": "evidence/current-release-review.json#CR-01"
+    },
+    {
+      "id": "CR-02",
+      "severity": "P1",
+      "title": "更换普通任务 Worker 后首读沿用前执行者缓存，空历史 Worker 得不到必读材料",
+      "scope": "current_release_isolated_reproduction",
+      "evidence": "evidence/current-release-review.json#CR-02"
+    },
+    {
+      "id": "AR-03",
+      "severity": "P2",
+      "title": "非相关成功调用清空技术失败计数，仍能无进展循环",
+      "scope": "current_release_isolated_reproduction",
+      "evidence": "evidence/architecture-repros.json#technical_retry_without_progress"
+    },
+    {
+      "id": "AR-04",
+      "severity": "P2",
+      "title": "暂停后恢复缺少项目侧治理事件留痕",
+      "scope": "later_session_source_check",
+      "evidence": "evidence/pause-tail-review.json"
+    }
+  ],
+  "literary_evidence_sources": [
+    "evidence/literary-001-040.json",
+    "evidence/literary-041-078.json",
+    "evidence/literary-cross-check-supplement.json"
+  ],
+  "priority_plan": [
+    "typed_outcomes_execution_materials_idempotence_progress_budget",
+    "trusted_host_protected_store_and_human_decisions",
+    "independent_prose_facts_and_temporal_constraints",
+    "multi_chapter_blind_reading_with_cost_measurement"
+  ],
+  "totals": {
+    "input_tokens": 8524048,
+    "cache_read_tokens": 145924208,
+    "output_tokens": 1167929,
+    "gross_tokens": 155616185
+  },
+  "cost_boundary": "仅原22会话宿主报告字段累加；未获取账单或估算金额；不同快照不能重复相加",
+  "version_boundary": {
+    "original_session_stop_reported": "2.0.0",
+    "later_source_session_reported": "2.0.1",
+    "current_reproduction_commit": "54c0047",
+    "historical_source_hash_proven": false
+  }
+}

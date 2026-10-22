@@ -1,0 +1,14 @@
+{
+  "redacted_fields": [
+    "controller owner",
+    "execution claim/token"
+  ],
+  "values_removed": 10,
+  "files": [
+    "pause-tail-new-session-evidence.json",
+    "current-release-review.json",
+    "workflow-findings.json",
+    "pause-tail-review.json"
+  ],
+  "method": "将同一凭据替换为稳定脱敏标记；保留会话ID、任务ID、材料hash、步骤、业务结果和正文引文。原始转录SHA256指未脱敏源文件，导出摘录不是逐字未脱敏副本。"
+}

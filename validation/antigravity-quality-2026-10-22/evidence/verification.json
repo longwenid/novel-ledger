@@ -1,0 +1,40 @@
+{
+  "code_baseline": "54c0047",
+  "full_existing_suite": {
+    "passed": 555,
+    "duration_seconds": 55.136,
+    "status": "pass",
+    "limitation": "既有用例覆盖，不含本报告新增的失败场景；不代表文学验收"
+  },
+  "mechanical_audit": {
+    "ok": true,
+    "chapters": 78,
+    "state_hash": "09c67c47d59a3bd8b95f01a77905a05adb9988ae300a2e7507218dfe8ac0166f",
+    "written_han": 267338,
+    "verification_scope": "mechanical",
+    "unverified": [
+      "model_context_isolation",
+      "author_statement_authenticity",
+      "literary_quality"
+    ],
+    "accepted_findings": [],
+    "design_drift": []
+  },
+  "quote_verification": {
+    "initial_quotes": 146,
+    "matched": 146,
+    "supplementary_quotes": 16,
+    "supplementary_matched": 16,
+    "basis": "冻结SQLite chapters.prose所指documents值；Unicode字符偏移；prose_hash是引擎文档地址，body_sha256是原文字符串UTF-8哈希"
+  },
+  "mutations": "仅审计报告/证据和临时复现工程；没有改动执行引擎或真实小说",
+  "portable_protocol_probes": {
+    "script": "../reproduce_protocol.py",
+    "all_isolated": true,
+    "CR-01": true,
+    "CR-02": true,
+    "AR-03": true,
+    "WF-04-current": true,
+    "interpretation": "true表示在54c0047成功复现缺陷；不是功能通过"
+  }
+}
