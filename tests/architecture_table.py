@@ -74,7 +74,7 @@ ALLOWED = {
     # key space). book_state stays a pure declaration module: it imports nothing but contracts.
     'application': {'contracts', 'ports', 'store_keys', 'book_state', 'creation', 'facts', 'narrative', 'planning',
                     'workflow', 'world', 'craft', 'editorial', 'receipts',
-                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'opening_service', 'verification', 'lint', 'writing_service'},
+                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'opening_service', 'verification', 'lint', 'style', 'writing_service'},
     'writing_service': {'contracts', 'ports', 'store_keys', 'editorial', 'planning', 'workflow'},
     'revision_service': {'contracts', 'ports', 'store_keys', 'editorial', 'facts', 'narrative', 'revision_impact',
                          'story_memory', 'understanding', 'workflow', 'verification'},
@@ -97,7 +97,9 @@ ALLOWED = {
     'unattended': {'contracts', 'ports'},
     'bootstrap': {'contracts', 'application', 'context', 'presentation', 'sqlite_store',
                   'workspace', 'workflow', 'host', 'unattended', 'delivery', 'bookpage'},
-    'novel': {'contracts', 'bootstrap'},
+    # The entry adapter renders the read pack (read_pack.md/read_ref.md) beside the JSON dump:
+    # pure presentation formatting, and the one delivery helper the CLI is allowed to call.
+    'novel': {'contracts', 'bootstrap', 'delivery'},
 }
 
 # These modules can evaluate values and invoke injected capabilities, but cannot

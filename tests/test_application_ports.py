@@ -220,6 +220,9 @@ class ApplicationPortsTests(unittest.TestCase):
                                      'self_check': '逐项按章纲比对，动作与证据均在正文中，无计划外变化。'})
         self.assertEqual(outcome['missing'], [])
         self.assertEqual(outcome['quotes_unlocated'], [])
+        self.assertEqual(outcome['prose_report']['clean'], True)
+        self.assertIn(outcome['prose_report']['han'], range(*[outcome['prose_report']['band'][0],
+                                                              outcome['prose_report']['band'][1] + 1]))
         receipt = outcome['receipt']
         items = receipt['data']['drift_check']['items']
         self.assertGreaterEqual(len(items), 4)
@@ -233,6 +236,17 @@ class ApplicationPortsTests(unittest.TestCase):
         receipt['session'] = 'assembler'
         app.submit(receipt)
         self.assertEqual(repo.task(pending['id'])['status'], 'done')
+
+    def test_receipt_report_flags_a_draft_that_misses_the_band(self):
+        app, repo, _, runtime, _ = self.make_app()
+        drive(app, until='write')
+        pending = repo.pending()
+        outcome = app.draft_receipt(pending['id'], '太短的正文。',
+                                    {'title': '封条', 'summary': '摘要。', 'self_check': '自检。'})
+        report = outcome['prose_report']
+        self.assertFalse(report['substance_ok'])
+        self.assertFalse(report['clean'])
+        self.assertLess(report['han'], report['band'][0])
 
     def test_every_worker_entry_renews_and_a_widened_grant_is_never_narrowed(self):
         app, repo, _, runtime, _ = self.make_app()

@@ -345,12 +345,21 @@ def dispatch(args, open_runtime=open_local_runtime):
             result = app.read(args.task, args.record, everything=getattr(args, 'everything', False),
                               claim=identity.get('NOVEL_EXECUTION_CLAIM'))
             if getattr(args, 'save', None):
+                from novel_ledger.delivery import pack_markdowns
                 target = Path(args.save)
                 target.write_text(dump(result), encoding='utf-8')
-                return {'saved': str(target.resolve()), 'task_id': result['task_id'],
+                packs = pack_markdowns(result)
+                written = [str(target.resolve())]
+                for name, body in packs.items():
+                    side = target.with_name(name)
+                    side.write_text(body, encoding='utf-8')
+                    written.append(str(side))
+                return {'saved': written[0], 'packs': written,
+                        'task_id': result['task_id'],
                         'records': sorted(result['records']), 'records_hash': result.get('records_hash'),
                         'already_read': result.get('already_read', []),
-                        'note': '全文已落盘；需要片段时用本地脚本读这份文件，不逐条 --record 重读。'}
+                        'note': '全文与分节包已落盘：每章与压缩后只读 read_pack.md（章纲/前章尾/状态/锚），'
+                                '参考材料在 read_ref.md；需要片段用本地脚本读文件，不逐条 --record 重读。'}
             return result
         if command == 'receipt':
             prose = Path(args.prose).expanduser().read_text(encoding='utf-8')

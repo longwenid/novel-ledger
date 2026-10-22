@@ -21,6 +21,43 @@ def json_write(path, value):
     atomic_write(path, json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
 
 
+# What a prose writer re-reads every chapter (and after every context compression): the chapter's
+# own outline, the tail of the previous chapter, the live state and the anchors. Everything else —
+# contract, world, volume outline — is group-start material the worker has already internalized,
+# so it lands in a separate reference file read on demand instead of being re-read per chapter.
+PACK_RECORDS = ('chapter_outline', 'previous_chapters', 'state', 'style_anchor', 'word_budget',
+                'hooks', 'author_feedback')
+PACK_TAIL_CHARS = 2500
+
+
+def pack_markdowns(result):
+    """One writing pack and one reference pack, in reading order, from a read response.
+
+    Measured on a real fast-group run: a worker re-read six to eight material files per chapter
+    (each read a full-context model round-trip), and a compressed context forced it to re-read
+    everything. Two files turn that into one read per chapter: `read_pack.md` for the chapter's
+    own material, `read_ref.md` for the rest. Nothing is summarized — sections are verbatim; only
+    the previous chapter is tailed, because continuity lives at its end.
+    """
+    records = (result or {}).get('records') or {}
+
+    def section(name, value):
+        body = json.dumps(value, ensure_ascii=False, allow_nan=False)
+        if name == 'previous_chapters' and len(body) > PACK_TAIL_CHARS:
+            body = body[:120] + '\n…（前文省略，连续性只需要结尾；全文见 read_pack.json）…\n' + body[-PACK_TAIL_CHARS:]
+        return '## ' + name + '\n```\n' + body + '\n```\n'
+
+    pack_names = [name for name in PACK_RECORDS if name in records]
+    ref_names = [name for name in records if name not in pack_names]
+    head = '# 材料包：%s\n' % result.get('task_id', '') + \
+           '写作每章与上下文被压缩后，只读本文件；其余材料在 read_ref.md，按需再读。\n\n'
+    pack = head + ''.join(section(name, records[name]['value']) for name in pack_names)
+    reference = '# 参考材料：%s\n' % result.get('task_id', '') + \
+                '组首通读一次即可；仅在需要核对设定细节时再读。\n\n' + \
+                ''.join(section(name, records[name]['value']) for name in ref_names)
+    return {'read_pack.md': pack, 'read_ref.md': reference}
+
+
 # The author-facing card for one choice board. The controller hands this file's content over
 # verbatim instead of re-deriving a presentation from the JSON return: a live run had to redirect
 # advance's stdout to a file (GBK consoles garble UTF-8) and then hand-write a markdown card for
@@ -193,10 +230,11 @@ def render_dispatch_card(envelope, identity):
     command_names = ('ready', 'read', 'check', 'preflight', 'submit')
     if stage == 'write' and 'receipt' in (envelope.get('commands') or {}):
         # The same one-write-one-assembly flow outside a group: prose goes in the draft file,
-        # the receipt assembles around it.
-        steps[2] = ('3. 把成稿一次写入任务目录 `draft.md`（完整章节，不逐段追加），'
+        # the receipt assembles around it and answers the mechanical report in the same call.
+        steps[2] = ('3. 把成稿一次写入任务目录 `draft.md`（一次 write 完整章节，不逐段追加），'
                     '执行 commands.receipt 本地组装回执：信封、drift_check.items 与 actual.from 投影由引擎填好，'
-                    '核对每行 status/reason/quote 如实后按需小改；schema/task_id/input_hash 不手写。')
+                    '响应含机械报告（字数区间/lint/文风代理）——不达标按报告一轮修完 draft 再重跑 receipt，'
+                    'clean 后核对每行 status/reason/quote 如实；schema/task_id/input_hash 不手写。')
         command_names = (*command_names, 'receipt')
     if envelope.get('worker_batch'):
         group = envelope['worker_batch']
@@ -205,13 +243,16 @@ def render_dispatch_card(envelope, identity):
         steps[2] = ('3. 执笔章把成稿一次写入任务目录 `draft.md`（完整章节，不逐段追加），'
                     '执行 commands.receipt 本地组装回执：信封、drift_check.items 与 actual.from 投影由引擎填好，'
                     '核对每行 status/reason/quote 如实后按需小改；返修章仍从 result.template.json 起稿。')
-        steps[-1] = ('5. 本组范围第 %s～%s 章，每章固定序列（模型调用预算 ≤8 次/章，每步都重读全部上下文，省一步即省一步的钱）：'
+        steps[-1] = ('5. 本组范围第 %s～%s 章，每章固定序列（模型调用预算 ≤8 次/章，每个工具调用都是一次全上下文模型往返，省一步即省一步的钱）：'
                      '① commands.worker_next 取新任务与凭据，只按返回更新 NOVEL_TASK_ID/NOVEL_TASK_PATH/NOVEL_EXECUTION_CLAIM，保留同一 NOVEL_SESSION；'
-                     '② 一次 commands.read 取增量材料（上下文被压缩后只允许这一次全量重建，可用 --save 落盘，禁止逐条 --record 重读未变更记录）；'
-                     '③ 成稿一次写入 draft.md；④ commands.receipt 组装并核对；'
-                     '⑤ commands.preflight 一次拿全量 findings，合并成一版修改；⑥ commands.submit。'
+                     '② 一次 commands.read 取增量材料并 --save 落盘，之后每章与上下文被压缩后只读 read_pack.md（章纲/前章尾/状态/锚）；'
+                     '参考材料在 read_ref.md，仅在核对设定细节时读；禁止逐条 --record 重读未变更记录；'
+                     '③ 成稿一次写入 draft.md（一次 write 完整章节，不逐段追加）；'
+                     '④ commands.receipt 组装：响应含全量机械报告（字数区间/lint/文风代理），不达标按报告一轮修完 draft（整段替换，不逐句小改）再重跑 receipt，clean 后核对 status/quote/reason；'
+                     '⑤ commands.preflight（机械报告已绿时通常一次过）；⑥ commands.submit。'
                      'worker_boundary=continue 回到 ①；finished 或 batch_finished 后结束；不得自行 advance 或处理作者决定。'
-                     '已读材料不再读进上下文，需要片段用本地脚本读落盘文件。'
+                     '调用纪律：不用 ls/dir/探查命令翻目录，不用 python 逐字段查看 result.json，不开后台任务再轮询输出——'
+                     '这些每一次都是全价模型调用；不确定格式用一次 check，不猜不翻。'
                      % (group['first'], group['last']))
         command_names = (*command_names, 'worker_next', 'receipt')
     lines = ['# Worker 自举卡：%s' % stage,

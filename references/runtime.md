@@ -41,13 +41,13 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 ## 快速无人值守：五章一组
 
-快速无人值守按 `run --complete --fast --source 原话` 或 `run --through N --fast --source 原话` 在原授权目标上启用；模式保存为 `writing_mode=fast`，以后未指定模式的 run 沿用，`--standard` 恢复普通模式。模式选择不增加正文或作者裁决授权。首章取得准确版本认可后，同卷内的顺序执笔**默认建议采用快速组**：2026-10-22 真实宿主实测快速组约 2.09M tokens/章、普通单章新 Worker 约 4.51M/章（省 54%），返修率不高于普通模式，见 [实测记录](../validation/dsh-run-cost-2026-10-22.md)。2026-10-23 十三章连跑实测仍为 2.09M/章且零事故——其中 94% 是每步重读上下文，稳态章 14/18 次调用在搬运材料而非写作；v2.1.0 起派工卡固定每章六步序列、`receipt` 本地组装回执、`read --save` 材料落盘，目标把稳态章压到 0.4M～0.6M，见 [成本解剖](../validation/dsh-fast-group-cost-2026-10-23.md)。两组的逐章质量口径完全一致——每章单独冻结、完整成稿、自比、核账与原子提交不变。作者明确要求逐章新会话时用 `--standard`；模式属执行策略，总编在已授权目标内可直接采用，交付复盘注明实际模式。
+快速无人值守按 `run --complete --fast --source 原话` 或 `run --through N --fast --source 原话` 在原授权目标上启用；模式保存为 `writing_mode=fast`，以后未指定模式的 run 沿用，`--standard` 恢复普通模式。模式选择不增加正文或作者裁决授权。首章取得准确版本认可后，同卷内的顺序执笔**默认建议采用快速组**：2026-10-22 真实宿主实测快速组约 2.09M tokens/章、普通单章新 Worker 约 4.51M/章（省 54%），返修率不高于普通模式，见 [实测记录](../validation/dsh-run-cost-2026-10-22.md)。2026-10-23 十三章连跑实测仍为 2.09M/章且零事故——其中 94% 是每步重读上下文，稳态章 14/18 次调用在搬运材料而非写作；v2.1.0 上线 receipt 本地组装与六步序列后，同日整卷连跑（~51 章）六步已生效但每章仍 ~33 次调用（材料文件逐个读、压缩后全量重建、draft 微编辑），v2.1.1 以双材料包（read_pack.md/read_ref.md）与 receipt 附机械报告应答，见 [成本解剖](../validation/dsh-session-bc8e4483-cost-2026-10-23.md)。两组的逐章质量口径完全一致——每章单独冻结、完整成稿、自比、核账与原子提交不变。作者明确要求逐章新会话时用 `--standard`；模式属执行策略，总编在已授权目标内可直接采用，交付复盘注明实际模式。
 
 首章仍单独写并取得准确版本认可；之后每组由一个真实 Worker 最多连写五章，不跨卷、不越过授权终点或缺失章纲。每章单独冻结、完整成稿、自比与提交，沿用固定章纲，事实只在该章通过后入库。不能一次交五章后跳过中间核验。返修仍使用本章有限额度，同一 Worker 只返修当前章，通过后才写下一章；暂停、停摆或需要作者决定时结束该组。
 
 建组前先核对授权终点与剩余章数：快速组的省费来自摊掉一次 Worker 冷启动，授权终点把组截断成单章时摊销完全不发生（2026-10-22 实测单章组约 6.8M tokens，见 [成本记录](../validation/dsh-session-45-cost-fix-2026-10-22.md)）。`run` 在快速模式下剩余章数不足一组时会返回 `fast_group_note` 提示；作者"一次五章"类授权意图应先按该意图对齐 `run --through` 再 advance 建组，不扩大作者未给的授权。Worker 租约由活动自动续租：read/recall/patch/ready/check/preflight/submit 每次成功的携带 token 调用都按租约自身的授予时长续期（放宽过的租期不会被心跳打回默认值）。章纲/卷纲/世界模型/约定这类单次交付的长稿任务，prepare-worker 缺省即按 `single_delivery_lease_seconds`（默认 3600 秒）授予，覆盖静默起草窗口；执笔类任务仍用短租期加心跳，长起草期间可先拿半成品回执跑 check——试算的内容问题按数据返回、不计失败，既保心跳又提前拿 findings。
 
-- 主干按原路径 advance 派出本组首任务，取得真实 Worker 会话 ID 后 prepare-worker 并注入返回的 worker_env；随后 `watch --owner ID`（本地轮询，零模型调用）一口气守完本组——`--steps 0` 直守到组边界，只在 worker_blocked、idle 或作者边界返回时介入，不逐章查询状态、不逐章给 Worker 发消息（2026-10-23 十三章实测：主会话逐章参与花了 3.17M/13 章，纯组边界值守可省大半）。
+- 主干按原路径 advance 派出本组首任务，取得真实 Worker 会话 ID 后 prepare-worker 并注入返回的 worker_env；随后 `watch --owner ID`（本地轮询，零模型调用）一口气守完本组——`--steps 0` 直守到组边界，只在 worker_blocked、idle 或作者边界返回时介入，不逐章查询状态、不逐章给 Worker 发消息（2026-10-23 十三章实测：主会话逐章参与花了 3.17M/13 章；同日整卷连跑中主会话轮询后台任务 40 次、发消息 18 次，占 7.99M 的大半——watch 期间这些动作一次都不需要）。
 - Worker 提交返回 `worker_boundary=continue` 时，执行当前 task.json 的 `commands.worker_next`。该命令只允许从本人已提交的最新任务接续当前组，不授予 advance、认领主控、改纲或作者权限。
 - 返回下一任务后，按返回值更新 `NOVEL_TASK_ID`、`NOVEL_TASK_PATH`、`NOVEL_EXECUTION_CLAIM`，保留同一 `NOVEL_SESSION`；读取新 task.json、brief 和 read 返回的新增/变更必读材料。执行身份只在引擎授权的组内接续时更新。
 - 同一组中已经实际读取、名称与哈希都相同的记录可复用；变更记录重新读取，`read --all` 始终可取完整材料。新组不继承此缓存，也不能复用旧组会话。

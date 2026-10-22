@@ -327,8 +327,15 @@ class WriteReceiptHandoffTests(unittest.TestCase):
         pack = Path(view['task_path']).with_name('read_pack.json')
         saved = self.cli(view['commands']['read'] + ['--save', str(pack)], self.prepared['worker_env'])
         self.assertEqual(saved['saved'], str(pack))
-        self.assertIn('records', saved)                      # the record names …
+        self.assertEqual(len(saved['packs']), 3)              # json + writing pack + reference pack
+        self.assertIn('records', saved)                       # the record names …
         self.assertLess(len(json.dumps(saved, ensure_ascii=False)), 1500)  # … not the bodies
+        writing = pack.with_name('read_pack.md')
+        reference = pack.with_name('read_ref.md')
+        landed_pack = writing.read_text(encoding='utf-8')
+        self.assertIn('## chapter_outline', landed_pack)      # the per-chapter material, in one file
+        self.assertIn('## previous_chapters', landed_pack)
+        self.assertIn('contract', reference.read_text(encoding='utf-8'))
         landed = json.loads(pack.read_text(encoding='utf-8'))
         self.assertTrue(landed['records'])
         self.assertEqual(sorted(landed['records']), saved['records'])

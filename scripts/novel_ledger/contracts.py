@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 # The five-step pipeline is a protocol generation change: v2 removed every reviewer dispatch, so a
 # task frozen by v1 (checks_version, obligations, blind first read, plan/book_plan stages) can no
 # longer be executed by this build. The pipeline and storage carry independent version identifiers.
-VERSION = '2.1.0'
+VERSION = '2.1.1'
 
 
 SCHEMA = 'novel-ledger/5'

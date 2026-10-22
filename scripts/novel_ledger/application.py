@@ -4,9 +4,9 @@ from __future__ import annotations
 import copy
 from .contracts import (CONTENT_ERRORS, CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS,
                         SINGLE_DELIVERY_STAGES, VERSION, Error, EXECUTION,
-                        execution_recovery, policy_default,
+                        execution_recovery, han_count, policy_default,
                         digest, dump, require, text)
-from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint, receipts
+from . import book_state, creation, facts, narrative, planning, workflow, craft, editorial, store_keys, lint, receipts, style
 from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
 from .opening_service import OpeningService
@@ -584,7 +584,11 @@ class Application:
         """Assemble the submit-shaped receipt for a write chapter locally: envelope from the task,
         drift rows from the chapter outline, before-values from the engine's own projection,
         evidence quotes located in the draft. Assembly stops being model work — the writer owns
-        the prose, the verdicts and the quotes, and this only removes the plumbing."""
+        the prose, the verdicts and the quotes, and this only removes the plumbing.
+
+        The answer also carries the mechanical prose report (word band, lint, style proxies):
+        the writer fixes the draft against numbers in one pass instead of discovering them one
+        preflight round-trip at a time, each of which re-reads the whole transcript."""
         task = self.repo.task(task_id)
         self._live(task, verify=False)
         require(task['input']['stage'] == 'write', 'stage',
@@ -592,13 +596,35 @@ class Application:
                 {'stage': task['input']['stage']})
         require(text(prose), 'result', '正文为空：先把成稿写入 draft 文件再组装。')
         book = self.repo.load()
-        plan = (book.get('plans') or {}).get(str(task['input']['chapter']))
+        chapter = task['input']['chapter']
+        plan = (book.get('plans') or {}).get(str(chapter))
         receipt, missing, unlocated = receipts.assemble(task, book['state'], prose, meta or {}, plan)
-        return {'receipt': receipt, 'chapter': task['input']['chapter'],
+        return {'receipt': receipt, 'chapter': chapter,
                 'items': len(receipt['data']['drift_check']['items']),
                 'missing': missing, 'quotes_unlocated': unlocated,
+                'prose_report': self._prose_report(book, plan, prose, chapter),
                 'note': '组装完成：核对每行 status/reason 如实、quote 指向正文对应变化；'
-                        'missing 为还缺的字段，quotes_unlocated 为需手动补 quote 的行。'}
+                        'missing 为还缺的字段，quotes_unlocated 为需手动补 quote 的行。'
+                        'prose_report 不达标时按报告一次修完 draft 再重跑 receipt。'}
+
+    def _prose_report(self, book, plan, prose, chapter):
+        """The same mechanical judgments submit will run, on the draft alone, for zero calls."""
+        contract = book.get('contract') or {}
+        count = han_count(prose)
+        band = (narrative.budget_for(book, chapter) if book.get('narrative_tracking')
+                else {'minimum': contract['chapter_min'], 'maximum': contract['chapter_max']})
+        priors = self._priors(book, chapter)
+        write_volume = planning.volume_for(editorial.effective_contract(book), chapter)
+        volume_style = ((book.get('volumes_outline') or {}).get(write_volume['id']) or {}).get('style') \
+            if write_volume else None
+        report = style.examine(prose, (plan or {}).get('style'), style.baseline(book),
+                               style.merged_window(contract, volume_style), chapter, contract=contract)
+        lint_rows = lint.draft_findings(prose, priors or [], chapter)
+        return {'han': count, 'band': [band['minimum'], band['maximum']],
+                'substance_ok': band['minimum'] <= count <= band['maximum'],
+                'lint_findings': lint_rows, 'style_findings': report['findings'],
+                'clean': not lint_rows and not report['findings']
+                         and band['minimum'] <= count <= band['maximum']}
 
     def claim(self, task_id, session, seconds=None):
         require(text(session), 'claim', '认领需要会话和正整数租期。')
