@@ -41,7 +41,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 ## 快速无人值守：五章一组
 
-作者明确要求快速无人值守时，在原授权目标上增加 `run --complete --fast --source 原话`，或 `run --through N --fast --source 原话`。模式保存为 `writing_mode=fast`；以后未指定模式的 run 沿用，使用 `--standard` 恢复普通模式。模式选择不增加正文或作者裁决授权。
+快速无人值守按 `run --complete --fast --source 原话` 或 `run --through N --fast --source 原话` 在原授权目标上启用；模式保存为 `writing_mode=fast`，以后未指定模式的 run 沿用，`--standard` 恢复普通模式。模式选择不增加正文或作者裁决授权。首章取得准确版本认可后，同卷内的顺序执笔**默认建议采用快速组**：2026-10-22 真实宿主实测快速组约 2.09M tokens/章、普通单章新 Worker 约 4.51M/章（省 54%），返修率不高于普通模式，见 [实测记录](../validation/dsh-run-cost-2026-10-22.md)。两组的逐章质量口径完全一致——每章单独冻结、完整成稿、自比、核账与原子提交不变。作者明确要求逐章新会话时用 `--standard`；模式属执行策略，总编在已授权目标内可直接采用，交付复盘注明实际模式。
 
 首章仍单独写并取得准确版本认可；之后每组由一个真实 Worker 最多连写五章，不跨卷、不越过授权终点或缺失章纲。每章单独冻结、完整成稿、自比与提交，沿用固定章纲，事实只在该章通过后入库。不能一次交五章后跳过中间核验。返修仍使用本章有限额度，同一 Worker 只返修当前章，通过后才写下一章；暂停、停摆或需要作者决定时结束该组。
 
@@ -72,7 +72,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端显示会乱；需要人读的长内容一律走引擎物化的文件（brief.md、board.md、question.json、dispatch.md、task.json、html），机器可读的短 JSON 才看控制台，或先 `$env:PYTHONUTF8=1`。自行重定向 JSON 时注意 PowerShell 5 的 `Out-File -Encoding utf8` 带 BOM，Python 读回要用 utf-8-sig。
 
-无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。
+无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用：2026-10-22 实测逐事件 advance 轮询平均每次重放约 33 万 tokens，183 次 advance 占主会话消耗的大半（见 [实测记录](../validation/dsh-run-cost-2026-10-22.md)）；无人值守期间不要用 advance 代替 watch 等待。
 
 | action | 主干下一步 |
 |---|---|
