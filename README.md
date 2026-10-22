@@ -2,7 +2,7 @@
 
 长篇小说的写作流程与事实账本：保存作者决定、设计、正文和事实状态，支持连续创作、暂停恢复与历史修订。
 
-运行仅依赖 Python 3.9+ 标准库；模型调用由宿主提供。当前 CLI 版本为 `2.0.2`，数据库为 `novel-ledger/5`，协议边界见 [协议](references/protocol.md#适用范围与字段来源)。
+运行仅依赖 Python 3.9+ 标准库；模型调用由宿主提供。当前 CLI 版本为 `2.1.0`，数据库为 `novel-ledger/5`，协议边界见 [协议](references/protocol.md#适用范围与字段来源)。
 
 入口：[SKILL.md](SKILL.md) 提供任务路由与执行边界；[运行指南](references/runtime.md) 提供命令动作与恢复方法；[架构](references/architecture.md) 维护模块职责；[返工与成本](references/rework.md) 说明工程原则。
 
@@ -152,7 +152,7 @@ init ──► 逐门选择（13 门，一门一件事，主干自执）──�
 运行所需路径与常用命令：
 
 ```bash
-python scripts/novel.py --version          # 2.0.2
+python scripts/novel.py --version          # 2.1.0
 python scripts/novel.py --help             # 全部子命令
 ```
 

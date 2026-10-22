@@ -7,15 +7,15 @@ import json
 import os
 import sys
 from pathlib import Path
-from novel_ledger.contracts import CONTROLLER_STAGES, Error, VERSION, require
+from novel_ledger.contracts import CONTENT_ERRORS, CONTROLLER_STAGES, Error, VERSION, dump, require
 from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
-          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next', 'worker', 'worker-ready', 'worker-error', 'prepare-worker'}
+          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next', 'worker', 'worker-ready', 'worker-error', 'prepare-worker', 'receipt'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
-WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'worker-next', 'worker-ready', 'worker-error'}
+WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'worker-next', 'worker-ready', 'worker-error', 'receipt'}
 # Prose and frozen records belong to a dispatched task; the controller role never executes them.
-WORKER_ONLY = {'read', 'recall', 'patch', 'worker-next', 'worker-ready', 'worker-error'}
+WORKER_ONLY = {'read', 'recall', 'patch', 'worker-next', 'worker-ready', 'worker-error', 'receipt'}
 
 
 def load(path):
@@ -103,6 +103,16 @@ def parser():
             sub.add_argument('--record')
             sub.add_argument('--all', action='store_true', dest='everything',
                              help='取回全部必读记录（默认只给本任务还没拿到过的那些）。')
+            sub.add_argument('--save', nargs='?', const='read_pack.json', default=None,
+                             help='把完整响应落盘（默认 read_pack.json），响应只回记录清单与摘要；'
+                                  '需要片段时用本地脚本读文件，不逐条重读。')
+        if command == 'receipt':
+            sub.add_argument('--task')
+            sub.add_argument('--prose', required=True, help='成稿文件路径（如任务目录 draft.md）。')
+            sub.add_argument('--title')
+            sub.add_argument('--summary')
+            sub.add_argument('--self-check', dest='self_check')
+            sub.add_argument('--out', help='回执写出路径；缺省写在成稿同目录 result.json。')
         if command == 'recall':
             group = sub.add_mutually_exclusive_group(required=True)
             group.add_argument('--chapter', type=int)
@@ -111,8 +121,13 @@ def parser():
                 group.add_argument('--' + kind)
             sub.add_argument('--limit', type=int, default=5)
             sub.add_argument('--before', type=int)
-        if command in ('claim', 'run', 'renew', 'prepare-worker'):
+        if command in ('run', 'renew'):
             sub.add_argument('--seconds', type=int, default=300)
+        if command in ('claim', 'prepare-worker'):
+            # None lets the engine size the lease by the task's delivery shape: single silent
+            # receipts get the long grant, heartbeat-sustained stages the short one.
+            sub.add_argument('--seconds', type=int, default=None,
+                             help='租期秒数；缺省按阶段取 single_delivery_lease_seconds 或 worker_lease_seconds。')
         if command in ('claim', 'prepare-worker'):
             sub.add_argument('--session', required=True)
         if command == 'prepare-worker':
@@ -312,7 +327,8 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'usage':
             return app.usage()
         if command == 'patch':
-            return app.patch(args.task, args.old, args.new, args.start)
+            return app.patch(args.task, args.old, args.new, args.start,
+                             claim=identity.get('NOVEL_EXECUTION_CLAIM'))
         if command == 'deliver':
             return runtime.deliver()
         if command in ('submit', 'preflight'):
@@ -326,10 +342,29 @@ def dispatch(args, open_runtime=open_local_runtime):
                 payload = worker_receipt(payload, identity, True)
             return app.check(payload, getattr(args, 'task', None), session=identity.get('NOVEL_SESSION'))
         if command == 'read':
-            return app.read(args.task, args.record, everything=getattr(args, 'everything', False))
+            result = app.read(args.task, args.record, everything=getattr(args, 'everything', False),
+                              claim=identity.get('NOVEL_EXECUTION_CLAIM'))
+            if getattr(args, 'save', None):
+                target = Path(args.save)
+                target.write_text(dump(result), encoding='utf-8')
+                return {'saved': str(target.resolve()), 'task_id': result['task_id'],
+                        'records': sorted(result['records']), 'records_hash': result.get('records_hash'),
+                        'already_read': result.get('already_read', []),
+                        'note': '全文已落盘；需要片段时用本地脚本读这份文件，不逐条 --record 重读。'}
+            return result
+        if command == 'receipt':
+            prose = Path(args.prose).expanduser().read_text(encoding='utf-8')
+            outcome = app.draft_receipt(identity['NOVEL_TASK_ID'] or args.task, prose,
+                                        {'title': args.title or '', 'summary': args.summary or '',
+                                         'self_check': args.self_check or ''})
+            receipt = outcome.pop('receipt')
+            target = Path(args.out).expanduser() if args.out else Path(args.prose).expanduser().with_name('result.json')
+            target.write_text(dump(receipt), encoding='utf-8')
+            return {**outcome, 'written': str(target.resolve())}
         if command == 'recall':
             kind = next((k for k in ('entity', 'node', 'topic', 'thread') if getattr(args, k)), None)
-            return app.recall(args.task, args.chapter, args.state, kind, getattr(args, kind) if kind else None, args.limit, args.before)
+            return app.recall(args.task, args.chapter, args.state, kind, getattr(args, kind) if kind else None,
+                              args.limit, args.before, claim=identity.get('NOVEL_EXECUTION_CLAIM'))
         if command == 'prepare-worker':
             return app.prepare_worker(args.task, args.session, owner, args.seconds, args.reset_failures)
         if command == 'worker-ready':
@@ -412,12 +447,16 @@ def dispatch(args, open_runtime=open_local_runtime):
     except (Error, OSError, ValueError) as exc:
         if portable:
             error = exc if isinstance(exc, Error) else Error('worker_io', str(exc))
-            try:
-                error.details['recovery'] = app.worker_failure(identity['NOVEL_TASK_ID'], identity.get('NOVEL_SESSION'), args.command, error.code)
-            except Error:
-                pass  # An ended task is handed back; never reopen it to count retries.
-            if not error.details['recovery']['retry_allowed']:
-                error.details['recover'] += ' 修复原因后由主控 prepare-worker --reset-failures。'
+            if error.code not in CONTENT_ERRORS:
+                # Content defects reach a worker as preview data, never as raised errors; whatever
+                # still raises on a worker's command is protocol or execution territory and is
+                # what the technical accounting is for.
+                try:
+                    error.details['recovery'] = app.worker_failure(identity['NOVEL_TASK_ID'], identity.get('NOVEL_SESSION'), args.command, error.code)
+                except Error:
+                    pass  # An ended task is handed back; never reopen it to count retries.
+                if error.details['recovery'].get('blocked'):
+                    error.details['recover'] += ' 修复原因后由主控 prepare-worker --reset-failures。'
             raise error from None
         raise
     finally:

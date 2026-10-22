@@ -125,9 +125,10 @@ class RevisionRepairTests(unittest.TestCase):
         budget = copy.deepcopy(repo.load()['rework'])
         oversized = copy.deepcopy(result)
         oversized['data']['through_chapter'] = 6
-        with self.assertRaises(Error) as caught:
-            app.check(oversized)
-        self.assertEqual(caught.exception.code, 'chapter_outline')
+        # A content defect answers the preview as data: nothing commits, nothing is counted.
+        checked = app.check(oversized)
+        self.assertFalse(checked['valid'])
+        self.assertEqual(checked['error'], 'chapter_outline')
         self.assertEqual(repo.get('book'), root)
         result['data']['chapters'][0]['synopsis'] += '人物重新权衡自己的责任。'
         app.check(result)

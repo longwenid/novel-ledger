@@ -25,6 +25,12 @@ FAST = (
     'test_prose_lint.LintFlowTests.test_preview_answers_every_defect_in_one_call',
     'test_style_voice', 'test_style_guard_flow',
     'test_validation_runner', 'test_architecture_repairs', 'test_opening_architecture',
+    # The v2.1 execution contract: the taxonomy guard, the content-preview data path, and the
+    # mechanical receipt assembly that turns a steady-state chapter into ~6 model calls.
+    'test_error_taxonomy',
+    'test_execution_handoff.ContentPreviewHandoffTests',
+    'test_execution_handoff.WriteReceiptHandoffTests',
+    'test_execution_handoff.ExecutionHandoffTests.test_first_identity_fault_hands_back_without_reset_ceremony',
     # The fast gate pins automatic revision bounds with one end-to-end case; the full gate
     # additionally covers proposal authorization, changed sources and rollback.
     'test_revision_bounds.RevisionBoundsTests.test_a_revision_inside_the_window_opens_its_exact_range',

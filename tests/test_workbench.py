@@ -315,9 +315,9 @@ class WorkbenchTests(unittest.TestCase):
         duplicate = copy.deepcopy(valid)
         duplicate['data']['chapters'][0]['scenes'][0].update(id='scene:1', depends_on=[])
         root = repo.get('book')
-        with self.assertRaises(Error) as caught:
-            app.check(duplicate)
-        self.assertEqual(caught.exception.code, 'scene_identity')
+        checked = app.check(duplicate)            # content findings answer previews as data
+        self.assertFalse(checked['valid'])
+        self.assertEqual(checked['error'], 'scene_identity')
         self.assertEqual(repo.get('book'), root)
         app.submit(valid)
         self.assertEqual(drive(app, owner)['action'], 'target_reached')
@@ -327,9 +327,9 @@ class WorkbenchTests(unittest.TestCase):
         revised = scenes()
         future_collision = copy.deepcopy(revised)
         future_collision['data']['chapters'][0]['scenes'][0].update(id='scene:6', depends_on=[])
-        with self.assertRaises(Error) as caught:
-            app.check(future_collision)
-        self.assertEqual(caught.exception.code, 'scene_identity')
+        collision = app.check(future_collision)
+        self.assertFalse(collision['valid'])
+        self.assertEqual(collision['error'], 'scene_identity')
         app.submit(revised)
         self.assertEqual(repo.load()['plans']['4']['scenes'][0]['depends_on'], ['scene:1'])
         self.assertEqual(app.advance(owner=owner)['task']['stage'], 'repair')
@@ -363,8 +363,8 @@ class WorkbenchTests(unittest.TestCase):
                 accepted = candidate
         forged = copy.deepcopy(accepted)
         forged['data']['understanding'][0]['evidence'][0]['quote'] = original
-        with self.assertRaises(Error):
-            self.app.check(forged)
+        refused = self.app.check(forged)          # a content defect answers as data, not a raise
+        self.assertFalse(refused['valid'])
         self.assertEqual(self.repo.get('book'), root)
         self.app.submit(accepted)
         changed = base.replace(original, replacement)

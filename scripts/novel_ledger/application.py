@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION,
+from .contracts import (CONTENT_ERRORS, CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS,
+                        SINGLE_DELIVERY_STAGES, VERSION, Error, EXECUTION,
                         execution_recovery, policy_default,
                         digest, dump, require, text)
-from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint
+from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint, receipts
 from .ports import Presentation, Repository, TaskCompiler
 from .revision_service import RevisionService
 from .opening_service import OpeningService
@@ -137,6 +138,7 @@ class Application:
         lease = self.repo.get(store_keys.claim(task_id))
         require(lease is not None, 'worker_identity', '任务尚未由主控绑定真实 Worker。')
         self._session(task, session, claim)
+        self._touch_lease(task_id, claim)
         return {'schema': EXECUTION, 'task_id': task_id, 'session': session, 'ready': True}
 
     def prepare_worker(self, task_id, session, owner=None, seconds=None, reset_failures=False):
@@ -162,7 +164,12 @@ class Application:
                 'note': '仅交给该真实 Worker；凭据不写入任务文件。宿主仍负责模型上下文隔离。'}
 
     def worker_failure(self, task_id, session, operation, code):
-        """Technical accounting is separate from story revisions and literary repair budgets."""
+        """Technical accounting is separate from story revisions and literary repair budgets.
+
+        Content codes never arrive here from the CLI funnel — a preview answers them as data —
+        and blocking is uniform: one fault of any code routes the recovery to the controller,
+        the retry limit cuts the worker off.
+        """
         with self.repo.transaction():
             task = self.repo.task(task_id)
             require(task['status'] == 'pending', 'stale_task', '已结束任务不记录执行重试。')
@@ -173,7 +180,7 @@ class Application:
             recovery = execution_recovery(code, count)
             row = {'task': task_id, 'session': session, 'operation': operation,
                    'code': code, 'failures': count,
-                   'blocked': old.get('blocked', False) or not recovery['retry_allowed']}
+                   'blocked': old.get('blocked', False) or recovery['blocked']}
             self.repo.put(store_keys.technical_failure(task_id), row)
             self.repo.record('worker_failure', row)
             return {**recovery, 'task_id': task_id}
@@ -224,14 +231,15 @@ class Application:
                     {'task_id': task['id'], 'lease_session': lease['session'], 'expired': lease['until'] <= self.clock()})
 
     def _touch_lease(self, task_id, claim):
-        """Activity renewal: a worker that keeps calling the engine with its token keeps the lease.
-
-        Only a currently valid lease is extended — an expired one still goes through the
-        controller recovery path — and nothing is rejected here; a wrong token simply doesn't renew.
+        """Activity renewal: a worker that keeps calling the engine with its token keeps the lease,
+        extended by the lease's own granted span — a widened grant is never narrowed back by a
+        heartbeat. Only a currently valid lease is extended — an expired one still goes through
+        the controller recovery path — and nothing is rejected here; a wrong token simply doesn't renew.
         """
         lease = self.repo.get(store_keys.claim(task_id))
         if lease and claim and lease['token'] == claim and lease['until'] > self.clock():
-            lease['until'] = self.clock() + policy_default('worker_lease_seconds')
+            seconds = lease.get('seconds') or policy_default('worker_lease_seconds')
+            lease['until'] = self.clock() + seconds
             self.repo.put(store_keys.claim(task_id), lease)
 
     def _sources(self, work):
@@ -363,7 +371,7 @@ class Application:
             return {**boundary, **view}
         return {'action': 'task_ready', 'task': self.presentation.task(task, self._baseline(book, task), compact=compact), 'status': self.status(), **view}
 
-    def read(self, task_id, record=None, everything=False):
+    def read(self, task_id, record=None, everything=False, claim=None):
         task = self.repo.task(task_id)
         self._live(task, verify=False)
         work = task['input']
@@ -392,7 +400,9 @@ class Application:
                 result['already_read'] = already
                 result['already_read_note'] = ('这些记录此前已交给本任务；需要原文时用 read --record 名称重取，'
                                                '或用 read --all 取回全部必读记录。')
-        return self._observe_read(task_id, names, result)
+        result = self._observe_read(task_id, names, result)
+        self._touch_lease(task_id, claim)
+        return result
 
     def _observe_read(self, task_id, names, result):
         """Count actual supplemental output, including recall; this is not billed usage."""
@@ -430,12 +440,61 @@ class Application:
             require(session == caller, 'session', '试算身份与会话不符。')
         self._session(task, session, check_lease=False)
         preview = self.submit({**payload, 'session': session}, preview=True)
-        # The preview rolled back, so the renewal lands as its own small write: a worker
-        # iterating on a draft checks repeatedly, and each successful check is a heartbeat.
-        self._touch_lease(task['id'], payload.get('execution_claim'))
-        return {**preview, 'valid': True, 'session_used': session}
+        # submit() itself renews after a rolled-back preview, for check and preflight alike; the
+        # renewal below therefore only fixes the answer's validity line.
+        return {**preview, 'valid': preview.get('valid', True), 'session_used': session}
 
     def submit(self, result, preview=False):
+        """File a receipt; a preview validates it and rolls everything back.
+
+        Content defects answer a preview as data — the full findings list plus the stalled
+        signal, never a counted technical failure — so iteration is the worker's own budget.
+        Protocol, identity and lease faults still raise, whichever way the call came in.
+        """
+        try:
+            response = self._submit(result, preview)
+        except Error as exc:
+            if not preview or exc.code not in CONTENT_ERRORS:
+                raise
+            response = self._content_preview(result, exc)
+        if preview:
+            # The preview rolled back, so the heartbeat lands as its own small write: preflight
+            # enters here directly, without check() around it, and a receipt that only answers
+            # findings must still keep the lease alive.
+            self._touch_lease(result.get('task_id'), result.get('execution_claim'))
+        return response
+
+    def _content_preview(self, result, exc):
+        """The data answer to a content defect: what is wrong, in full, and how long it has gone
+        without converging — no ledger change, no failure accounting."""
+        task_id = result.get('task_id')
+        findings = exc.details.get('findings') or []
+        rounds, stalled = self._content_rounds(task_id, findings)
+        return {'valid': False, 'accepted': False, 'committed': False, 'checked': True,
+                'task_id': task_id, 'error': exc.code, 'message': exc.message,
+                'findings': findings, 'findings_count': len(findings),
+                'content_rounds': rounds, 'stalled': stalled,
+                'recovery': exc.details.get('recovery'), 'recover': exc.details.get('recover'),
+                'note': ('试算未通过属返修数据：合并全部 findings 一版修正后重试，不计技术失败。'
+                         + ('连续多轮同一 findings 未收敛（stalled）：停止盲试，把全量 findings 交回主控。'
+                            if stalled else ''))}
+
+    def _content_rounds(self, task_id, findings):
+        """Consecutive previews with an unchanged finding set. A changed set means progress and
+        restarts the count; reaching the policy limit marks the loop stalled. A data signal
+        only — the hard stop for a silent worker remains the watch loop's idle limit."""
+        if not task_id:
+            return 0, False
+        key = store_keys.content_rounds(task_id)
+        row = self.repo.get(key) or {}
+        digests = sorted(digest(finding) for finding in findings)
+        rounds = 1 if digests != row.get('digests') else row.get('rounds', 0) + 1
+        stalled = rounds >= policy_default('design_stall_rounds')
+        with self.repo.transaction():
+            self.repo.put(key, {'rounds': rounds, 'digests': digests, 'stalled': stalled})
+        return rounds, stalled
+
+    def _submit(self, result, preview=False):
         require(isinstance(result, dict) and result.get('schema') == RESULT, 'schema', '回执协议无效。')
         with self.repo.transaction(preview=preview):
             task = self.repo.task(result.get('task_id'))
@@ -511,16 +570,49 @@ class Application:
             self.repo.after_commit(lambda: self._refresh_book(response))
         return response
 
+    def _lease_seconds(self, task, seconds):
+        """The lease span follows the delivery shape: one long silent receipt gets the long
+        grant that covers its drafting window; heartbeat-sustained stages keep the short one.
+        An explicit --seconds always wins."""
+        if seconds is not None:
+            return seconds
+        key = ('single_delivery_lease_seconds' if task['input']['stage'] in SINGLE_DELIVERY_STAGES
+               else 'worker_lease_seconds')
+        return policy_default(key)
+
+    def draft_receipt(self, task_id, prose, meta=None):
+        """Assemble the submit-shaped receipt for a write chapter locally: envelope from the task,
+        drift rows from the chapter outline, before-values from the engine's own projection,
+        evidence quotes located in the draft. Assembly stops being model work — the writer owns
+        the prose, the verdicts and the quotes, and this only removes the plumbing."""
+        task = self.repo.task(task_id)
+        self._live(task, verify=False)
+        require(task['input']['stage'] == 'write', 'stage',
+                'receipt 组装只服务执笔阶段；返修与重设计按派工卡模板起稿。',
+                {'stage': task['input']['stage']})
+        require(text(prose), 'result', '正文为空：先把成稿写入 draft 文件再组装。')
+        book = self.repo.load()
+        plan = (book.get('plans') or {}).get(str(task['input']['chapter']))
+        receipt, missing, unlocated = receipts.assemble(task, book['state'], prose, meta or {}, plan)
+        return {'receipt': receipt, 'chapter': task['input']['chapter'],
+                'items': len(receipt['data']['drift_check']['items']),
+                'missing': missing, 'quotes_unlocated': unlocated,
+                'note': '组装完成：核对每行 status/reason 如实、quote 指向正文对应变化；'
+                        'missing 为还缺的字段，quotes_unlocated 为需手动补 quote 的行。'}
+
     def claim(self, task_id, session, seconds=None):
-        seconds = policy_default('worker_lease_seconds') if seconds is None else seconds
-        require(text(session) and type(seconds) is int and seconds > 0, 'claim', '认领需要会话和正整数租期。')
+        require(text(session), 'claim', '认领需要会话和正整数租期。')
         with self.repo.transaction():
             task = self.repo.task(task_id)
+            seconds = self._lease_seconds(task, seconds)
+            require(type(seconds) is int and seconds > 0, 'claim', '认领需要会话和正整数租期。')
             self._live(task)
             self._session(task, session, check_lease=False)
             old = self.repo.get(store_keys.claim(task_id))
             require(not old or old['until'] <= self.clock() or old['session'] == session, 'worker_busy', '另一 Worker 仍持有任务租约。')
-            lease = {'session': session, 'token': old['token'] if old and old['session'] == session else self.new_id(), 'until': self.clock() + seconds}
+            lease = {'session': session,
+                     'token': old['token'] if old and old['session'] == session else self.new_id(),
+                     'until': self.clock() + seconds, 'seconds': seconds}
             self.repo.put(store_keys.claim(task_id), lease)
             self._writing.bind(task, session, seconds)
             return {**lease, 'usage': '回执顶层 execution_claim 填写返回的 token 字段（裸字符串，非对象）。'}
@@ -813,11 +905,17 @@ class Application:
             self._save(book)
         return self.status()
 
-    def recall(self, task_id, chapter=None, full_state=False, kind=None, key=None, limit=5, before=None):
+    def recall(self, task_id, chapter=None, full_state=False, kind=None, key=None, limit=5, before=None,
+               claim=None):
+        result = self._recall(task_id, chapter, full_state, kind, key, limit, before, claim)
+        self._touch_lease(task_id, claim)
+        return result
+
+    def _recall(self, task_id, chapter, full_state, kind, key, limit, before, claim):
         task = self.repo.task(task_id)
         self._live(task, verify=False)
         if full_state:
-            return self.read(task_id, 'complete_state')
+            return self.read(task_id, 'complete_state', claim=claim)
         require(before is None or type(before) is int and before > 0, 'recall', 'before 须为正整数章号。')
         work = task['input']
         require('history_source' in work['records'], 'recall', '任务缺少冻结历史目录，须按当前协议重新派工。')
@@ -1067,9 +1165,11 @@ class Application:
             self.repo.record('deliver', {'snapshot_hash': reference})
         return {'recorded': True, 'snapshot_hash': reference}
 
-    def patch(self, task_id, old, new, start=None):
+    def patch(self, task_id, old, new, start=None, claim=None):
         task = self.repo.task(task_id)
         book = self._live(task)
         require(task['input']['stage'] in ('repair', 'redesign') and task['input'].get('capabilities', {}).get('editorial'),
                 'patch', '仅本任务声明的返修或重设计可定位补丁。')
-        return craft.patch_at(book['draft']['prose'], old, new, start)
+        result = craft.patch_at(book['draft']['prose'], old, new, start)
+        self._touch_lease(task_id, claim)
+        return result

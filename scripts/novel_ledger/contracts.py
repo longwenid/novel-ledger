@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 # The five-step pipeline is a protocol generation change: v2 removed every reviewer dispatch, so a
 # task frozen by v1 (checks_version, obligations, blind first read, plan/book_plan stages) can no
 # longer be executed by this build. The pipeline and storage carry independent version identifiers.
-VERSION = '2.0.2'
+VERSION = '2.1.0'
 
 
 SCHEMA = 'novel-ledger/5'
@@ -78,10 +78,17 @@ DEFAULTS = {
     'revision_limit': 3,
     'fast_batch_chapters': 5,
     'technical_retries': 2,
-    # Worker lease TTL. Every successful worker call carrying the claim token (submit, check)
-    # renews it, so a long repair loop stays leased while it keeps calling the engine and only
-    # silence — not working slowly — lets the lease expire.
+    # Worker lease TTL for heartbeat-sustained stages. Every successful worker call carrying the
+    # claim token renews it by the lease's own granted span, so a long repair loop stays leased
+    # while it keeps calling the engine and only silence — not working slowly — lets it expire.
     'worker_lease_seconds': 300,
+    # Single-delivery design stages draft one long receipt in silence no heartbeat can cross
+    # (world model, contract, volume and chapter outlines): the grant itself must cover the
+    # drafting window, or the first preflight after drafting dies on an expired lease.
+    'single_delivery_lease_seconds': 3600,
+    # How many consecutive content previews with an unchanged finding set mark the fix loop
+    # stalled. A data signal only: the hard stop remains the watch loop's idle limit.
+    'design_stall_rounds': 3,
     # opening/5's two new gates are the ones a web serial lives on, so their floors are numbers, not
     # prose: how many rungs the reader-visible ladder must show at each size class, how many stages
     # the 格局 ladder must walk, and how late the theme anchor may land. `anchor_max_chapter` is the
@@ -219,6 +226,12 @@ AUTHOR_SEVERITY = 'author'
 # tokens and 2~5 minutes each, for a 3.6K-character envelope). Everything else, starting with
 # world_model, keeps the new-worker rule.
 CONTROLLER_STAGES = frozenset({'opening_options'})
+
+
+# Design stages delivered as one long silent receipt: no engine call can happen while the draft is
+# being written, so the lease grant itself must cover the drafting window. Their default lease is
+# DEFAULTS['single_delivery_lease_seconds']; write-family stages keep the short heartbeat lease.
+SINGLE_DELIVERY_STAGES = frozenset({'world_model', 'opening_contract', 'volume_outline', 'chapter_outline'})
 
 
 # Bounded repair budgets: one chapter may spend this many rounds before the author is asked. Declared
@@ -598,6 +611,53 @@ CONTROLLER_ERRORS = frozenset((
     'projection', 'chain', 'schema_version',
 ))
 
+# Content defects are quality findings about the receipt's own data: the worker fixes them by
+# revising the draft, so a preview answers them as data — the full findings list, never a counted
+# technical failure — and their rounds are governed by the repair budgets and the stalled signal.
+CONTENT_ERRORS = frozenset((
+    'alias', 'alias_conflict', 'amount', 'anchor', 'anchor_fixed', 'chapter_outline',
+    'character_current', 'clock', 'custody', 'design_drift', 'development', 'dialogue',
+    'draft', 'drift_check', 'drift_reason', 'elapsed_days', 'entity', 'entity_coverage',
+    'evidence', 'evidence_scope', 'event', 'event_op', 'events', 'historical', 'hook',
+    'hook_due', 'hook_extension',
+    'hook_reference', 'initial_fact', 'insufficient_resource', 'knowledge', 'ledger', 'link',
+    'literal_policy', 'move', 'opening_alignment', 'opening_diversity', 'opening_gate',
+    'opening_option', 'opening_options', 'opening_scene', 'opening_voice', 'outline_alignment',
+    'outline_state', 'patch', 'patch_base', 'path', 'path_time', 'perceive', 'place',
+    'place_cycle', 'placement', 'precondition', 'reader_knowledge', 'reading_dependency',
+    'relation', 'repair_scope', 'resource', 'resurrection', 'revision_outline', 'scene',
+    'scene_identity', 'scene_time', 'schedule', 'spatial_protocol', 'state', 'story_closure',
+    'story_criteria', 'story_dependency', 'story_node', 'story_precondition', 'story_protocol',
+    'story_thread', 'thread_due', 'time_conflict', 'time_evidence', 'understanding',
+    'understanding_reference', 'volume_outline', 'word_budget', 'world', 'world_alignment',
+    'world_fields', 'world_id', 'world_identity', 'world_links', 'world_optional',
+    'world_record', 'world_reference', 'world_section', 'writer_events',
+))
+
+# Everything else raised by the engine: envelope and receipt protocol, storage integrity, host
+# plumbing, and the author/controller flow gates. These keep entering the technical failure
+# accounting when a worker hits them. The taxonomy is exhaustive and guarded by a test that
+# walks every raise site: a new code must join exactly one of the three sets, by decision.
+TECHNICAL_ERRORS = frozenset((
+    'access', 'alignment_schema', 'author_decision', 'author_source', 'book_integrity',
+    'book_ownership', 'book_state', 'capability', 'chapter', 'chapter_limit', 'chapter_order',
+    'chapter_target', 'checks', 'claim', 'completion', 'contract', 'coverage', 'creation',
+    'criterion', 'delivery', 'editorial_protocol', 'edits', 'envelope_identity', 'envelope_input',
+    'envelope_task', 'execution_claim', 'exists', 'feedback', 'file', 'findings', 'first_read',
+    'first_read_frozen', 'format', 'gold', 'history_integrity', 'host_command', 'host_loop',
+    'host_timeout', 'host_transport', 'input_version', 'intake', 'lease', 'length',
+    'lexical_policy', 'lint', 'manifest', 'observation', 'observation_conflict', 'opening',
+    'opening_back', 'opening_incomplete', 'opening_state', 'opening_system', 'opening_version',
+    'outline_policy', 'output', 'pause', 'paused', 'payoffs', 'pilot_version', 'plan_guard',
+    'plan_preconditions', 'project', 'project_isolation', 'prose_integrity', 'recall', 'record',
+    'remedy_exhausted', 'repair_budget', 'replan', 'replay_conflict', 'result', 'resume',
+    'review', 'revision', 'revision_bounds', 'revision_carry', 'revision_impact',
+    'revision_proposal', 'revision_scope', 'revision_target', 'schema', 'severity', 'source',
+    'stage', 'stage_brief', 'stage_template', 'stale_case', 'stdin_encoding', 'stdin_json',
+    'target', 'task', 'task_integrity', 'transaction', 'understanding_source', 'verdict',
+    'volume', 'watch', 'worker_io', 'world_view', 'writing_mode',
+))
+
 RECOVERY_ROUTES = {
     'controller_lease': ('renew_controller', '主控核对 owner；有效租约由原主控 renew，已失效则沿原授权 run 重新认领，再恢复 Worker。'),
     'stale_task': ('resync_task', '主控核对 status 与当前任务；不修改旧任务身份重投稿件。'),
@@ -611,11 +671,21 @@ RECOVERY_ROUTES = {
 
 
 def execution_recovery(code, failures=0):
-    escalated = code in CONTROLLER_ERRORS or failures >= policy_default('technical_retries')
+    """Who must act, and whether the worker may keep going at all.
+
+    Role routing is immediate for CONTROLLER_ERRORS: one identity or lease fault already belongs
+    to the controller. Blocking is uniform — every code is cut off at the same retry limit, so a
+    first identity handback costs the controller one prepare-worker claim, and only a repeated
+    fault needs the explicit --reset-failures reopen.
+    """
+    limit = policy_default('technical_retries')
+    blocked = failures >= limit
+    escalated = blocked or code in CONTROLLER_ERRORS
     return {'actor': 'controller' if escalated else 'worker',
             'action': RECOVERY_ROUTES.get(code, ('prepare_worker', ''))[0] if escalated else 'correct_from_template',
             'retry_allowed': not escalated,
-            'failures': failures, 'limit': policy_default('technical_retries')}
+            'blocked': blocked,
+            'failures': failures, 'limit': limit}
 
 
 class Error(Exception):

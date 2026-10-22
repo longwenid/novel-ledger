@@ -66,11 +66,14 @@ ALLOWED = {
     'workflow': {'contracts', 'creation', 'drift', 'drift_simulation', 'drift_reconcile', 'facts', 'narrative', 'planning',
                  'world', 'craft', 'editorial', 'understanding',
                  'design_queries', 'evidence', 'lint', 'ledger', 'style'},
+    # receipts mechanically assembles a prose receipt — envelope, drift rows, projected
+    # before-values, quote location — so assembly is an engine command, not model work.
+    'receipts': {'contracts', 'drift', 'result_templates'},
     # book_state declares the four-partition field ownership and the invariants between those fields,
     # so the application reads it to check the state it owns (the same way it reads store_keys for the
     # key space). book_state stays a pure declaration module: it imports nothing but contracts.
     'application': {'contracts', 'ports', 'store_keys', 'book_state', 'creation', 'facts', 'narrative', 'planning',
-                    'workflow', 'world', 'craft', 'editorial',
+                    'workflow', 'world', 'craft', 'editorial', 'receipts',
                     'story_memory', 'understanding', 'revision_service', 'contract_activation', 'opening_service', 'verification', 'lint', 'writing_service'},
     'writing_service': {'contracts', 'ports', 'store_keys', 'editorial', 'planning', 'workflow'},
     'revision_service': {'contracts', 'ports', 'store_keys', 'editorial', 'facts', 'narrative', 'revision_impact',
@@ -125,6 +128,7 @@ CORE_EXTERNAL = {
     'drift_reconcile': {'__future__', 'copy'},
     'style': {'__future__', 're'},
     'result_templates': {'__future__'},
+    'receipts': {'__future__'},
     'revision_impact': {'__future__'},
     'spatial': {'__future__', 'copy'},
     'story_memory': {'__future__', 'copy'},

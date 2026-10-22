@@ -160,8 +160,11 @@ def _finding(chapter, kind, key, expect, got, why, criterion='drift', severity='
 
 
 def _reject(findings, code, message, details=None):
+    # The full list, not a sample: a preview answers every defect in one call, and a truncated
+    # answer used to resurface the cut findings one repair round at a time.
     rows = [f for f in findings if isinstance(f, dict)]
-    require(not rows, code, message, {**(details or {}), 'findings': _safe(rows[:12]),
+    require(not rows, code, message, {**(details or {}), 'findings': _safe(rows),
+                                      'findings_count': len(rows),
                                       'recover': '按 findings 逐条修正章纲/卷纲后重提；'
                                                  '不要改库或历史事实。'})
 

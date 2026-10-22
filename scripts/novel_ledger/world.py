@@ -158,7 +158,7 @@ def _bindings(model, choices):
             {'rule': '位阶、硬通货、格局阶梯和已声明的世界架构必须按字段承接',
              'expect': 'powers 全字段等值；economy 同名 resource，且 allocator 出现在 distribution；'
                        '阶梯每级在 geography/cosmology/factions/powers 有同名 name',
-             'got': complaints[:8], 'mismatches': len(complaints),
+             'got': complaints, 'mismatches': len(complaints),
              'recover': '把门里选定的那一行逐字写进对应领域的记录；世界可以比阶梯更长，但不能对不上。'})
 
 

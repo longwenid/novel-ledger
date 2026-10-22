@@ -27,7 +27,7 @@ SCHEMA_KEY = 'schema'
 # of the ledger it writes, so this one is declared but built by the adapter.
 BOOK_ROOT = 'book'
 
-PREFIXES = ('claim:', 'branch-book:', 'history_head:', 'technical_failure:')
+PREFIXES = ('claim:', 'branch-book:', 'history_head:', 'technical_failure:', 'content_rounds:')
 
 # The journal row an actual read leaves behind. It is written by the application and summed by the
 # storage adapter's `usage`, so the shape is declared here instead of being an implicit agreement
@@ -50,6 +50,12 @@ def claim(task_id):
 
 def technical_failure(task_id):
     return 'technical_failure:' + task_id
+
+
+def content_rounds(task_id):
+    """The consecutive no-progress preview counter behind the stalled signal; written by the
+    application after a rolled-back preview, read by the next one."""
+    return 'content_rounds:' + task_id
 
 
 def branch_book(branch):

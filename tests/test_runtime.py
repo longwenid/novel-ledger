@@ -625,8 +625,10 @@ class RuntimeTests(unittest.TestCase):
         blank = json.loads(Path(task['template_path']).read_text(encoding='utf-8'))
         malformed = subprocess.run(command + ['check'], input=json.dumps(blank), text=True, capture_output=True,
                                    encoding='utf-8', errors='replace')
-        self.assertEqual(malformed.returncode, 2)
+        # A content defect is preview data now, not a raised error: exit 0, valid=false, findings.
+        self.assertEqual(malformed.returncode, 0)
         body = json.loads(malformed.stdout)
+        self.assertFalse(body['valid'])
         self.assertEqual(body['error'], 'design_drift')
         self.assertTrue(body['message'])
         self.assertEqual(self.repo.pending()['id'], pending)          # nothing was committed

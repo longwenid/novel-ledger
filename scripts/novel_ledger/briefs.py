@@ -283,6 +283,7 @@ CHAPTER_CHECK_HINTS = (
     '每章 synopsis 汉字数落在 words±tolerance；plot.beat、world_refs、style.pov、style.rhythm 不得为空。',
     'resources/places/knowledge/characters/hooks 数组不得省略：没有变化就给空数组。',
     'enter 是本章开始时的状态，exit 必须等于 enter 施加本章全部增量后的结果，引擎会自己算一遍比对。',
+    '四类增量的 from 是前序章节留下的同坐标状态（引擎投影逐字比对，首次确立才允许 null），to 是施加本章变化后的完整值对象。',
     'node/thread 只能引用本卷卷纲已登记的集合；knowledge 的 to 取 hinted|suspected|misled|confirmed|retracted。',
     'hooks 只有 plant/payoff 两个动作：同一 id 各一次、payoff 不早于 plant、各自落在卷纲窗口内；'
     'hook_refs 承接的 id 必须已经 plant 过。',
@@ -351,6 +352,8 @@ def stage(name, payload=None):
                            'knowledge=[{who,topic,from,to,reason}]、characters=[{entity,from,to,choice,cost}] 四类数组按模板逐项核对，缺省或 null 与空数组同义——'
                            '空数组就是「本章无此类变化」的声明；knowledge 的 to 取 hinted|suspected|misled|confirmed|retracted，'
                            'character 的 to 是 {desire,stance,relationship_focus} 且 choice/cost 缺一不可；'
+                           '四类数组的 from/to 是同一坐标的前后值：from 填前序章节留下的状态（引擎拿投影逐字比对，'
+                           '本章首次确立该坐标才允许 null），to 填施加本章变化后的完整值——不是状态描述字符串；'
                            'clock.advance_days 是本章经过的天数，不倒退；'
                            'enter/exit 是状态链的全部依据：enter 列本章开始时每个受动坐标的期望值（承接上一章 exit），'
                            'kind 取 resources|places|knowledge|character|node|thread|clock，key 用该坐标的键'

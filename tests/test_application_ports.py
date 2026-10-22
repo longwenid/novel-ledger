@@ -8,10 +8,10 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from novel_ledger.application import Application
 from novel_ledger import context, workflow, store_keys
-from novel_ledger.contracts import Error, digest
+from novel_ledger.contracts import Error, digest, policy_default
 from novel_ledger.ports import Repository
 from memory_repository import MemoryRepository
-from support import contract, drive, response
+from support import contract, drive, prose_stub, response
 
 
 class MemoryPresentation:
@@ -199,15 +199,70 @@ class ApplicationPortsTests(unittest.TestCase):
         pending = app.advance()['task']['task_id']
         lease = app.claim(pending, 'claimed-worker', seconds=30)
         candidate = response(app, session='claimed-worker', claim=lease['token'])
-        # 25s in, the lease is still valid: a successful check is a heartbeat and extends it,
-        # so a slow repair loop that keeps calling the engine never runs out of lease.
+        # 25s in, the lease is still valid: a successful check is a heartbeat and extends it by
+        # the lease's own granted span (30s here — never the global default), so a slow repair
+        # loop that keeps calling the engine never runs out of lease.
         runtime.now = 1025.0
         app.check(candidate, session='claimed-worker')
-        self.assertEqual(repo.get(store_keys.claim(pending))['until'], 1325.0)
+        self.assertEqual(repo.get(store_keys.claim(pending))['until'], 1055.0)
         # Past the original 1030 expiry, the renewed lease still admits the same receipt.
         runtime.now = 1031.0
         app.submit(candidate)
         self.assertEqual(repo.task(pending)['status'], 'done')
+
+    def test_receipt_assembly_passes_preflight_without_model_plumbing(self):
+        app, repo, _, runtime, _ = self.make_app()
+        drive(app, until='write')
+        pending = repo.pending()
+        outcome = app.draft_receipt(pending['id'], prose_stub(pending['input']['chapter']),
+                                    {'title': '封条' + str(pending['input']['chapter']),
+                                     'summary': '沈桐要求核对退件来源。',
+                                     'self_check': '逐项按章纲比对，动作与证据均在正文中，无计划外变化。'})
+        self.assertEqual(outcome['missing'], [])
+        self.assertEqual(outcome['quotes_unlocated'], [])
+        receipt = outcome['receipt']
+        items = receipt['data']['drift_check']['items']
+        self.assertGreaterEqual(len(items), 4)
+        for item in items:
+            self.assertEqual(item['status'], 'kept')
+            self.assertTrue(item['evidence']['quote'], item['kind'])
+            if item['kind'] in ('resources', 'places', 'knowledge', 'characters'):
+                self.assertIn('from', item['actual'])
+        preview = app.check(receipt, session='assembler')
+        self.assertTrue(preview['valid'], preview.get('findings'))
+        receipt['session'] = 'assembler'
+        app.submit(receipt)
+        self.assertEqual(repo.task(pending['id'])['status'], 'done')
+
+    def test_every_worker_entry_renews_and_a_widened_grant_is_never_narrowed(self):
+        app, repo, _, runtime, _ = self.make_app()
+        drive(app, until='write')
+        pending = repo.pending()['id']
+        lease = app.claim(pending, 'widened-worker', seconds=7200)
+        receipt = response(app, session='widened-worker', claim=lease['token'])
+        runtime.now = 1500.0                       # deep inside the widened grant
+        app.check(receipt, session='widened-worker')
+        self.assertEqual(repo.get(store_keys.claim(pending))['until'], 1500.0 + 7200)
+        # Preflight enters submit directly, without check() around it: it renews on its own.
+        runtime.now = 1501.0
+        app.submit(receipt, preview=True)
+        self.assertEqual(repo.get(store_keys.claim(pending))['until'], 1501.0 + 7200)
+        # A material read carrying the token is the drafting worker's heartbeat.
+        runtime.now = 1502.0
+        app.read(pending, claim=lease['token'])
+        self.assertEqual(repo.get(store_keys.claim(pending))['until'], 1502.0 + 7200)
+
+    def test_single_delivery_stages_default_to_the_long_lease(self):
+        design, _, _, _, _ = self.make_app()
+        outline = design.advance()['task']['task_id']   # volume_outline: one long silent receipt
+        lease = design.claim(outline, 'design-worker')
+        self.assertEqual(lease['seconds'], policy_default('single_delivery_lease_seconds'))
+        self.assertEqual(lease['until'], 1000.0 + policy_default('single_delivery_lease_seconds'))
+        app, _, _, _, _ = self.make_app()
+        drive(app, until='write')
+        short = app.claim(app.repo.pending()['id'], 'prose-worker')
+        self.assertEqual(short['seconds'], policy_default('worker_lease_seconds'))
+        self.assertEqual(short['until'], 1000.0 + policy_default('worker_lease_seconds'))
 
     def test_memory_adapter_implements_the_entire_application_repository_port(self):
         _, repo, _, _, _ = self.make_app()
