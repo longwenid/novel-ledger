@@ -20,7 +20,7 @@ class MemoryPresentation:
     def __init__(self):
         self.effects = []
 
-    def task(self, task, baseline=None, compact=False):
+    def task(self, task, baseline=None, compact=False, preserve_result=False):
         self.effects.append(('task', task['id']))
         return {'task_id': task['id'], 'input_hash': task['input_hash'],
                 'stage': task['input']['stage'], 'chapter': task['input']['chapter'],
@@ -37,6 +37,10 @@ class MemoryPresentation:
     def world(self):
         self.effects.append(('world',))
         return {'delivery_id': 'memory:world'}
+
+    def book(self):
+        self.effects.append(('book',))
+        return {'delivery_id': 'memory:book'}
 
     def board(self, board):
         self.effects.append(('board', board.get('hash')))

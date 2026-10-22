@@ -161,6 +161,12 @@ flowchart TD
 - `work/<task>/` 里两类文件分属不同作者：task.json、input.json、identity.json、dispatch.md（Worker 自举卡）、brief.md（简报全文） 由主控生成且可重建；result.template.json（表单）与 result.json（回执）由 Worker 写。主控只在表单缺失或属于其他任务时才生成它，重跑 advance 绝不覆盖 Worker 已填内容；取消任务是唯一回收表单的事件。重派未提交任务时，引擎把上次遗留的 result.json 草稿隔离为 `result.stale.json` 并在派工卡注明——账本才是回执的记录源。
 - 角色由身份而非称呼区分：opening_options 属 `contracts.CONTROLLER_STAGES`，主干可读取该门的 read/recall 材料；其他阶段只对携带 NOVEL_TASK_ID 的派工身份开放，主控代读按 role_boundary 拒绝；audit/export/html 是验收与交付命令，主控可用。身份本身随派工一起留档（identity.json：task_id、input_hash、阶段、worker_env），供核对与解释失败，但权限只看宿主注入的凭据——可核对的数据不是许可证，也不由 Worker 写回。
 
+### 执行交接与恢复所有权
+
+`contracts.EXECUTION` 与统一恢复表声明执行协议及错误处理者；Application 的 prepare_worker/worker_ready/worker_failure 负责认领、就绪验证和技术失败状态，纯创作 workflow 不接管宿主身份。技术计数以 store_keys 声明的任务键保存，不修改作品分区、章节、返修额度或冻结输入。连续失败阻断后，任务仍 pending，status/advance/watch 给出可恢复的 worker_blocked，只有主控显式准备并重置可恢复。
+
+CLI 的 Python worker 入口只执行 Worker 公开命令，先验证会话与认领，在内存中注入回执身份；不生成身份、不从任务文件取私有 token。交付层根据同一状态生成 execution、ready/commands 与跨平台卡片；prepare-worker 重建视图时保留 Worker 草稿。入口捕获到的技术错误可自动计数；宿主自己的任意工具失败须经 report_error 上报。旧直接接口兼容不构成安全沙箱，真实模型身份、工具限制与上下文隔离仍由宿主提供。
+
 ### 字面策略与材料选择
 
 - 字面约定是项目级版本记录（book.lexical_policy），不属于约定快照；默认值在开书阶段即生效，作者改规则用 lexical 命令留档，改规则取消在途任务并作废其视图。约定里出现 lexical_policy 属于未知字段，直接拒绝。
@@ -256,7 +262,7 @@ verification 是程序能力边界，不是操作系统安全沙箱。所有正�
 
 编辑能力冻结为 editorial/1，开关与字段见协议，专用字段见 [编辑能力](editorial.md)。craft/spatial/editorial 均是纯值规则，不传 Repository。章纲重排与正文重绑定由 workflow 返回，应用层单一事务保存；预检一并回滚。
 
-完本快照保存完整交付状态与正文引用，delivery/bookpage 只读取冻结版本；组合根把 LocalPresentation 注入 Application，交付、页面与只读查询均不反向调用应用层。统一 book.html 和世界导出是可重建派生物，失败不回滚生效约定；生成时机和实际交付范围见 [约定与交付](world.md#约定与交付)。读取观测在适配层留痕，离线评测与宿主观察不修改故事。
+完本快照保存完整交付状态与正文引用，delivery/bookpage 只读取冻结版本；组合根把 LocalPresentation 注入 Application，交付、页面与只读查询均不反向调用应用层。统一 book.html 和世界导出是可重建派生物；submit 通过 after_commit 调用交付端口刷新页面，advance 返回时也刷新，页面错误独立回报，不回滚已生效内容；生成时机和实际交付范围见 [约定与交付](world.md#约定与交付)。读取观测在适配层留痕，离线评测与宿主观察不修改故事。
 
 承诺关联冻结为可选 hook-links/1：领域层只验证有据事件的实体/话题关联及变更理由，查询层据关联选择材料；未标注旧承诺不自动猜关系，仍能完整补读。事件解释版本随规范化事件保存，旧在途能力不被追补，旧投影不因新增字段解释而改变。派工 baseline 取任务自己的冻结 state 视图，避免在信封再灌入全量资源与承诺。read 和 recall 输出都留实际字符观测，计费仍来自宿主日志。
 

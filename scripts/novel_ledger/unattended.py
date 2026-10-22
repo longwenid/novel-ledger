@@ -57,6 +57,10 @@ def watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, n
         cursor = task['task_id']
         while True:
             current = app.task_status(task['task_id'])
+            if current.get('execution_blocked'):
+                return {'action': 'worker_blocked', 'task_id': current.get('batch_task') or task['task_id'],
+                        'recovery': current.get('recovery'), 'dispatched': waited,
+                        'boundary': '技术执行已停止，由主控修复交接原因后 prepare-worker --reset-failures。'}
             if current['status'] != 'pending' and not current.get('batch_active'):
                 break
             if current.get('batch_task') and current['batch_task'] != cursor:

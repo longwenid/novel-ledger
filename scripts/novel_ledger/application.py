@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION,
+from .contracts import (CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION,
+                        execution_recovery,
                         digest, dump, require, text)
 from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint
 from .ports import Presentation, Repository, TaskCompiler
@@ -83,6 +84,7 @@ class Application:
                 'target': book['target'], 'written_han': book['written_han'], 'finish': book['finish'],
                 'writing_mode': book.get('writing_mode', 'standard'), 'worker_batch': self._writing.describe(),
                 'pending_task': task['id'] if task else None, 'stage': task['input']['stage'] if task else None,
+                'execution_failure': self.repo.get(store_keys.technical_failure(task['id'])) if task else None,
                 'pause_reason': None if sealed else book.get('pause_reason'),
                 'author_decision': None if sealed else copy.deepcopy(book.get('author_block')),
                 # What the author accepted while a review still asked for changes, so a project never
@@ -113,12 +115,74 @@ class Application:
 
     def task_status(self, task_id):
         task = self.repo.task(task_id)
-        return {**{key: task[key] for key in ('id', 'status', 'reviewer')}, **self._writing.task_status(task)}
+        batch = self._writing.task_status(task)
+        failure = self.repo.get(store_keys.technical_failure(batch.get('batch_task') or task_id)) or {}
+        return {**{key: task[key] for key in ('id', 'status', 'reviewer')}, **batch,
+                'execution_blocked': bool(failure.get('blocked')),
+                'recovery': execution_recovery(failure.get('code', ''), failure.get('failures', 0))}
 
     def authorize_worker(self, task_id, session, claim=None):
         task = self.repo.task(task_id)
         self._live(task, verify=False)
+        failure = self.repo.get(store_keys.technical_failure(task_id)) or {}
+        require(not failure.get('blocked'), 'technical_blocked', '本任务技术错误已交回主控。')
         self._session(task, session, claim)
+
+    def worker_ready(self, task_id, session, claim=None):
+        """Portable worker entry: identity and recovery state before any material I/O."""
+        task = self.repo.task(task_id)
+        self._live(task, verify=False)
+        failure = self.repo.get(store_keys.technical_failure(task_id)) or {}
+        require(not failure.get('blocked'), 'technical_blocked', '本任务技术错误已交回主控。')
+        lease = self.repo.get(store_keys.claim(task_id))
+        require(lease is not None, 'worker_identity', '任务尚未由主控绑定真实 Worker。')
+        self._session(task, session, claim)
+        return {'schema': EXECUTION, 'task_id': task_id, 'session': session, 'ready': True}
+
+    def prepare_worker(self, task_id, session, owner=None, seconds=300, reset_failures=False):
+        """Controller binds the host-returned identity; no invented session or prose edits."""
+        self.controller_guard(owner)
+        task = self.repo.task(task_id)
+        self._live(task)
+        failure = self.repo.get(store_keys.technical_failure(task_id)) or {}
+        require(not failure.get('blocked') or reset_failures, 'technical_blocked',
+                '先修复交接原因，再由主控显式 --reset-failures 恢复技术执行。')
+        lease = self.claim(task_id, session, seconds)
+        if reset_failures:
+            with self.repo.transaction():
+                self.repo.put(store_keys.technical_failure(task_id), None)
+                self.repo.record('worker_recovered', {'task': task_id, 'session': session})
+        view = self.presentation.task(self.repo.task(task_id), compact=True, preserve_result=True)
+        return {'schema': EXECUTION, 'ready': True, 'task': view,
+                'worker_env': {'NOVEL_TASK_ID': task_id, 'NOVEL_SESSION': session,
+                               'NOVEL_EXECUTION_CLAIM': lease['token'],
+                               'NOVEL_TASK_PATH': view.get('task_path', ''),
+                               'NOVEL_PROJECT': view.get('project_path', '')},
+                'lease_until': lease['until'],
+                'note': '仅交给该真实 Worker；凭据不写入任务文件。宿主仍负责模型上下文隔离。'}
+
+    def worker_failure(self, task_id, session, operation, code):
+        """Technical accounting is separate from story revisions and literary repair budgets."""
+        with self.repo.transaction():
+            task = self.repo.task(task_id)
+            require(task['status'] == 'pending', 'stale_task', '已结束任务不记录执行重试。')
+            old = self.repo.get(store_keys.technical_failure(task_id)) or {}
+            if old.get('blocked'):
+                return {**execution_recovery(old['code'], old['failures']), 'task_id': task_id}
+            count = old.get('failures', 0) + 1
+            recovery = execution_recovery(code, count)
+            row = {'task': task_id, 'session': session, 'operation': operation,
+                   'code': code, 'failures': count,
+                   'blocked': old.get('blocked', False) or not recovery['retry_allowed']}
+            self.repo.put(store_keys.technical_failure(task_id), row)
+            self.repo.record('worker_failure', row)
+            return {**recovery, 'task_id': task_id}
+
+    def worker_succeeded(self, task_id):
+        old = self.repo.get(store_keys.technical_failure(task_id))
+        if old and not old.get('blocked'):
+            with self.repo.transaction():
+                self.repo.put(store_keys.technical_failure(task_id), None)
 
     def _cancel_pending(self, reason):
         self._writing.close(reason)
@@ -157,9 +221,7 @@ class Application:
         if lease and check_lease:
             require(lease['session'] == session and lease['token'] == claim and lease['until'] > self.clock(),
                     'worker_lease', 'Worker 租约或执行认领已过期。',
-                    {'lease_session': lease['session'], 'expired': lease['until'] <= self.clock(),
-                     'recover': '先执行 claim --task ' + task['id'] + ' --session <你的会话> 取得新 token，'
-                                '再在回执顶层 execution_claim 填该 token（裸字符串）后重新提交；回执内容本身不用改。'})
+                    {'task_id': task['id'], 'lease_session': lease['session'], 'expired': lease['until'] <= self.clock()})
 
     def _sources(self, work):
         """Frozen recent chapters; workflow adds the composed current draft as its own evidence."""
@@ -185,7 +247,20 @@ class Application:
                                for ident, hook in sorted(state['hooks'].items()) if hook['status'] == 'open'],
                 'candidate': {'chapter': book['draft']['chapter'], 'stage': book['draft']['stage']} if book['draft'] else None}
 
+    def _refresh_book(self, response):
+        # A derived view cannot undo a committed receipt. Keep its failure separate
+        # so the controller can retry html without resubmitting or rewriting prose.
+        try:
+            response['book_view'] = self.presentation.book()
+        except (OSError, Error) as exc:
+            response['book_view_error'] = str(exc)
+
     def advance(self, after=None, owner=None, compact=False, wait_pending=False):
+        response = self._advance(after, owner, compact, wait_pending)
+        self._refresh_book(response)
+        return response
+
+    def _advance(self, after=None, owner=None, compact=False, wait_pending=False):
         boundary = None
         refresh_world = False
         with self.repo.transaction():
@@ -198,6 +273,12 @@ class Application:
                 if prior['status'] != 'done' or book.get('last_task') != after:
                     return {'action': 'resync', 'status': self.status()}
             task = self.repo.pending()
+            if task:
+                failure = self.repo.get(store_keys.technical_failure(task['id'])) or {}
+                if failure.get('blocked'):
+                    return {'action': 'worker_blocked', 'task_id': task['id'],
+                            'recovery': execution_recovery(failure['code'], failure['failures']),
+                            'status': self.status()}
             if book['status'] != 'running' and not (book['status'] == 'preparing' and book.get('creation')):
                 proposal = self._revision_summary(book)
                 if proposal:
@@ -348,10 +429,14 @@ class Application:
                 require(task['result_hash'] == digest(result), 'replay_conflict', '同一任务不能提交不同内容。')
                 group = self._writing.active()
                 continuing = bool(group and group['task_id'] == task['id'])
-                return {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
+                response = {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
                         'idempotent': True, 'task_id': task['id'],
                         'worker_boundary': 'continue' if continuing else 'finished'}
+                self.repo.after_commit(lambda: self._refresh_book(response))
+                return response
             book = self._live(task)
+            failure = self.repo.get(store_keys.technical_failure(task['id'])) or {}
+            require(not failure.get('blocked'), 'technical_blocked', '本任务技术错误已交回主控。')
             require(book['status'] == 'running' or (book['status'] == 'preparing' and task['input']['stage'] == 'opening_options'),
                     'paused', '项目暂停，保留回执并由主控恢复。')
             require(result.get('input_hash') == task['input_hash'], 'input_version', '输入版本不匹配。',
@@ -401,6 +486,9 @@ class Application:
                         'rework': (updated.get('rework') or {}).get(str(work['chapter'])), 'status': updated['status']}
             if outcome.style_report is not None:
                 response['style_report'] = outcome.style_report
+            # Includes fast-mode submissions: they need no controller advance
+            # between chapters. Preview/rollback must leave the page untouched.
+            self.repo.after_commit(lambda: self._refresh_book(response))
         return response
 
     def claim(self, task_id, session, seconds=300):

@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
 from novel_ledger.bootstrap import open_local_runtime
-from novel_ledger.contracts import digest
-from support import contract, drive
+from novel_ledger.contracts import Error, digest
+from support import contract, drive, response
 
 
 class BootstrapIntegrationTests(unittest.TestCase):
@@ -31,6 +31,75 @@ class BootstrapIntegrationTests(unittest.TestCase):
     def close_runtime(self):
         self.runtime.close()
         self.runtime = None
+
+    def test_submit_refreshes_prose_without_a_followup_advance(self):
+        drive(self.runtime.app, until='write')
+        page = self.project / 'book.html'
+        self.assertNotIn('<section class="chapter"', page.read_text(encoding='utf-8'))
+        receipt = response(self.runtime.app)
+        result = self.runtime.app.submit(receipt)
+        self.assertEqual(result['committed_chapter'], 1)
+        self.assertEqual(result['book_view']['chapters'], 1)
+        self.assertEqual(result['book_view']['path'], str(page))
+        text = page.read_text(encoding='utf-8')
+        self.assertIn('id="read-1"', text)
+        self.assertIn(receipt['data']['prose'], text)
+
+    def test_preview_rejection_and_transaction_rollback_preserve_the_page(self):
+        drive(self.runtime.app, until='write')
+        page = self.project / 'book.html'
+        before = page.read_bytes()
+        receipt = response(self.runtime.app)
+        checked = self.runtime.app.submit(receipt, preview=True)
+        self.assertTrue(checked['checked'])
+        self.assertNotIn('book_view', checked)
+        self.assertEqual(page.read_bytes(), before)
+        with self.assertRaises(Error):
+            self.runtime.app.submit({**receipt, 'input_hash': 'stale'})
+        self.assertEqual(page.read_bytes(), before)
+        original = self.runtime.app._save
+
+        def fail_after_save(book):
+            original(book)
+            raise RuntimeError('transaction aborted')
+
+        with patch.object(self.runtime.app, '_save', side_effect=fail_after_save):
+            with self.assertRaisesRegex(RuntimeError, 'transaction aborted'):
+                self.runtime.app.submit(receipt)
+        self.assertEqual(page.read_bytes(), before)
+        self.assertEqual(self.runtime.repo.headers('main'), [])
+        self.assertEqual(self.runtime.repo.pending()['id'], receipt['task_id'])
+
+    def test_refresh_failure_keeps_commit_and_advance_can_rebuild_page(self):
+        drive(self.runtime.app, until='write')
+        receipt = response(self.runtime.app)
+        page = self.project / 'book.html'
+        before = page.read_bytes()
+        # Both ordinary write errors and protected-path errors are page failures,
+        # not failed submissions of an already committed chapter.
+        for error in (OSError('page is locked'), Error('output', 'protected path')):
+            with self.subTest(error=type(error).__name__):
+                with patch.object(self.runtime.app.presentation, 'book', side_effect=error):
+                    result = self.runtime.app.submit(receipt)
+                self.assertTrue(result['accepted'])
+                self.assertIn('book_view_error', result)
+                self.assertNotIn('book_view', result)
+                self.assertEqual(len(self.runtime.repo.headers('main')), 1)
+                self.assertEqual(self.runtime.repo.task(receipt['task_id'])['status'], 'done')
+                self.assertEqual(page.read_bytes(), before)
+        page.unlink()
+        handoff = self.runtime.app.advance(compact=True)
+        self.assertEqual(handoff['action'], 'await_author')
+        self.assertEqual(handoff['book_view']['chapters'], 1)
+        self.assertIn('id="read-1"', page.read_text(encoding='utf-8'))
+
+    def test_advance_refreshes_paused_boundary_without_dispatching(self):
+        drive(self.runtime.app, until='write')
+        self.runtime.app.pause('作者临时暂停。')
+        result = self.runtime.app.advance(compact=True)
+        self.assertEqual(result['action'], 'paused')
+        self.assertNotIn('task', result)
+        self.assertIn('作者临时暂停。', Path(result['book_view']['path']).read_text(encoding='utf-8'))
 
     def cli_deliver(self):
         environment = {key: value for key, value in os.environ.items()

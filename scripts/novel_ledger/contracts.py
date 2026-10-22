@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 # The five-step pipeline is a protocol generation change: v2 removed every reviewer dispatch, so a
 # task frozen by v1 (checks_version, obligations, blind first read, plan/book_plan stages) can no
 # longer be executed by this build. The pipeline and storage carry independent version identifiers.
-VERSION = '2.0.0'
+VERSION = '2.0.1'
 
 
 SCHEMA = 'novel-ledger/5'
@@ -77,6 +77,7 @@ DEFAULTS = {
     'stall_after_rounds': 2,
     'revision_limit': 3,
     'fast_batch_chapters': 5,
+    'technical_retries': 2,
     # opening/5's two new gates are the ones a web serial lives on, so their floors are numbers, not
     # prose: how many rungs the reader-visible ladder must show at each size class, how many stages
     # the 格局 ladder must walk, and how late the theme anchor may land. `anchor_max_chapter` is the
@@ -582,11 +583,51 @@ def contract_errors(raw):
     return complaints
 
 
+EXECUTION = 'novel-ledger.execution/1'
+
+# Recovery is a role contract, shared by errors, dispatch cards and the CLI.
+# Never suggest a controller operation to a dispatched worker.
+CONTROLLER_ERRORS = frozenset((
+    'session', 'session_reuse', 'worker_identity', 'worker_lease', 'worker_busy',
+    'controller_lease', 'role_boundary', 'worker_boundary', 'stale_task',
+    'writing_batch', 'technical_blocked', 'source_integrity', 'state_integrity',
+    'projection', 'chain', 'schema_version',
+))
+
+RECOVERY_ROUTES = {
+    'controller_lease': ('renew_controller', '主控核对 owner；有效租约由原主控 renew，已失效则沿原授权 run 重新认领，再恢复 Worker。'),
+    'stale_task': ('resync_task', '主控核对 status 与当前任务；不修改旧任务身份重投稿件。'),
+    'writing_batch': ('resync_task', '主控核对当前组和原执行者；保留已提交章节，不把旧回调转成下一任务。'),
+    'worker_busy': ('wait_for_worker', '主控先核对原 Worker 是否仍在运行；不抢占有效租约。'),
+    'source_integrity': ('inspect_integrity', '主控保留现场并检查冻结来源；不重写数据库或放宽验收。'),
+    'state_integrity': ('inspect_integrity', '主控保留现场并检查历史重放；不重写数据库或放宽验收。'),
+    'projection': ('inspect_integrity', '主控保留现场并核对投影来源；不直接保存投影。'),
+    'chain': ('inspect_integrity', '主控保留现场并核对事件链；不修改历史回执。'),
+}
+
+
+def execution_recovery(code, failures=0):
+    escalated = code in CONTROLLER_ERRORS or failures >= policy_default('technical_retries')
+    return {'actor': 'controller' if escalated else 'worker',
+            'action': RECOVERY_ROUTES.get(code, ('prepare_worker', ''))[0] if escalated else 'correct_from_template',
+            'retry_allowed': not escalated,
+            'failures': failures, 'limit': policy_default('technical_retries')}
+
+
 class Error(Exception):
     def __init__(self, code, message, details=None):
         super().__init__(message)
         self.code, self.message = code, message
-        self.details = details or {'recover': '按当前任务模板修正后重提；不要改库或替换任务身份。'}
+        self.details = dict(details or {})
+        recovery = execution_recovery(code)
+        self.details.setdefault('recovery', recovery)
+        if code in CONTROLLER_ERRORS:
+            self.details['recover'] = (RECOVERY_ROUTES.get(code, ('', ''))[1] +
+                                       '保留任务与已填稿件，将 task_id、真实会话和错误码交回主控；'
+                                       '由主控 prepare-worker 绑定 NOVEL_TASK_ID/NOVEL_SESSION 并注入凭据。'
+                                       'Worker 不执行 claim/advance/run。')
+        else:
+            self.details.setdefault('recover', '按当前任务模板修正后重提；不要改库或替换任务身份。')
 
     def as_dict(self):
         return {'error': self.code, 'message': self.message, 'details': self.details}

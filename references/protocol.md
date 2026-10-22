@@ -70,7 +70,7 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 }
 ```
 
-使用执行认领时附 execution_claim。preflight 完整校验后回滚，checked 不等于入库；submit 才更新。相同已提交结果幂等，不同结果拒绝。拒绝不计修复额度，真实短稿提交计实际执笔轮次并保留稿件。
+新派工的 commands 通过跨平台 Python worker 入口执行；主控 prepare-worker 后，读取入口自动验证 ready，session 与 execution_claim 在内存中注入，不写回草稿。旧直接接口仍由宿主附执行认领。技术恢复遵循 details.recovery，连续失败阻断与文学返修分开；完整身份交接见 [执行身份与技术恢复](runtime.md#执行身份与技术恢复)。preflight 完整校验后回滚，checked 不等于入库；submit 才更新。相同已提交结果幂等，不同结果拒绝。拒绝不计修复额度，真实短稿提交计实际执笔轮次并保留稿件。
 
 预检和正式执笔提交的 style_report 含 metrics/observations/findings，正式章节核账记录保存同一报告；observations 不触发返修，findings 沿现有额度处理。submit 的 accepted=true 表示回执已接受，不等于正文已入库。正文的字数、lint、文风和漂移 findings 会保留候选并进入有界返修；信封、结构或证据校验抛出的错误回滚提交。设计提交失败保持原任务，不自动消耗正文返修额度。
 

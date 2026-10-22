@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import sys
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -66,14 +67,16 @@ class ArtifactTests(unittest.TestCase):
         frozen = json.loads((brief_path.parent / 'input.json').read_text(encoding='utf-8'))['brief']
         self.assertEqual(brief, frozen)
         self.assertIn('# 开书方案简报', brief)
-        # The bootstrap card carries the env preamble verbatim (every cold worker used to pay one
-        # role_boundary round to learn it), the claim story, and argv command lines.
+        # Controller-only opening must not bootstrap a worker or ask for a worker lease.
         card = dispatch_path.read_text(encoding='utf-8')
-        self.assertIn("$env:NOVEL_TASK_ID='%s'" % task['task_id'], card)
-        self.assertIn('claim=null', card)
-        self.assertIn('worker_boundary', card)
-        self.assertIn('read', card) and self.assertIn('submit', card)
-        self.assertIn('utf-8-sig', card)
+        full = json.loads(Path(task['task_path']).read_text(encoding='utf-8'))
+        self.assertEqual(full['execution']['state'], 'controller')
+        self.assertNotIn('ready', full['commands'])
+        self.assertNotIn('worker', full['commands']['read'])
+        result = subprocess.run(full['commands']['read'], text=True, capture_output=True,
+                                encoding='utf-8', timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)['task_id'], task['task_id'])
 
     def test_a_redispatched_task_quarantines_the_previous_attempt_draft(self):
         """A live reviewer found a dropped session's half-written receipt beside the blank form.
@@ -203,7 +206,8 @@ class ClaimRoleTests(unittest.TestCase):
             novel.worker_guard(None, argparse.Namespace(command='claim'))
         self.assertEqual(caught.exception.code, 'worker_boundary')
         self.assertIn('主干', caught.exception.message)
-        self.assertIn('claim --task task-claim-lesson', caught.exception.details['recover'])
+        self.assertEqual(caught.exception.details['recovery']['actor'], 'controller')
+        self.assertFalse(caught.exception.details['recovery']['retry_allowed'])
 
 
 class RepairScopeTests(unittest.TestCase):

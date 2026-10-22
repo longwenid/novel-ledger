@@ -11,11 +11,11 @@ from novel_ledger.contracts import CONTROLLER_STAGES, Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
-          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next'}
+          'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next', 'worker', 'worker-ready', 'worker-error', 'prepare-worker'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
-WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'worker-next'}
+WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'worker-next', 'worker-ready', 'worker-error'}
 # Prose and frozen records belong to a dispatched task; the controller role never executes them.
-WORKER_ONLY = {'read', 'recall', 'patch', 'worker-next'}
+WORKER_ONLY = {'read', 'recall', 'patch', 'worker-next', 'worker-ready', 'worker-error'}
 
 
 def load(path):
@@ -111,10 +111,23 @@ def parser():
                 group.add_argument('--' + kind)
             sub.add_argument('--limit', type=int, default=5)
             sub.add_argument('--before', type=int)
-        if command in ('claim', 'run', 'renew'):
+        if command in ('claim', 'run', 'renew', 'prepare-worker'):
             sub.add_argument('--seconds', type=int, default=300)
-        if command == 'claim':
+        if command in ('claim', 'prepare-worker'):
             sub.add_argument('--session', required=True)
+        if command == 'prepare-worker':
+            sub.add_argument('--task', required=True)
+            sub.add_argument('--reset-failures', action='store_true')
+        if command == 'worker':
+            sub.add_argument('--task', required=True)
+            sub.add_argument('--session')
+            sub.add_argument('--execution-claim')
+            sub.add_argument('worker_command', nargs=argparse.REMAINDER)
+        if command in ('worker-ready', 'worker-error'):
+            sub.add_argument('--task', required=True)
+        if command == 'worker-error':
+            sub.add_argument('--code', required=True)
+            sub.add_argument('--operation', required=True)
         if command == 'run':
             group = sub.add_mutually_exclusive_group(required=True)
             group.add_argument('--through', type=int)
@@ -177,10 +190,35 @@ def dispatch_identity(project, task_id):
         return {'path': str(path), 'readable': False}
 
 
+def worker_identity(args):
+    return getattr(args, '_worker_context', None) or {
+        'NOVEL_TASK_ID': os.environ.get('NOVEL_TASK_ID'),
+        'NOVEL_SESSION': os.environ.get('NOVEL_SESSION'),
+        'NOVEL_EXECUTION_CLAIM': os.environ.get('NOVEL_EXECUTION_CLAIM')}
+
+
+def normalize_worker(args):
+    if args.command != 'worker':
+        return args
+    argv = list(args.worker_command)
+    if argv and argv[0] == '--':
+        argv.pop(0)
+    require(argv and argv[0] in WORKER, 'worker_boundary', 'worker 只执行 Worker 公开命令。')
+    if argv[0] in WORKER_ONLY and '--task' not in argv:
+        argv.extend(['--task', args.task])
+    nested = parser().parse_args(['--project', args.project, *argv])
+    require(nested.project == args.project, 'worker_boundary', 'worker 不能改投其他项目。')
+    nested._worker_context = {'NOVEL_TASK_ID': args.task,
+                              'NOVEL_SESSION': args.session or os.environ.get('NOVEL_SESSION'),
+                              'NOVEL_EXECUTION_CLAIM': args.execution_claim or os.environ.get('NOVEL_EXECUTION_CLAIM')}
+    nested._portable_worker = True
+    return nested
+
+
 def role_guard(args):
     """A dispatched worker and the controller are different roles; prose is worker-only."""
     if args.command in WORKER_ONLY:
-        task = os.environ.get('NOVEL_TASK_ID')
+        task = worker_identity(args).get('NOVEL_TASK_ID')
         asked = getattr(args, 'task', None)
         if not task:
             # 开书门任务没有独立性要求：无正文、无首读封印、无审写分离。主干自执是默认路径
@@ -205,7 +243,8 @@ def role_guard(args):
 
 
 def worker_guard(app, args):
-    ident = os.environ.get('NOVEL_TASK_ID')
+    identity = worker_identity(args)
+    ident = worker_identity(args).get('NOVEL_TASK_ID')
     if not ident:
         return
     if args.command == 'claim':
@@ -217,14 +256,34 @@ def worker_guard(app, args):
                             '确需租约时回报主控，由主控执行 claim --task ' + ident + ' --session <会话>。'})
     require(args.command in WORKER, 'worker_boundary', 'Worker 不能执行主控或作者命令。')
     if args.command not in ('submit', 'preflight', 'worker-next'):
-        app.authorize_worker(ident, os.environ.get('NOVEL_SESSION'), os.environ.get('NOVEL_EXECUTION_CLAIM'))
+        app.authorize_worker(ident, worker_identity(args).get('NOVEL_SESSION'), worker_identity(args).get('NOVEL_EXECUTION_CLAIM'))
+
+
+
+def worker_receipt(payload, identity, portable):
+    require(isinstance(payload, dict), 'schema', '回执须为 JSON 对象。')
+    if not identity.get('NOVEL_TASK_ID'):
+        return payload
+    require(payload.get('task_id') == identity['NOVEL_TASK_ID'], 'worker_boundary', '回执不能改投其他任务。')
+    require(payload.get('session') in (None, '', identity.get('NOVEL_SESSION')) if portable
+            else payload.get('session') == identity.get('NOVEL_SESSION'),
+            'worker_boundary', '回执不能复用其他会话身份。')
+    if portable:
+        require(payload.get('execution_claim') in (None, identity.get('NOVEL_EXECUTION_CLAIM')),
+                'worker_lease', '回执中有其他任务或过期的凭据，保留 data 并交主控核对。')
+        return {**payload, 'session': identity.get('NOVEL_SESSION'),
+                'execution_claim': identity.get('NOVEL_EXECUTION_CLAIM')}
+    return payload
 
 
 def dispatch(args, open_runtime=open_local_runtime):
+    args = normalize_worker(args)
+    identity = worker_identity(args)
+    portable = getattr(args, '_portable_worker', False)
     require(args.project, 'project', '须指定 --project 小说项目绝对路径。')
     require(args.command in PUBLIC | SEALED, 'access', '未登记命令默认拒绝。')
     if args.command == 'init':
-        require(not os.environ.get('NOVEL_TASK_ID'), 'worker_boundary', 'Worker 不能初始化项目。')
+        require(not identity.get('NOVEL_TASK_ID'), 'worker_boundary', 'Worker 不能初始化项目。')
     runtime = open_runtime(args.project, initialize=args.command == 'init',
                            contract=load(args.contract) if args.command == 'init' and args.contract else None,
                            source=args.source if args.command == 'init' else '', entry=Path(__file__).resolve())
@@ -232,6 +291,8 @@ def dispatch(args, open_runtime=open_local_runtime):
         app = runtime.app
         role_guard(args)
         worker_guard(app, args)
+        if portable and args.command != 'worker-next':
+            app.worker_ready(identity['NOVEL_TASK_ID'], identity['NOVEL_SESSION'], identity['NOVEL_EXECUTION_CLAIM'])
         if args.command in SEALED:
             app.content_guard()
         command, owner = args.command, args.owner
@@ -255,29 +316,33 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'deliver':
             return runtime.deliver()
         if command in ('submit', 'preflight'):
-            result = load(args.file)
-            require(isinstance(result, dict), 'schema', '回执须为 JSON 对象。')
-            if os.environ.get('NOVEL_TASK_ID'):
-                require(result.get('task_id') == os.environ['NOVEL_TASK_ID'] and result.get('session') == os.environ.get('NOVEL_SESSION'),
-                        'worker_boundary', '回执不能改投其他任务或会话。')
+            result = worker_receipt(load(args.file), identity, portable)
             return app.submit(result, command == 'preflight')
         if command == 'check':
             # Same validation as submit, but the receipt may omit task identity and may be piped in:
             # a worker learns which field is wrong without reading the engine's source.
             payload = load(args.file) if args.file else stdin_json()
-            return app.check(payload, getattr(args, 'task', None), session=os.environ.get('NOVEL_SESSION'))
+            if portable:
+                payload = worker_receipt(payload, identity, True)
+            return app.check(payload, getattr(args, 'task', None), session=identity.get('NOVEL_SESSION'))
         if command == 'read':
             return app.read(args.task, args.record, everything=getattr(args, 'everything', False))
         if command == 'recall':
             kind = next((k for k in ('entity', 'node', 'topic', 'thread') if getattr(args, k)), None)
             return app.recall(args.task, args.chapter, args.state, kind, getattr(args, kind) if kind else None, args.limit, args.before)
+        if command == 'prepare-worker':
+            return app.prepare_worker(args.task, args.session, owner, args.seconds, args.reset_failures)
+        if command == 'worker-ready':
+            return app.worker_ready(args.task, identity.get('NOVEL_SESSION'), identity.get('NOVEL_EXECUTION_CLAIM'))
+        if command == 'worker-error':
+            return app.worker_failure(args.task, identity.get('NOVEL_SESSION'), args.operation, args.code)
         if command == 'claim':
             return app.claim(args.task, args.session, args.seconds)
         if command == 'run':
             return app.run(args.through, args.complete, owner, args.seconds, args.source, mode=args.mode)
         if command == 'worker-next':
-            return app.continue_writing(args.task, os.environ.get('NOVEL_SESSION'),
-                                        os.environ.get('NOVEL_EXECUTION_CLAIM'))
+            return app.continue_writing(args.task, identity.get('NOVEL_SESSION'),
+                                        identity.get('NOVEL_EXECUTION_CLAIM'))
         if command == 'renew':
             return app.renew(owner, args.seconds)
         if command == 'approve':
@@ -344,8 +409,23 @@ def dispatch(args, open_runtime=open_local_runtime):
             require(args.owner, 'watch', 'watch 需要 --owner（run 命令返回的主控身份）。')
             return runtime.watch(args.owner, args.steps, args.poll, args.idle_limit)
         require(False, 'access', '未实现命令。')
+    except (Error, OSError, ValueError) as exc:
+        if portable:
+            error = exc if isinstance(exc, Error) else Error('worker_io', str(exc))
+            try:
+                error.details['recovery'] = app.worker_failure(identity['NOVEL_TASK_ID'], identity.get('NOVEL_SESSION'), args.command, error.code)
+            except Error:
+                pass  # An ended task is handed back; never reopen it to count retries.
+            if not error.details['recovery']['retry_allowed']:
+                error.details['recover'] += ' 修复原因后由主控 prepare-worker --reset-failures。'
+            raise error from None
+        raise
     finally:
-        runtime.close()
+        try:
+            if portable and sys.exc_info()[0] is None and args.command not in ('worker-ready', 'worker-error'):
+                app.worker_succeeded(identity['NOVEL_TASK_ID'])
+        finally:
+            runtime.close()
 
 
 def main(argv=None):

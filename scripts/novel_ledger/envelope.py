@@ -47,7 +47,7 @@ TASK_FIELDS = ('schema', 'task_id', 'input_hash', 'stage', 'chapter', 'scope', '
 # stages, so the envelope has one shape instead of two.
 TASK_OPTIONAL = ('brief', 'guides', 'input_path', 'template_path',
                  'records', 'required', 'brief_path', 'dispatch_path', 'stale_result_session',
-                 'catalog_path', 'worker_batch')
+                 'catalog_path', 'worker_batch', 'execution')
 
 # Dispatch identity (`identity.json` in the work directory): the task's own copy of who it is,
 # written so a worker and the controller can cross-check the dispatched identity without guessing.

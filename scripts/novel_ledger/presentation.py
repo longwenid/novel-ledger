@@ -14,9 +14,9 @@ class LocalPresentation:
         self.workspace = workspace
         self.entry = Path(entry)
 
-    def task(self, task, baseline=None, compact=False):
+    def task(self, task, baseline=None, compact=False, preserve_result=False):
         return delivery.materialize(self.repo, task, self.entry, baseline, compact,
-                                    workspace=self.workspace)
+                                    workspace=self.workspace, preserve_result=preserve_result)
 
     def revision_path(self, plan_hash):
         return str(self.workspace.artifact_path(self.workspace.project / 'work' / ('revision-' + plan_hash + '.json')))
@@ -28,6 +28,9 @@ class LocalPresentation:
 
     def world(self):
         return delivery.export_world(self.repo, bookpage.render, workspace=self.workspace)
+
+    def book(self):
+        return bookpage.write(self.repo, workspace=self.workspace)
 
     def board(self, board):
         return delivery.write_board_card(self.workspace, board)

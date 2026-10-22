@@ -40,7 +40,7 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 | 冻结材料 | 新 Worker 完整读取本任务必要资料；历史与设计按 `read`/`recall` 补读，缺资料按任务补读，不截断正文和证据。 |
 | 修复与范围 | 预检、换 Worker、恢复、改约和修订不重置有限额度；超出自动范围的历史修订保存完整方案等作者授权，不能用 `resume` 绕过。 |
 | 判断依据 | 自比给出具体结论；偏差附原因、原文与影响范围，不自动填 pass。 |
-| 文风与人物 | 按作者风格和人物当下处境写，允许心理、停顿与关系中的言不由衷；不把核账解释写进对白。首章形状默认只观察，具体取舍见 [创作与自比](references/craft.md#人物与表达的真实感)。 |
+| 文风与人物 | 默认减少形容词堆叠，优先用动作、事实和具体细节表达，保留有辨识作用的修饰。按作者风格和人物当下处境写，允许心理、停顿与关系中的言不由衷；不把核账解释写进对白。首章形状默认只观察，具体取舍见 [创作与自比](references/craft.md#人物与表达的真实感)。 |
 
 ## 最短交接
 
@@ -52,14 +52,18 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 |---|---|---|
 | 取当前动作 | 主干 | `advance --compact`，已有 owner 时继续携带；按返回动作执行，不自行拼下一任务。 |
 | 派工或恢复 | 主干 | 核对原执行者与 claim；仍在运行或认领有效时等待，普通模式的新任务、快速模式的新组派空历史 Worker；快速组内按受限接续入口沿用原 Worker。未认领或租约过期不证明旧执行者已停止。 |
-| 交给 Worker | 主干 | 开书门任务（opening_options）不派 Worker：主干自执（读 task.json 与同目录 brief.md → `read --task` → 从 result.template.json 起稿写 result.json → submit，session 填主干身份）。其余阶段（world_model、opening_contract、volume_outline、chapter_outline、write、repair、redesign）转发任务目录的 `dispatch.md`（引擎渲染的 Worker 自举卡：环境自举、步骤、认领状态、命令与常见坑）并附角色、`task_path`、一句背景；不手写环境自举或复述协议，不改写 `commands/guides`。 |
-| 完成冻结任务 | Worker | 按 `dispatch.md` 自举环境后读 `task.json` 与 `brief.md`，按 `brief/required` 读取材料；从 `result.template.json` 起稿按模板写结果并执行 `commands.submit`。填真实 `session`，使用认领时附 token 裸字符串 `execution_claim`（认领由主干执行）。 |
+| 交给 Worker | 主干 | 开书门任务（opening_options）不派 Worker：主干自执（读 task.json 与同目录 brief.md → `read --task` → 从 result.template.json 起稿写 result.json → submit，session 填主干身份）。其余阶段（world_model、opening_contract、volume_outline、chapter_outline、write、repair、redesign）先创建停在自举边界的真实 Worker，取得宿主会话 ID 后由主控 `prepare-worker --task ID --session ID`；将返回的 worker_env 仅注入该 Worker，再转发任务目录的 `dispatch.md`（引擎渲染的 Worker 自举卡：环境自举、步骤、认领状态、命令与常见坑）并附角色、`task_path`、一句背景；不手写环境自举或复述协议，不改写 `commands/guides`。 |
+| 完成冻结任务 | Worker | 读 `task.json`、`brief.md`，用冻结 commands 读取必读材料（入口自动验证身份）；从 `result.template.json` 起稿，执行冻结 commands。Python worker 入口在内存中注入 session/凭据，不手填或从旧任务复制身份。缺身份、角色或租约错误交回主控。 |
 | 核实提交 | 主干 | 无人值守（普通与快速模式同样）用 `watch --owner ID`：等待与续租在引擎进程内完成，任务提交后直接带回下一 task_ready，不用 advance 轮询等待；需要显式核实时再 `advance --compact --after 该任务ID`。只收身份、提交状态或错误摘要，正文与完整回执留在项目。进程退出或口头完成不替代数据库提交。 |
 | 接续或交付 | 主干 | 按 [运行动作表](references/runtime.md#动作分支) 处理选择、认可、修订、暂停和交付；章节、卷纲和卷末不是授权目标的停点。 |
+
+执行交接统一按 `novel-ledger.execution/1`：身份与租约错误立即交主控，其余连续技术失败达到 `details.recovery.limit` 后停止；主控修复原因后显式 `prepare-worker --reset-failures`。宿主工具失败用 `commands.report_error` 上报，不猜源码或数据库恢复。技术执行记录与文学返修额度分开。
 
 普通任务提交后结束（`worker_boundary=finished`）；快速模式返回 `worker_boundary=continue` 时仅用派工卡的 `worker_next` 接续同组，满五章或遇边界后结束，详见[快速无人值守](references/runtime.md#快速无人值守五章一组)。Worker 不自行 advance。命令路径确实移动时由主干重新 advance 刷新，先核实文件，不凭路径字面判失效。
 
 ## 交付与停止
+
+正式 submit 提交后（含快速组内每章）及主干 advance 返回时，引擎自动刷新 book.html；book_view_error 表示派生页面失败，用 html 重建，不重写已提交正文。
 
 交付实际完成范围及文件绝对路径；开书范围以实际交付的卷纲为准——`scope=rolling` 时只交进入中的那一卷，不能称全书卷纲。`ready_to_complete` 仍须 `complete` 验收，再从准确快照 `deliver`；导出失败只恢复交付。
 

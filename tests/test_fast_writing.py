@@ -56,6 +56,10 @@ class FastWritingTests(unittest.TestCase):
             self.assertEqual(self.repo.pending()['input']['chapter'], chapter)
             receipt, result = self.submit('fast-worker', lease)
             self.assertEqual(result['committed_chapter'], chapter)
+            self.assertEqual(result['book_view']['chapters'], chapter)
+            page = Path(result['book_view']['path']).read_text(encoding='utf-8')
+            self.assertEqual(page.count('<section class="chapter"'), chapter)
+            self.assertIn('id="read-' + str(chapter) + '"', page)
             self.assertEqual(result['worker_boundary'], 'finished' if chapter == 6 else 'continue')
             if chapter < 6:
                 self.assertEqual(self.app.advance(owner=self.owner)['action'], 'wait_for_batch')
@@ -70,6 +74,22 @@ class FastWritingTests(unittest.TestCase):
             self.app.claim(new['task_id'], 'fast-worker')
         self.assertEqual(caught.exception.code, 'session_reuse')
         self.app.claim(new['task_id'], 'next-worker')
+
+    def test_supervision_of_submitted_group_head_observes_later_task_block(self):
+        first, lease = self.start_group()
+        self.submit('fast-worker', lease)
+        current, lease = self.next(first, lease)
+        for _ in range(2):
+            self.app.worker_failure(current['task_id'], 'fast-worker', 'host-read', 'host_tool')
+        observed = self.app.task_status(first['task_id'])
+        self.assertEqual(observed['status'], 'done')
+        self.assertTrue(observed['batch_active'])
+        self.assertTrue(observed['execution_blocked'])
+        self.assertEqual(observed['batch_task'], current['task_id'])
+        stopped = unattended.watch(self.app, self.owner, poll=0.01, idle_limit=1,
+                                   sleep=lambda _: self.fail('blocked group must not keep waiting'))
+        self.assertEqual(stopped['action'], 'worker_blocked')
+        self.assertEqual(stopped['task_id'], current['task_id'])
 
     def test_failed_prose_repairs_the_same_chapter_without_spending_the_next_chapter_budget(self):
         task, lease = self.start_group()
