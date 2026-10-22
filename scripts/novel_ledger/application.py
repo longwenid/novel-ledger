@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION,
+from .contracts import (CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error,
                         digest, dump, require, text)
 from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint
 from .ports import Presentation, Repository, TaskCompiler
@@ -185,7 +185,20 @@ class Application:
                                for ident, hook in sorted(state['hooks'].items()) if hook['status'] == 'open'],
                 'candidate': {'chapter': book['draft']['chapter'], 'stage': book['draft']['stage']} if book['draft'] else None}
 
+    def _refresh_book(self, response):
+        # A derived view cannot undo a committed receipt. Keep its failure separate
+        # so the controller can retry html without resubmitting or rewriting prose.
+        try:
+            response['book_view'] = self.presentation.book()
+        except (OSError, Error) as exc:
+            response['book_view_error'] = str(exc)
+
     def advance(self, after=None, owner=None, compact=False, wait_pending=False):
+        response = self._advance(after, owner, compact, wait_pending)
+        self._refresh_book(response)
+        return response
+
+    def _advance(self, after=None, owner=None, compact=False, wait_pending=False):
         boundary = None
         refresh_world = False
         with self.repo.transaction():
@@ -348,9 +361,11 @@ class Application:
                 require(task['result_hash'] == digest(result), 'replay_conflict', '同一任务不能提交不同内容。')
                 group = self._writing.active()
                 continuing = bool(group and group['task_id'] == task['id'])
-                return {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
+                response = {'valid': True, 'accepted': not preview, 'checked': preview, 'committed': not preview,
                         'idempotent': True, 'task_id': task['id'],
                         'worker_boundary': 'continue' if continuing else 'finished'}
+                self.repo.after_commit(lambda: self._refresh_book(response))
+                return response
             book = self._live(task)
             require(book['status'] == 'running' or (book['status'] == 'preparing' and task['input']['stage'] == 'opening_options'),
                     'paused', '项目暂停，保留回执并由主控恢复。')
@@ -401,6 +416,9 @@ class Application:
                         'rework': (updated.get('rework') or {}).get(str(work['chapter'])), 'status': updated['status']}
             if outcome.style_report is not None:
                 response['style_report'] = outcome.style_report
+            # Includes fast-mode submissions: they need no controller advance
+            # between chapters. Preview/rollback must leave the page untouched.
+            self.repo.after_commit(lambda: self._refresh_book(response))
         return response
 
     def claim(self, task_id, session, seconds=300):

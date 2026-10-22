@@ -38,6 +38,10 @@ class MemoryPresentation:
         self.effects.append(('world',))
         return {'delivery_id': 'memory:world'}
 
+    def book(self):
+        self.effects.append(('book',))
+        return {'delivery_id': 'memory:book'}
+
     def board(self, board):
         self.effects.append(('board', board.get('hash')))
         return {'delivery_id': 'memory:board/' + str(board.get('hash'))}
