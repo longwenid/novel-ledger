@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from .creation import gate_note, gate_title, value_rules
-from .contracts import (GENRE_CATALOG, OPENING_DIRECTION, OPENING_DIRECTION_GATES, OPENING_VERSION,
-                        OPTION_CONTRACT, WORLD_ARCHITECTURE)
-from . import stages, world
+from .catalog import GENRE_CATALOG, OPENING_DIRECTION, OPENING_DIRECTION_GATES
+from .contracts import (OPENING_VERSION, OPTION_CONTRACT, WORLD_ARCHITECTURE)
+from . import catalog, stages, world
 BRIEFS = {
     'opening_options': '开书方案简报',
     'world_model': '世界与约定简报',

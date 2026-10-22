@@ -18,7 +18,7 @@ fixtures stay valid by construction so a rejection never means "the fixture was 
 import copy
 import uuid
 
-from novel_ledger import context, drift, facts, store_keys, workflow
+from novel_ledger import context, drift, drift_simulation, drift_validation, facts, store_keys, workflow
 from novel_ledger.contracts import (CONTRACT_FIELDS, COSMOLOGY_SCOPES, DERIVED_FIELDS, RESULT, digest, han_count,
                                     opening_source, policy_default, require)
 from novel_ledger.result_templates import drift_items, template
@@ -316,7 +316,7 @@ def volume_outline_fixture(app, work, hooks=None):
             volume = next(row for row in contract['volumes'] if row['id'] == ident)
             chapters = chapter_rows(book, volume, state, hooks=enabled)
             data['chapters'][ident] = chapters
-            state = drift.simulate(chapters, state, book.get('world'), volume, outline)[0]
+            state = drift_simulation.simulate(chapters, state, book.get('world'), volume, outline)[0]
     return data
 
 
@@ -324,7 +324,7 @@ def volume_rows(book, volume_ids=None, words=None, hooks=None, stage=None):
     """The volume outline rows for `volume_ids`, sized to the policy's per-volume 汉字 target.
 
     Public so a drift-unit test can build the same rows the dispatch fixture builds without an
-    application: `drift.validate_volume_outline` is deterministic over (contract, world, rows).
+    application: `drift_validation.validate_volume_outline` is deterministic over (contract, world, rows).
     `hooks=False` switches every promise off at once, which is how a test isolates the non-hook
     checks from the hook chain. `stage` may be a list of rungs to assign by volume order (a test
     building a book without an opening needs the ladder explicitly), or a single stage for all.
@@ -417,7 +417,7 @@ def anchor_state(app, book, payload, volume):
         rows = (book.get('chapter_outlines') or {}).get(prior['id'])
         if rows:
             outline = (book.get('volumes_outline') or {}).get(prior['id'])
-            state = drift.simulate(rows, state, book.get('world'), prior, outline)[0]
+            state = drift_simulation.simulate(rows, state, book.get('world'), prior, outline)[0]
     return state
 
 
@@ -456,7 +456,7 @@ def chapter_rows(book, volume, state, first=None, words=None, resources=True, pl
     """The chapter rows for `volume`, each declaring its deltas and its enter/exit handshake.
 
     `state` is the projected state the chain starts from, and is copied: the caller's state is
-    never advanced. Public so a drift-unit test can hand `drift.validate_chapter_outline` rows
+    never advanced. Public so a drift-unit test can hand `drift_validation.validate_chapter_outline` rows
     without paying for an application dispatch. `hooks=False` switches the promise schedule off,
     which is how a test isolates a non-hook check from the chain.
     """

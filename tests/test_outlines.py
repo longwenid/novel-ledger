@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import creation, drift, planning, workflow
+from novel_ledger import creation, drift, drift_simulation, drift_validation, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import DEFAULTS, Error
 from novel_ledger.sqlite_store import SQLiteRepository
@@ -66,7 +66,7 @@ class VolumeOutlineTests(unittest.TestCase):
         self.rows = volume_rows(self.book, ['v1', 'v2'])
 
     def submit(self, rows, wanted=('v1', 'v2')):
-        return drift.validate_volume_outline({'volumes': rows}, self.contract, self.world,
+        return drift_validation.validate_volume_outline({'volumes': rows}, self.contract, self.world,
                                              {}, {}, list(wanted), self.state)
 
     def assertRejected(self, criterion, rows, wanted=('v1', 'v2')):
@@ -85,7 +85,7 @@ class VolumeOutlineTests(unittest.TestCase):
         self.assertEqual(report['v2']['nodes'][-1]['window'], [4, 4])
         policy = self.contract['volume_outline']
         for row in self.rows:
-            length = drift._deep_han({key: row.get(key) for key in drift.VOLUME_FIELDS})
+            length = drift_validation._deep_han({key: row.get(key) for key in drift.VOLUME_FIELDS})
             self.assertGreaterEqual(length, policy['words'] - policy['tolerance'])
             self.assertLessEqual(length, policy['words'] + policy['tolerance'])
 
@@ -158,7 +158,7 @@ class VolumeStageTests(unittest.TestCase):
         rungs = [row['stage'] for row in choices['ladder']['ladder']]
         rows = volume_rows(book, ['v1', 'v2'])
         self.assertEqual([row['stage'] for row in rows], rungs[:2])
-        report = drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+        report = drift_validation.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
                                                choices, {}, ['v1', 'v2'], book['state'])
         self.assertEqual([report['v1']['stage'], report['v2']['stage']], rungs[:2])
 
@@ -174,7 +174,7 @@ class VolumeStageTests(unittest.TestCase):
         for label, rows in (('invented', invented), ('descending', descending)):
             with self.subTest(scenario=label):
                 with self.assertRaises(Error) as caught:
-                    drift.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
+                    drift_validation.validate_volume_outline({'volumes': rows}, book['contract'], book['world'],
                                                   choices, {}, ['v1', 'v2'], book['state'])
                 self.assertEqual(caught.exception.code, 'design_drift')
                 criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
@@ -200,13 +200,13 @@ class ChapterOutlineTests(unittest.TestCase):
         self.world = self.book['world']
         self.state = self.book['state']
         self.volume = self.contract['volumes'][0]
-        self.volume_row = drift.validate_volume_outline(
+        self.volume_row = drift_validation.validate_volume_outline(
             {'volumes': volume_rows(self.book, ['v1'])}, self.contract, self.world,
             {}, {}, ['v1'], self.state)['v1']
         self.rows = chapter_rows(self.book, self.volume, self.state)
 
     def submit(self, rows, state0=None):
-        return drift.validate_chapter_outline(
+        return drift_validation.validate_chapter_outline(
             {'volume': self.volume['id'], 'chapters': rows},
             self.contract['chapter_outline'], self.volume, self.volume_row, self.world,
             self.state if state0 is None else state0)
@@ -226,7 +226,7 @@ class ChapterOutlineTests(unittest.TestCase):
         self.assertTrue(rows[0]['enter'])
         self.assertEqual([item['kind'] for item in rows[0]['enter']],
                          [item['kind'] for item in rows[0]['exit']])
-        state, findings = drift.simulate(rows, self.state, self.world, self.volume, self.volume_row)
+        state, findings = drift_simulation.simulate(rows, self.state, self.world, self.volume, self.volume_row)
         self.assertEqual(findings, [])
         self.assertEqual(state['clock'], 2)
         self.assertEqual(state['resources'], {'["shen","车费","元"]': '2'})
@@ -283,13 +283,13 @@ class ChapterOutlineTests(unittest.TestCase):
         book['contract']['narrative_tracking'] = True
         book = seeded_book(book['contract'])
         volume = book['contract']['volumes'][0]
-        volume_row = drift.validate_volume_outline(
+        volume_row = drift_validation.validate_volume_outline(
             {'volumes': volume_rows(book, ['v1'])}, book['contract'], book['world'],
             {}, {}, ['v1'], book['state'])['v1']
         rows = chapter_rows(book, volume, book['state'])
         rows[1]['plot']['nodes'] = copy.deepcopy(rows[0]['plot']['nodes'])
         with self.assertRaises(Error) as caught:
-            drift.validate_chapter_outline({'volume': 'v1', 'chapters': rows},
+            drift_validation.validate_chapter_outline({'volume': 'v1', 'chapters': rows},
                                            book['contract']['chapter_outline'], volume,
                                            volume_row, book['world'], book['state'])
         criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
@@ -322,7 +322,7 @@ class ChapterOutlineTests(unittest.TestCase):
         broken['resources'] = [{'key': '["shen","车费","元"]', 'from': 4, 'to': 1,
                                 'reason': '卷末资源结余。'}]
         with self.assertRaises(Error) as caught:
-            drift.validate_chapter_outline({'volume': 'v1', 'chapters': self.rows},
+            drift_validation.validate_chapter_outline({'volume': 'v1', 'chapters': self.rows},
                                            self.contract['chapter_outline'], self.volume,
                                            broken, self.world, self.state)
         criteria = {finding['criterion'] for finding in caught.exception.details['findings']}
@@ -330,12 +330,12 @@ class ChapterOutlineTests(unittest.TestCase):
 
     def test_a_repair_batch_anchors_on_the_state_the_book_is_actually_in(self):
         # The book has already written chapter 1: the live state is chapter 1's exit state.
-        live, _ = drift.simulate(self.rows[:1], self.state, self.world, self.volume,
+        live, _ = drift_simulation.simulate(self.rows[:1], self.state, self.world, self.volume,
                                  self.volume_row)
         tail = self.submit(copy.deepcopy(self.rows), state0=live)
         # Chapter 1 is a stale prefix now; the validator returns the suffix it anchored on.
         self.assertEqual([row['chapter'] for row in tail], [2])
-        _, findings = drift.simulate(tail, live, self.world, self.volume, self.volume_row)
+        _, findings = drift_simulation.simulate(tail, live, self.world, self.volume, self.volume_row)
         self.assertEqual(findings, [])
 
     def test_scope_all_builds_every_volume_up_front(self):
@@ -445,7 +445,7 @@ class VolumeHookTests(unittest.TestCase):
         self.rows = volume_rows(self.book, ['v1', 'v2'], hooks=True)
 
     def submit(self, rows):
-        return drift.validate_volume_outline({'volumes': rows}, self.contract, self.world,
+        return drift_validation.validate_volume_outline({'volumes': rows}, self.contract, self.world,
                                              {}, {}, ['v1', 'v2'], self.state)
 
     def assertRejected(self, criterion, rows):
@@ -509,13 +509,13 @@ class ChapterHookTests(unittest.TestCase):
         self.contract, self.world, self.state = (self.book['contract'], self.book['world'],
                                                  self.book['state'])
         self.volume = self.contract['volumes'][0]
-        self.volume_row = drift.validate_volume_outline(
+        self.volume_row = drift_validation.validate_volume_outline(
             {'volumes': volume_rows(self.book, ['v1'], hooks=True)}, self.contract, self.world,
             {}, {}, ['v1'], self.state)['v1']
         self.rows = chapter_rows(self.book, self.volume, self.state, hooks=True)
 
     def submit(self, rows):
-        return drift.validate_chapter_outline(
+        return drift_validation.validate_chapter_outline(
             {'volume': 'v1', 'chapters': rows}, self.contract['chapter_outline'], self.volume,
             self.volume_row, self.world, self.state)
 
@@ -540,11 +540,11 @@ class ChapterHookTests(unittest.TestCase):
     def test_the_promise_schedule_can_be_switched_off(self):
         # With no promise declared, a chapter chain of empty hook arrays is the consistent shape:
         # the two switches travel together (a promise the volume declared must be executed).
-        outline = drift.validate_volume_outline(
+        outline = drift_validation.validate_volume_outline(
             {'volumes': volume_rows(self.book, ['v1'], hooks=False)}, self.contract, self.world,
             {}, {}, ['v1'], self.state)['v1']
         rows = chapter_rows(self.book, self.volume, self.state, hooks=False)
-        validated = drift.validate_chapter_outline(
+        validated = drift_validation.validate_chapter_outline(
             {'volume': 'v1', 'chapters': rows}, self.contract['chapter_outline'], self.volume,
             outline, self.world, self.state)
         self.assertEqual([row['hooks'] for row in validated], [[], []])
@@ -589,7 +589,7 @@ class HookClosureTests(unittest.TestCase):
         self.contract, self.world = self.book['contract'], self.book['world']
         self.volumes = self.contract['volumes']
         self.state = self.book['state']
-        self.v1_row = drift.validate_volume_outline(
+        self.v1_row = drift_validation.validate_volume_outline(
             {'volumes': volume_rows(self.book, ['v1'], hooks=True)}, self.contract, self.world,
             {}, {}, ['v1'], self.state)['v1']
 
@@ -600,7 +600,7 @@ class HookClosureTests(unittest.TestCase):
         rows = self.v1_chapters()
         rows[-1]['hooks'] = []                    # the volume ends without paying its promise
         with self.assertRaises(Error) as caught:
-            drift.validate_chapter_outline({'volume': 'v1', 'chapters': rows},
+            drift_validation.validate_chapter_outline({'volume': 'v1', 'chapters': rows},
                                            self.contract['chapter_outline'], self.volumes[0],
                                            self.v1_row, self.world, self.state)
         self.assertEqual(caught.exception.code, 'design_drift')
@@ -609,22 +609,22 @@ class HookClosureTests(unittest.TestCase):
 
     def test_a_continuing_promise_may_stay_open_and_is_paid_in_the_next_volume(self):
         rows = self.v1_chapters()
-        drift.validate_chapter_outline({'volume': 'v1', 'chapters': rows},
+        drift_validation.validate_chapter_outline({'volume': 'v1', 'chapters': rows},
                                        self.contract['chapter_outline'], self.volumes[0],
                                        self.v1_row, self.world, self.state)
-        after_v1, findings = drift.simulate(rows, self.state, self.world, self.volumes[0],
+        after_v1, findings = drift_simulation.simulate(rows, self.state, self.world, self.volumes[0],
                                             self.v1_row)
         self.assertEqual(findings, [])
         self.assertEqual(after_v1['hooks']['hook-v1-carry']['status'], 'open')
         self.assertEqual(after_v1['hooks']['hook-v1-required']['status'], 'paid')
-        v2_row = drift.validate_volume_outline(
+        v2_row = drift_validation.validate_volume_outline(
             {'volumes': volume_rows(self.book, ['v2'], hooks=True)}, self.contract, self.world,
             {}, {'v1': self.v1_row}, ['v2'], after_v1)['v2']
         v2_rows = chapter_rows(self.book, self.volumes[1], after_v1, hooks=True)
-        drift.validate_chapter_outline({'volume': 'v2', 'chapters': v2_rows},
+        drift_validation.validate_chapter_outline({'volume': 'v2', 'chapters': v2_rows},
                                        self.contract['chapter_outline'], self.volumes[1],
                                        v2_row, self.world, after_v1)
-        after_v2, findings = drift.simulate(v2_rows, after_v1, self.world, self.volumes[1], v2_row)
+        after_v2, findings = drift_simulation.simulate(v2_rows, after_v1, self.world, self.volumes[1], v2_row)
         self.assertEqual(findings, [])
         self.assertEqual(after_v2['hooks']['hook-v1-carry']['status'], 'paid')
         self.assertEqual(after_v2['hooks']['hook-v2-required']['status'], 'paid')

@@ -14,7 +14,7 @@ flowchart TD
     APP --> VERIFY[只读验收 verification]
     VERIFY --> PORT
     VERIFY --> DOMAIN
-    VERIFY --> DRIFT
+    VERIFY --> DRIFTR[执笔核算 drift_reconcile]
     APP --> WRITE[连写编排 writing_service]
     WRITE --> PORT
     WRITE --> WF
@@ -28,6 +28,10 @@ flowchart TD
     WF --> DOMAIN
     WF --> DRIFT[漂移核算 drift]
     DRIFT --> DOMAIN
+    WF --> DRIFTS[状态链模拟 drift_simulation]
+    WF --> DRIFTR
+    DRIFTS --> DOMAIN
+    DRIFTR --> DOMAIN
     VIEW --> PORT
     VIEW --> DEL[任务与导出 delivery]
     VIEW --> PAGE[全书页面 bookpage]

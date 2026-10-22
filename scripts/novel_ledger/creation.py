@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import copy
-from . import contracts
-from .contracts import (DEFAULTS, OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_TIERS, SCALE_WINDOW,
-                        alignment_for, digest, require, text)
+from . import catalog, contracts
+from .contracts import (DEFAULTS, OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_TIERS, SCALE_WINDOW, alignment_for, digest, require, text)
 
 # The one gate set in force. Older protocols (opening/1../5) are refused rather than re-planned:
 # a project that declares one is told to reopen under the current protocol, and nothing downstream
@@ -25,8 +24,8 @@ SYSTEM_GATES = {OPENING_VERSION: ('scale',)}
 # Direct choices and the protagonist value shape come from CONTRACT_FIELDS.opening.
 DERIVATION_INPUTS = {'world': ('world_premise', 'mechanism', 'red_lines'),
                      'scale': ('tier', 'volume_count', 'chapters', 'chapter_window')}
-# Brainstorm lenses live in contracts.LENSES; this module only picks and carries them.
-LENSES = tuple(label for label, _point, _structure in contracts.LENSES)
+# Brainstorm lenses live in catalog.LENSES; this module only picks and carries them.
+LENSES = tuple(label for label, _point, _structure in catalog.LENSES)
 
 
 def opening_version(state):
@@ -73,7 +72,7 @@ def lens_index(gate, round_no, version=OPENING_VERSION):
 
 def lens_brief(index):
     """The method handed to the option writer: a bare label is not a method."""
-    label, point, structure = contracts.LENSES[index % len(contracts.LENSES)]
+    label, point, structure = catalog.LENSES[index % len(catalog.LENSES)]
     return '本轮创意透镜：' + label + '。' + point + ' 落地要求：' + structure
 
 
@@ -250,7 +249,7 @@ def value_fields(gate, version=OPENING_VERSION):
 OPTION_CONTRACT = contracts.OPTION_CONTRACT
 LEGACY_LENS_WORDS = ('混搭', '倒置', '代价递进', '认知差', '规则推演', '绑定', '闭环', '阶梯', '商业化倒推')
 LENS_WORDS = tuple(dict.fromkeys(
-    ('透镜', '落地要求', '典型落法') + tuple(row[0] for row in contracts.LENSES) + LEGACY_LENS_WORDS))
+    ('透镜', '落地要求', '典型落法') + tuple(row[0] for row in catalog.LENSES) + LEGACY_LENS_WORDS))
 
 
 def _reject_lens_language(option):
@@ -564,7 +563,7 @@ def name_warnings(gate, options):
     for option in options:
         name = str((option.get('value') or {}).get('name') or '')
         given = name[1:]
-        if len(name) == 2 and name[0] in contracts.CLICHE_SURNAMES and given in contracts.CLICHE_GIVEN:
+        if len(name) == 2 and name[0] in catalog.CLICHE_SURNAMES and given in catalog.CLICHE_GIVEN:
             warnings.append({'option': option.get('id'), 'code': 'protagonist_name_cliche',
                              'message': '「%s」是 AI 起名重灾组合（潇洒姓×玄乎单字），读者一眼批量脸；'
                                         '按主角门的命名纪律换贴世界与阶层的名字。' % name})
@@ -585,7 +584,7 @@ def premise_warnings(gate, options):
     for option in options:
         value = option.get('value') if isinstance(option.get('value'), dict) else {}
         text_value = ' '.join(str(value.get(key, '')) for key in ('novelty', 'first_cause'))
-        found = [word for word in contracts.SETTING_CLICHES if word in text_value]
+        found = [word for word in catalog.SETTING_CLICHES if word in text_value]
         if found:
             warnings.append({'option': option.get('id'), 'code': 'premise_public_setting',
                              'message': '「%s」是被头部作品占位的公共设定组合，读者会当熟面孔：novelty 必须写清'

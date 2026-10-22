@@ -18,13 +18,14 @@ import time
 from decimal import Decimal
 from pathlib import Path
 from string import Template
-from .contracts import CONTRACT_FIELDS, LENSES, VOLUME_TURNS, han_count
+from .catalog import LENSES, VOLUME_TURNS
+from .contracts import CONTRACT_FIELDS, han_count
 from .ports import PublicationReader
 from .publication import publication
 from .workspace import LocalWorkspace
 from .planning import volume_for
 from .world import LABELS as WORLD_LABELS, SECTIONS as WORLD_SECTIONS
-from . import creation, understanding
+from . import catalog, creation, understanding
 from .briefs import gate_title
 
 FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '终局', 'genre': '题材',

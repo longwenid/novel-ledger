@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
-from novel_ledger import drift, facts, workflow
+from novel_ledger import drift, drift_reconcile, facts, workflow
 from novel_ledger.bootstrap import open_local_runtime
 from novel_ledger.contracts import Error, digest
 from novel_ledger.result_templates import drift_items
@@ -68,7 +68,7 @@ class FixedOutlineTests(unittest.TestCase):
                         actual=copy.deepcopy(item['planned']), evidence={'chapter': 1, 'quote': quote})
         check = {'items': items, 'unplanned': [], 'verdict': 'clean'}
         book = self.repo.load()
-        valid = drift.reconcile(check, row, book['state'], book.get('world'))
+        valid = drift_reconcile.reconcile(check, row, book['state'], book.get('world'))
         self.assertEqual(valid['findings'], [])
         self.assertEqual(valid['events'][0]['op'], 'reader_knowledge')
         for variant, criterion in (('missing', 'drift_coverage'), ('changed', 'drift_kept'),
@@ -82,7 +82,7 @@ class FixedOutlineTests(unittest.TestCase):
                 else:
                     changed['items'][-1].update(status='skipped', actual=None)
                     changed['verdict'] = 'deviated'
-                result = drift.reconcile(changed, row, book['state'], book.get('world'))
+                result = drift_reconcile.reconcile(changed, row, book['state'], book.get('world'))
                 self.assertIn(criterion, {f['criterion'] for f in result['findings']})
 
     def test_incompatible_entry_state_stops_without_replanning(self):

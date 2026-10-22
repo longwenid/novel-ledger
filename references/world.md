@@ -10,7 +10,7 @@
 
 模型包含 premise/story_capacity/selection_hash 和完整记录数组。领域及记录字段以 `world.SECTIONS` 和当前任务模板为准；**必填集合由 `world.required_sections(tier, choices)` 合并档位基础域与门中声明后决定（微型档的基础域是规则、社会、日常、人物、隐秘与机制），最终列表之外的领域保留为空数组，不要为凑数写进来**——世界被之后每一次派工读取，它的规模是持续成本而不是一次性成本。
 
-`world.required_sections(tier, choices)` 合并档位基础域与已声明内容：`resource` 要求 `economy`，`tiers` 要求 `powers`，格局包含 `一界`/`星海`/`诸天` 要求 `cosmology`。t3–t5 的基础域由 `BASE_SECTIONS` 声明；世界架构还要求 geography/history/factions/rules/mysteries 承接五项决定。简报与校验共用这个集合，不强制所有项目增加宇宙位面。模型始终包含全部领域键，不使用的领域显式给空数组；mechanisms 按所选机制方向为空或实写。
+`world.required_sections(tier, choices)` 合并档位基础域与已声明内容：`resource` 要求 `economy`，`tiers` 要求 `powers`，格局包含 `一界`/`星海`/`诸天` 要求 `cosmology`。各档位基础域：`t0=(rules,society,everyday,characters,mysteries,mechanisms)`，`t1=t0∪geography`，`t2=t1∪history`（领域次序一律按 `world.SECTIONS`），`t3–t5=BASE_SECTIONS`（全部基础领域）；世界架构还要求 geography/history/factions/rules/mysteries 承接五项决定。简报与校验共用这个集合，不强制所有项目增加宇宙位面。模型始终包含全部领域键，不使用的领域显式给空数组；mechanisms 按所选机制方向为空或实写。
 
 | 领域 | 说明 |
 |---|---|

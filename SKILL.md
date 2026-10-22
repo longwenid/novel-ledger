@@ -52,9 +52,9 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 |---|---|---|
 | 取当前动作 | 主干 | `advance --compact`，已有 owner 时继续携带；按返回动作执行，不自行拼下一任务。 |
 | 派工或恢复 | 主干 | 核对原执行者与 claim；仍在运行或认领有效时等待，普通模式的新任务、快速模式的新组派空历史 Worker；快速组内按受限接续入口沿用原 Worker。未认领或租约过期不证明旧执行者已停止。 |
-| 交给 Worker | 主干 | 开书门任务（opening_options）不派 Worker：主干自执（读 task.json 与同目录 brief.md → `read --task` → 从 result.template.json 起稿写 result.json → submit，session 填主干身份）。其余阶段（world_model、volume_outline、chapter_outline、write、repair、redesign）转发任务目录的 `dispatch.md`（引擎渲染的 Worker 自举卡：环境自举、步骤、认领状态、命令与常见坑）并附角色、`task_path`、一句背景；不手写环境自举或复述协议，不改写 `commands/guides`。 |
+| 交给 Worker | 主干 | 开书门任务（opening_options）不派 Worker：主干自执（读 task.json 与同目录 brief.md → `read --task` → 从 result.template.json 起稿写 result.json → submit，session 填主干身份）。其余阶段（world_model、opening_contract、volume_outline、chapter_outline、write、repair、redesign）转发任务目录的 `dispatch.md`（引擎渲染的 Worker 自举卡：环境自举、步骤、认领状态、命令与常见坑）并附角色、`task_path`、一句背景；不手写环境自举或复述协议，不改写 `commands/guides`。 |
 | 完成冻结任务 | Worker | 按 `dispatch.md` 自举环境后读 `task.json` 与 `brief.md`，按 `brief/required` 读取材料；从 `result.template.json` 起稿按模板写结果并执行 `commands.submit`。填真实 `session`，使用认领时附 token 裸字符串 `execution_claim`（认领由主干执行）。 |
-| 核实提交 | 主干 | 无人值守连写用 `watch --owner ID`：等待与续租在引擎进程内完成，任务提交后直接带回下一 task_ready；需要显式核实时再 `advance --compact --after 该任务ID`。只收身份、提交状态或错误摘要，正文与完整回执留在项目。进程退出或口头完成不替代数据库提交。 |
+| 核实提交 | 主干 | 无人值守（普通与快速模式同样）用 `watch --owner ID`：等待与续租在引擎进程内完成，任务提交后直接带回下一 task_ready，不用 advance 轮询等待；需要显式核实时再 `advance --compact --after 该任务ID`。只收身份、提交状态或错误摘要，正文与完整回执留在项目。进程退出或口头完成不替代数据库提交。 |
 | 接续或交付 | 主干 | 按 [运行动作表](references/runtime.md#动作分支) 处理选择、认可、修订、暂停和交付；章节、卷纲和卷末不是授权目标的停点。 |
 
 普通任务提交后结束（`worker_boundary=finished`）；快速模式返回 `worker_boundary=continue` 时仅用派工卡的 `worker_next` 接续同组，满五章或遇边界后结束，详见[快速无人值守](references/runtime.md#快速无人值守五章一组)。Worker 不自行 advance。命令路径确实移动时由主干重新 advance 刷新，先核实文件，不凭路径字面判失效。

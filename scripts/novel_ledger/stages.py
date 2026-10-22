@@ -10,7 +10,7 @@ from .contracts import require
 # the contract, one writes each volume's outline at the contract length, one writes a volume's chapter
 # outlines (resource/place/knowledge/plot deltas), and each chapter is drafted against its own
 # outline with the engine reconciling the writer's self-comparison. There is no reviewer stage:
-# the checks that used to be a second agent's receipt are now mechanical (drift.reconcile), so
+# the checks that used to be a second agent's receipt are now mechanical (drift_reconcile.reconcile), so
 # the count of dispatches before the first word is a constant instead of a function of reviews.
 STAGES = frozenset({
     'chapter_outline', 'opening_contract', 'opening_options', 'redesign', 'repair',

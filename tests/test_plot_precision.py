@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import drift, facts, narrative
+from novel_ledger import drift, drift_reconcile, drift_simulation, drift_validation, facts, narrative
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import chapter_rows, contract, seeded_book, volume_rows
 
@@ -46,10 +46,10 @@ class ExactContinuityTests(unittest.TestCase):
 
     def test_subnanounit_changes_are_settled_in_both_design_and_prose(self):
         row = self.row()
-        state, findings = drift.simulate([row], self.state, self.book['world'])
+        state, findings = drift_simulation.simulate([row], self.state, self.book['world'])
         self.assertEqual(findings, [])
         self.assertEqual(state['resources'][RESOURCE], '4.0000000001')
-        result = drift.reconcile(self.check(row), row, self.state, self.book['world'])
+        result = drift_reconcile.reconcile(self.check(row), row, self.state, self.book['world'])
         self.assertEqual(result['findings'], [])
         state, events = facts.settle(self.state, result['events'], QUOTE, 1)
         self.assertEqual(len(events), 1)
@@ -58,7 +58,7 @@ class ExactContinuityTests(unittest.TestCase):
     def test_large_integer_spending_preserves_the_last_unit(self):
         self.state['resources'][RESOURCE] = '9007199254740993'
         row = self.row('9007199254740993', '9007199254740992')
-        result = drift.reconcile(self.check(row), row, self.state, self.book['world'])
+        result = drift_reconcile.reconcile(self.check(row), row, self.state, self.book['world'])
         self.assertEqual(result['findings'], [])
         state, events = facts.settle(self.state, result['events'], QUOTE, 1)
         self.assertEqual(len(events), 1)
@@ -69,7 +69,7 @@ class ExactContinuityTests(unittest.TestCase):
         balance = '123456789012345678901234567890.123456789'
         self.state['resources'][RESOURCE] = balance
         row = self.row(balance, '0')
-        result = drift.reconcile(self.check(row), row, self.state, self.book['world'])
+        result = drift_reconcile.reconcile(self.check(row), row, self.state, self.book['world'])
         self.assertEqual(result['findings'], [])
         state, events = facts.settle(self.state, result['events'], QUOTE, 1)
         self.assertEqual(events[0]['quantity'], balance)
@@ -80,16 +80,16 @@ class ExactContinuityTests(unittest.TestCase):
         for before, after, criterion in [('4', '4.0000000001', 'drift_kept'),
                                          ('4.0000000001', '4', 'drift_before')]:
             with self.subTest(criterion=criterion):
-                result = drift.reconcile(self.check(row, before, after), row, self.state, self.book['world'])
+                result = drift_reconcile.reconcile(self.check(row, before, after), row, self.state, self.book['world'])
                 self.assertIn(criterion, {f['criterion'] for f in result['findings']})
 
     def test_volume_terminal_and_replan_entry_are_exact(self):
         row = self.row('4', '4')
         terminal = {'resources': [{'key': RESOURCE, 'to': '4.0000000001'}]}
-        _, findings = drift.simulate([row], self.state, self.book['world'], volume_outline=terminal)
+        _, findings = drift_simulation.simulate([row], self.state, self.book['world'], volume_outline=terminal)
         self.assertIn('drift_closure', {f['criterion'] for f in findings})
         row['enter'][0]['expected'] = '4.0000000001'
-        self.assertTrue(drift.state_mismatch(self.state, row))
+        self.assertTrue(drift_reconcile.state_mismatch(self.state, row))
 
     def test_projection_values_remain_json_safe_without_precision_loss(self):
         for value in ('4.0000000001', '9007199254740993'):
@@ -114,7 +114,7 @@ class ExactContinuityTests(unittest.TestCase):
                     condition['expected'] = '4.0000000001'
         outline['resources'] = [{'key': RESOURCE, 'from': '4', 'to': '4.0000000001',
                                  'reason': '保留精确余额。'}]
-        normalized = drift.validate_chapter_outline(
+        normalized = drift_validation.validate_chapter_outline(
             {'volume': 'v1', 'chapters': rows}, self.book['contract']['chapter_outline'],
             volume, outline, self.book['world'], self.state)
         decoded = json.loads(json.dumps(drift.plan_rows(normalized)))

@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import drift, facts, spatial
+from novel_ledger import drift, drift_reconcile, drift_simulation, drift_validation, facts, spatial
 from novel_ledger.contracts import Error
 from novel_ledger.result_templates import drift_items
 from support import chapter_rows, contract, seeded_book, volume_rows
@@ -51,7 +51,7 @@ class UnplannedSettlementTests(unittest.TestCase):
 
     def reconcile(self, entries):
         row = empty_row()
-        return drift.reconcile(receipt(row, entries), row, self.state, self.book['world'])
+        return drift_reconcile.reconcile(receipt(row, entries), row, self.state, self.book['world'])
 
     def test_unplanned_values_are_diagnostic_previews_with_blocking_alignment_findings(self):
         resource = '["shen","车费","元"]'
@@ -122,7 +122,7 @@ class UnplannedSettlementTests(unittest.TestCase):
                                    claim='进一步核对后确认来源。')])
         item = next(item for item in check['items'] if item['kind'] == 'knowledge')
         item.update(actual={'from': None, 'to': 'hinted'}, claim='封条上的字迹可疑。')
-        settled = drift.reconcile(check, row, self.state, self.book['world'])
+        settled = drift_reconcile.reconcile(check, row, self.state, self.book['world'])
         self.assertIn('outline_alignment', {f['criterion'] for f in settled['findings']})
         self.assertEqual(settled['events'][1]['before'], '封条上的字迹可疑。')
         state, events = facts.settle(self.state, settled['events'], QUOTE, 1)
@@ -145,7 +145,7 @@ class UnplannedSettlementTests(unittest.TestCase):
                               extra('places', 'shen', 'office', 'yard', links=['path'])])
         item = next(item for item in check['items'] if item['kind'] == 'places')
         item['actual'] = {'from': 'office', 'to': 'yard'}
-        settled = drift.reconcile(check, row, self.state, self.book['world'])
+        settled = drift_reconcile.reconcile(check, row, self.state, self.book['world'])
         self.assertIn('outline_alignment', {f['criterion'] for f in settled['findings']})
         self.assertEqual([event['from'] for event in settled['events']], ['office', 'yard', 'office'])
         state, events = facts.settle(self.state, settled['events'], QUOTE, 1)
@@ -208,10 +208,10 @@ class UnplannedSettlementTests(unittest.TestCase):
         item = next(item for item in check['items'] if item['kind'] == 'knowledge')
         item.update(status='deviated', actual={'from': 'confirmed', 'to': 'hinted'})
         check['verdict'] = 'deviated'
-        rejected = drift.reconcile(check, row, self.state, self.book['world'])
+        rejected = drift_reconcile.reconcile(check, row, self.state, self.book['world'])
         self.assertIn('drift_knowledge', {f['criterion'] for f in rejected['findings']})
         item['actual']['to'] = 'retracted'
-        allowed = drift.reconcile(check, row, self.state, self.book['world'])
+        allowed = drift_reconcile.reconcile(check, row, self.state, self.book['world'])
         self.assertIn('outline_alignment', {f['criterion'] for f in allowed['findings']})
         state, _ = facts.settle(self.state, allowed['events'], QUOTE, 1)
         self.assertEqual(state['knowledge']['shen:secret']['stance'], 'disproved')
@@ -230,7 +230,7 @@ class UnplannedSettlementTests(unittest.TestCase):
                     row['plot']['nodes'] = rows
                 else:
                     row[field] = rows
-                settled = drift.reconcile(receipt(row, skip=True), row, self.state, self.book['world'])
+                settled = drift_reconcile.reconcile(receipt(row, skip=True), row, self.state, self.book['world'])
                 self.assertIn('outline_alignment', {f['criterion'] for f in settled['findings']})
                 self.assertEqual(settled['events'], [])
                 self.assertEqual(len(settled['deviations']), 1)
@@ -251,11 +251,11 @@ class ComputableTerminalTests(unittest.TestCase):
         self.chapters = chapter_rows(self.book, self.volume, self.state)
 
     def validate_volume(self, outline):
-        return drift.validate_volume_outline({'volumes': [outline]}, self.contract, self.world,
+        return drift_validation.validate_volume_outline({'volumes': [outline]}, self.contract, self.world,
                                              {}, {}, ['v1'], self.state)['v1']
 
     def validate_chapters(self, rows=None, outline=None, state=None):
-        return drift.validate_chapter_outline({'volume': 'v1', 'chapters': rows or self.chapters},
+        return drift_validation.validate_chapter_outline({'volume': 'v1', 'chapters': rows or self.chapters},
                                                self.contract['chapter_outline'], self.volume,
                                                outline or self.outline, self.world,
                                                self.state if state is None else state)
@@ -278,7 +278,7 @@ class ComputableTerminalTests(unittest.TestCase):
                 self.assertIn('drift_closure', {f['criterion'] for f in caught.exception.details['findings']})
 
     def test_a_tail_replan_checks_the_absolute_terminal_without_recounting_the_prefix(self):
-        prefix_state, _ = drift.simulate(self.chapters[:2], self.state, self.world,
+        prefix_state, _ = drift_simulation.simulate(self.chapters[:2], self.state, self.world,
                                          self.volume, self.outline)
         tail = self.chapters[2:]
         self.validate_chapters(tail, state=prefix_state)

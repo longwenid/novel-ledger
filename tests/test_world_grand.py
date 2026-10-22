@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import briefs, contracts, creation, drift, world
+from novel_ledger import briefs, contracts, creation, drift, drift_validation, world
 from novel_ledger.contracts import Error, dump
 from support import contract, seeded_book, volume_rows
 
@@ -299,7 +299,7 @@ class VolumeStageTests(unittest.TestCase):
                                     'ladder': ladder_rows()}}
 
     def submit(self, rows, selected=None):
-        return drift.validate_volume_outline({'volumes': rows}, self.contract, self.world,
+        return drift_validation.validate_volume_outline({'volumes': rows}, self.contract, self.world,
                                              self.selected if selected is None else selected,
                                              {}, ['v1', 'v2'], self.state)
 

@@ -6,13 +6,14 @@ import json
 import sys
 import time
 from pathlib import Path
-from .contracts import FORM_ARTIFACTS, GENRE_CATALOG, IDENTITY, RESULT, VERSION, digest, require, text
+from .catalog import GENRE_CATALOG
+from .contracts import FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, digest, require, text
 from .result_templates import template
 from .ports import PublicationReader
 from .publication import publication
 from .workspace import LocalWorkspace, atomic_write
 from .envelope import validate_identity, validate_task
-from . import store_keys
+from . import catalog, store_keys
 
 
 def json_write(path, value):

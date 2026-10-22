@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import copy
 import math
-from . import contracts
+from . import contracts, drift_validation
 from .contracts import (CONTRACT_FIELDS, DEFAULT_NAME_CHARS, DEFAULT_TERMS,
                         POLICY_FIELDS, contract_errors, contract_skeleton, digest, require, text)
-from . import craft, drift, story_memory
+from . import craft, story_memory
 
 
 def resolve_policy(policy):
@@ -226,19 +226,19 @@ def chapter_policy(contract, volume, model=None):
 
 def validate_volume_outline(data, contract, world, selected=None, existing=None, missing_ids=None,
                             state=None):
-    """Delegate the volume outline's mechanical checks to `drift` (single implementation)."""
-    return drift.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state)
+    """Delegate the volume outline's mechanical checks to `drift_validation` (single implementation)."""
+    return drift_validation.validate_volume_outline(data, contract, world, selected, existing, missing_ids, state)
 
 
 def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0, previous=None):
     """Delegate the chapter outline's chain checks, then freeze the scenes it declares.
 
-    `drift` owns the state chain; this entry point adds the one piece that needs the scene protocol
+    `drift_simulation` owns the state chain; this entry point adds the one piece that needs the scene protocol
     (identity and reading dependencies), which is why it lives beside the policy rather than in the
     pure drift core. Rows without scenes are bound too: the binding is what records that the row
     declared no dependency, which a revision later reads as "conservatively expand".
     """
-    rows = drift.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0)
+    rows = drift_validation.validate_chapter_outline(data, policy, volume_row, volume_row_outline, world, state0)
     entities = copy.deepcopy((state0 or {}).get('entities') or {})
     replaced = {row['chapter'] for row in rows}
     previous = {key: value for key, value in (previous or {}).items()
