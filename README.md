@@ -178,7 +178,7 @@ python scripts/novel.py --project "$P" run --through 3 --source '作者授权先
 
 `run` 返回 `owner` 租约令牌，之后每个主控命令都要带 `--owner <令牌>`，否则返回 `controller_lease`。
 
-默认主干循环：开书门任务（opening_options）由主干在同一会话自执；世界模型及之后按 `advance --compact` → 转发任务目录的 `dispatch.md`（Worker 自举卡）派空历史子 agent → `watch --owner ID`（引擎进程内等待提交并续租）→ 取下一派工执行。中文长内容一律走引擎物化的文件工件：任务目录的 `brief.md`（简报全文）与 `dispatch.md`，`await_choice` 时的 `work/board.md`（作者卡片）、`work/question.json`（提问载荷）与 `work/last-advance.json`（完整视图快照，`--compact` 的板面回显压缩为哈希与 option_ids）。主干只处理目标、任务身份、简短状态和治理命令，子 agent 读取完整任务并直接提交；主干生命周期由宿主提供。
+默认主干循环：开书门任务（opening_options）由主干在同一会话自执；世界模型及之后按 `advance --compact` → 创建真实空历史子 agent，取得宿主会话 ID → `prepare-worker` 并注入 worker_env → 转发 `dispatch.md`，Worker 执行自动验证身份的 Python commands → `watch --owner ID`（引擎进程内等待提交并续租）→ 取下一派工执行。中文长内容一律走引擎物化的文件工件：任务目录的 `brief.md`（简报全文）与 `dispatch.md`，`await_choice` 时的 `work/board.md`（作者卡片）、`work/question.json`（提问载荷）与 `work/last-advance.json`（完整视图快照，`--compact` 的板面回显压缩为哈希与 option_ids）。主干只处理目标、任务身份、简短状态和治理命令，子 agent 读取完整任务并直接提交；主干生命周期由宿主提供。
 
 章节、卷纲边界与卷末都继续循环；修订就绪按授权 `promote` 后接续，完本依次 `complete`、`deliver`。首章认可和开书选择仍按准确版本保存作者决定。`--compact` 只精简返回主干的派工信息，磁盘 `task.json` 与冻结材料保持完整；`status --tasks` 列出全部派工任务的生命周期视图。完整动作分支见 [运行与恢复](references/runtime.md)；`host-step/host-loop` 保留为可选子进程适配器。
 

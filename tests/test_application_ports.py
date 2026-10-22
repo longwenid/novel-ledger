@@ -20,7 +20,7 @@ class MemoryPresentation:
     def __init__(self):
         self.effects = []
 
-    def task(self, task, baseline=None, compact=False):
+    def task(self, task, baseline=None, compact=False, preserve_result=False):
         self.effects.append(('task', task['id']))
         return {'task_id': task['id'], 'input_hash': task['input_hash'],
                 'stage': task['input']['stage'], 'chapter': task['input']['chapter'],

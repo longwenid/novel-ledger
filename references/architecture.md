@@ -161,6 +161,12 @@ flowchart TD
 - `work/<task>/` 里两类文件分属不同作者：task.json、input.json、identity.json、dispatch.md（Worker 自举卡）、brief.md（简报全文） 由主控生成且可重建；result.template.json（表单）与 result.json（回执）由 Worker 写。主控只在表单缺失或属于其他任务时才生成它，重跑 advance 绝不覆盖 Worker 已填内容；取消任务是唯一回收表单的事件。重派未提交任务时，引擎把上次遗留的 result.json 草稿隔离为 `result.stale.json` 并在派工卡注明——账本才是回执的记录源。
 - 角色由身份而非称呼区分：opening_options 属 `contracts.CONTROLLER_STAGES`，主干可读取该门的 read/recall 材料；其他阶段只对携带 NOVEL_TASK_ID 的派工身份开放，主控代读按 role_boundary 拒绝；audit/export/html 是验收与交付命令，主控可用。身份本身随派工一起留档（identity.json：task_id、input_hash、阶段、worker_env），供核对与解释失败，但权限只看宿主注入的凭据——可核对的数据不是许可证，也不由 Worker 写回。
 
+### 执行交接与恢复所有权
+
+`contracts.EXECUTION` 与统一恢复表声明执行协议及错误处理者；Application 的 prepare_worker/worker_ready/worker_failure 负责认领、就绪验证和技术失败状态，纯创作 workflow 不接管宿主身份。技术计数以 store_keys 声明的任务键保存，不修改作品分区、章节、返修额度或冻结输入。连续失败阻断后，任务仍 pending，status/advance/watch 给出可恢复的 worker_blocked，只有主控显式准备并重置可恢复。
+
+CLI 的 Python worker 入口只执行 Worker 公开命令，先验证会话与认领，在内存中注入回执身份；不生成身份、不从任务文件取私有 token。交付层根据同一状态生成 execution、ready/commands 与跨平台卡片；prepare-worker 重建视图时保留 Worker 草稿。入口捕获到的技术错误可自动计数；宿主自己的任意工具失败须经 report_error 上报。旧直接接口兼容不构成安全沙箱，真实模型身份、工具限制与上下文隔离仍由宿主提供。
+
 ### 字面策略与材料选择
 
 - 字面约定是项目级版本记录（book.lexical_policy），不属于约定快照；默认值在开书阶段即生效，作者改规则用 lexical 命令留档，改规则取消在途任务并作废其视图。约定里出现 lexical_policy 属于未知字段，直接拒绝。

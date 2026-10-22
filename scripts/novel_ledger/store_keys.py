@@ -27,7 +27,7 @@ SCHEMA_KEY = 'schema'
 # of the ledger it writes, so this one is declared but built by the adapter.
 BOOK_ROOT = 'book'
 
-PREFIXES = ('claim:', 'branch-book:', 'history_head:')
+PREFIXES = ('claim:', 'branch-book:', 'history_head:', 'technical_failure:')
 
 # The journal row an actual read leaves behind. It is written by the application and summed by the
 # storage adapter's `usage`, so the shape is declared here instead of being an implicit agreement
@@ -46,6 +46,10 @@ def read_chars(value):
 
 def claim(task_id):
     return 'claim:' + task_id
+
+
+def technical_failure(task_id):
+    return 'technical_failure:' + task_id
 
 
 def branch_book(branch):

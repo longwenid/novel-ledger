@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import html
 import json
+import shlex
 import sys
 import time
 from pathlib import Path
 from .catalog import GENRE_CATALOG
-from .contracts import FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, digest, require, text
+from .contracts import FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, EXECUTION, CONTROLLER_STAGES, execution_recovery, digest, require, text
 from .result_templates import template
 from .ports import PublicationReader
 from .publication import publication
@@ -140,7 +141,9 @@ def write_advance_snapshot(workspace: LocalWorkspace, boundary):
 
 
 def _quoted_argv(argv):
-    return ' '.join("'%s'" % part for part in argv)
+    if sys.platform == 'win32':
+        return '& ' + ' '.join("'%s'" % part.replace("'", "''") for part in argv)
+    return shlex.join(argv)
 
 
 def render_dispatch_card(envelope, identity):
@@ -153,10 +156,23 @@ def render_dispatch_card(envelope, identity):
     the protocol.
     """
     stage = envelope['stage']
+    if stage in CONTROLLER_STAGES:
+        lines = ['# 主控自执卡：' + stage, '',
+                 identity.get('task_line', ''),
+                 '任务：`' + envelope['task_path'] + '`；读同目录 brief.md，按模板只填 data 和主控真实 session。',
+                 '开书门不创建 Worker，无需 claim/prepare-worker，也不使用 Worker 环境自举。',
+                 '执行 read 后按当前模板起稿，check 通过再 submit；字段问题按错误与模板修正，不查内部接口猜格式。', '']
+        for name in ('read', 'check', 'submit'):
+            if (envelope.get('commands') or {}).get(name):
+                lines.append('- %s：%s' % (name, _quoted_argv(envelope['commands'][name])))
+        if envelope.get('stale_result_session'):
+            lines.append('遗留草稿已隔离：上次会话 %s 的未提交 result.json 已移到 result.stale.json；从当前模板起稿。'
+                         % envelope['stale_result_session'])
+        return '\n'.join(lines) + '\n'
     claim = envelope.get('claim')
     if claim is None:
-        claim_lines = ['- 本任务 claim=null：无需认领，直接读取与提交。认领（claim 命令）由主干进程执行；'
-                       'Worker 进程（已设 NOVEL_TASK_ID）执行会被 worker_boundary 拒绝。']
+        claim_lines = ['- 本任务 claim=null：开书门由主控自执；其他阶段须先由主控 prepare-worker 绑定真实会话。'
+                       'Worker 不执行 claim，不从旧任务寻找或复制 session。']
     else:
         state = '已过期' if claim.get('expired') else '生效中（session=%s）' % claim.get('session')
         claim_lines = ['- 本任务已有租约（%s）：未过期沿用原会话；过期由主干重新认领，Worker 不执行 claim。' % state]
@@ -167,10 +183,10 @@ def render_dispatch_card(envelope, identity):
     steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。',
              '2. 执行一次无参数 read（命令见下）把必读记录拿齐；确需某份再 read --record 名称。',
              '3. 复制 `result.template.json` 为 `result.json` 起稿，只改 data；'
-             '填真实 session，已认领时附 execution_claim；schema/task_id/input_hash 不手写。',
-             '4. `preflight` 试算，按报错 details.expect 修正；不为确认格式读引擎源码。',
+             'Python worker 入口在内存中注入真实 session/execution_claim，不写回草稿；schema/task_id/input_hash 不手写。',
+             '4. 执行 commands.preflight 试算，按 details.expect 与 details.recovery 修正；不为确认格式读引擎源码。',
              '5. `submit` 提交；worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令，不改写 commands/guides。']
-    command_names = ('read', 'preflight', 'submit')
+    command_names = ('ready', 'read', 'check', 'preflight', 'submit')
     if envelope.get('worker_batch'):
         group = envelope['worker_batch']
         steps[-1] = ('5. 本组范围第 %s～%s 章：逐章落笔和提交，章纲固定、额度按章计算。'
@@ -185,14 +201,26 @@ def render_dispatch_card(envelope, identity):
              identity.get('task_line') or ('本任务：stage=%s。' % stage),
              '任务文件（唯一权威）：`%s`；简报全文：同目录 `brief.md`（不必解析 input.json）。' % envelope['task_path'],
              '',
-             '## 1. 环境自举（PowerShell，沿用宿主注入的执行身份）',
+             '## 1. 执行准备（Python 入口，跨平台）',
+             '',
+             '先由主控启动真实 Worker 并取得宿主会话 ID，再 prepare-worker；宿主将返回的 worker_env 仅交给该 Worker。',
+             'identity 中 session 为空不是让你找旧身份；缺失或不匹配立即带错误码交回主控，不读正文、不遍历历史任务。',
+             '首条 commands.read 会自动验证 ready，失败不会交付材料；commands.ready 仅用于诊断，不必另起模型轮次探测。Python 入口无需某一种 shell 的初始化脚本。',
+             '宿主不能注入环境时，可在 worker 的 -- 前显式传 --session 与 --execution-claim；只用主控当次返回的值，不写入任务文件。',
+             '',
+             '### POSIX 环境示例（macOS/Linux，宿主已注入时不重复设置）',
+             '    export NOVEL_TASK_ID=' + shlex.quote(envelope['task_id']),
+             '    export PYTHONIOENCODING=utf-8',
+             '    # NOVEL_SESSION / NOVEL_EXECUTION_CLAIM 由宿主提供；缺失交回主控。',
+             '',
+             '### PowerShell 环境示例（Windows，宿主已注入时不重复设置）',
              '',
              '    $env:PYTHONIOENCODING=\'utf-8\'',
              '    [Console]::OutputEncoding=[System.Text.Encoding]::UTF8',
              "    $env:NOVEL_TASK_ID='%s'" % envelope['task_id'],
              session_line,
              '',
-             '首条 read 报 role_boundary 说明环境变量未生效：回本块重设后再试。',
+             '身份、角色、租约错误立即交回主控；其他技术错误按 details.recovery.retry_allowed 执行。连续错误达到 limit 后停止，主控修复原因后显式重开。',
              '',
              '## 2. 步骤',
              '',
@@ -241,7 +269,7 @@ def task_line(work):
     if work.get('scope'):
         parts.append('scope=' + str(work['scope']))
     if work.get('chapter'):
-        chapter = ('chapter=%s' % work['chapter'] if work.get('first') in (None, work.get('chapter'))
+        chapter = ('chapter=%s' % work['chapter'] if not work.get('first') or work.get('first') == work.get('chapter')
                    else 'chapters=%s-%s' % (work['first'], work['last']))
         parts.append(chapter)
     parts.append('required=' + ','.join(work.get('required') or ()) or 'required=(无)')
@@ -296,7 +324,7 @@ def baseline_projection(repo: PublicationReader, task, given=None):
     return view
 
 
-def materialize(repo: PublicationReader, task, entry, baseline=None, compact=False, *, workspace: LocalWorkspace):
+def materialize(repo: PublicationReader, task, entry, baseline=None, compact=False, *, workspace: LocalWorkspace, preserve_result=False):
     work = task['input']
     base = workspace.artifact_path('work/' + task['id'])
     def artifact(name):
@@ -311,8 +339,8 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     shared = {'task_id': task['id'], 'input_hash': task['input_hash'], 'stage': work['stage'],
               'chapter': work['chapter'], 'scope': work['scope'],
               'delivery_phase': 'formal',
-              'requires_new_worker': task['reviewer'] is None and not (batch and lease),
-              'review_session': task['reviewer'] or ((lease or {}).get('session') if batch else None)}
+              'requires_new_worker': task['reviewer'] is None and not lease,
+              'review_session': task['reviewer'] or (lease or {}).get('session')}
     envelope = {'schema': work['schema'], **shared,
                 'task_path': str(artifact('task.json')), 'result_path': str(artifact('result.json')),
                 'project_path': str(workspace.project), 'host_log_path': str(artifact('host.log')),
@@ -330,11 +358,27 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
                              'preflight': command + ['preflight', '--file', str(artifact('result.json'))],
                              'read': command + ['read', '--task', task['id']],
                              'recall': command + ['recall', '--task', task['id']]}}
+    failure = repo.get(store_keys.technical_failure(task['id'])) or {}
+    controller_stage = work['stage'] in CONTROLLER_STAGES
+    prepared = bool(lease and lease['until'] > time.time())
+    envelope['execution'] = {'schema': EXECUTION,
+                             'state': ('controller' if controller_stage else 'blocked' if failure.get('blocked')
+                                       else 'ready' if prepared else 'await_worker_identity'),
+                             'session': shared['review_session'],
+                             'recovery': execution_recovery(failure.get('code', ''), failure.get('failures', 0))}
+    if not controller_stage:
+        envelope['commands']['report_error'] = command + ['worker-error', '--task', task['id']]
+        direct = envelope['commands']
+        envelope['commands'] = {name: command + ['worker', '--task', task['id'], '--'] + argv[len(command):]
+                                for name, argv in direct.items()}
+        envelope['commands']['ready'] = command + ['worker', '--task', task['id'], '--', 'worker-ready', '--task', task['id']]
+    envelope['commands']['check'] = (command if controller_stage else command + ['worker', '--task', task['id'], '--']) + ['check', '--task', task['id'], '--file', str(artifact('result.json'))]
+    worker_command = command if controller_stage else command + ['worker', '--task', task['id'], '--']
     if batch:
         envelope['worker_batch'] = batch
-        envelope['commands']['worker_next'] = command + ['worker-next', '--task', task['id']]
+        envelope['commands']['worker_next'] = worker_command + ['worker-next', '--task', task['id']]
     if work.get('capabilities', {}).get('editorial') and work['stage'] in ('repair', 'redesign'):
-        envelope['commands']['patch'] = command + ['patch', '--task', task['id']]
+        envelope['commands']['patch'] = worker_command + ['patch', '--task', task['id']]
     reference_dir = Path(entry).parent.parent / 'references'
     # Guides are optional reference material per stage; the dispatch's own brief carries what the
     # task needs, so whole documents are not shipped on every round. Only stages that actually have
@@ -406,7 +450,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         stale = artifact('result.json')
         same_batch_worker = bool(batch and lease and isinstance(prior, dict)
                                  and prior.get('review_session') == lease.get('session'))
-        if isinstance(prior, dict) and prior.get('input_hash') == envelope['input_hash'] and stale.exists() and not same_batch_worker:
+        if not preserve_result and isinstance(prior, dict) and prior.get('input_hash') == envelope['input_hash'] and stale.exists() and not same_batch_worker:
             try:
                 stale_receipt = json.loads(stale.read_text(encoding='utf-8'))
             except (OSError, ValueError):
@@ -459,7 +503,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         # Keep the controller's context small; workers always receive the complete on-disk envelope.
         # The shared dispatch fields are listed from the same mapping the envelope was built from.
         keys = ('schema', 'version', *shared, 'task_path', 'identity_path', 'brief_path', 'dispatch_path',
-                'claim', 'redispatch_count', 'stale_result_session', 'catalog_path', 'worker_batch')
+                'claim', 'redispatch_count', 'stale_result_session', 'catalog_path', 'worker_batch', 'execution')
         return {key: envelope[key] for key in keys if key in envelope}
     return envelope
 

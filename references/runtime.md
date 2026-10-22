@@ -45,7 +45,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 首章仍单独写并取得准确版本认可；之后每组由一个真实 Worker 最多连写五章，不跨卷、不越过授权终点或缺失章纲。每章单独冻结、完整成稿、自比与提交，沿用固定章纲，事实只在该章通过后入库。不能一次交五章后跳过中间核验。返修仍使用本章有限额度，同一 Worker 只返修当前章，通过后才写下一章；暂停、停摆或需要作者决定时结束该组。
 
-- 主干按原路径 advance 派出本组首任务，建议用真实会话 claim 并注入凭据；随后 `watch --owner ID` 等整组完成，不逐章另派 Worker。
+- 主干按原路径 advance 派出本组首任务，取得真实 Worker 会话 ID 后 prepare-worker 并注入返回的 worker_env；随后 `watch --owner ID` 等整组完成，不逐章另派 Worker。
 - Worker 提交返回 `worker_boundary=continue` 时，执行当前 task.json 的 `commands.worker_next`。该命令只允许从本人已提交的最新任务接续当前组，不授予 advance、认领主控、改纲或作者权限。
 - 返回下一任务后，按返回值更新 `NOVEL_TASK_ID`、`NOVEL_TASK_PATH`、`NOVEL_EXECUTION_CLAIM`，保留同一 `NOVEL_SESSION`；读取新 task.json、brief 和 read 返回的新增/变更必读材料。执行身份只在引擎授权的组内接续时更新。
 - 同一组中已经实际读取、名称与哈希都相同的记录可复用；变更记录重新读取，`read --all` 始终可取完整材料。新组不继承此缓存，也不能复用旧组会话。
@@ -78,6 +78,7 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 |---|---|
 | task_ready | 按任务路径派工；先核对仍在运行的子 agent 与 claim，具体见任务交接 |
 | wait_for_batch | 原 Worker 正在接续本组，用 watch 等待整组；不要为下一章另派 Worker |
+| worker_blocked | 核对 status.execution_failure 与恢复动作，修复身份、凭据或材料错误后，对同一任务 prepare-worker --reset-failures；保留稿件和文学额度，不直接重派绕过 |
 | wait_for_submit | 等待或联系当前子 agent 完成提交；它已结束时核实错误并沿允许会话恢复当前任务，不派下一个任务 |
 | resync | 放下过期的 after 回调，重新调用不带 --after 的 advance --compact，以当前任务为准 |
 | revision_ready | 修订属于当前授权目标时执行 promote，再回到 advance --compact；作者明确要求先看候选再决定时，交付候选并等待该决定 |
@@ -105,9 +106,25 @@ advance --compact 的 task 只含任务身份、阶段、task_path、identity_pa
 
 每个任务目录另写 identity.json 与 dispatch.md：identity.json 是该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、入口与版本，以及 worker_env 里应注入的变量名）；dispatch.md 是引擎从冻结任务渲染的 **Worker 自举卡**（环境自举命令、执行步骤、认领状态、argv 命令行、常见坑）。identity 供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：除 opening_options 对主干放行 read/recall 外，read/recall/patch 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示宿主尚未注入执行身份，不能自行编造；已有 claim 时派工身份沿用其 session。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
 
-除主干自执的 opening_options 外，新任务派真实新 Worker，填真实 session（普通模式一个会话只做一个任务；快速模式仅冻结的同组正文及其返修可接续，跨组仍按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**初始认领由主干进程执行**：需要租约时主干调用 `claim --task ID --session ID` 并把返回 token 转给该 Worker 填入回执顶层 execution_claim，提交时附带；Worker 进程执行 claim 会被 worker_boundary 拒绝；快速组内下一任务的受限认领由 worker-next 在事务内生成，返回 token 仅供该任务。claim=null 表示无需认领。
+除主干自执的 opening_options 外，新任务派真实新 Worker，填真实 session（普通模式一个会话只做一个任务；快速模式仅冻结的同组正文及其返修可接续，跨组仍按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**初始身份准备由主干执行**：用 `prepare-worker --task ID --session 宿主真实会话ID`，按下节交付 worker_env；Worker 不执行 claim。快速组内下一任务的凭据由 worker-next 生成。claim=null 表示尚未认领，不表示新 Worker 已可读取正文。
 
-主干已派出的子 agent 仍在运行，或 claim.expired=false 时继续等待，不重派；claim=null 只表示没有执行认领，不证明没有运行中的子 agent。expired=true 表示提交前须重新认领，也不证明旧执行者已停止。已写好 result.json 但租约过期时，由主干沿允许的会话重新 claim，Worker 只更新 execution_claim 后重提，保留已填回执。恢复任务先 status、再 advance --compact，以当前任务为准，不手改库；要看全部派工的生命周期用 `status --tasks`（id/状态/阶段/会话，取代直接查库）。
+主干已派出的子 agent 仍在运行，或 claim.expired=false 时继续等待，不重派；claim=null 只表示没有执行认领，不证明没有运行中的子 agent。expired=true 表示提交前须重新认领，也不证明旧执行者已停止。已写好 result.json 但租约过期时，由主干沿允许会话重新 prepare-worker，Worker 使用新注入凭据后重提，保留已填回执。恢复任务先 status、再 advance --compact，以当前任务为准，不手改库；要看全部派工的生命周期用 `status --tasks`（id/状态/阶段/会话，取代直接查库）。
+
+### 执行身份与技术恢复
+
+世界模型及后续派工使用 `novel-ledger.execution/1`，`task.execution.state` 为 `await_worker_identity`、`ready`、`blocked`；开书门是 `controller`。主控先创建真实独立 Worker，使它停在自举边界等待准备；用宿主返回的会话 ID 执行：
+
+```bash
+python3 "$ROOT/scripts/novel.py" --project "$PROJECT" --owner "$OWNER" prepare-worker --task "$TASK" --session "$SESSION"
+```
+
+宿主将响应的 `worker_env`（含当次凭据）仅交给该 Worker。`prepare-worker` 认领同一任务并刷新派工卡，保留 `result.json`，不把它当遗留草稿隔离。初次 `session` 为空时 Worker 等待主控准备，不遍历历史、不复制旧身份。不能提供真实身份的宿主应报告能力缺失。这个入口核对宿主声明的身份与租约，不证明实际模型隔离。
+
+首条 `commands.read` 会自动完成 ready 验证，失败不交付材料；`commands.ready` 只用于宿主诊断，无需额外模型往返。生成的 Worker commands 经 Python `worker` 入口执行，兼容 macOS/Linux/Windows；不依赖 PowerShell 自举。宿主不能注入环境时，可在外层 `worker` 的 `--` 前传 `--session` 和 `--execution-claim`，值必须来自本次主控准备响应。凭据不写入 task/identity/dispatch 或模型起草的回执；入口在内存中补齐空 session 和缺失 claim，拒绝复用其他身份或凭据。schema/task_id/input_hash 仍从模板保留。底层旧命令保持兼容，新派工使用生成的 commands。
+
+`details.recovery` 统一给出 `actor/action/retry_allowed/failures/limit`。身份、角色、会话复用和租约错误立即交主控；其他技术错误连续失败两次后返回主控。成功的实际操作清除未阻断的连续失败计数，ready 探测不清除计数。阻断保留 pending、草稿与文学返修预算，`advance/watch` 返回 `worker_blocked`，不空等到 idle。主控核实原因已修复后对同一任务 `prepare-worker --reset-failures`，不靠换 Worker、resume 或重派刷新计数。
+
+通过 worker 执行的引擎命令错误由入口自动记录；CLI 看不到模型在引擎外执行的任意工具，宿主应按 `commands.report_error --code host_tool --operation 工具名` 上报失败，执行者同样遵循返回的恢复动作，不继续猜接口。仅靠本地 CLI 不能强制约束同权限进程访问源码和数据库。
 
 ### 路径与失效判定
 
@@ -118,7 +135,7 @@ commands/guides 由**当前安装**渲染（解释器取自身份进程，脚本
 | 阶段 | Worker 动作 | 结果 |
 |---|---|---|
 | 正式任务 | 完整读 required 及任务所需来源，按 result.template.json 填 result.json。格式不确定先 check，缺资料按 read/recall 补读。执笔阶段逐项写 drift_check 与 self_check。 | 当前输入版本的回执；不复制旧回执的结论，不凭记忆自报前态。 |
-| 提交 | 执行 commands.submit；认领过的任务附 token 裸字符串 execution_claim。 | 漂移核算、字数、lint 与字面检查在提交时执行；worker_boundary=finished 后结束，主干再用 --after 核实；checked 只是试算，不代表已提交。 |
+| 提交 | 执行 commands.submit；worker 入口在内存中注入当次身份与凭据。 | 漂移核算、字数、lint 与字面检查在提交时执行；worker_boundary=finished 后结束，主干再用 --after 核实；checked 只是试算，不代表已提交。 |
 
 await_author 给准确 prose_hash；已获得该版本认可时由主干 `approve --prose-hash HASH --source 原话`，沿原目标继续。
 

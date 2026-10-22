@@ -75,6 +75,22 @@ class FastWritingTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'session_reuse')
         self.app.claim(new['task_id'], 'next-worker')
 
+    def test_supervision_of_submitted_group_head_observes_later_task_block(self):
+        first, lease = self.start_group()
+        self.submit('fast-worker', lease)
+        current, lease = self.next(first, lease)
+        for _ in range(2):
+            self.app.worker_failure(current['task_id'], 'fast-worker', 'host-read', 'host_tool')
+        observed = self.app.task_status(first['task_id'])
+        self.assertEqual(observed['status'], 'done')
+        self.assertTrue(observed['batch_active'])
+        self.assertTrue(observed['execution_blocked'])
+        self.assertEqual(observed['batch_task'], current['task_id'])
+        stopped = unattended.watch(self.app, self.owner, poll=0.01, idle_limit=1,
+                                   sleep=lambda _: self.fail('blocked group must not keep waiting'))
+        self.assertEqual(stopped['action'], 'worker_blocked')
+        self.assertEqual(stopped['task_id'], current['task_id'])
+
     def test_failed_prose_repairs_the_same_chapter_without_spending_the_next_chapter_budget(self):
         task, lease = self.start_group()
         before = copy.deepcopy(self.repo.load())
