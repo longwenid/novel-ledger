@@ -355,9 +355,9 @@ class WriteReceiptHandoffTests(unittest.TestCase):
         self.assertGreaterEqual(assembled['items'], 4)
         receipt_path = Path(view['result_path'])
         self.assertTrue(receipt_path.exists())
-        # The receipt the engine wrote is the receipt the engine accepts, unchanged.
-        checked = self.cli(commands['preflight'], self.prepared['worker_env'])
-        self.assertTrue(checked['valid'], checked.get('findings'))
+        # Assembly and the dry-run answer in one call: the worker never pays a separate
+        # preflight round-trip for a receipt the engine itself just wrote.
+        self.assertTrue(assembled['preview']['valid'], assembled['preview'].get('findings'))
         accepted = self.cli(commands['submit'], self.prepared['worker_env'])
         self.assertEqual(accepted['committed_chapter'], 1)
 

@@ -230,11 +230,12 @@ def render_dispatch_card(envelope, identity):
     command_names = ('ready', 'read', 'check', 'preflight', 'submit')
     if stage == 'write' and 'receipt' in (envelope.get('commands') or {}):
         # The same one-write-one-assembly flow outside a group: prose goes in the draft file,
-        # the receipt assembles around it and answers the mechanical report in the same call.
+        # the receipt assembles around it and answers mechanics plus the dry-run in one call.
         steps[2] = ('3. 把成稿一次写入任务目录 `draft.md`（一次 write 完整章节，不逐段追加），'
-                    '执行 commands.receipt 本地组装回执：信封、drift_check.items 与 actual.from 投影由引擎填好，'
-                    '响应含机械报告（字数区间/lint/文风代理）——不达标按报告一轮修完 draft 再重跑 receipt，'
-                    'clean 后核对每行 status/reason/quote 如实；schema/task_id/input_hash 不手写。')
+                    '执行 commands.receipt 一次完成组装+机械报告+全量试算：'
+                    '信封、drift_check.items 与 actual.from 投影由引擎填好，prose_report（字数区间/lint/文风代理）与 preview 同答——'
+                    '不达标按报告一轮修完 draft 再重跑 receipt，preview.valid=true 后核对每行 status/reason/quote 如实；'
+                    'schema/task_id/input_hash 不手写。')
         command_names = (*command_names, 'receipt')
     if envelope.get('worker_batch'):
         group = envelope['worker_batch']
@@ -243,13 +244,14 @@ def render_dispatch_card(envelope, identity):
         steps[2] = ('3. 执笔章把成稿一次写入任务目录 `draft.md`（完整章节，不逐段追加），'
                     '执行 commands.receipt 本地组装回执：信封、drift_check.items 与 actual.from 投影由引擎填好，'
                     '核对每行 status/reason/quote 如实后按需小改；返修章仍从 result.template.json 起稿。')
-        steps[-1] = ('5. 本组范围第 %s～%s 章，每章固定序列（模型调用预算 ≤8 次/章，每个工具调用都是一次全上下文模型往返，省一步即省一步的钱）：'
+        steps[-1] = ('5. 本组范围第 %s～%s 章，每章固定序列（模型调用预算 ≤7 次/章，每个工具调用都是一次全上下文模型往返，省一步即省一步的钱和时间）：'
                      '① commands.worker_next 取新任务与凭据，只按返回更新 NOVEL_TASK_ID/NOVEL_TASK_PATH/NOVEL_EXECUTION_CLAIM，保留同一 NOVEL_SESSION；'
                      '② 一次 commands.read 取增量材料并 --save 落盘，之后每章与上下文被压缩后只读 read_pack.md（章纲/前章尾/状态/锚）；'
                      '参考材料在 read_ref.md，仅在核对设定细节时读；禁止逐条 --record 重读未变更记录；'
                      '③ 成稿一次写入 draft.md（一次 write 完整章节，不逐段追加）；'
-                     '④ commands.receipt 组装：响应含全量机械报告（字数区间/lint/文风代理），不达标按报告一轮修完 draft（整段替换，不逐句小改）再重跑 receipt，clean 后核对 status/quote/reason；'
-                     '⑤ commands.preflight（机械报告已绿时通常一次过）；⑥ commands.submit。'
+                     '④ commands.receipt 一次完成组装+机械报告+全量试算（prose_report 与 preview 同答）：'
+                     '不达标按报告一轮修完 draft（整段替换，不逐句小改）再重跑 receipt，preview.valid=true 后核对 status/quote/reason；'
+                     '⑤ commands.submit。'
                      'worker_boundary=continue 回到 ①；finished 或 batch_finished 后结束；不得自行 advance 或处理作者决定。'
                      '调用纪律：不用 ls/dir/探查命令翻目录，不用 python 逐字段查看 result.json，不开后台任务再轮询输出——'
                      '这些每一次都是全价模型调用；不确定格式用一次 check，不猜不翻。'

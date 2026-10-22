@@ -369,7 +369,18 @@ def dispatch(args, open_runtime=open_local_runtime):
             receipt = outcome.pop('receipt')
             target = Path(args.out).expanduser() if args.out else Path(args.prose).expanduser().with_name('result.json')
             target.write_text(dump(receipt), encoding='utf-8')
-            return {**outcome, 'written': str(target.resolve())}
+            # The same call answers "would it commit": assembling and dry-running in one process
+            # saves a full-context round-trip per chapter, which is what the per-call price is.
+            preview = {'valid': False, 'error': 'not_run'}
+            try:
+                session = identity.get('NOVEL_SESSION')
+                preview = app.check({**receipt, 'session': session,
+                                     'execution_claim': identity.get('NOVEL_EXECUTION_CLAIM')},
+                                    session=session)
+            except Error as exc:
+                preview = {'valid': False, 'error': exc.code, 'message': exc.message,
+                           'recovery': exc.details.get('recovery')}
+            return {**outcome, 'preview': preview, 'written': str(target.resolve())}
         if command == 'recall':
             kind = next((k for k in ('entity', 'node', 'topic', 'thread') if getattr(args, k)), None)
             return app.recall(args.task, args.chapter, args.state, kind, getattr(args, kind) if kind else None,
