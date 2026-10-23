@@ -18,10 +18,12 @@ ALLOWED = {
     'store_keys': set(),
     'stages': {'contracts'},
     'envelope': {'contracts'},
+    'execution': set(),
     'ports': {'contracts'},
     'governance': {'contracts', 'store_keys', 'ports'},
     'authority': {'contracts'},
     'build_info': {'contracts'},
+    'runtime_install': {'contracts', 'build_info'},
     'continuity': {'contracts'},
     'continuity_service': {'contracts', 'continuity', 'store_keys', 'ports'},
     'book_state': {'contracts'},
@@ -76,7 +78,7 @@ ALLOWED = {
     # key space). book_state stays a pure declaration module: it imports nothing but contracts.
     'application': {'contracts', 'ports', 'store_keys', 'book_state', 'creation', 'facts', 'narrative', 'planning',
                     'workflow', 'world', 'craft', 'editorial',
-                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'opening_service', 'verification', 'lint', 'writing_service', 'governance', 'continuity_service'},
+                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'opening_service', 'verification', 'lint', 'writing_service', 'governance', 'continuity_service', 'execution'},
     'writing_service': {'contracts', 'ports', 'store_keys', 'editorial', 'planning', 'workflow'},
     'revision_service': {'contracts', 'ports', 'store_keys', 'editorial', 'facts', 'narrative', 'revision_impact',
                          'story_memory', 'understanding', 'workflow', 'verification'},
@@ -88,7 +90,7 @@ ALLOWED = {
     'publication': {'ports', 'verification'},
     'verification': {'contracts', 'ports', 'book_state', 'creation', 'drift_reconcile', 'editorial', 'facts', 'lint', 'narrative', 'planning', 'understanding', 'world'},
     'workspace': {'contracts'},
-    'delivery': {'contracts', 'catalog', 'ports', 'store_keys', 'envelope', 'result_templates', 'publication', 'workspace'},
+    'delivery': {'contracts', 'catalog', 'ports', 'store_keys', 'envelope', 'result_templates', 'publication', 'workspace', 'execution'},
     'bookpage': {'contracts', 'catalog', 'ports', 'publication', 'workspace', 'planning',
                  'world', 'creation', 'understanding', 'briefs'},
     'presentation': {'ports', 'bookpage', 'delivery', 'workspace'},
@@ -97,9 +99,9 @@ ALLOWED = {
     'host': {'contracts', 'ports'},
     # unattended owns the wait between dispatch and external submission; like host it sees only
     # the public application protocol, so the loop stays an adapter even though it runs long.
-    'unattended': {'contracts', 'ports'},
+    'unattended': {'contracts', 'ports', 'execution'},
     'bootstrap': {'contracts', 'application', 'context', 'presentation', 'sqlite_store',
-                  'workspace', 'workflow', 'host', 'preview', 'unattended', 'delivery', 'bookpage', 'build_info'},
+                  'workspace', 'workflow', 'host', 'preview', 'unattended', 'delivery', 'bookpage', 'build_info', 'runtime_install'},
     'novel': {'contracts', 'bootstrap'},
 }
 
@@ -111,6 +113,7 @@ CORE_EXTERNAL = {
     'store_keys': {'__future__'},
     'stages': {'__future__', 'contracts'},
     'envelope': {'__future__', 'contracts'},
+    'execution': {'__future__'},
     'ports': {'__future__', 'typing'},
     'governance': {'__future__'},
     'continuity': {'__future__'},
@@ -155,7 +158,7 @@ CORE_EXTERNAL = {
 # discover resources or start processes, but only through the injected surface.
 ADAPTERS = {
     'workspace', 'delivery', 'bookpage', 'presentation',
-    'sqlite_store', 'preview', 'host', 'unattended', 'bootstrap', 'novel', 'authority', 'build_info',
+    'sqlite_store', 'preview', 'host', 'unattended', 'bootstrap', 'novel', 'authority', 'build_info', 'runtime_install',
 }
 
 FORBIDDEN_CORE_NAMES = {'open', '__import__', 'eval', 'exec', 'Path',

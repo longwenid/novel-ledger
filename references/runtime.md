@@ -7,6 +7,7 @@
 | 当前需要 | 读取小节 |
 |---|---|
 | 新建或导入设定 | [开书入口选择](opening.md#入口选择)；已有项目先看下面的运行前提。 |
+| 固定运行安装、版本冲突恢复 | [固定运行版本与受控切换](#固定运行版本与受控切换)。 |
 | 授权正文、续租、循环派工 | [目标与主控认领](#目标与主控认领)、[主干循环](#主干循环默认执行路径)。 |
 | 收到 action、不知道下一步 | [动作分支](#动作分支)。 |
 | 认领、提交或恢复原会话 | [任务交接](#任务交接)。 |
@@ -37,6 +38,45 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 开书交付按 outline_ready 的实际卷纲覆盖说明；卷纲与章纲为必选阶段；不将设计完成视为正文授权。
 
+## 固定运行版本与受控切换
+
+写作运行与技能开发使用不同目录。开始连续写作前，先用开发入口生成完整固定副本（Python标准库复制，不修改源目录；`--ref` 需要本地Git）：
+
+```bash
+python3 "$DEV_ROOT/scripts/novel.py" pin-engine --output "$RUNTIME"
+```
+
+返回 `runtime_root`、`entry`、`build` 及后续命令。把 ROOT 改为该 runtime_root，再执行 init/status/run/advance 等操作；Worker commands 自动指向同一固定入口。副本包含脚本、规则、模板与素材，带内容清单，文件设为只读；启动时核验清单，不接受被改动的副本。文件模式不是OS权限隔离。目标已存在时只复用有效副本，不覆盖；副本须在开发目录外。不要把固定运行副本继续链接回开发树。
+
+已有项目带待办时，`pin-engine --project PROJECT` 会以只读连接取得冻结指纹；所选副本不匹配即拒绝发布，不取消任务。恢复已冻结的发布版本：
+
+```bash
+python3 "$DEV_ROOT/scripts/novel.py" --project "$PROJECT" pin-engine --ref "$RELEASE" --output "$RUNTIME"
+```
+
+RELEASE 由准确发布记录核实，不根据版本号相同就猜指纹一致。该命令读取Git归档到独立目录，不执行checkout、restore、stash，也不移走开发文件。更换ROOT后先status核对当前任务及原执行者；旧租约过期仍不证明旧执行者已退出。
+
+作者已明确选择升级到新发布版本时，先不带 `--project` 固定新发布副本，再从新ROOT对**准确待办**执行受控恢复：
+
+```bash
+python3 "$ROOT/scripts/novel.py" --project "$PROJECT" --owner "$OWNER" recover-engine \
+  --task "$TASK" --input-hash "$INPUT_HASH" --source '作者对本次引擎升级的授权原话' --worker-stopped
+```
+
+TASK/INPUT_HASH 来自准确待办或engine_changed返回值；有登记租约时，主控核实原执行者已停止才加 `--worker-stopped`。source 保存真实升级授权，不能拿正文目标冒充升级授权；required模式还须受控宿主证明。接口在一个事务内取消旧待办、保留已提交正文/固定章纲/数据库候选/已花额度、按同一阶段与范围冻结新任务。旧result.json原位保留，返回preserved_result_path；Worker读取新材料后从新模板迁移适用data并重新核验，不复用旧input_hash或凭据。恢复不删除整卷章纲，不重置返修额度；编译或授权失败整体回滚。仍关联独立核验的任务先按准确候选处理，不借升级跳过核验。
+
+`engine_changed` 的 recovery.action=pin_engine 对应上述命令族；可选择恢复准确固定构建，或在真实升级授权下recover-engine。不能靠prepare-worker --reset-failures解除版本冲突，也不能重签旧任务输入字段绕过校验。
+
+## 宿主能力与执行状态
+
+```bash
+python3 "$ROOT/scripts/novel.py" --project "$PROJECT" host-check
+```
+
+此只读命令报告native_worker_creation=false、worker_creation=external_host_required、watch能力及是否存在可信身份验证器；不把“可运行命令”当成“可创建独立模型”。主控必须另外核对当前宿主实际的会话创建工具或已安装模型适配器；没有时保留任务并报告能力缺失，不伪造session或启动普通脚本冒充Worker。watch不创建模型，只监督已由宿主派出的执行者。
+
+prepare-worker.ready只表示协议身份登记成功，响应的worker_presence、status.worker_presence及派工卡execution.worker_presence另列身份登记、租约有效期、实际读取/心跳活动和身份是否经宿主证明。activity_observed不证明当前仍存活，worker_running=null须由宿主核实；phase=await_worker_start表示尚未观察到该身份活动，lease_expired表示租约过期。组active=true也不证明后台正在写。准备身份后立即向真实Worker交付任务，不结束主控回复留下空挂租约。
+
 ## 目标与主控认领
 
 直接导入完整约定的默认目标为试章；逐门流程按当前卷纲策略交付开书设计，不自动获得正文授权。作者已授权正文后，用 `run --through N --source 原话` 或 `run --complete --source 原话` 保存目标并取得 owner。后续主控治理命令带 `--owner 返回值`；`renew --owner 返回值` 续租。过期后重新 run 认领，沿用已经授权的实际目标，不扩大范围。
@@ -66,7 +106,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 | task_ready | **开书门任务（opening_options）由主干自执**：读 task_path 的 task.json 与同目录 brief.md，`read --task` 取必读（同会话连门且 records_hash 未变可豁免），从 result.template.json 起稿一次成稿后 check/submit（session 填主干身份，门任务不绑定会话）。其余阶段按任务交接规则派工；快速组内只由原 Worker 接续。 | 原执行者状态与 claim；普通新任务和快速新组用空历史会话，沿用当前模型设置。门任务对主控放行 read/recall（contracts.CONTROLLER_STAGES），正文阶段不在此列。 |
 | Worker 结束 | 接收身份和状态摘要，正文与完整回执留在项目。**子 agent 空转结束**（无提交、无报告，或宿主显示其模型调用连续空响应重试）不是流程事件：用 `advance --compact` 重派同一 pending 任务（引擎重渲染视图，`redispatch_count` 递增，上次未提交的回执草稿被隔离为 `result.stale.json`；未提交不计任何返修额度），普通模式换一个新子 agent；快速模式先按上节确认原执行者停止，pause --cancel/resume 后重开组，不把已绑定组转给新会话。连续两次仍空转则保留现场报告作者，不要靠反复重派碰运气。 | task_id、真实 session、accepted/checked、worker_boundary 或错误码及原因。 |
 | 核实提交 | 无人值守用 `watch --owner ID`（默认一步：等当前任务提交后直接取下一派工）；需要显式核实时 advance --compact --after 该任务ID。 | wait_for_submit 表示未提交，resync 表示重取状态；不能仅凭 accepted_chapters 判断卷纲或章纲是否已采纳。watch 的等待发生在引擎进程里，主干会话不为等待付费。 |
-| 接续 | 按下面的动作表继续。 | 章节、卷纲、Worker 和卷末均非授权目标停点，修订采纳、完本与交付也在循环内。 |
+| 接续 | 按下面的动作表继续。 | 章节、卷纲、Worker 和卷末均非授权目标停点，修订采纳、完本与交付也在循环内；controller.must_continue=true时继续执行返回动作，不以进展通报结束本轮。 |
 
 ### 动作分支
 
@@ -74,7 +114,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端显示会乱；需要人读的长内容一律走引擎物化的文件（brief.md、board.md、question.json、dispatch.md、task.json、html），机器可读的短 JSON 才看控制台，或先 `$env:PYTHONUTF8=1`。自行重定向 JSON 时注意 PowerShell 5 的 `Out-File -Encoding utf8` 带 BOM，Python 读回要用 utf-8-sig。
 
-无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用；无人值守期间不要用 advance 代替 watch 等待，实际输入、缓存与输出费用从宿主观测核对。
+无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。返回task_ready是下一次派工，不是停止；五章组完成不需要作者再说“继续”。advance/watch附controller.must_continue与下一动作，正式submit附continuation，区分Worker组内接续与主控跨组接续。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用；无人值守期间不要用 advance 代替 watch 等待，实际输入、缓存与输出费用从宿主观测核对。
 
 | action | 主干下一步 |
 |---|---|

@@ -27,7 +27,7 @@ understanding 是 intent 内独立的版本对象，不把解释与未来方案�
 
 ## 主干循环与子 agent
 
-宿主主干管理作者目标、任务身份、治理命令与简短进度；子 agent（Worker）读取完整冻结材料，完成当前世界、卷纲、章纲、执笔或返修并提交。开书门任务（opening_options）例外：无正文、无派工必要性，由主干在同一会话自执（`contracts.CONTROLLER_STAGES`），选择板由引擎物化为 work/board.md。workflow 决定下一任务，主干只接收身份及状态摘要，正文与完整回执保留在项目中；无人值守的等待由 `watch` 在引擎进程内承担。主干生命周期和模型会话隔离由宿主提供，host 是可选的外部进程适配器。
+宿主主干管理作者目标、任务身份、治理命令与简短进度；子 agent（Worker）读取完整冻结材料，完成当前世界、卷纲、章纲、执笔或返修并提交。开书门任务（opening_options）例外：无正文、无派工必要性，由主干在同一会话自执（`contracts.CONTROLLER_STAGES`），选择板由引擎物化为 work/board.md。workflow 决定下一任务，主干只接收身份及状态摘要，正文与完整回执保留在项目中；无人值守的等待由 `watch` 在引擎进程内承担。主干生命周期和模型会话隔离由宿主提供，host 是可选的外部进程适配器。execution为advance/watch提供controller.must_continue，submit的continuation区分组内与跨组角色；identity_registered、activity_observed和未知的worker_running分别表达登记、观察及存活边界。
 
 compact 是派工返回视图，冻结任务、正文和材料保持完整。任务身份与执行认领分别承担提交校验和并发占用；派工、等待、同会话恢复及提交核实统一见 [主干循环](runtime.md#主干循环默认执行路径) 与 [任务交接](runtime.md#任务交接)；修订采纳、完本和交付统一按 [动作分支](runtime.md#动作分支) 执行。
 
@@ -112,6 +112,8 @@ flowchart TD
 |---|---|
 | governance / authority | 治理检查点、模式与一次性授权消费；签名验证适配器只接收受控宿主注入，不从项目读取密钥；不是OS隔离 |
 | continuity / continuity_service | 明确区间及原文证据纯规则；候选保存、独立首读冻结、后比较、歧义裁决与准确版本采纳，报告不直接改事实 |
+| runtime_install | 完整固定运行副本、Git归档选择、文件清单核验与只读文件模式；独立于小说库，不改变开发检出；用于隔离正常开发更新，不声称OS隔离 |
+| execution | 纯值的主控接续指令与执行活动观察；不从租约推断进程存活 |
 | build_info | 安装包代码与执行规则指纹；不包含历史validation产物，新冻结任务绑定此构建 |
 | contracts | 协议标识、约定字段表与当前开书对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、共享数值默认（`DEFAULTS`，含 `world_ladder` 的位阶/阶梯条数下限与主题锚点上限）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
 | catalog | 开书内容目录：类型库、创意透镜、卷型转折、开书方向与门序、雷同戒律与档位板文案；纯数据无依赖，creation/briefs/delivery/bookpage 读取渲染选择板与简报 |
@@ -287,3 +289,9 @@ verification 是程序能力边界，不是操作系统安全沙箱。所有正�
 策略组合与字段形状统一见 [卷纲参数](narrative.md#参数与范围)。
 
 2.1.0的受控宿主与独立连续性流程、默认/旧项目模式及真实能力边界详见[质量与宿主](quality.md)。CLI本身不注入可信authority，required模式缺宿主就拒绝；检查点不能阻止同账户同时篡改数据与检查点。正式新状态写入建立治理检查点，读取不隐式认证旧历史。
+
+## 运行安装与版本恢复
+
+runtime_install将完整发布源码、规则、模板及素材发布到开发树外，生成文件清单和指纹；新副本核验完整后发布，原检出和小说库保持只读。固定入口后续在组合根打开库前验证清单。选择Git版本通过archive读取，不使用checkout/restore/stash；旧发布副本的运行规则仍以该发布为准。
+
+Application.recover_engine是单一事务用例：核对准确pending task/input_hash、主控租约、实际构建差异、原执行者停止声明、作者升级授权及未处理的核验，再取消旧任务并按同阶段/范围编译新任务。章纲、正文、候选和预算不因版本切换重置；旧输入仍保留在数据库，旧result.json保留在原任务目录。没有引入架空的宿主模型创建API；真实宿主的跨组持续运行需另做实际验收。

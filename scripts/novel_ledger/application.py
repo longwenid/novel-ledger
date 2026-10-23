@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (CONTENT_ERRORS, SINGLE_DELIVERY_STAGES, policy_default, CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION,
+from .contracts import (CONTENT_ERRORS, SINGLE_DELIVERY_STAGES, policy_default, CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION, Job,
                         execution_recovery,
                         digest, dump, require, text)
 from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint
@@ -14,6 +14,7 @@ from .verification import VerificationService
 from .writing_service import WritingService
 from .governance import Governance
 from .continuity_service import ContinuityService
+from .execution import controller_handoff, presence, submission_handoff
 
 # An amendment preview is a JSON-encoded value, not prose: if it is cut, it says so, because a
 # silently truncated preview reads as a valid value and would let a reviewer (or a script) compare
@@ -102,6 +103,9 @@ class Application:
                 'target': book['target'], 'written_han': book['written_han'], 'finish': book['finish'],
                 'writing_mode': book.get('writing_mode', 'standard'), 'worker_batch': self._writing.describe(),
                 'pending_task': task['id'] if task else None, 'stage': task['input']['stage'] if task else None,
+                'worker_presence': self.worker_presence(task['id']) if task else None,
+                'engine': {'current': self.build_info, 'frozen': task['input'].get('build') if task else None,
+                           'matches': not task or not task['input'].get('build') or task['input']['build'] == self.build_info},
                 'execution_failure': self.repo.get(store_keys.technical_failure(task['id'])) if task else None,
                 'pause_reason': None if sealed else book.get('pause_reason'),
                 'author_decision': None if sealed else copy.deepcopy(book.get('author_block')),
@@ -136,9 +140,24 @@ class Application:
         batch = self._writing.task_status(task)
         failure = self.repo.get(store_keys.technical_failure(batch.get('batch_task') or task_id)) or {}
         return {**{key: task[key] for key in ('id', 'status', 'reviewer')}, **batch,
+                'worker_presence': self.worker_presence(batch.get('batch_task') or task_id),
                 'continuity': self._continuity.summary(batch.get('batch_task') or task_id),
                 'execution_blocked': bool(failure.get('blocked')),
                 'recovery': execution_recovery(failure.get('code', ''), failure.get('failures', 0))}
+
+    def worker_presence(self, task_id):
+        lease = self.repo.get(store_keys.claim(task_id))
+        delivered = self.repo.get(store_keys.execution_reads(lease['execution_id']), {}) if lease and lease.get('execution_id') else {}
+        return presence(lease, delivered, self.clock())
+
+    def host_check(self):
+        return {'native_worker_creation': False, 'worker_creation': 'external_host_required',
+                'identity_verification_available': self._governance.authority is not None,
+                'assurance': self._governance.describe(),
+                'supervision': 'watch', 'watch_creates_workers': False,
+                'unattended_host_ready': None,
+                'next_action': 'verify_real_worker_creation_in_host',
+                'note': '先由实际宿主创建独立模型会话；session登记和租约不证明Worker已启动。'}
 
     def authorize_worker(self, task_id, session, claim=None):
         task = self.repo.task(task_id)
@@ -180,7 +199,9 @@ class Application:
                 self.repo.put(store_keys.technical_failure(task_id), None)
                 self.repo.record('worker_recovered', {'task': task_id, 'session': session})
         view = self.presentation.task(self.repo.task(task_id), compact=True, preserve_result=True)
-        return {'schema': EXECUTION, 'ready': True, 'task': view,
+        return {'schema': EXECUTION, 'ready': True, 'identity_registered': True,
+                'worker_presence': self.worker_presence(task_id),
+                'next_action': {'actor': 'host', 'action': 'start_or_handoff_real_worker'}, 'task': view,
                 'worker_env': {'NOVEL_TASK_ID': task_id, 'NOVEL_SESSION': session,
                                'NOVEL_EXECUTION_CLAIM': lease['token'],
                                'NOVEL_TASK_PATH': view.get('task_path', ''),
@@ -224,6 +245,7 @@ class Application:
             self._session(task, session, claim)
             lease = self.repo.get(store_keys.claim(task_id))
             require(lease is not None, 'worker_identity', '续租必须来自已准备的执行通道。')
+            lease['activity_at'] = self.clock()
             lease['until'] = self.clock() + lease.get('seconds', policy_default('worker_lease_seconds'))
             self.repo.put(store_keys.claim(task_id), lease)
         return True
@@ -287,7 +309,10 @@ class Application:
     def _check_build(self, task):
         frozen = task['input'].get('build')
         require(not frozen or not self.build_info or frozen == self.build_info, 'engine_changed',
-                '当前引擎或执行规则已不同于冻结任务；保留候选，由主控明确切换版本后重新冻结任务。')
+                '当前引擎或执行规则已不同于冻结任务；保留候选，由主控明确切换版本后重新冻结任务。',
+                {'task_id': task['id'], 'input_hash': task['input_hash'], 'frozen_build': frozen,
+                 'current_build': self.build_info, 'recovery_commands': ['pin-engine', 'recover-engine'],
+                 'boundary': '不还原开发目录；固定准确发布副本，或经作者升级授权对这一任务重新冻结。'})
 
     def _worker_actor(self, task, session):
         self._governance.actor(session)
@@ -345,7 +370,7 @@ class Application:
     def advance(self, after=None, owner=None, compact=False, wait_pending=False):
         response = self._advance(after, owner, compact, wait_pending)
         self._refresh_book(response)
-        return response
+        return controller_handoff(response)
 
     def _advance(self, after=None, owner=None, compact=False, wait_pending=False):
         boundary = None
@@ -448,6 +473,45 @@ class Application:
         if boundary:
             return {**boundary, **view}
         return {'action': 'task_ready', 'task': self.presentation.task(task, self._baseline(book, task), compact=compact), 'status': self.status(), **view}
+
+    def recover_engine(self, task_id, input_hash, source, owner=None, worker_stopped=False):
+        """Explicit version transition for exactly one pending task; no replanning or budget reset."""
+        require(text(source), 'author_source', '重新冻结须保存作者对版本升级的授权原话。')
+        with self.repo.transaction():
+            self.controller_guard(owner)
+            book = self._load()
+            task = self.repo.task(task_id)
+            pending = self.repo.pending()
+            require(pending is not None and pending['id'] == task_id and task['input_hash'] == input_hash,
+                    'engine_recovery', '任务或输入版本已变，先核对当前status，不重放旧恢复请求。')
+            work = task['input']
+            require(work.get('build') and self.build_info and work['build'] != self.build_info,
+                    'engine_recovery', '只有构建确实不同的任务需要重新冻结。')
+            require(work['branch'] == book['branch'] and work['revision'] == book['revision']
+                    and book['status'] in ('running', 'preparing'),
+                    'engine_recovery', '项目范围或状态已变，不以版本恢复绕过暂停和作者边界。')
+            require(not self.repo.get(store_keys.claim(task_id)) or worker_stopped is True,
+                    'worker_busy', '先核实原Worker已停止，再用 --worker-stopped 明确记录；租约过期不证明进程结束。')
+            require(self._continuity.summary(task_id) is None, 'continuity_pending',
+                    '当前任务仍有关联核验；先处理准确候选，不以版本切换绕过核验。')
+            subject = {'task': task_id, 'input_hash': input_hash,
+                       'from_build': work['build'], 'to_build': self.build_info}
+            self._governance.authorize('engine_upgrade', subject, source)
+            payload = {key: copy.deepcopy(value) for key, value in work.get('payload', {}).items()
+                       if key != 'worker_batch'}
+            job = Job(work['stage'], work['chapter'], work['scope'], work.get('first', 0), work.get('last', 0), payload)
+            # Retiring removes only reproducible forms; result.json and existing story drafts remain.
+            self._cancel_pending('明确授权的引擎版本切换；保留旧候选和创作依据。')
+            book['revision'] += 1
+            self._save(book)
+            replacement = self._writing.dispatch(book, job, owner)
+            require(replacement['input'].get('build') == self.build_info, 'engine_recovery',
+                    '编译器没有使用目标构建，恢复事务已撤销。')
+            self.repo.record('engine_upgrade', {**subject, 'replacement': replacement['id'],
+                                               'source': source, 'worker_stopped': worker_stopped})
+        return controller_handoff({'action': 'task_ready', 'recovered': True, 'retired_task': task_id,
+                                   'task': self.presentation.task(replacement, self._baseline(book, replacement), compact=True),
+                                   'status': self.status()})
 
     def read(self, task_id, record=None, everything=False, receive=None):
         task = self.repo.task(task_id)
@@ -637,6 +701,8 @@ class Application:
                                          'action': 'answer' if needs_author else 'revise_candidate' if finding_rows else 'continue'},
                             effects_if_submitted={'chapter_commit': bool(outcome.chapter),
                                                   'repair_consumption': int(work['stage'] == 'repair')})
+            if not preview:
+                response['continuation'] = submission_handoff(worker_boundary, needs_author)
             if outcome.style_report is not None:
                 response['style_report'] = outcome.style_report
             if review is not None:

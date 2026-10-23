@@ -287,10 +287,15 @@ class FastWritingTests(unittest.TestCase):
             if result['worker_boundary'] == 'continue':
                 task, lease = self.next(task, lease, session)
                 continue
+            self.assertEqual(result['continuation']['actor'], 'controller')
+            self.assertTrue(result['continuation']['must_continue'])
             step = self.app.advance(owner=self.owner)
             if step['action'] == 'ready_to_complete':
+                self.assertTrue(step['controller']['must_continue'])
                 break
             self.assertEqual(step['action'], 'task_ready')
+            self.assertTrue(step['controller']['must_continue'])
+            self.assertEqual(step['controller']['action'], 'dispatch_worker')
             task = step['task']
             session_number += 1
             session = 'fast-worker-' + str(session_number)
@@ -311,6 +316,7 @@ class FastWritingTests(unittest.TestCase):
         result = unattended.watch(self.app, self.owner, poll=0.01, idle_limit=100, sleep=work)
         self.assertEqual(result['action'], 'task_ready')
         self.assertEqual(result['task']['chapter'], 7)
+        self.assertTrue(result['controller']['must_continue'])
         self.assertTrue(result['task']['requires_new_worker'])
         self.assertEqual(len(self.repo.headers('main')), 6)
 

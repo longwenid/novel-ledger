@@ -46,6 +46,7 @@ python3 validation/measure.py --out /path/to/metrics.json
 | 快速无人值守 | 同一会话组内最多五章、逐章提交与返修；首章及卷界单独处理；跨组会话复用和过期回调拒绝；预检回滚组进度；同组材料哈希复用；暂停重开与真实子进程整组提交。 | test_fast_writing、test_application_ports、test_host_ports |
 | 模块依赖与端口 | 全作用域 import 白名单、无环与核心 I/O 禁令；用内存账本、替代交付、公开宿主能力和运行工厂实际完成用例。 | test_architecture、test_application_ports、test_domain_boundaries、test_presentation_boundaries、test_host_ports、test_cli_boundary |
 | 只读验收与信任边界 | 零章/已写投影被外部修改后拒绝继续派工与提交；状态变化在事务提交前核验；completed 与伪造 audit.ok 不能绕过线路闭合和历史重放；失败不覆盖正文与交付文件；改约不重置额度且保留可回答的作者问题；数字扰动长模板仍被识别。 | test_verification、test_workbench、test_prose_lint |
+| 固定运行与无人值守恢复 | 固定副本在开发更新后仍可执行；篡改清单拒绝；精确任务升级保留章纲/候选/预算，失败事务回滚，受控宿主授权不可绕过；五章组后仍回主控接续，登记不等于运行。 | test_engine_runtime、test_fast_writing、test_host_authority |
 | 存储与组合根 | 同根快照、结构共享与完整逻辑哈希复用、损坏/丢块及跨区字段拒绝；共享来源清理可达性、预检/异常回滚和返回值隔离；文件回收只在提交后执行；真实 SQLite、CLI 重开与冻结交付重试。 | test_storage_boundaries、test_storage_growth、test_snapshot_integrity、test_bootstrap、test_history |
 | 开书、卷纲与叙事 | 逐门作者决定、卷纲 all/rolling 覆盖、跨卷续接、跨卷线路 continues、场景来源与完本兑现。 | test_opening、test_outlines、test_narrative、test_longform |
 | 创作记忆与场景身份 | 执笔提交的理解增量绑定准确版本；原文失效与携带恢复，场景移动保留身份，阅读关联与章纲重排，初始化即建立理解结构，预检完整回滚。 | test_workbench |
@@ -115,3 +116,5 @@ history_transport 使用独立存储夹具，500 章包含至少 150 万合成�
 工程结果与原始度量见 [验收记录](../validation/results.md) 及 [metrics.json](../validation/metrics.json)。维护当前操作文档时保留历史记录的日期、版本和实验条件，不把后来通过的检查追写成早期结论。
 
 连续性与宿主新增回归：test_execution_handoff、test_continuity_flow、test_host_authority。前两者验证真实CLI/事务边界与准确候选，后者验证签名对象、实际上下文与一次性消费；它们不证明某个真实宿主已完成OS权限隔离，也不证明独立模型不会漏报。
+
+无人值守的真实宿主验收应额外连续跨过至少两个五章组，中间不发送“继续”，保存真实独立Worker身份、每组派工/完成、主控续派和合法停点证据。Python合成回执和CLI子进程测试只能验证引擎边界，不能当作真实模型宿主已完成这项验收。

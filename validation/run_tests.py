@@ -19,7 +19,7 @@ FAST = (
     'test_architecture', 'test_domain_boundaries', 'test_application_ports',
     'test_cli_boundary', 'test_dependency_bounds', 'test_longform', 'test_outlines',
     'test_pipeline_shapes.PipelineShapeTests', 'test_review_material', 'test_storage_growth',
-    'test_context_growth', 'test_plot_precision',
+    'test_context_growth', 'test_plot_precision', 'test_engine_runtime',
     'test_snapshot_integrity', 'test_snapshot_probe', 'test_verification', 'test_outline_lock', 'test_fast_writing',
     'test_prose_lint.LintUnitTests',
     'test_prose_lint.LintFlowTests.test_preview_answers_every_defect_in_one_call',

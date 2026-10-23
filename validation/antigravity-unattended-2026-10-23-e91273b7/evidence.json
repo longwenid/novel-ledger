@@ -1,0 +1,476 @@
+{
+  "schema": "novel-ledger.unattended-audit/1",
+  "date": "2026-10-23",
+  "session": "e91273b7-ff53-4df5-8b82-e0ccf5d68c2a",
+  "source": {
+    "path": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+    "sha256": "0f3aa4b518d30977277aa654307c23e39528c6a81d90e4629caf60ad0fcf7783",
+    "rows": 759,
+    "steps": [
+      0,
+      758
+    ]
+  },
+  "scope": "只读核对完整主会话、现存项目状态、代码与协议；未续写、重签、改库、还原源码或发送会话消息。",
+  "limits": [
+    "没有取得实际宿主内部调度器日志；未证明Antigravity所有模式都不支持子agent。",
+    "未开展241～255章文学或连续性审查；机械提交不代表这些质量项已通过。"
+  ],
+  "current_state": {
+    "status": "running",
+    "target": 600,
+    "finish": true,
+    "writing_mode": "fast",
+    "written_han": 830617,
+    "pause_reason": null,
+    "author_block": null,
+    "accepted_chapters": 255,
+    "last_chapter": 255,
+    "pending_task": "29601c6f380e4e7190936a4ef34ef6ef",
+    "pending_chapter": 256,
+    "frozen_build": {
+      "engine_hash": "cc68a69a5cf9e52f4c1f8fa125a6b4ea6f9968d729ed447db1c27d7d329aea79",
+      "rules_hash": "515ce90a22863bb3b1445e888bd8eaa5ec8fdea271c4ec75fbd2f3a4c92aab14",
+      "version": "2.1.2"
+    },
+    "current_build": {
+      "version": "2.1.2",
+      "engine_hash": "26a76fc2bc9239eb87b85a3750543a8a202691e251c2a9a922961890cb3088cb",
+      "rules_hash": "3d5180f189de11fd9ded389b5d352af9dbe1a5aa65724b067461238234e3abd5"
+    },
+    "lease_until": "2026-10-23T13:12:53.430938+08:00",
+    "lease_expired": true,
+    "last_journal": {
+      "id": 1155,
+      "at": 1792732073.524534,
+      "action": "worker_prepared"
+    }
+  },
+  "batch_boundaries": [
+    {
+      "completed_group": [
+        241,
+        245
+      ],
+      "stopped_at_china": "2026-10-23T11:58:48+08:00",
+      "next_action": "task_ready",
+      "next_chapter": 246,
+      "target": 600,
+      "pause_reason": null,
+      "author_decision": null,
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 313,
+          "step_index": 312,
+          "created_at_utc": "2026-10-23T03:58:47Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 314,
+          "step_index": 313,
+          "created_at_utc": "2026-10-23T03:58:48Z"
+        }
+      ]
+    },
+    {
+      "completed_group": [
+        246,
+        250
+      ],
+      "stopped_at_china": "2026-10-23T12:30:23+08:00",
+      "next_action": "task_ready",
+      "next_chapter": 251,
+      "target": 600,
+      "pause_reason": null,
+      "author_decision": null,
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 423,
+          "step_index": 422,
+          "created_at_utc": "2026-10-23T04:30:22Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 424,
+          "step_index": 423,
+          "created_at_utc": "2026-10-23T04:30:23Z"
+        }
+      ]
+    },
+    {
+      "completed_group": [
+        251,
+        255
+      ],
+      "stopped_at_china": "2026-10-23T13:07:53+08:00",
+      "next_action": "task_ready",
+      "next_chapter": 256,
+      "target": 600,
+      "pause_reason": null,
+      "author_decision": null,
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 740,
+          "step_index": 739,
+          "created_at_utc": "2026-10-23T05:07:48Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 743,
+          "step_index": 742,
+          "created_at_utc": "2026-10-23T05:07:53Z"
+        }
+      ]
+    }
+  ],
+  "workspace_mutations": [
+    {
+      "command": "git -C /Users/longwen/.gemini/config/skills/novel-ledger checkout -- scripts/novel_ledger/bookpage.py",
+      "succeeded": true,
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 508,
+          "step_index": 507,
+          "created_at_utc": "2026-10-23T04:57:43Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 509,
+          "step_index": 508,
+          "created_at_utc": "2026-10-23T04:57:46Z"
+        }
+      ]
+    },
+    {
+      "command": "git -C /Users/longwen/.gemini/config/skills/novel-ledger stash push -m \"wip-before-revert-to-match\"",
+      "succeeded": true,
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 615,
+          "step_index": 614,
+          "created_at_utc": "2026-10-23T05:01:58Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 616,
+          "step_index": 615,
+          "created_at_utc": "2026-10-23T05:02:01Z"
+        }
+      ]
+    },
+    {
+      "command": "mkdir -p /tmp/novel_backup && mv /Users/longwen/.gemini/config/skills/novel-ledger/scripts/novel_ledger/preview.py /tmp/novel_backup/ && mv /Users/longwen/.gemini/config/skills/novel-ledger/scripts/novel_ledger/templates/preview.js /tmp/novel_backup/ && mv /Users/longwen/.gemini/config/skills/novel-ledger/tests/test_preview.py /tmp/novel_backup/",
+      "succeeded": true,
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 621,
+          "step_index": 620,
+          "created_at_utc": "2026-10-23T05:02:07Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 622,
+          "step_index": 621,
+          "created_at_utc": "2026-10-23T05:02:10Z"
+        }
+      ]
+    },
+    {
+      "command": "git -C /Users/longwen/.gemini/config/skills/novel-ledger restore .",
+      "succeeded": true,
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 659,
+          "step_index": 658,
+          "created_at_utc": "2026-10-23T05:03:16Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 660,
+          "step_index": 659,
+          "created_at_utc": "2026-10-23T05:03:19Z"
+        }
+      ]
+    }
+  ],
+  "tool_counts": {
+    "read_file": 7,
+    "run_command": 368
+  },
+  "structured_errors": {
+    "controller_lease": 1,
+    "engine_changed": 7,
+    "design_drift": 1,
+    "literal_policy": 1,
+    "worker_lease": 3,
+    "role_boundary": 1,
+    "output": 1,
+    "time_evidence": 1
+  },
+  "old_release_fingerprint_verified": {
+    "commit": "2b1f7c9",
+    "matches_frozen_build": true,
+    "method": "仅将git archive解到隔离临时目录计算fingerprint，未执行旧引擎或操作小说。"
+  },
+  "findings": [
+    {
+      "id": "UW-01",
+      "severity": "high",
+      "title": "主控在五章组完成后主动终止，未执行跨组续派",
+      "conclusion": "三次停止前引擎均返回 task_ready，目标为600章，未暂停、无待作者决定。五章限制属于单个Worker，主控应继续下一组。",
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 313,
+          "step_index": 312,
+          "created_at_utc": "2026-10-23T03:58:47Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 314,
+          "step_index": 313,
+          "created_at_utc": "2026-10-23T03:58:48Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 423,
+          "step_index": 422,
+          "created_at_utc": "2026-10-23T04:30:22Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 424,
+          "step_index": 423,
+          "created_at_utc": "2026-10-23T04:30:23Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 738,
+          "step_index": 737,
+          "created_at_utc": "2026-10-23T05:07:44Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 740,
+          "step_index": 739,
+          "created_at_utc": "2026-10-23T05:07:48Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 742,
+          "step_index": 741,
+          "created_at_utc": "2026-10-23T05:07:52Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 743,
+          "step_index": 742,
+          "created_at_utc": "2026-10-23T05:07:53Z"
+        }
+      ],
+      "fix": "主控收到 task_ready 后继续派真实新Worker并监督，只有作者边界、失败或授权终点才结束。"
+    },
+    {
+      "id": "UW-02",
+      "severity": "high",
+      "title": "活动任务使用可变开发安装，预览改造引发真实版本冲突",
+      "conclusion": "技能目录是开发仓库的符号链接。任务256冻结于2b1f7c9对应指纹；本会话13:39:59提交d2745d6后，13:41读取返回engine_changed。此阻断晚于三次组末停顿，不能解释之前的主动停止。",
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 750,
+          "step_index": 749,
+          "created_at_utc": "2026-10-23T05:41:45Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 754,
+          "step_index": 753,
+          "created_at_utc": "2026-10-23T05:42:00Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 756,
+          "step_index": 755,
+          "created_at_utc": "2026-10-23T05:42:17Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 758,
+          "step_index": 757,
+          "created_at_utc": "2026-10-23T05:42:22Z"
+        }
+      ],
+      "fix": "运行使用预先固定且独立部署的完整代码与规则；开发仓库与写作安装分离。升级经明确授权与受控重新冻结完成，不直接改input_hash。"
+    },
+    {
+      "id": "UW-03",
+      "severity": "high",
+      "title": "写作会话为恢复指纹还原共享开发目录并移走新增文件",
+      "conclusion": "12:57 checkout bookpage.py，13:02 stash push，随后移走preview.py、preview.js和test_preview.py，13:03 restore .；均有成功返回。与此前本会话文件反复消失时间吻合。",
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 508,
+          "step_index": 507,
+          "created_at_utc": "2026-10-23T04:57:43Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 509,
+          "step_index": 508,
+          "created_at_utc": "2026-10-23T04:57:46Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 615,
+          "step_index": 614,
+          "created_at_utc": "2026-10-23T05:01:58Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 616,
+          "step_index": 615,
+          "created_at_utc": "2026-10-23T05:02:01Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 621,
+          "step_index": 620,
+          "created_at_utc": "2026-10-23T05:02:07Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 622,
+          "step_index": 621,
+          "created_at_utc": "2026-10-23T05:02:10Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 659,
+          "step_index": 658,
+          "created_at_utc": "2026-10-23T05:03:16Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 660,
+          "step_index": 659,
+          "created_at_utc": "2026-10-23T05:03:19Z"
+        }
+      ],
+      "fix": "固定运行版本时保持共享开发树完整；写作任务不得自行还原源码。遇版本冲突保留任务并交主控选择合法恢复路径。"
+    },
+    {
+      "id": "UW-04",
+      "severity": "high",
+      "title": "未建立真实独立Worker与监督循环",
+      "conclusion": "该会话759条记录中，工具调用仅有read_file 7次、run_command 368次；未发现独立模型会话创建、实际watch调用或host-loop启动。主控自填worker-batch-ch...身份并在同一会话写正文及提交。",
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 208,
+          "step_index": 207,
+          "created_at_utc": "2026-10-23T03:49:29Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 210,
+          "step_index": 209,
+          "created_at_utc": "2026-10-23T03:49:34Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 216,
+          "step_index": 215,
+          "created_at_utc": "2026-10-23T03:50:08Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 318,
+          "step_index": 317,
+          "created_at_utc": "2026-10-23T04:21:38Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 324,
+          "step_index": 323,
+          "created_at_utc": "2026-10-23T04:21:52Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 428,
+          "step_index": 427,
+          "created_at_utc": "2026-10-23T04:52:40Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 434,
+          "step_index": 433,
+          "created_at_utc": "2026-10-23T04:52:53Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 741,
+          "step_index": 740,
+          "created_at_utc": "2026-10-23T05:07:49Z"
+        }
+      ],
+      "fix": "对接实际模型宿主的独立会话创建和身份注入；不能把登记session的成功当作真实Worker已运行。watch只能监督，不能代替创建Writer。"
+    },
+    {
+      "id": "UW-05",
+      "severity": "medium",
+      "title": "预先登记下一组后结束主控，任务占用空挂并过期",
+      "conclusion": "13:07:53已准备第256章，随后没有正文读取或提交，journal末条仍是worker_prepared。300秒租约13:12:53到期；active=true只表示组未结算，不证明后台有人在写。",
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 742,
+          "step_index": 741,
+          "created_at_utc": "2026-10-23T05:07:52Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 743,
+          "step_index": 742,
+          "created_at_utc": "2026-10-23T05:07:53Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 746,
+          "step_index": 745,
+          "created_at_utc": "2026-10-23T05:41:20Z"
+        },
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 750,
+          "step_index": 749,
+          "created_at_utc": "2026-10-23T05:41:45Z"
+        }
+      ],
+      "fix": "准备身份后立即交付真实Worker，不能终止主控后留下空占用；恢复前核对原执行者和租约，不沿用过期凭据。"
+    },
+    {
+      "id": "UW-06",
+      "severity": "medium",
+      "title": "会话末尾的原因解释混淆批次边界与停止条件",
+      "conclusion": "“必须额外授权无限递归或必须host-loop才能跨组”不是该技能的规则。项目已有600章完本目标，默认主干与子agent路径同样应跨组持续执行。",
+      "evidence": [
+        {
+          "source": "/Users/longwen/.gemini/antigravity/brain/e91273b7-ff53-4df5-8b82-e0ccf5d68c2a/.system_generated/logs/transcript_full.jsonl",
+          "line": 759,
+          "step_index": 758,
+          "created_at_utc": "2026-10-23T05:42:22Z"
+        }
+      ],
+      "fix": "说明真实宿主能力与具体错误，不把主动final答复解释成引擎限制；不要要求作者每五章重复授权。"
+    }
+  ]
+}

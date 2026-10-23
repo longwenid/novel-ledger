@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-23",
+  "scope": "Skill and engine implementation; no novel runtime deployment or writing",
+  "build": {
+    "version": "2.1.2",
+    "engine_hash": "a6a547dc39f1030178dcebf328bfc880a52c5bfeda97219a2fdd8ab96b572ef8",
+    "rules_hash": "45d4e73f24376955279a629cb5bb7ccbd841ad6245859c1dd067bbe900b6e67a"
+  },
+  "implemented": [
+    "Complete runtime snapshots and file-manifest verification; optional Git archive selection without checkout",
+    "Exact pending-task build recovery with author authorization and stopped-worker declaration",
+    "Controller continuation handoffs across worker groups and separate submission continuation roles",
+    "Host capability reporting and separate registration, activity and lease observations"
+  ],
+  "validation": {
+    "full_suite": {
+      "passed": 620,
+      "subtests_passed": 1658,
+      "seconds": 62.41,
+      "command": "python3 -m pytest tests/ -q --tb=short"
+    },
+    "skill_format": "passed",
+    "active_links": {
+      "files": 17,
+      "bad_references": 0
+    },
+    "cross_group_fixture": "12 synthetic chapters across 3 worker groups; not a real model run",
+    "real_antigravity_host_acceptance": "not_performed"
+  },
+  "observed_existing_novel": {
+    "accepted_chapters": 255,
+    "pending_chapter": 256,
+    "last_journal_id": 1155
+  },
+  "novel_mutated": false,
+  "git_committed": false
+}

@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import time
 from .contracts import require, text
+from .execution import controller_handoff
 
 # The controller lease defaults to 300 seconds; renewing well inside that keeps a long wait from
 # looking like an abandoned run to the next advance.
 RENEW_EVERY = 30.0
 
 
-def watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, now=time.monotonic,
+def _watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, now=time.monotonic,
           on_dispatch=None):
     """Advance whenever the project can move, waiting quietly while a worker holds the task.
 
@@ -79,3 +80,8 @@ def watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, n
                 renew_at = moment + RENEW_EVERY
             sleep(poll)
         rounds += 1
+
+
+def watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, now=time.monotonic,
+          on_dispatch=None):
+    return controller_handoff(_watch(app, owner, steps, poll, idle_limit, sleep, now, on_dispatch))

@@ -11,7 +11,7 @@ import time
 import uuid
 from pathlib import Path
 from .application import Application
-from . import bookpage, context, delivery, host, preview, unattended, workflow
+from . import bookpage, context, delivery, host, preview, runtime_install, unattended, workflow
 from .contracts import require
 from .presentation import LocalPresentation
 from .sqlite_store import SQLiteRepository
@@ -26,6 +26,9 @@ def local_workspace(repo: SQLiteRepository):
 def local_application(repo: SQLiteRepository, entry=None, *, workspace=None, authority=None):
     workspace = workspace if workspace is not None else local_workspace(repo)
     entry = entry or Path(__file__).resolve().parents[1] / 'novel.py'
+    root = Path(entry).resolve().parent.parent
+    if (root / runtime_install.MANIFEST).exists():
+        runtime_install.verify(root)
     build = fingerprint()
 
     def compile_task(book, job):
@@ -104,11 +107,28 @@ class LocalRuntime:
         self.repo.close()
 
 
+def pin_local_runtime(project, output, ref=None, entry=None):
+    expected = None
+    if project is not None:
+        repo = SQLiteRepository(project, readonly=True)
+        try:
+            pending = repo.pending()
+            expected = pending['input'].get('build') if pending else None
+        finally:
+            repo.close()
+    root = Path(entry or __file__).resolve()
+    root = root.parent.parent if entry else root.parents[2]
+    return runtime_install.pin(root, output, ref=ref, expected=expected, project=project)
+
+
 def preview_local(project, port=0, open_browser=False, entry=None):
     return preview.serve(project, port, open_browser, entry)
 
 
 def open_local_runtime(project, *, initialize=False, contract=None, source='', entry=None):
+    root = Path(entry).resolve().parent.parent if entry else Path(__file__).resolve().parents[2]
+    if (root / runtime_install.MANIFEST).exists():
+        runtime_install.verify(root)
     if initialize:
         book = workflow.new_book(contract, source) if contract is not None else workflow.preparing_book(source, guided=True)
         repo = SQLiteRepository.initialize(project, book)

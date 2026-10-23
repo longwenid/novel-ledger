@@ -8,9 +8,9 @@ import os
 import sys
 from pathlib import Path
 from novel_ledger.contracts import CONTENT_ERRORS, CONTROLLER_STAGES, Error, VERSION, require
-from novel_ledger.bootstrap import open_local_runtime, preview_local
+from novel_ledger.bootstrap import open_local_runtime, pin_local_runtime, preview_local
 
-PUBLIC = {'init', 'assurance', 'prepare-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
+PUBLIC = {'pin-engine', 'recover-engine', 'host-check', 'init', 'assurance', 'prepare-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
           'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next', 'worker', 'worker-ready', 'worker-error', 'prepare-worker'}
 OBSERVER = {'review-read', 'review-observe', 'review-report'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver', 'preview'} | OBSERVER
@@ -63,6 +63,14 @@ def parser():
         sub = subs.add_parser(command)
         sub.add_argument('--project', default=argparse.SUPPRESS)
         sub.add_argument('--owner', default=argparse.SUPPRESS)
+        if command == 'pin-engine':
+            sub.add_argument('--output', required=True)
+            sub.add_argument('--ref', help='从本地Git提交生成运行副本，不改变当前检出。')
+        if command == 'recover-engine':
+            sub.add_argument('--task', required=True)
+            sub.add_argument('--input-hash', required=True)
+            sub.add_argument('--source', required=True)
+            sub.add_argument('--worker-stopped', action='store_true')
         if command == 'init':
             sub.add_argument('--contract')
             sub.add_argument('--source', default='')
@@ -315,8 +323,11 @@ def dispatch(args, open_runtime=open_local_runtime):
     args = normalize_worker(args)
     identity = worker_identity(args)
     portable = getattr(args, '_portable_worker', False)
-    require(args.project, 'project', '须指定 --project 小说项目绝对路径。')
+    require(args.project or args.command == 'pin-engine', 'project', '须指定 --project 小说项目绝对路径。')
     require(args.command in PUBLIC | SEALED, 'access', '未登记命令默认拒绝。')
+    if args.command == 'pin-engine':
+        require(not identity.get('NOVEL_TASK_ID'), 'worker_boundary', 'Worker 不能安装或切换引擎。')
+        return pin_local_runtime(args.project, args.output, args.ref, entry=Path(__file__).resolve())
     if args.command == 'init':
         require(not identity.get('NOVEL_TASK_ID'), 'worker_boundary', 'Worker 不能初始化项目。')
     if args.command == 'preview':
@@ -343,6 +354,12 @@ def dispatch(args, open_runtime=open_local_runtime):
                 result['book_view'] = runtime.book_view()
             except OSError as exc:
                 result['book_view_error'] = str(exc)
+            return result
+        if command == 'host-check':
+            return app.host_check()
+        if command == 'recover-engine':
+            result = app.recover_engine(args.task, args.input_hash, args.source, owner, args.worker_stopped)
+            result['preserved_result_path'] = str(Path(args.project).resolve() / 'work' / args.task / 'result.json')
             return result
         if command == 'assurance':
             return app.configure_assurance(args.trust, args.continuity, args.source, owner)

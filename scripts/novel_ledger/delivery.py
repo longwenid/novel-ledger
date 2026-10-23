@@ -10,6 +10,7 @@ from pathlib import Path
 from .catalog import GENRE_CATALOG
 from .contracts import FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, EXECUTION, CONTROLLER_STAGES, execution_recovery, digest, require, text
 from .result_templates import template
+from .execution import presence
 from .ports import PublicationReader
 from .publication import publication
 from .workspace import LocalWorkspace, atomic_write
@@ -217,7 +218,7 @@ def render_dispatch_card(envelope, identity):
                      'submit 返回 worker_boundary=continue 时执行 commands.worker_next；'
                      '只按返回任务更新 NOVEL_TASK_ID、NOVEL_TASK_PATH 与 NOVEL_EXECUTION_CLAIM，'
                      '保留同一 NOVEL_SESSION。先读下一任务和新增/变更的必读资料，再写下一章。'
-                     'worker_boundary=finished 或 batch_finished 后结束；不得自行 advance 或处理作者决定。'
+                     'worker_boundary=finished 或 batch_finished 只结束本Worker；主控继续下一派工。不得自行 advance 或处理作者决定。'
                      % (group['first'], group['last']))
         command_names = (*command_names, 'worker_next')
     lines = ['# Worker 自举卡：%s' % stage,
@@ -228,6 +229,7 @@ def render_dispatch_card(envelope, identity):
              '## 1. 执行准备（Python 入口，跨平台）',
              '',
              '先由主控启动真实 Worker 并取得宿主会话 ID，再 prepare-worker；宿主将返回的 worker_env 仅交给该 Worker。',
+             'prepare-worker 的 ready 只表示身份登记成功；不证明模型进程运行。activity_observed 也不代替宿主存活核实。',
              'identity 中 session 为空不是让你找旧身份；缺失或不匹配立即带错误码交回主控，不读正文、不遍历历史任务。',
              '首条 commands.read 会自动验证 ready，失败不会交付材料；commands.ready 仅用于诊断，不必另起模型轮次探测。Python 入口无需某一种 shell 的初始化脚本。',
              '宿主不能注入环境时，可在 worker 的 -- 前显式传 --session 与 --execution-claim；只用主控当次返回的值，不写入任务文件。',
@@ -389,6 +391,8 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
                              'state': ('controller' if controller_stage else 'blocked' if failure.get('blocked')
                                        else 'ready' if prepared else 'await_worker_identity'),
                              'session': shared['review_session'],
+                             'worker_presence': presence(lease, repo.get(store_keys.execution_reads(lease['execution_id']), {})
+                                                         if lease and lease.get('execution_id') else {}, time.time()),
                              'recovery': execution_recovery(failure.get('code', ''), failure.get('failures', 0))}
     if not controller_stage:
         envelope['commands']['report_error'] = command + ['worker-error', '--task', task['id']]

@@ -596,7 +596,7 @@ CONTROLLER_ERRORS = frozenset((
     'writing_batch', 'technical_blocked', 'source_integrity', 'state_integrity',
     'projection', 'chain', 'schema_version',
     'host_authority', 'host_actor', 'authorization_replay', 'governance_integrity',
-    'engine_changed', 'continuity_identity', 'continuity_stale',
+    'engine_changed', 'engine_recovery', 'continuity_identity', 'continuity_stale',
     'continuity_pending', 'continuity_settlement',
 ))
 
@@ -623,7 +623,7 @@ CONTENT_ERRORS = frozenset((
 ))
 
 TECHNICAL_ERRORS = frozenset((
-    'preview', 'section',
+    'preview', 'section', 'runtime_install',
     'access', 'alignment_schema', 'author_decision', 'author_source', 'book_integrity',
     'book_ownership', 'book_state', 'capability', 'chapter', 'chapter_limit', 'chapter_order',
     'chapter_target', 'checks', 'claim', 'completion', 'contract', 'coverage', 'creation',
@@ -651,7 +651,8 @@ TECHNICAL_ERRORS = TECHNICAL_ERRORS | frozenset(('assurance_policy', 'continuity
 RECOVERY_ROUTES = {
     'continuity_pending': ('await_existing_review', '保留原候选，完成正在进行的独立阅读或作者裁决；不重新派读换稿。'),
     'continuity_settlement': ('settle_reviewed_candidate', '把原候选的准确回执交还原Worker提交，先结算返修再写新稿。'),
-    'engine_changed': ('pin_engine', '恢复冻结构建，或沿已获升级授权保留稿件、取消旧任务并重新冻结；不复用旧input_hash。'),
+    'engine_changed': ('pin_engine', '用pin-engine --ref准确提交 --output独立目录固定冻结构建；或沿作者升级授权用recover-engine对准确task/input_hash重新冻结。禁止还原开发目录或复用旧input_hash。'),
+    'engine_recovery': ('inspect_engine_recovery', '核对status的当前任务、构建及原执行者，恢复只作用于准确待办，不重置创作额度。'),
     'governance_integrity': ('inspect_integrity', '核对治理事件与检查点，保留异常现场；不清预算或覆盖检查点继续。'),
     'host_authority': ('connect_trusted_host', '接入受控宿主证明；本地CLI不能自行生成可信作者授权或独立模型身份。'),
     'host_actor': ('restore_host_channel', '把调用交还已登记的实际上下文；不要改会话字符串冒充其他角色。'),
