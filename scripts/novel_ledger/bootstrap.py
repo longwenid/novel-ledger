@@ -7,6 +7,7 @@ paths, concrete storage, clocks, or the caller's environment.
 from __future__ import annotations
 
 import json
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -49,6 +50,50 @@ class LocalRuntime:
 
     def book_view(self):
         return bookpage.write(self.repo, workspace=self.workspace, entry=self.entry)
+
+    def diagnose(self):
+        result = self.app.diagnose()
+        entry = Path(self.entry or Path(__file__).resolve().parents[1] / 'novel.py').resolve()
+        base = [sys.executable, str(entry), '--project', str(self.repo.project)]
+        owner = result['controller']['owner']
+        controlled = base + (['--owner', owner] if owner else [])
+        commands = {'diagnose': base + ['diagnose'], 'status': base + ['status']}
+        if result['next_action'] == 'advance':
+            commands['advance'] = controlled + ['advance', '--compact']
+        if owner and result['controller']['lease_valid'] and result['next_action'] in (
+                'verify_existing_worker', 'review_in_progress'):
+            commands['watch'] = controlled + ['watch']
+        task = result['task']
+        if task:
+            directory = self.repo.project / 'work' / task['task_id']
+            task['paths'] = {name: str(directory / filename) for name, filename in
+                             (('task', 'task.json'), ('dispatch', 'dispatch.md'), ('result', 'result.json'))}
+        pinned = (entry.parent.parent / runtime_install.MANIFEST).is_file()
+        result.update(runtime={'root': str(entry.parent.parent), 'entry': str(entry), 'pinned': pinned},
+                      project_path=str(self.repo.project), commands=commands,
+                      handoff={'resume': commands['diagnose'], 'recheck_before_action': True,
+                               'resets_model_history': False,
+                               'note': '宿主在安全交接点压缩或切换主控上下文；保留原授权与owner，先核实原执行者。'})
+        if task and not result['engine']['matches']:
+            result['engine_recovery'] = {
+                'task_id': task['task_id'], 'input_hash': task['input_hash'],
+                'preserved_result_path': task['paths']['result'],
+                'restore_release': {'command': 'pin-engine',
+                                    'required_inputs': ['matching_release_ref_or_runtime', 'new_runtime_directory']},
+                'upgrade_release': {'prepare': '先不带--project将已选择的新版本固定到开发树外的新目录。',
+                                    'from_pinned_entry_arguments': controlled[2:] + [
+                                        'recover-engine', '--task', task['task_id'], '--input-hash', task['input_hash']],
+                                    'required_inputs': ['pinned_entry', 'author_upgrade_source'] + (
+                                        ['worker_stopped_confirmation'] if result['worker']['identity_registered'] else [])},
+                'note': '准备固定副本不授权升级；实际恢复仍验证准确任务、作者授权及原执行者停止。'}
+            if task['status'] != 'pending':
+                result['engine_recovery'].pop('upgrade_release')
+                result['engine_recovery']['note'] = '本组正在接续；先恢复匹配的固定入口并核实原执行者，不对已完成任务执行recover-engine。'
+        if not pinned:
+            result['runtime']['pin'] = {
+                'arguments': base + ['pin-engine'], 'required_inputs': ['output'],
+                'condition': '输出须在开发树外；成功后统一使用返回的entry，若冻结指纹不符按恢复路径处理。'}
+        return result
 
     def deliver(self):
         result = delivery.deliver_completion(self.repo, lambda repo: bookpage.live_shell(self.workspace.project, self.entry),
@@ -108,33 +153,35 @@ class LocalRuntime:
 
 
 def pin_local_runtime(project, output, ref=None, entry=None):
-    expected = None
+    expected, task = None, None
     if project is not None:
         repo = SQLiteRepository(project, readonly=True)
         try:
             pending = repo.pending()
             expected = pending['input'].get('build') if pending else None
+            task = {'task_id': pending['id'], 'input_hash': pending['input_hash']} if pending else None
         finally:
             repo.close()
     root = Path(entry or __file__).resolve()
     root = root.parent.parent if entry else root.parents[2]
-    return runtime_install.pin(root, output, ref=ref, expected=expected, project=project)
+    return runtime_install.pin(root, output, ref=ref, expected=expected, project=project, task=task)
 
 
 def preview_local(project, port=0, open_browser=False, entry=None):
     return preview.serve(project, port, open_browser, entry)
 
 
-def open_local_runtime(project, *, initialize=False, contract=None, source='', entry=None):
+def open_local_runtime(project, *, initialize=False, contract=None, source='', entry=None, readonly=False):
     root = Path(entry).resolve().parent.parent if entry else Path(__file__).resolve().parents[2]
     if (root / runtime_install.MANIFEST).exists():
         runtime_install.verify(root)
     if initialize:
+        require(not readonly, 'access', '只读入口不能初始化项目。')
         book = workflow.new_book(contract, source) if contract is not None else workflow.preparing_book(source, guided=True)
         repo = SQLiteRepository.initialize(project, book)
     else:
         require(contract is None, 'contract', '已有项目不接受初始化约定。')
-        repo = SQLiteRepository(project)
+        repo = SQLiteRepository(project, readonly=readonly)
     try:
         return LocalRuntime(repo, entry)
     except BaseException:

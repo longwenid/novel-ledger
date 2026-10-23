@@ -135,6 +135,71 @@ class Application:
                 'action_counts': {name: sum(a['action'] == name for a in actions) for name in ('keep', 'local', 'rewrite')},
                 'plan_path': self.presentation.revision_path(plan['plan_hash'])}
 
+    def diagnose(self):
+        """Read operational metadata without re-dispatching or trusting a damaged projection.
+
+        This is a handoff snapshot, not an integrity audit or a replacement for advance.
+        In particular, do not load prose, render task artifacts, or renew any lease here.
+        """
+        state = self.repo.load_part('execution')
+        task = self.repo.pending()
+        batch = self._writing.describe()
+        task_origin = 'pending' if task else None
+        if task is None and batch and batch['active'] and batch.get('task_id'):
+            task = self.repo.task(batch['task_id'])
+            task_origin = 'active_batch'
+        run = self.repo.get(store_keys.CONTROLLER) or {}
+        moment = self.clock()
+        work = task['input'] if task else {}
+        frozen = work.get('build')
+        matches = not frozen or not self.build_info or frozen == self.build_info
+        lease = self.repo.get(store_keys.claim(task['id'])) if task else None
+        failure = self.repo.get(store_keys.technical_failure(task['id'])) if task else None
+        review = self._continuity.summary(task['id']) if task else None
+        decision = state.get('author_block') or {}
+        headers = self.repo.headers(state['branch'])
+        controller = {'owner': run.get('owner'), 'lease_until': run.get('until'),
+                      'lease_valid': bool(run and run['until'] > moment),
+                      'remaining_seconds': max(0, run.get('until', moment) - moment)}
+        recovery = execution_recovery('engine_changed') if not matches else (
+            execution_recovery(failure['code'], failure['failures']) if failure else None)
+        # Never treat an expired lease as proof that a model stopped, or a diagnostic
+        # suggestion as authorization to reset a task or change the author's target.
+        if state['status'] in ('paused', 'completed') or decision:
+            next_action = 'handle_boundary'
+        elif not matches:
+            next_action = 'pin_engine'
+        elif failure and failure.get('blocked'):
+            next_action = 'resolve_execution_failure'
+        elif review:
+            next_action = review_handoff(task['id'], review)['action']
+        elif lease:
+            next_action = 'verify_existing_worker'
+        else:
+            next_action = 'advance'
+        return {'schema': 'novel-ledger.diagnostics/1', 'as_of': moment,
+                'validation': {'integrity_checked': False, 'dispatch_authorized': False},
+                'project': {**{key: state.get(key) for key in
+                              ('status', 'branch', 'revision', 'target', 'finish', 'writing_mode',
+                               'run_authorized', 'last_task')},
+                            'accepted_chapters': headers[-1]['n'] if headers else 0,
+                            'author_decision_id': decision.get('id'),
+                            'author_decision_pending': bool(decision)},
+                'engine': {'current': self.build_info, 'frozen': frozen, 'matches': matches},
+                'controller': controller,
+                'task': ({'task_id': task['id'], 'input_hash': task['input_hash'],
+                          'status': task['status'], 'origin': task_origin, **{key: work.get(key) for key in
+                                                     ('stage', 'chapter', 'scope', 'first', 'last')}} if task else None),
+                'worker': ({'session': (lease or {}).get('session'),
+                            **self.worker_presence(task['id'])} if task else None),
+                'worker_batch': batch,
+                'continuity': ({key: review.get(key) for key in
+                               ('request_id', 'task_id', 'candidate_hash', 'phase', 'observer')}
+                               if review else None),
+                'execution_failure': ({key: failure.get(key) for key in
+                                       ('code', 'operation', 'failures', 'blocked')} if failure else None),
+                'recovery': recovery, 'next_action': next_action}
+
     def task_status(self, task_id):
         task = self.repo.task(task_id)
         batch = self._writing.task_status(task)

@@ -10,7 +10,7 @@ from pathlib import Path
 from novel_ledger.contracts import CONTENT_ERRORS, CONTROLLER_STAGES, Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime, pin_local_runtime, preview_local
 
-PUBLIC = {'pin-engine', 'recover-engine', 'host-check', 'init', 'assurance', 'prepare-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
+PUBLIC = {'diagnose', 'pin-engine', 'recover-engine', 'host-check', 'init', 'assurance', 'prepare-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
           'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next', 'worker', 'worker-ready', 'worker-error', 'prepare-worker'}
 OBSERVER = {'review-read', 'review-observe', 'review-report'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver', 'preview'} | OBSERVER
@@ -328,6 +328,13 @@ def dispatch(args, open_runtime=open_local_runtime):
     if args.command == 'pin-engine':
         require(not identity.get('NOVEL_TASK_ID'), 'worker_boundary', 'Worker 不能安装或切换引擎。')
         return pin_local_runtime(args.project, args.output, args.ref, entry=Path(__file__).resolve())
+    if args.command == 'diagnose':
+        require(not identity.get('NOVEL_TASK_ID'), 'worker_boundary', '运行诊断由主控读取；Worker 将错误摘要交回主控。')
+        runtime = open_runtime(args.project, entry=Path(__file__).resolve(), readonly=True)
+        try:
+            return runtime.diagnose()
+        finally:
+            runtime.close()
     if args.command == 'init':
         require(not identity.get('NOVEL_TASK_ID'), 'worker_boundary', 'Worker 不能初始化项目。')
     if args.command == 'preview':

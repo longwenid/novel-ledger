@@ -26,13 +26,13 @@ ROOT/PROJECT 替换为绝对路径，项目产物不放技能目录。默认执�
 
 | 项目状态 | 开始方式 |
 |---|---|
-| 已有 PROJECT，续写或恢复 | 先 status，再 advance --compact；保留当前任务、候选和授权，不重新 init。 |
+| 已有 PROJECT，续写或恢复 | 先 diagnose 核对入口、任务、版本和原执行者，再按当前动作继续；保留候选和授权，不重新 init。 |
 | 新 PROJECT | 按 [开书入口选择](opening.md#入口选择) 决定逐门开书、导入完整约定或 intake 部分要求。 |
 
 已有项目的最短恢复命令：
 
 ```bash
-python3 "$ROOT/scripts/novel.py" --project "$PROJECT" status
+python3 "$ROOT/scripts/novel.py" --project "$PROJECT" diagnose
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 ```
 
@@ -47,6 +47,8 @@ python3 "$DEV_ROOT/scripts/novel.py" pin-engine --output "$RUNTIME"
 ```
 
 返回 `runtime_root`、`entry`、`build` 及后续命令。把 ROOT 改为该 runtime_root，再执行 init/status/run/advance 等操作；Worker commands 自动指向同一固定入口。副本包含脚本、规则、模板与素材，带内容清单，文件设为只读；启动时核验清单，不接受被改动的副本。文件模式不是OS权限隔离。目标已存在时只复用有效副本，不覆盖；副本须在开发目录外。不要把固定运行副本继续链接回开发树。
+
+复用已有目录时核对 `reused` 与 `source_matches_runtime`：后者为 false 表示返回的是旧固定副本，并未发布当前源码；null 表示当前源码无法比较。发布新版本使用新目录。固定发布失败时不继续从开发入口启动新写手。
 
 已有项目带待办时，`pin-engine --project PROJECT` 会以只读连接取得冻结指纹；所选副本不匹配即拒绝发布，不取消任务。恢复已冻结的发布版本：
 
@@ -67,6 +69,8 @@ TASK/INPUT_HASH 来自准确待办或engine_changed返回值；有登记租约�
 
 `engine_changed` 的 recovery.action=pin_engine 对应上述命令族；可选择恢复准确固定构建，或在真实升级授权下recover-engine。不能靠prepare-worker --reset-failures解除版本冲突，也不能重签旧任务输入字段绕过校验。
 
+`pin-engine` 的指纹不符响应会带 `expected`、`selected`、准确 `task_id/input_hash` 和 `recovery_options`。两条路线分别是匹配原冻结发布、或先固定新发布再受控升级；命令模板中未知的 ref、目录和授权原话须由实际记录补齐，不原样执行占位符。没有找到准确旧发布时保留任务，不能反复改库、重冻或新建写手来试出一个可用版本。
+
 ## 宿主能力与执行状态
 
 ```bash
@@ -76,6 +80,16 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" host-check
 此只读命令报告native_worker_creation=false、worker_creation=external_host_required、watch能力及是否存在可信身份验证器；不把“可运行命令”当成“可创建独立模型”。主控必须另外核对当前宿主实际的会话创建工具或已安装模型适配器；没有时保留任务并报告能力缺失，不伪造session或启动普通脚本冒充Worker。watch不创建模型，只监督已由宿主派出的执行者。
 
 prepare-worker.ready只表示协议身份登记成功，响应的worker_presence、status.worker_presence及派工卡execution.worker_presence另列身份登记、租约有效期、实际读取/心跳活动和身份是否经宿主证明。activity_observed不证明当前仍存活，worker_running=null须由宿主核实；phase=await_worker_start表示尚未观察到该身份活动，lease_expired表示租约过期。组active=true也不证明后台正在写。准备身份后立即向真实Worker交付任务，不结束主控回复留下空挂租约。
+
+## 诊断与主控上下文交接
+
+`diagnose` 通过只读连接一次返回当前授权目标、主控 owner/租约、准确待办与输入哈希、当前/冻结构建、写手身份与活动、技术失败和核验阶段。输出不含正文、完整章纲、凭据或作者决定历史；不会重新派工、续租、重置失败计数或移动草稿。即使事实投影损坏，仍可读取运行元数据；`validation.integrity_checked=false` 表示没有进行完整验收，不能据此恢复被完整性错误阻断的写作。
+
+`commands` 是已填入真实入口和项目的 argv；版本恢复另列 `required_inputs`，不伪造升级授权或原执行者停止证明。`runtime.pinned=false` 时先按固定版本流程建立副本。`worker_running=null` 和租约过期都不能证明原写手已退出；重新派工前仍核实宿主状态。元数据的 `next_action` 仅提示核对方向，真正的阶段、派工和提交仍由原命令校验。
+
+在五章组结束、独立排障完成等安全交接点，由宿主压缩主控历史或换到新主控上下文；交接保留本次 diagnose 摘要、作者原授权位置、实际宿主会话对应关系，以及尚未解决的错误和决定。新主控先重跑摘要中的 `handoff.resume`，复核当前任务后接续，避免使用旧摘要直接恢复。原主控仍在运行时不并发接管同一 owner。引擎不控制模型历史，`diagnose` 不会自动清空上下文；`compact` 是存储整理，不能用于模型上下文压缩。
+
+身份、构建或完整性错误先读这份摘要与原错误；需要源码排障时交给独立工程上下文，带任务 ID、构建、错误及候选路径即可，主控只接收根因、修复范围和验证结果。写手缺字段或资料时继续使用冻结模板、`read --record`、`recall`，不猜数据库表列或内部类名。相同错误再次出现且无新证据时停止原样重试，保留现场按 recovery 分流，不把换写手作为消除错误的手段。
 
 ## 目标与主控认领
 
@@ -152,7 +166,7 @@ submit以outcome和总findings表达业务结果：repair_required是待返修�
 
 advance --compact 的 task 只含任务身份、阶段、task_path、identity_path、brief_path、dispatch_path、claim 等派工信息；完整 task.json 仍按原协议写入 task_path，作者选择板与非派工动作保持完整（--compact 下板面回显压缩为哈希与 option_ids，全文在 board.md 与 work/last-advance.json）。主干把 task_path 交给子 agent，由它完整读取本任务。commands 为 argv 数组，按数组执行，不拼 shell 字符串。
 
-每个任务目录另写 identity.json 与 dispatch.md：identity.json 是该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、入口与版本，以及 worker_env 里应注入的变量名）；dispatch.md 是引擎从冻结任务渲染的 **Worker 自举卡**（环境自举命令、执行步骤、认领状态、argv 命令行、常见坑）。identity 供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：除 opening_options 对主干放行 read/recall 外，read/recall/patch 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示宿主尚未注入执行身份，不能自行编造；已有 claim 时派工身份沿用其 session。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
+每个任务目录另写 identity.json 与 dispatch.md：identity.json 是该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、入口与版本，以及 worker_env 里应注入的变量名）；dispatch.md 是引擎从冻结任务渲染的 **Worker 自举卡**（宿主身份注入、文件落稿步骤、认领状态、argv 命令行、常见坑）。identity 供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：除 opening_options 对主干放行 read/recall 外，read/recall/patch 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示宿主尚未注入执行身份，不能自行编造；已有 claim 时派工身份沿用其 session。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
 
 除主干自执的 opening_options 外，新任务派真实新 Worker，填真实 session（普通模式一个会话只做一个任务；快速模式仅冻结的同组正文及其返修可接续，跨组仍按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**初始身份准备由主干执行**：用 `prepare-worker --task ID --session 宿主真实会话ID`，按下节交付 worker_env；Worker 不执行 claim。快速组内下一任务的凭据由 worker-next 生成。claim=null 表示尚未认领，不表示新 Worker 已可读取正文。
 

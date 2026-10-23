@@ -202,17 +202,18 @@ def render_dispatch_card(envelope, identity):
     else:
         state = '已过期' if claim.get('expired') else '生效中（session=%s）' % claim.get('session')
         claim_lines = ['- 本任务已有租约（%s）：未过期沿用原会话；过期由主干重新认领，Worker 不执行 claim。' % state]
-    session = identity['worker_env'].get('NOVEL_SESSION')
-    session_line = ("    $env:NOVEL_SESSION='%s'" % session.replace("'", "''") if session else
-                    "    if (-not $env:NOVEL_SESSION) { throw '缺少宿主执行身份：由主干注入真实会话标识，不得自拟。' }")
     commands = envelope.get('commands') or {}
     steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。',
              '2. 执行一次无参数 read（命令见下）把必读记录拿齐；可加 --save 集中落盘并通读两包，不截断前章；确需某份再 read --record 名称。',
-             '3. 复制 `result.template.json` 为 `result.json` 起稿，只改 data；'
+             '3. 用文件编辑工具从 `result.template.json` 起稿，先保存 UTF-8 `result.json`，只改 data；'
+             '正文也可先存独立 UTF-8 文件，再用 JSON 序列化读入 data.prose。'
+             '避免把长正文嵌入 python -c 或 shell 引号；后续按文件路径读取、局部编辑，不反复重贴整章。'
              'Python worker 入口在内存中注入真实 session/execution_claim，不写回草稿；schema/task_id/input_hash 不手写。',
-             '4. 执行 commands.preflight 试算，以 outcome 和总 findings 判断；内容拒绝不计技术错误，stalled=true 时停止盲试交主控，不为确认格式读引擎源码。',
+             '4. 对已保存文件执行 commands.preflight；完整读取同次报告的 outcome、findings 与 recovery，'
+             '按位置和字段一次修正当前可修的问题，保存后复检，不逐字段盲试或重读引擎源码。'
+             '内容拒绝不计技术错误；身份、租约、引擎版本阻断或 stalled=true 时保留稿件和报告交主控。',
              '5. `submit` 提交；worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令，不改写 commands/guides。']
-    command_names = ('ready', 'read', 'check', 'preflight', 'submit')
+    command_names = ('read', 'preflight', 'submit')
     if envelope.get('worker_batch'):
         group = envelope['worker_batch']
         steps[-1] = ('5. 本组范围第 %s～%s 章：逐章落笔和提交，章纲固定、额度按章计算。'
@@ -233,19 +234,9 @@ def render_dispatch_card(envelope, identity):
              'prepare-worker 的 ready 只表示身份登记成功；不证明模型进程运行。activity_observed 也不代替宿主存活核实。',
              'identity 中 session 为空不是让你找旧身份；缺失或不匹配立即带错误码交回主控，不读正文、不遍历历史任务。',
              '首条 commands.read 会自动验证 ready，失败不会交付材料；commands.ready 仅用于诊断，不必另起模型轮次探测。Python 入口无需某一种 shell 的初始化脚本。',
+             '宿主已注入 worker_env 时直接执行下列 commands，无需手工拼装环境变量或另找会话身份；'
+             'session/execution_claim 缺失或不匹配时交回主控，不猜测、不复制旧值。',
              '宿主不能注入环境时，可在 worker 的 -- 前显式传 --session 与 --execution-claim；只用主控当次返回的值，不写入任务文件。',
-             '',
-             '### POSIX 环境示例（macOS/Linux，宿主已注入时不重复设置）',
-             '    export NOVEL_TASK_ID=' + shlex.quote(envelope['task_id']),
-             '    export PYTHONIOENCODING=utf-8',
-             '    # NOVEL_SESSION / NOVEL_EXECUTION_CLAIM 由宿主提供；缺失交回主控。',
-             '',
-             '### PowerShell 环境示例（Windows，宿主已注入时不重复设置）',
-             '',
-             '    $env:PYTHONIOENCODING=\'utf-8\'',
-             '    [Console]::OutputEncoding=[System.Text.Encoding]::UTF8',
-             "    $env:NOVEL_TASK_ID='%s'" % envelope['task_id'],
-             session_line,
              '',
              '身份、角色、租约错误立即交回主控；其他技术错误按 details.recovery.retry_allowed 执行。连续错误达到 limit 后停止，主控修复原因后显式重开。',
              '',

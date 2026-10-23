@@ -29,6 +29,8 @@ understanding 是 intent 内独立的版本对象，不把解释与未来方案�
 
 宿主主干管理作者目标、任务身份、治理命令与简短进度；子 agent（Worker）读取完整冻结材料，完成当前世界、卷纲、章纲、执笔或返修并提交。开书门任务（opening_options）例外：无正文、无派工必要性，由主干在同一会话自执（`contracts.CONTROLLER_STAGES`），选择板由引擎物化为 work/board.md。workflow 决定下一任务，主干只接收身份及状态摘要，正文与完整回执保留在项目中；无人值守的等待由 `watch` 在引擎进程内承担。主干生命周期和模型会话隔离由宿主提供，host 是可选的外部进程适配器。execution为advance/watch提供controller.must_continue，submit的continuation区分组内与跨组角色；identity_registered、activity_observed和未知的worker_running分别表达登记、观察及存活边界。
 
+`Application.diagnose` 只投影运行元数据；本地组合根通过只读仓库补充真实入口、文件位置和 argv。诊断不调用任务物化，不修改租约、计数或候选，不读取正文与全部设计，也不证明账本完整性。其小摘要用于宿主安全接续；模型历史压缩仍由宿主负责。
+
 compact 是派工返回视图，冻结任务、正文和材料保持完整。任务身份与执行认领分别承担提交校验和并发占用；派工、等待、同会话恢复及提交核实统一见 [主干循环](runtime.md#主干循环默认执行路径) 与 [任务交接](runtime.md#任务交接)；修订采纳、完本和交付统一按 [动作分支](runtime.md#动作分支) 执行。
 
 ## 依赖方向
