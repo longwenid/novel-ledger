@@ -14,7 +14,10 @@ def atomic_write(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name('.' + path.name + '-' + uuid.uuid4().hex)
     try:
-        temporary.write_text(content, encoding='utf-8')
+        # newline='' keeps artifacts byte-stable on Windows: text mode would translate LF
+        # into CRLF, so content-equality skip checks (bookpage's preview entry, task
+        # re-materialization) would mismatch and rewrite identical files forever.
+        temporary.write_text(content, encoding='utf-8', newline='')
         os.replace(str(temporary), str(path))
     finally:
         temporary.unlink(missing_ok=True)

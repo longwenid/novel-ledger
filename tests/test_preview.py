@@ -134,8 +134,16 @@ class PreviewTests(unittest.TestCase):
 
     def test_cli_preview_has_a_usable_url_and_stops_on_interrupt(self):
         environment = {k: v for k, v in os.environ.items() if not k.startswith('NOVEL_')}
+        # Windows cannot send SIGINT to a child; CTRL_C_EVENT only works inside a fresh
+        # process group, which also keeps the interrupt away from this test process.
+        windows = sys.platform == 'win32'
+        if windows:
+            import ctypes
+            if not ctypes.windll.kernel32.GetConsoleWindow():
+                self.skipTest('无控制台宿主无法投递 Ctrl+C 事件；URL 部分已在有控制台环境验证。')
         process = subprocess.Popen([sys.executable, str(ROOT / 'scripts/novel.py'), '--project', str(self.project), 'preview'],
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=environment)
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', env=environment,
+                                   creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if windows else 0)
         try:
             info = json.loads(process.stdout.readline())
             url = urlsplit(info['preview_url'])
@@ -143,7 +151,7 @@ class PreviewTests(unittest.TestCase):
             connection.request('GET', url.path + 'api/index')
             self.assertEqual(connection.getresponse().status, 200)
             connection.close()
-            process.send_signal(signal.SIGINT)
+            process.send_signal(signal.CTRL_BREAK_EVENT if windows else signal.SIGINT)
             output, error = process.communicate(timeout=5)
             self.assertEqual(process.returncode, 0, error)
             self.assertTrue(json.loads(output)['preview_stopped'])

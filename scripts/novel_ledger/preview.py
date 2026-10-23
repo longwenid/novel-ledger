@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import secrets
+import signal
 import sqlite3
+import sys
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -89,6 +91,13 @@ def create_server(project, port=0, entry=None):
 
 
 def serve(project, port=0, open_browser=False, entry=None):
+    if sys.platform == 'win32':
+        # A process launched in a fresh process group (how hosts start helpers) has
+        # CTRL_C_EVENT disabled by Windows; CTRL_BREAK still arrives, so map it to the
+        # same graceful stop instead of the default hard termination.
+        def _raise_interrupt(_signum, _frame):
+            raise KeyboardInterrupt()
+        signal.signal(signal.SIGBREAK, _raise_interrupt)
     with create_server(project, port, entry) as server:
         info = {'preview_url': server.url, 'readonly': True, 'stop': 'Ctrl+C'}
         print(json.dumps(info, ensure_ascii=False), flush=True)
