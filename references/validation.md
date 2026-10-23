@@ -24,13 +24,14 @@
 
 ```bash
 python3 validation/run_tests.py fast
+python3 validation/run_tests.py e2e
 python3 validation/run_tests.py full
 python -m pytest tests/ -n auto          # 全量并行（装 pytest-xdist；用例各建临时项目，可安全并行）
 python3 <skill-creator>/scripts/quick_validate.py ROOT
 python3 validation/measure.py --out /path/to/metrics.json
 ```
 
-`fast` 固定覆盖架构、端口替换、角色隔离、有限预算、修订授权及端到端交付（含档位形状声明、章纲状态链与漂移核算的守卫）；`full` 自动发现 tests/ 中全部测试。两种入口均在失败时返回非零状态，可供本机或 CI 调用；`--list` 仅列出案例，`-v` 显示逐项结果。安装 pytest-xdist 时可使用并行入口；测试数量与耗时以当前执行结果为准，历史版本的测量不作为当前预算。新增关键边界时维护快速组，新增测试始终由完整组自动收集。快速检查通过后，跨模块重构仍须完整回归；原 unittest discovery 命令继续可用。
+三组共用同一发现空间：`fast` 是日常门，固定覆盖架构、端口替换、角色隔离、有限预算、修订授权及端到端交付（含档位形状声明、章纲状态链与漂移核算的守卫），并有 120 秒墙钟预算——测试全绿但超预算同样判失败，防止日常门重新长回慢套件；`e2e` 装载重型端到端文件（整卷连写、真实 CLI 进程交接、冻结安装、长连续性流程），改动交接/执行/安装路径时先跑它；`full` 自动发现 tests/ 中全部测试，仍是两组的严格超集（tests/test_validation_runner.py 守卫子集、组间不重复与关键边界非空）。三种入口均在失败时返回非零状态，可供本机或 CI 调用；`--list` 仅列出案例，`-v` 显示逐项结果。安装 pytest-xdist 时可使用并行入口；测试数量与耗时以当前执行结果为准，历史版本的测量不作为当前预算。新增关键边界时维护快速组，新增测试始终由完整组自动收集。快速检查通过后，跨模块重构仍须完整回归；原 unittest discovery 命令继续可用。
 
 `validation/anchor_check.py` 核对根目录、references/ 与 docs/ 活跃 Markdown 的行内本地文件链接、同页与跨页精确标题锚点；跳过围栏代码示例，坏引用返回非零。历史 validation/ 报告、引用式链接和 Setext 标题不在此入口覆盖内（改标题或挪小节后运行）。quick_validate 属宿主自带工具，路径按本机实际安装替换；它是可选的附加校验，缺失时不影响上面的测试与测量。Windows 控制台默认 GBK：测试与 CLI 自身按 UTF-8 读写，但外部校验脚本可能仍按本地编码读文件，此时对全部命令加 `PYTHONUTF8=1`。
 

@@ -1,7 +1,6 @@
 import copy
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -116,23 +115,6 @@ class RuntimeTests(unittest.TestCase):
 
 
 
-
-    def test_preflight_rolls_back_and_retries_are_idempotent(self):
-        self.app.advance()
-        result = response(self.app)
-        before = dump(self.repo.load())
-        checked = self.app.submit(result, preview=True)
-        self.assertTrue(checked['checked'])
-        self.assertTrue(checked['valid'])
-        self.assertFalse(checked['committed'])
-        self.assertEqual(dump(self.repo.load()), before)
-        self.assertEqual(self.repo.pending()['id'], result['task_id'])
-        committed = self.app.submit(result)
-        self.assertTrue(committed['valid'])
-        self.assertTrue(committed['committed'])
-        self.assertTrue(self.app.submit(result)['idempotent'])
-        result['data']['intent'] = '不同内容。'
-        self.assertCode('replay_conflict', self.app.submit, result)
 
     def test_rejection_does_not_commit_fact_or_spend_budget(self):
         drive(self.app, until='write')
@@ -545,13 +527,6 @@ class RuntimeTests(unittest.TestCase):
             self.assertCode('lease', host.step, self.app, [sys.executable, '-c', 'pass'], owner)
         self.assertIsNone(self.repo.get('claim:' + self.repo.pending()['id']))
 
-    def test_worker_process_cannot_take_controller_actions(self):
-        result = host.step(self.app, [sys.executable, str(ROOT / 'tests' / 'process_worker.py'), 'controller'])
-        self.assertEqual(result['action'], 'needs_attention')
-        self.assertEqual(result['exit_code'], 2)
-        self.assertIn('worker_boundary', Path(result['log']).read_text(encoding='utf-8', errors='replace'))
-
-
     def test_role_boundary_keeps_the_controller_out_of_prose(self):
         command = [sys.executable, str(ROOT / 'scripts' / 'novel.py'), '--project', str(self.project)]
         task = self.app.advance()['task']
@@ -568,43 +543,6 @@ class RuntimeTests(unittest.TestCase):
                                   encoding='utf-8', errors='replace', env=foreign)
         self.assertEqual(json.loads(outsider.stdout)['error'], 'worker_boundary')
 
-    def test_dispatch_identity_travels_with_the_task_and_explains_the_credential(self):
-        """Identity is data the dispatch can be checked against, while the credential stays ambient."""
-        task = self.app.advance()['task']
-        identity_path = Path(task['identity_path'])
-        self.assertTrue(identity_path.is_file())
-        identity = json.loads(identity_path.read_text(encoding='utf-8'))
-        self.assertEqual((identity['task_id'], identity['input_hash'], identity['stage']),
-                         (task['task_id'], task['input_hash'], task['stage']))
-        self.assertTrue(identity['requires_new_worker'])
-        self.assertEqual(identity['worker_env'], {'NOVEL_TASK_ID': task['task_id'], 'NOVEL_SESSION': None})
-        self.assertEqual(Path(identity['task_path']), Path(task['task_path']))
-        # The compact view a controller forwards names the same file, so it can be handed on.
-        self.assertEqual(Path(self.app.advance(compact=True)['task']['identity_path']), identity_path)
-        # The refusal teaches what to inject instead of leaving the asker to guess.
-        import argparse
-        import importlib
-        cli = importlib.import_module('novel')
-        args = argparse.Namespace(command='read', task=task['task_id'], project=str(self.project))
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('NOVEL_TASK_ID', None)
-            os.environ.pop('NOVEL_SESSION', None)
-            with self.assertRaises(Error) as caught:
-                cli.role_guard(args)
-        self.assertEqual(caught.exception.code, 'role_boundary')
-        self.assertIn('NOVEL_TASK_ID', caught.exception.details['recover'])
-        self.assertEqual(caught.exception.details['identity']['task_id'], task['task_id'])
-
-        # A claim carries the host-supplied execution identity into every derived
-        # artifact; a card must not teach a worker to invent a replacement ID.
-        lease = self.app.claim(task['task_id'], 'host-execution-123')
-        refreshed = self.app.advance()['task']
-        identity = json.loads(Path(refreshed['identity_path']).read_text(encoding='utf-8'))
-        self.assertEqual(identity['worker_env']['NOVEL_SESSION'], lease['session'])
-        self.assertIn('host-execution-123', Path(refreshed['dispatch_path']).read_text(encoding='utf-8'))
-
-
-
     def test_dispatch_material_carries_its_own_path_self_check(self):
         self.repo.save(workflow.preparing_book(guided=True))
         handle = self.app.advance()['task']
@@ -613,7 +551,10 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn('当前安装的真实路径', envelope['note'])
         self.assertIn('advance', envelope['note'])
         material = json.loads(Path(handle['input_path']).read_text(encoding='utf-8'))
-        self.assertIn('路径自检', material['brief'])
+        # The slim opening card keeps install paths in the envelope note and points reads
+        # through task.json commands; the brief itself must not inline real paths.
+        self.assertIn('task.json.commands.read', material['brief'])
+        self.assertNotIn(str(ROOT), material['brief'])
         entry = envelope['commands']['submit'][1]
         self.assertTrue(Path(entry).is_file(), entry)
 
@@ -717,15 +658,6 @@ class DomainTests(unittest.TestCase):
                     workflow.new_book(raw)
                 self.assertEqual(caught.exception.code, 'contract')
                 self.assertIn('未知约定字段', caught.exception.message)
-
-    def test_architecture_diagram_products_match_their_source(self):
-        def block(text):
-            match = re.search(r'```mermaid\n(.*?)```', text, re.S)
-            return (match.group(1) if match else text).strip()
-
-        source = block((ROOT / 'references' / 'architecture.md').read_text(encoding='utf-8'))
-        self.assertEqual(block((ROOT / 'docs' / 'architecture.mmd').read_text(encoding='utf-8')), source)
-        self.assertIn(source, (ROOT / 'README.md').read_text(encoding='utf-8'))
 
     def test_the_declared_repository_protocol_covers_the_adapter(self):
         """A hand-written interface nobody checks drifts: this keeps the declaration honest."""

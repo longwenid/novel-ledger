@@ -273,13 +273,14 @@ pwsh tools/install-dsh.ps1 -Remove
 ## 六、开发与验证
 
 ```bash
-python3 validation/run_tests.py               # 默认快速边界与关键业务链路
+python3 validation/run_tests.py               # 默认快速边界与关键业务链路（120 秒墙钟预算）
+python3 validation/run_tests.py e2e           # 重型端到端（整卷连写、CLI 进程交接、冻结安装）
 python3 validation/run_tests.py full          # 自动发现全部工程测试（串行）
 python -m pytest tests/ -n auto               # 全量并行（需安装 pytest-xdist）
 python3 validation/measure.py --out validation/metrics.json          # 依赖图与必读材料度量
 ```
 
-默认运行快速组，覆盖关键边界与主流程；需要完整回归时显式使用 full，自动收集全部工程测试；两者可从其他目录运行，失败返回非零状态。未安装 pytest-xdist 时使用串行入口。页面模板随技能安装，导出为离线单文件。
+默认运行快速组，覆盖关键边界与主流程，超墙钟预算即判失败以保持反馈速度；重型端到端（整卷连写、真实 CLI 进程交接、冻结安装）归入 e2e 组；需要完整回归时显式使用 full，自动收集全部工程测试；三组可从其他目录运行，失败返回非零状态。未安装 pytest-xdist 时使用串行入口。页面模板随技能安装，导出为离线单文件。
 
 测试使用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。全量项数以本机运行为准（`python3 validation/run_tests.py full`），详细记录见 [历史验收记录](validation/archive/results.md)。历史工程度量见 [2026-10-20 快照修复后测量](validation/archive/quality-metrics-fixed-2026-10-20.json)，内含 UTC 生成时间、源码提交及覆盖本地修改的 Python 源码指纹；历史快照按其原始条件解释。当前度量请运行上面的 `validation/measure.py`，以本次输出的生成时间和源码指纹为准。数百万字的上下文、累计快照与完整来源验收见 [修复报告](validation/archive/storage-snapshot-fix-2026-10-20.md)。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
 
