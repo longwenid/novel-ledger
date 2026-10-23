@@ -1,6 +1,6 @@
 # opening/5 独立对抗复核（task-25）
 
-> 历史归档：本文件保留当轮版本、设计或实验条件，不是当前执行规范。旧门序、兼容条款、独立审查阶段及命令均不用于当前流程；当前唯一执行依据见 [任务协议](../references/protocol.md) 与 [运行流程](../references/runtime.md)。
+> 历史归档：本文件保留当轮版本、设计或实验条件，不是当前执行规范。旧门序、兼容条款、独立审查阶段及命令均不用于当前流程；当前唯一执行依据见 [任务协议](../../references/protocol.md) 与 [运行流程](../../references/runtime.md)。
 
 复核对象：HEAD `455379b`（"开书协议升到 opening/5"），`contracts.VERSION = 2.0.0`、`OPENING_VERSION = 5`。
 依据：`validation/opening5-spec.md`（冻结规格）+ 源码 + tests；**未读** `validation/opening5-verification.md` 的结论。

@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
-from novel_ledger import bookpage, store_keys, unattended
+from novel_ledger import bookpage, delivery, store_keys, unattended
 from novel_ledger.bootstrap import open_local_runtime, local_application
 from novel_ledger.authority import SignedHostAuthority
 from novel_ledger.contracts import Error, digest, dump
@@ -198,6 +198,67 @@ class FastWritingTests(unittest.TestCase):
         self.assertIn('state', second['records'])
         complete = self.app.read(task['task_id'], everything=True)
         self.assertIn('contract', complete['records'])
+
+    def test_previous_prose_is_delivered_once_per_version_across_the_group(self):
+        task, lease = self.start_group()
+        received = {}
+        for chapter in range(2, 7):
+            material = self.app.read(task['task_id'])
+            sources = {name: row for name, row in material['records'].items()
+                       if name.startswith('previous_chapter:')}
+            self.assertEqual(set(sources), {'previous_chapter:' + str(chapter - 1)})
+            received.update(sources)
+            index = material['records']['previous_chapters']['value']
+            self.assertEqual([row['chapter'] for row in index], list(range(max(1, chapter - 2), chapter)))
+            work = self.repo.task(task['task_id'])['input']
+            expected = {}
+            for row in index:
+                self.assertNotIn('prose', row)
+                original = self.repo.chapter('main', row['chapter'])
+                self.assertEqual(row['prose_hash'], original['prose'])
+                self.assertEqual(received[row['record']]['hash'], original['prose'])
+                expected[row['chapter']] = self.repo.read_document(original['prose'])
+                self.assertEqual(received[row['record']]['value'], expected[row['chapter']])
+            # Engine evidence is complete even when this delivery reused a previous full source.
+            self.assertEqual(self.app._sources(work), expected)
+            pack = delivery.pack_markdowns(material)['read_pack.md']
+            self.assertIn(next(iter(sources.values()))['value'], pack)
+            self.submit('fast-worker', lease)
+            if chapter < 6:
+                task, lease = self.next(task, lease)
+        self.assertEqual(len(received), 5)
+
+    def test_previous_prose_full_read_and_fresh_context_restore_entire_window(self):
+        task, lease = self.start_group()
+        first = self.app.read(task['task_id'])
+        self.submit('fast-worker', lease)
+        task, lease = self.next(task, lease)
+        delta = self.app.read(task['task_id'])
+        self.assertIn('previous_chapter:1', delta['already_read'])
+        complete = self.app.read(task['task_id'], everything=True)
+        self.assertEqual({n for n in complete['records'] if n.startswith('previous_chapter:')},
+                         {'previous_chapter:1', 'previous_chapter:2'})
+        self.app.prepare_worker(task['task_id'], 'fast-worker', self.owner, fresh_context=True)
+        restored = self.app.read(task['task_id'])
+        self.assertNotEqual(restored['execution_id'], first['execution_id'])
+        self.assertEqual(restored['records'], complete['records'])
+        event = json.loads(self.repo.db.execute(
+            "SELECT value FROM journal WHERE action='read' ORDER BY id DESC LIMIT 1").fetchone()[0])
+        self.assertEqual(event['execution_id'], restored['execution_id'])
+        self.assertEqual(event['record_hashes'], {n: row['hash'] for n, row in restored['records'].items()})
+
+    def test_frozen_previous_prose_index_rejects_mismatched_source_and_supports_inline_tasks(self):
+        task, _ = self.start_group()
+        work = copy.deepcopy(self.repo.task(task['task_id'])['input'])
+        row = self.repo.read_document(work['records']['previous_chapters'])[0]
+        prose = self.repo.read_document(row['prose_hash'])
+        inline = copy.deepcopy(work)
+        inline['records']['previous_chapters'] = self.repo.document([{'chapter': 1, 'prose': prose}])
+        self.assertEqual(self.app._sources(inline), {1: prose})
+        work['records'][row['record']] = self.repo.document('另一版本的正文。')
+        with self.assertRaises(Error) as caught:
+            self.app._sources(work)
+        self.assertEqual(caught.exception.code, 'source_integrity')
 
     def test_cancelled_group_keeps_committed_prefix_and_cannot_be_resumed_by_its_worker(self):
         task, lease = self.start_group()

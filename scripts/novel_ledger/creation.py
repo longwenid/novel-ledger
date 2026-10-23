@@ -522,7 +522,7 @@ def _validate_ladder(value, tier_id, floors):
 def _validate_promise_anchor(value, tier, floors):
     """The payoff anchor is the counterweight to a grand world: one promise with a chapter deadline.
 
-    Evidence (validation/research-brainstorm-trends.md §4) puts the reader-verifiable window around
+    Evidence (validation/archive/research-brainstorm-trends.md §4) puts the reader-verifiable window around
     the first 100k characters; the ladder's own floor is the tier's chapter window when that is
     tighter. `deadline_chapter` is digits so the check is arithmetic, not interpretation.
     """
@@ -574,7 +574,7 @@ def premise_warnings(gate, options):
     """Advisory flags for a core idea built on a setting the current headliners already own.
 
     Systems, sequences, 克系+民俗, 无限流 and 幕后黑手 are public settings: free to use, and therefore
-    worth nothing as a novelty claim (validation/research-brainstorm-trends.md §1.2). The warning
+    worth nothing as a novelty claim (validation/archive/research-brainstorm-trends.md §1.2). The warning
     names the collision and asks what this world gained; it never blocks a choice — same severity as
     the protagonist-name warning, for the same reason: the author decides.
     """

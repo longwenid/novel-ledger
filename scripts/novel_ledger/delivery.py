@@ -39,6 +39,7 @@ def pack_markdowns(result):
             records[name]['value'], ensure_ascii=False, indent=2, allow_nan=False) + '\n```\n'
 
     names = [name for name in PACK_RECORDS if name in records]
+    names.extend(name for name in records if name.startswith('previous_chapter:'))
     other = [name for name in records if name not in names]
     notice = ('本次实际交付的完整材料；新上下文须完整读取两包。'
               '同一上下文仅可复用已读且哈希未变的记录；历史丢失时由主控重新交付，不能只读前章尾。\n\n')

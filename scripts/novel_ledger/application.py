@@ -14,7 +14,7 @@ from .verification import VerificationService
 from .writing_service import WritingService
 from .governance import Governance
 from .continuity_service import ContinuityService
-from .execution import controller_handoff, presence, submission_handoff
+from .execution import controller_handoff, presence, review_handoff, submission_handoff
 
 # An amendment preview is a JSON-encoded value, not prose: if it is cut, it says so, because a
 # silently truncated preview reads as a valid value and would let a reviewer (or a script) compare
@@ -341,7 +341,14 @@ class Application:
         record = (work.get('records') or {}).get('previous_chapters')
         if record:
             for row in self.repo.read_document(record):
-                sources.setdefault(row['chapter'], row['prose'])
+                if 'prose' in row:
+                    prose = row['prose']  # Existing frozen tasks use inline full chapters.
+                else:
+                    reference = work['records'].get(row.get('record'))
+                    require(reference is not None and reference == row.get('prose_hash'),
+                            'source_integrity', '前章正文索引与冻结来源不一致。')
+                    prose = self.repo.read_document(reference)
+                sources.setdefault(row['chapter'], prose)
         return sources
 
     def _priors(self, book, chapter):
@@ -383,8 +390,7 @@ class Application:
                 if prior['status'] == 'pending':
                     review = self._continuity.summary(after)
                     if review:
-                        return {'action': 'review_complete' if review['phase'] == 'done' else 'review_required',
-                                'task_id': after, 'review': review}
+                        return review_handoff(after, review)
                     return {'action': 'wait_for_submit', 'task_id': after}
                 if prior['status'] != 'done' or book.get('last_task') != after:
                     return {'action': 'resync', 'status': self.status()}
@@ -398,8 +404,7 @@ class Application:
                             'status': self.status()}
                 review = self._continuity.summary(task['id'])
                 if review and book['status'] == 'running':
-                    return {'action': 'review_complete' if review['phase'] == 'done' else 'review_required',
-                            'task_id': task['id'], 'review': review}
+                    return review_handoff(task['id'], review)
             if book['status'] != 'running' and not (book['status'] == 'preparing' and book.get('creation')):
                 proposal = self._revision_summary(book)
                 if proposal:
@@ -564,7 +569,10 @@ class Application:
                                   if name in task['input']['records']})
                 self.repo.put(key, delivered)
             self._writing.record_read(task, names)
-            self.repo.record('read', store_keys.read_record(task_id, names, len(dump(result))))
+            self.repo.record('read', store_keys.read_record(
+                task_id, names, len(dump(result)), execution_id=lease.get('execution_id'),
+                record_hashes={name: task['input']['records'][name] for name in names
+                               if name in task['input']['records']}))
             if receive is not None:
                 # Cache only successfully delivered material. The adapter's file failure
                 # rolls back this execution's delivery marks and read journal together.

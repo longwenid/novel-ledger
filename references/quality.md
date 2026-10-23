@@ -1,6 +1,6 @@
 # 独立连续性核验与可信宿主
 
-何时读：`continuity_review_required`、`review_required`、`review_complete`，或配置保障模式、接入可信执行宿主。普通执笔仍按当前任务的commands与模板执行。
+何时读：`continuity_review_required`、`review_required`、`review_in_progress`、`review_author_required`、`review_complete`，或配置保障模式、接入可信执行宿主。普通执笔仍按当前任务的commands与模板执行。
 
 ## 模式与边界
 
@@ -20,11 +20,11 @@
 机械通过且需要独立阅读时：
 
 1. `preflight`返回 `continuity_review_required`，不保存请求。Worker执行正式submit后，引擎保存准确候选和冻结历史，返回 `request_id`、`candidate_hash`、`worker_boundary=await_review`。章节与文学额度尚未改变。
-2. 主控收到Worker摘要，或watch/advance返回 `review_required`，实际创建另一空历史读者上下文，取得真实会话ID。执行 `prepare-observer --request ID --session 真实ID`（带原owner），仅向该读者注入 `observer_env` 并交付返回的commands；清除执笔Worker的环境，不能由主控或执笔者换个名字代审。
-3. 读者执行 `commands.review-read`，完整读候选与相邻正文。只读阶段不提供章纲和执笔自评。需要远章时加 `--chapter N`，只从本请求冻结历史取原文。
+2. 主控收到Worker摘要，或watch/advance返回 `review_required`，在核验尚未绑定读者时实际创建另一空历史读者上下文，取得真实会话ID。执行 `prepare-observer --request ID --session 真实ID`（带原owner），仅向该读者注入 `observer_env` 并交付返回的commands；清除执笔Worker的环境，不能由主控或执笔者换个名字代审。绑定后首读与比较阶段的advance返回 `review_in_progress`，主控执行 `watch --owner ID`，由引擎等待并续主控租约；不重复派读者，也不以模型轮询等待。
+3. 读者执行 `commands.review-read`，完整读候选与相邻正文。只读阶段不提供章纲和执笔自评。响应的sources保留本次原文与准确hash，history只给冻结历史的章节范围、数量及补读入口；完整历史hash清单留在候选存储中，不反复投递。需要远章时加 `--chapter N`，只从本请求冻结历史取完整原文及hash，不缩减每章必读窗口。
 4. 读者从read返回的 `observation_template` 起稿。观察给出实体、谓词、值、明确/表象/传闻/不确定，以及原文版本、quote/start。无法确认的事情保留限制，不自动填pass，也不要求每章凑若干事实。用 `commands.review-observe --file 观察.json` 冻结后，不能回头覆盖这份首读。
 5. 读者执行 `commands.review-read --compare`，此时才拿到章纲、自比和 `report_template`。比较已读原文、计划、执笔自评；旧账目只作线索，涉及的旧事实须回到原文。用 `commands.review-report --file 报告.json` 提交。明确矛盾须成对引文；歧义和编辑判断分别记录。
-6. `review_complete`后，由原执笔Worker用原候选和当前有效凭据重做submit。明确矛盾按统一findings进入本章有限返修，不能改纲迁就正文；通过才入库。纯编辑意见保留在报告，不用形容词数量或个人偏好自动拒稿。报告含歧义时保持 `review_required`，交作者选择 `review-resolve --request ID --disposition accept_uncertainty|repair --source 原话`；接受未决会留痕，不能覆盖成clean。
+6. `review_complete`后，由原执笔Worker用原候选和当前有效凭据重做submit。明确矛盾按统一findings进入本章有限返修，不能改纲迁就正文；通过才入库。纯编辑意见保留在报告，不用形容词数量或个人偏好自动拒稿。报告含歧义时advance/watch返回 `review_author_required`（报告存储phase仍为review_required），停止自动推进并交作者选择 `review-resolve --request ID --disposition accept_uncertainty|repair --source 原话`；接受未决会留痕，不能覆盖成clean。读者长时间未完成时watch返回idle，保留原候选和读者身份，先核实宿主执行状态。
 
 同一候选已提交成功后原命令重试返回原章节确认和 `idempotent=true`；内容不同则拒绝。报告绑定task/input/candidate/observations各版本，候选哈希覆盖回执内容但排除session/execution_claim两项传输身份；主控合法重新派工时可更新这两项，不能因此重复收费阅读，也不能改data沿用旧核验。旧读者身份不能转成新执笔者，已开始的原读者仍独立完成核验。取消任务、换分支或新候选取代后，旧读者不得继续结算；引擎/规则构建变化时读者也停止。没有实际读者或宿主能力时保留候选报告缺口，不提交空核验来凑流程。
 

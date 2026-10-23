@@ -1,6 +1,6 @@
 # 验证
 
-当前执行仅以本技能入口、[任务协议](protocol.md)、[运行流程](runtime.md) 及其专项指南为准。`validation/` 中的历史规格、实验和报告只保存当轮证据，不作为执行规范或兼容承诺。
+当前执行仅以本技能入口、[任务协议](protocol.md)、[运行流程](runtime.md) 及其专项指南为准。[validation/archive/](../validation/archive/README.md) 中的历史规格、实验和报告只保存当轮证据，不作为执行规范或兼容承诺；活跃验证脚本保留在 `validation/` 顶层。
 
 何时读：修改引擎、检查协议与材料成本，或设计真实长篇的文学及用量验收。
 
@@ -87,6 +87,12 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_revisio
 
 记录模块、完整依赖图和必读完整记录字节。增加未引用未来节点时，必读材料不应无故增长，全设计仍可按哈希补读；连续依赖链与 20/100/500 章历史另测，保留完整来源。
 
+派工数量用 `python3 validation/measure.py --only dispatch --continuity required`；`off` 可作另一策略的对照，不会更改项目策略。默认 required 与新项目 CLI 一致，按每章首次候选通过计算独立读者数量。`story_tasks`（旧字段 `total` 的同义值）只计故事任务，`fast_total_workers` 和 `standard_total_workers` 另加独立读者；这些是无返修、重设计或上下文恢复时的交付数量下界，不是模型调用数。快速组减少写手冷启动，不省去逐章独立核验。
+
+已运行项目用 `python3 validation/cost_report.py --project PROJECT` 只读查看：`input_chars` 为冻结任务信封，`required_material_chars` 经存储适配器展开各任务完整必读记录后累计，`continuity_reads` 单列独立核验的实际交付字符。必读材料按每个任务计数，重复引用不会因底层共享存储而省略；它与实际读取日志是不同口径，不能相加作为模型输入。宿主反复读取落盘文件、失败候选及模型历史不在这些量里，仍须对照真实 token 日志。
+
+`python3 validation/read_waste_probe.py PROJECT` 按执行上下文和记录哈希标记重复交付；`--json` 提供结构化结果。缺执行身份或哈希的旧日志只报告同名候选，混合响应只统计整份响应字符，不按记录数量猜测重复部分；新执行的完整重读不视为旧执行已读。重复交付本身不证明可以省去，也不能据此预测 token 或费用。上述度量口径由 `test_cost_accounting` 回归覆盖。
+
 history_transport 使用独立存储夹具，500 章包含至少 150 万合成汉字。记录目录入口、原全量摘要/事件索引字节、首次构建与复用、实际事件页读取、无命中最坏扫描和最早章完整补读。行为测试覆盖损坏、冻结边界、分支共享前缀、承诺关联、原事件解释及补读量留痕；存储夹具不构成完本交付。
 
 数百万字体量另用 `python3 validation/longform_stress.py --out /path/to/longform-stress.json`：默认测 100/500/1000/2000 章、每章至少 3000 合成汉字的末章必读、主控派工、冻结补读与重开保真，并独立跑 100 章/10 卷的真实工程提交和完本链。前者是来源记录，后者使用短合成正文，两者都不是实际百万字文学写作。相同任务增加 20/100/500/2000 条已收束伏笔和线路时，必读材料不应增长，完整旧来源与显式旧依赖仍须可读，见 test_context_growth。
@@ -113,7 +119,7 @@ history_transport 使用独立存储夹具，500 章包含至少 150 万合成�
 
 离线盲测与实际用量命令见 [编辑能力](editorial.md)。变体预期保留在私有文件，评审只获得冻结正文样本，先冻结首读；原稿不是金标准，误报须独立裁决。修稿重新首读，确认原缺陷消失且没有新损失。
 
-工程结果与原始度量见 [验收记录](../validation/results.md) 及 [metrics.json](../validation/metrics.json)。维护当前操作文档时保留历史记录的日期、版本和实验条件，不把后来通过的检查追写成早期结论。
+历史工程结果与原始度量见 [验收记录](../validation/archive/results.md) 及 [metrics.json](../validation/archive/metrics.json)。维护当前操作文档时保留历史记录的日期、版本和实验条件，不把后来通过的检查追写成早期结论；当前基线用本页度量命令重新生成。
 
 连续性与宿主新增回归：test_execution_handoff、test_continuity_flow、test_host_authority。前两者验证真实CLI/事务边界与准确候选，后者验证签名对象、实际上下文与一次性消费；它们不证明某个真实宿主已完成OS权限隔离，也不证明独立模型不会漏报。
 

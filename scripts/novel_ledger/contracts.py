@@ -103,7 +103,7 @@ def policy_default(key):
 # --------------------------------------------------------------------------------------------------
 # opening/5's setting vocabulary, declared once for the gates, the world model and the checks.
 #
-# The 2024-2026 male-channel research (validation/opening5-spec.md §2) says the genre's live
+# The 2024-2026 male-channel research (validation/archive/opening5-spec.md §2) says the genre's live
 # decisions are a world rule that keeps feeding the story, a ladder the reader can count, and an
 # escalation that changes the rules instead of the map. Enumerating the answers is what makes them
 # checkable at the gate instead of re-invented three dispatches later.

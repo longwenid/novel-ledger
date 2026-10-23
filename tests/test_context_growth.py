@@ -12,9 +12,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts')]
 
-from novel_ledger import context, facts
+from novel_ledger import context, facts, story_memory
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import Job, dump
+from novel_ledger.contracts import Error, Job, digest, dump
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import drive, seeded_book, tracked_contract
 
@@ -30,6 +30,21 @@ def history_rows(book, count):
         book['state']['hooks'][ident] = {'status': 'paid', 'due': number + 1, 'text': hook['text']}
         book['state']['thread_progress'][ident] = {
             'status': 'resolved', 'last_chapter': number + 1, 'reason': '这条支线已经收束。'}
+
+
+def old_background(state, count):
+    """Use the domain event API; these isolated places/topics are not inputs to the current scene."""
+    for number in range(count):
+        facts.apply_event(state, {'op': 'place', 'place': {
+            'id': 'old-place-' + str(number), 'name': '本章无人所在的历史地点'}}, number + 1)
+        facts.apply_event(state, {'op': 'knowledge', 'entity': 'shen',
+            'topic': 'old-topic-' + str(number), 'before': None, 'claim': '过去已确认的无关知识',
+            'source': '此前章节', 'stance': 'knows',
+            'evidence': {'chapter': number + 1, 'quote': '此前已成立的原文证据。'}}, number + 1)
+
+
+def complete_scene(**values):
+    return {'id': 'current', 'reads': [], 'depends_on': [], **values}
 
 
 class ContextGrowthTests(unittest.TestCase):
@@ -141,6 +156,152 @@ class ContextGrowthTests(unittest.TestCase):
         selected = context.scoped_state(state, ['hero'], explicit, 21)
         self.assertEqual(selected['developments']['hero'], state['developments']['hero'])
         self.assertEqual(set(selected['hooks']), {'soon', 'remote'})
+
+    def test_complete_dependencies_bound_old_places_and_participant_knowledge(self):
+        sizes = []
+        for count in (20, 100, 500, 2000):
+            with self.subTest(history=count):
+                book = copy.deepcopy(self.book)
+                plan = book['plans']['1']
+                plan.update(dependency_coverage='complete', scenes=[complete_scene()])
+                old_background(book['state'], count)
+                before = copy.deepcopy(book)
+                work, values = self.material(book)
+                self.assertEqual(book, before)
+                sizes.append(len(dump(values).encode('utf-8')))
+                state = values['state']
+                self.assertFalse(any(k.startswith('old-place-') for k in state['places']))
+                self.assertFalse(any(k.startswith('shen:old-topic-') for k in state['knowledge']))
+                self.assertEqual(state['material_scope']['mode'], 'declared_dependencies')
+                complete = self.repo.read_document(work['records']['complete_state'])
+                self.assertEqual(complete, book['state'])
+                self.assertNotIn('complete_state', work['required'])
+        self.assertEqual(len(set(sizes)), 1, sizes)
+
+    def test_partial_or_missing_scene_dependencies_keep_unknown_background(self):
+        book = copy.deepcopy(self.book)
+        old_background(book['state'], 100)
+        for declaration in ({}, {'dependency_coverage': 'partial', 'scenes': [complete_scene()]},
+                            {'dependency_coverage': 'complete', 'scenes': []},
+                            {'dependency_coverage': 'complete', 'scenes': [{'id': 'undeclared'}]}):
+            with self.subTest(declaration=declaration):
+                plan = {**book['plans']['1'], **declaration}
+                selected = context.scoped_state(book['state'], ['shen'], plan, 1)
+                self.assertEqual(selected['places'], book['state']['places'])
+                self.assertEqual(selected['knowledge'], book['state']['knowledge'])
+                self.assertEqual(selected['material_scope']['mode'], 'conservative')
+                self.assertIn('不完整', selected['material_scope']['note'])
+                self.assertEqual(selected['material_scope']['source'], 'complete_state')
+
+    def test_design_batches_do_not_use_the_start_chapters_complete_dependency_boundary(self):
+        book = copy.deepcopy(self.book)
+        old_background(book['state'], 1)
+        book['plans']['1'].update(dependency_coverage='complete', scenes=[complete_scene()])
+        book['plans']['2'].update(dependency_coverage='complete', scenes=[complete_scene(
+            id='later', reads=[{'kind': 'knowledge', 'key': 'shen:old-topic-0'}])])
+        book['plans']['2']['places'] = [{'entity': 'shen', 'from': 'office', 'to': 'old-place-0'}]
+        # These sources do not belong to the first fixed prose chapter, but a redesign covering
+        # chapters 1-3 must keep them to decide the second chapter's knowledge and destination.
+        _, first = self.material(book, Job('write', 1))
+        self.assertNotIn('shen:old-topic-0', first['state']['knowledge'])
+        self.assertNotIn('old-place-0', first['state']['places'])
+        jobs = [Job('chapter_outline', 1, 'v1', 1, 3, {'repair': True}),
+                Job('volume_outline', 1, 'volumes', payload={'volume_ids': ['v1']}),
+                Job('volume_outline', 1, 'volumes', payload={'volume_ids': ['v1'], 'also': ['chapter_outline']})]
+        for job in jobs:
+            with self.subTest(stage=job.stage, payload=job.payload):
+                work, _ = self.material(book, job)
+                selected = self.repo.read_document(work['records']['state'])
+                self.assertEqual(selected['knowledge']['shen:old-topic-0'],
+                                 book['state']['knowledge']['shen:old-topic-0'])
+                self.assertEqual(selected['places'], book['state']['places'])
+                self.assertEqual(selected['material_scope']['mode'], 'conservative')
+                self.assertIn('设计任务', selected['material_scope']['note'])
+
+    def test_complete_knowledge_keeps_dialogue_changes_boundaries_and_offstage_reads(self):
+        state = copy.deepcopy(self.book['state'])
+        facts.apply_event(state, {'op': 'entity', 'entity': {
+            'id': 'witness', 'name': '远处证人', 'kind': 'person'}}, 1)
+        for who, topic in [('shen', 'dialogue'), ('shen', 'change'), ('shen', 'reveal'),
+                           ('shen', 'reader'), ('shen', 'scene-reading'), ('shen', 'unused'),
+                           ('witness', 'offstage')]:
+            facts.apply_event(state, {'op': 'knowledge', 'entity': who, 'topic': topic,
+                'before': None, 'claim': topic, 'source': '已核验原文', 'stance': 'knows',
+                'evidence': {'chapter': 1, 'quote': '他记得当年的经过。'}}, 1)
+        plan = {'chapter': 2, 'dependency_coverage': 'complete',
+                'scenes': [complete_scene(
+                    reads=[{'kind': 'knowledge', 'key': 'witness:offstage'}],
+                    dialogue_intents=[{'entity': 'shen', 'knowledge_topics': ['dialogue']}],
+                    reading_refs=[{'kind': 'disclosure', 'key': 'scene-reading'}])],
+                'knowledge': [{'who': 'shen', 'topic': 'change', 'from': 'confirmed', 'to': 'retracted'}],
+                'disclosures': [{'topic': 'reveal'}], 'reader_refs': ['reader']}
+        selected = context.scoped_state(state, ['shen'], plan, 2)
+        expected = {'shen:dialogue', 'shen:change', 'shen:reveal', 'shen:reader',
+                    'shen:scene-reading', 'witness:offstage'}
+        self.assertEqual(set(selected['knowledge']), expected)
+        self.assertEqual(selected['knowledge'], {key: state['knowledge'][key] for key in expected})
+
+    def test_complete_space_keeps_custody_route_parents_and_actual_travel_constraints(self):
+        state = facts.seed({
+            'editorial_features': True,
+            'entities': [{'id': ident, 'name': ident, 'kind': 'object' if ident in ('box', 'token') else 'person'}
+                         for ident in ('shen', 'guard', 'witness', 'box', 'token')],
+            'places': [{'id': 'region', 'name': '城域'}, {'id': 'town', 'name': '城区', 'parent': 'region'},
+                       {'id': 'office', 'name': '值班室', 'parent': 'town'},
+                       {'id': 'gate', 'name': '中庭'}, {'id': 'yard', 'name': '后院'},
+                       {'id': 'remote', 'name': '远处证人所在'}, {'id': 'unrelated', 'name': '废弃旧地'}],
+            'placements': {'shen': 'office', 'guard': 'unrelated', 'witness': 'remote', 'box': 'office', 'token': 'office'},
+            'initial_facts': [{'entity': 'guard', 'key': 'open', 'value': True}],
+            'links': [{'id': 'first', 'a': 'office', 'b': 'gate', 'kind': 'path', 'min_days': 1,
+                       'requires': {'guard:open': True}},
+                      {'id': 'second', 'a': 'gate', 'b': 'yard', 'kind': 'path', 'min_days': 1},
+                      {'id': 'sight', 'a': 'office', 'b': 'yard', 'kind': 'sight'},
+                      {'id': 'remote-path', 'a': 'remote', 'b': 'unrelated', 'kind': 'path'}],
+            'anchors': [{'entity': 'office', 'key': 'door', 'value': '东', 'policy': 'fixed'},
+                        {'entity': 'unrelated', 'key': 'door', 'value': '西', 'policy': 'fixed'}]})
+        facts.apply_event(state, {'op': 'placement', 'entity': 'token',
+                                 'before': {'place': 'office'}, 'after': {'holder': 'box'}}, 1)
+        facts.apply_event(state, {'op': 'placement', 'entity': 'box',
+                                 'before': {'place': 'office'}, 'after': {'holder': 'shen'}}, 1)
+        state['arrivals'].update(shen=2, box=4, token=4, witness=50)
+        plan = {'chapter': 2, 'dependency_coverage': 'complete', 'scenes': [complete_scene(
+                    reads=[{'kind': 'placements', 'key': 'witness'}])],
+                'places': [{'entity': 'shen', 'from': 'office', 'to': 'yard', 'links': ['first', 'second']}]}
+        selected = context.scoped_state(state, ['token'], plan, 2)
+        self.assertEqual(set(selected['places']), {'region', 'town', 'office', 'gate', 'yard', 'remote'})
+        self.assertEqual(set(selected['links']), {'first', 'second', 'sight'})
+        self.assertEqual(selected['custody'], {'box': 'shen', 'token': 'box'})
+        self.assertEqual(selected['facts']['guard:open'], True)
+        self.assertEqual(selected['placements']['witness'], 'remote')
+        self.assertEqual(selected['anchors'], {'office:door': state['anchors']['office:door']})
+        travel = {'op': 'travel', 'entity': 'shen', 'from': 'office', 'to': 'yard',
+                  'links': ['first', 'second'], 'depart': 4, 'arrive': 6}
+        full_after, selected_after = copy.deepcopy(state), copy.deepcopy(selected)
+        facts.apply_event(full_after, travel, 2)
+        facts.apply_event(selected_after, travel, 2)
+        for field in ('placements', 'custody', 'arrivals'):
+            self.assertEqual(selected_after[field], {key: full_after[field][key] for key in selected_after[field]})
+        for candidate in (state, selected):
+            with self.assertRaises(Error) as caught:
+                facts.apply_event(copy.deepcopy(candidate), {**travel, 'depart': 3}, 2)
+            self.assertEqual(caught.exception.code, 'path_time')
+
+    def test_scene_packet_references_the_only_chapter_outline_and_keeps_exact_inputs(self):
+        book = copy.deepcopy(self.book)
+        plan = book['plans']['1']
+        plan.update(dependency_coverage='complete', scenes=[complete_scene(
+            reads=[{'kind': 'entities', 'key': 'shen'}, {'kind': 'knowledge', 'key': 'shen:unknown'}])])
+        work, values = self.material(book)
+        packet = values['scene_context']
+        self.assertNotIn('plan', packet)
+        self.assertEqual(packet['plan_record'], 'chapter_outline')
+        self.assertEqual(packet['plan_hash'], work['records']['chapter_outline'])
+        self.assertEqual(packet['state_hash'], digest(book['state']))
+        self.assertEqual({(item['kind'], item['key']) for item in packet['inputs']}, story_memory.reads(plan))
+        for item in packet['inputs']:
+            present, value = story_memory.lookup(book['state'], item['kind'], item['key'])
+            self.assertEqual((item['present'], item['value']), (present, value))
+        self.assertEqual(self.repo.read_document(work['records'][packet['plan_record']]), plan)
 
 
 if __name__ == '__main__':

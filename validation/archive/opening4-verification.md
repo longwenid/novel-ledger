@@ -1,6 +1,6 @@
 # opening/4 追补验证（V 验证位 · task-15 追补）
 
-> 历史归档：本文件保留当轮版本、设计或实验条件，不是当前执行规范。旧门序、兼容条款、独立审查阶段及命令均不用于当前流程；当前唯一执行依据见 [任务协议](../references/protocol.md) 与 [运行流程](../references/runtime.md)。
+> 历史归档：本文件保留当轮版本、设计或实验条件，不是当前执行规范。旧门序、兼容条款、独立审查阶段及命令均不用于当前流程；当前唯一执行依据见 [任务协议](../../references/protocol.md) 与 [运行流程](../../references/runtime.md)。
 
 时间：2026-10-19 01:05–01:15（Asia/Shanghai）
 写域：`validation/**`（未改 scripts/**、tests/**、references/**、SKILL.md、README.md）

@@ -141,7 +141,10 @@ class ContinuityService:
         self.repo.put(store_keys.continuity_review(ident), row)
         result = {'schema': SCHEMA, 'request_id': ident, 'candidate_hash': row['candidate_hash'],
                 'chapter': candidate['chapter'], 'sources': sources,
-                'history': [{'chapter': item['chapter'], 'prose_hash': item['prose_hash']} for item in candidate['history']],
+                'history': {'count': len(candidate['history']),
+                            'first_chapter': candidate['history'][0]['chapter'] if candidate['history'] else None,
+                            'last_chapter': candidate['history'][-1]['chapter'] if candidate['history'] else None,
+                            'read': 'commands.review-read --chapter N'},
                 'observation_template': {'schema': SCHEMA, 'request_id': ident, 'candidate_hash': row['candidate_hash'],
                                          'read_sources': seen, 'observations': [], 'limitations': []},
                 'instructions': '先通读正文，记录生死、行动、时间期限、地点/证物、知情与表达；未证实的旧账目只作线索。'}

@@ -97,6 +97,46 @@ class WatchUnitTests(unittest.TestCase):
     def test_watch_requires_the_controller_identity(self):
         self.assertRaises(Error, unattended.watch, FakeWatchApp([]), '  ')
 
+    def test_active_observer_is_waited_for_and_controller_renewed(self):
+        for initial in (ready('a'), {'action': 'review_in_progress', 'task_id': 'a'}):
+            with self.subTest(initial=initial['action']):
+                app = FakeWatchApp([initial])
+                phases = iter(['first_read', 'first_read', 'comparison', 'comparison', 'done'])
+                app.task_status = lambda task_id: {'id': task_id, 'status': 'pending',
+                    'continuity': {'phase': next(phases), 'observer': 'reader', 'request_id': 'review'}}
+                dispatched = []
+                result = unattended.watch(app, 'owner-1', poll=1, idle_limit=1000,
+                                          sleep=app.sleeper, now=app.clock, on_dispatch=dispatched.append)
+                self.assertEqual(result['action'], 'review_complete')
+                self.assertEqual(result['controller']['action'], 'resubmit_reviewed_candidate')
+                self.assertEqual(len(app.slept), 4)
+                self.assertGreaterEqual(app.renews, 1)
+                self.assertEqual(app.advance_owners, ['owner-1'])
+                self.assertEqual(len(dispatched), 0 if initial['action'] == 'review_in_progress' else 1)
+                self.assertEqual(result['dispatched'], dispatched)
+
+    def test_waiting_observer_stops_for_author_uncertainty_without_new_dispatch(self):
+        app = FakeWatchApp([{'action': 'review_in_progress', 'task_id': 'a'}])
+        phases = iter(['comparison', 'review_required'])
+        app.task_status = lambda task_id: {'id': task_id, 'status': 'pending',
+            'continuity': {'phase': next(phases), 'observer': 'reader', 'request_id': 'review'}}
+        result = unattended.watch(app, 'owner-1', poll=1, idle_limit=1000,
+                                  sleep=app.sleeper, now=app.clock)
+        self.assertEqual(result['action'], 'review_author_required')
+        self.assertFalse(result['controller']['must_continue'])
+        self.assertEqual(result['controller']['action'], 'resolve_review')
+        self.assertEqual(len(app.slept), 1)
+
+    def test_silent_observer_returns_idle_and_preserves_reader_identity(self):
+        app = FakeWatchApp([{'action': 'review_in_progress', 'task_id': 'a'}])
+        app.task_status = lambda task_id: {'id': task_id, 'status': 'pending',
+            'continuity': {'phase': 'first_read', 'observer': 'reader', 'request_id': 'review'}}
+        result = unattended.watch(app, 'owner-1', poll=1, idle_limit=100,
+                                  sleep=app.sleeper, now=app.clock)
+        self.assertEqual(result['action'], 'idle')
+        self.assertIn('原读者', result['boundary'])
+        self.assertGreaterEqual(app.renews, 1)
+
 
 class WatchIntegrationTests(unittest.TestCase):
     def setUp(self):

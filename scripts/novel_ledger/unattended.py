@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 from .contracts import require, text
-from .execution import controller_handoff
+from .execution import controller_handoff, review_handoff
 
 # The controller lease defaults to 300 seconds; renewing well inside that keeps a long wait from
 # looking like an abandoned run to the next advance.
@@ -42,26 +42,28 @@ def _watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, 
         handoff = app.advance(owner=owner, compact=True,
                               wait_pending=not steps or rounds < steps)
         action = handoff.get('action')
-        if action not in ('task_ready', 'wait_for_submit', 'wait_for_batch'):
+        if action not in ('task_ready', 'wait_for_submit', 'wait_for_batch', 'review_in_progress'):
             return {**handoff, 'dispatched': waited,
                     'watch_note': 'watch 在此停下：这一步需要主控或作者处理，处理后再次运行 watch 继续。'}
-        if steps and rounds >= steps:
+        if steps and rounds >= steps and action != 'review_in_progress':
             return {**handoff, 'dispatched': waited,
                     'watch_note': '下一派工已就绪，按 task 派出 Worker 后再运行 watch 等它完成。'}
-        task = handoff['task']
+        task = handoff.get('task') or {'task_id': handoff['task_id']}
         row = {'task_id': task['task_id'], 'stage': task.get('stage'),
                'chapter': task.get('chapter'), 'scope': task.get('scope')}
-        waited.append(row)
-        if on_dispatch:
-            on_dispatch(row)
+        if action != 'review_in_progress':
+            waited.append(row)
+            if on_dispatch:
+                on_dispatch(row)
         idle_at, renew_at = now() + idle_limit, now() + RENEW_EVERY
         cursor = task['task_id']
         while True:
             current = app.task_status(task['task_id'])
             review = current.get('continuity')
             if review and (current['status'] == 'pending' or current.get('batch_active')):
-                return {'action': 'review_complete' if review['phase'] == 'done' else 'review_required',
-                        'task_id': current.get('batch_task') or task['task_id'], 'review': review, 'dispatched': waited}
+                review_state = review_handoff(current.get('batch_task') or task['task_id'], review)
+                if review_state['action'] != 'review_in_progress':
+                    return {**review_state, 'dispatched': waited}
             if current.get('execution_blocked'):
                 return {'action': 'worker_blocked', 'task_id': current.get('batch_task') or task['task_id'],
                         'recovery': current.get('recovery'), 'dispatched': waited,
@@ -74,7 +76,8 @@ def _watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, 
             if moment >= idle_at:
                 return {'action': 'idle', 'task_id': task['task_id'], 'dispatched': waited,
                         'idle_after': idle_limit,
-                        'boundary': 'Worker 长时间未提交：确认执行者仍在，或按当前状态重新派工。'}
+                        'boundary': '读者长时间未完成核验：确认原读者仍在，保留候选与核验身份。' if review else
+                                    'Worker 长时间未提交：确认执行者仍在，或按当前状态重新派工。'}
             if moment >= renew_at:
                 app.renew(owner)
                 renew_at = moment + RENEW_EVERY

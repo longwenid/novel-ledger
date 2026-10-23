@@ -7,13 +7,15 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from novel_ledger.bootstrap import open_local_runtime
 from novel_ledger.contracts import Error, digest, dump
-from novel_ledger.continuity_service import SCHEMA
+from novel_ledger.continuity_service import ContinuityService, SCHEMA
 from novel_ledger.continuity import timeline_findings
+from novel_ledger.unattended import watch
 from support import contract, drive, response
 
 
@@ -75,11 +77,16 @@ class ContinuityFlowTests(unittest.TestCase):
     def test_blind_read_cannot_see_self_check_until_observations_are_frozen(self):
         ident = self.request()
         actor = self.reader(ident)
+        for after in (None, self.task['task_id']):
+            handoff = self.app.advance(after=after)
+            self.assertEqual(handoff['action'], 'review_in_progress')
+            self.assertEqual(handoff['controller']['action'], 'supervise_observer')
         blind = self.app.read_review(ident, *actor)
         self.assertNotIn('self_check', json.dumps(blind))
         with self.assertRaises(Error):
             self.app.read_review(ident, *actor, compare=True)
         frozen = self.freeze(ident, actor)
+        self.assertEqual(self.app.advance()['action'], 'review_in_progress')
         compared = self.app.read_review(ident, *actor, compare=True)
         self.assertEqual(compared['comparison']['self_check'], self.receipt['data']['self_check'])
         changed = {'schema': SCHEMA, 'request_id': ident, 'candidate_hash': ident, 'read_sources': ['candidate'],
@@ -93,6 +100,31 @@ class ContinuityFlowTests(unittest.TestCase):
         audit = self.app.audit()['continuity_review']
         self.assertEqual(audit['reviewed_chapters'], [1])
         self.assertEqual(audit['host_verified_chapters'], [])
+
+    def test_watch_supervises_real_review_across_the_original_controller_lease(self):
+        started = self.app.clock()
+        elapsed = [0]
+        self.app.clock = lambda: started + elapsed[0]
+        owner = self.app.run(through=1, source='工程夹具：监督同一核验直到完成。')['owner']
+        ident = self.request()
+        prepared = self.app.prepare_observer(ident, 'independent-reader', owner)
+        actor = 'independent-reader', prepared['token']
+        frozen = []
+
+        def finish_reader(seconds):
+            elapsed[0] += seconds
+            if not frozen:
+                frozen.append(self.freeze(ident, actor))
+                self.app.read_review(ident, *actor, compare=True)
+            if elapsed[0] >= 340:
+                self.report(ident, actor, frozen[0])
+
+        result = watch(self.app, owner, poll=20, idle_limit=600, sleep=finish_reader, now=lambda: elapsed[0])
+        self.assertEqual(result['action'], 'review_complete')
+        self.assertEqual(result['review']['observer'], actor[0])
+        self.assertEqual(elapsed[0], 340)
+        self.assertGreater(self.app.renew(owner)['until'], self.app.clock())
+        self.assertEqual(self.app.submit(self.receipt)['outcome'], 'chapter_committed')
 
     def test_explicit_death_then_alive_is_not_waived_by_an_empty_report(self):
         self.receipt['data']['prose'] += '老周死了。老周又说话。'
@@ -273,6 +305,11 @@ class ContinuityFlowTests(unittest.TestCase):
                    'evidence': [self.citation(self.receipt['data']['prose'], quote)]}
         self.report(ident, actor, frozen, [finding])
         self.assertEqual(self.app.submit(self.receipt)['outcome'], 'continuity_review_required')
+        for after in (None, self.task['task_id']):
+            handoff = self.app.advance(after=after)
+            self.assertEqual(handoff['action'], 'review_author_required')
+            self.assertFalse(handoff['controller']['must_continue'])
+            self.assertEqual(handoff['controller']['action'], 'resolve_review')
         self.assertEqual(self.repo.headers('main'), [])
         self.app.resolve_review(ident, 'accept_uncertainty', '保留这一歧义，不宣称已经解释清楚。')
         self.assertEqual(self.app.submit(self.receipt)['committed_chapter'], 1)
@@ -358,6 +395,52 @@ class TimelineTests(unittest.TestCase):
         self.assertTrue(timeline_findings(self.row([100, 100], [110, 110], relation='continues'), prior))
         self.assertFalse(timeline_findings(self.row([100, 100], [110, 110], relation='parallel'), prior))
         self.assertFalse(timeline_findings(self.row([100, 100], [110, 110], relation='flashback'), prior))
+
+
+class ContinuityReadBoundsTests(unittest.TestCase):
+    def read_fixture(self, chapter):
+        documents = {digest('第%04d章完整原文。' % n): '第%04d章完整原文。' % n for n in range(1, chapter)}
+        history = [{'chapter': n, 'prose_hash': digest('第%04d章完整原文。' % n)} for n in range(1, chapter)]
+        candidate = {'chapter': chapter, 'history': history, 'prose': '当前候选完整原文。',
+                     'prose_hash': digest('当前候选完整原文。')}
+        row = {'request_id': 'request', 'task_id': 'task', 'candidate_hash': 'candidate-hash'}
+        repo = Mock()
+        repo.read_document.side_effect = documents.__getitem__
+        service = ContinuityService(repo, None, None, None)
+        return service, row, candidate, documents
+
+    def test_history_metadata_is_bounded_without_cutting_sources_or_supplemental_reading(self):
+        sizes = []
+        for chapter in (10, 1000):
+            service, row, candidate, documents = self.read_fixture(chapter)
+            frozen_history = copy.deepcopy(candidate['history'])
+            with patch.object(service, '_observer', return_value=(row, candidate)):
+                read = service.read('request', 'reader', 'token')
+                sizes.append(len(dump(read)))
+                self.assertEqual(set(read['sources']), {'candidate'} | {str(n) for n in range(chapter - 4, chapter)})
+                self.assertEqual(read['sources']['candidate']['prose'], candidate['prose'])
+                for name, source in read['sources'].items():
+                    self.assertEqual(source['prose_hash'], digest(source['prose']))
+                    if name != 'candidate':
+                        self.assertEqual(source['prose'], documents[source['prose_hash']])
+                self.assertEqual(read['history'], {'count': chapter - 1, 'first_chapter': 1,
+                                                  'last_chapter': chapter - 1,
+                                                  'read': 'commands.review-read --chapter N'})
+                supplement = service.read('request', 'reader', 'token', chapter=1)
+                self.assertEqual(set(supplement['sources']), {'1'})
+                self.assertEqual(supplement['sources']['1']['prose'], '第0001章完整原文。')
+                with self.assertRaises(Error) as caught:
+                    service.read('request', 'reader', 'token', chapter=chapter)
+                self.assertEqual(caught.exception.code, 'continuity_source')
+                self.assertEqual(candidate['history'], frozen_history)
+        # The history grows a hundredfold; only chapter-number digits grow in the response.
+        self.assertLess(sizes[1] - sizes[0], 200)
+
+    def test_regular_chapter_keeps_the_complete_two_chapter_window(self):
+        service, row, candidate, _documents = self.read_fixture(11)
+        with patch.object(service, '_observer', return_value=(row, candidate)):
+            read = service.read('request', 'reader', 'token')
+        self.assertEqual(set(read['sources']), {'candidate', '9', '10'})
 
 
 if __name__ == '__main__':

@@ -53,18 +53,18 @@ STAGE_MATERIAL = {
                        'opening_choices', 'revision_impact', 'revision_instruction', 'state',
                        'style', 'world_model'),
     'chapter_outline': ('author_feedback', 'contract', 'design_drift', 'effective_layout', 'hooks',
-                        'previous_chapters', 'revision_impact', 'revision_instruction', 'state',
+                        'previous_chapters', 'previous_chapter:', 'revision_impact', 'revision_instruction', 'state',
                         'style', 'volume_outline', 'world_model'),
     'write': ('author_feedback', 'chapter_outline', 'contract', 'continuity_feedback', 'creative_memory', 'design_drift',
-              'disclosure_boundary', 'hooks', 'previous_chapters', 'scene_context', 'scene_sources',
+              'disclosure_boundary', 'hooks', 'previous_chapters', 'previous_chapter:', 'scene_context', 'scene_sources',
               'state', 'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core',
               'world_records'),
     'repair': ('author_feedback', 'base_draft', 'chapter_outline', 'contract', 'continuity_feedback', 'creative_memory',
-               'design_drift', 'disclosure_boundary', 'hooks', 'previous_chapters', 'prior_candidate',
+               'design_drift', 'disclosure_boundary', 'hooks', 'previous_chapters', 'previous_chapter:', 'prior_candidate',
                'revision_impact', 'revision_instruction', 'scene_context', 'scene_sources', 'state',
                'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core', 'world_records'),
     'redesign': ('author_feedback', 'base_draft', 'chapter_outline', 'contract', 'continuity_feedback', 'creative_memory',
-                 'design_drift', 'disclosure_boundary', 'hooks', 'previous_chapters', 'prior_candidate',
+                 'design_drift', 'disclosure_boundary', 'hooks', 'previous_chapters', 'previous_chapter:', 'prior_candidate',
                  'revision_impact', 'revision_instruction', 'scene_context', 'scene_sources', 'state',
                  'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core', 'world_records'),
 }
@@ -73,7 +73,8 @@ STAGE_MATERIAL = {
 def undeclared_material(stage, required):
     """Required records this stage never declared, as a sorted list of names."""
     declared = set(STAGE_MATERIAL.get(stage) or ())
-    return sorted(name for name in required if name not in declared)
+    prefixes = tuple(name for name in declared if name.endswith(':'))
+    return sorted(name for name in required if name not in declared and not name.startswith(prefixes))
 
 
 def projects_from(name):
@@ -116,17 +117,111 @@ def _planned_nodes(plan):
     return ids
 
 
-def scoped_state(state, participants, plan=None, chapter=0, horizon=3):
+def _complete_dependencies(plan):
+    """A flag without actual per-scene declarations does not justify dropping background."""
+    scenes = plan.get('scenes') or []
+    return (plan.get('dependency_coverage') == 'complete' and bool(scenes)
+            and all(isinstance(scene, dict) and isinstance(scene.get('reads'), list)
+                    and isinstance(scene.get('depends_on'), list) for scene in scenes))
+
+
+def _spatial_scope(state, participants, plan, inputs):
+    """Keep declared locations plus the custody, route and parent chains that make them true.
+
+    Called only for a complete dependency declaration. A partial declaration keeps the full
+    spatial background: absence from an incomplete list is not evidence of irrelevance.
+    """
+    people = set(participants)
+    people.update(key for kind, key in inputs
+                  if kind in ('entities', 'placements', 'character_current', 'developments'))
+    people.update(key.split(':', 1)[0] for kind, key in inputs if kind in ('facts', 'knowledge'))
+    custody = state.get('custody', {})
+    # A held object is located through its holder; a carrier's arrival bound includes everything
+    # carried. Keep both directions, including nested containers, without following unrelated cast.
+    related = {ident: set() for ident in state['entities']}
+    for item, holder in custody.items():
+        related.setdefault(item, set()).add(holder)
+        related.setdefault(holder, set()).add(item)
+    todo = list(people)
+    while todo:
+        for ident in related.get(todo.pop(), ()):
+            if ident not in people:
+                people.add(ident)
+                todo.append(ident)
+    places = state['places']
+    locations = {place for entity, place in state['placements'].items() if entity in people}
+    names = {}
+    for ident, row in places.items():
+        names.setdefault(row.get('name'), set()).add(ident)
+
+    def location(value):
+        if isinstance(value, str):
+            if value in places:
+                locations.add(value)
+            locations.update(names.get(value, ()))
+
+    link_ids = set()
+    for movement in plan.get('places') or []:
+        location(movement.get('from'))
+        location(movement.get('to'))
+        link_ids.update(movement.get('links') or [])
+    for row in (plan.get('enter') or []) + (plan.get('exit') or []) + (plan.get('preconditions') or []):
+        if row.get('kind') in ('places', 'place', 'placements'):
+            location(row.get('expected'))
+    for reference in plan.get('world_refs') or []:
+        if isinstance(reference, str) and reference.startswith('geography:'):
+            location(reference.split(':', 1)[1])
+    links = state.get('links', {})
+    for ident in link_ids:
+        link = links.get(ident, {})
+        location(link.get('a'))
+        location(link.get('b'))
+    # Preserve existing direct constraints between selected places, even if a writer is tempted
+    # to omit a declared path or confuse a sound/sight link with a route.
+    link_ids.update(ident for ident, link in links.items()
+                    if link['a'] in locations and link['b'] in locations)
+    todo = list(locations)
+    while todo:
+        parent = places.get(todo.pop(), {}).get('parent')
+        if parent is not None and parent not in locations:
+            locations.add(parent)
+            todo.append(parent)
+    return people, locations, link_ids
+
+
+def scoped_state(state, participants, plan=None, chapter=0, horizon=3, *, allow_dependency_scope=True):
+    plan = plan or {}
+    inputs = story_memory.reads(plan) if plan else set()
+    complete = allow_dependency_scope and _complete_dependencies(plan)
     selected = set(participants)
+    if complete:
+        selected, locations, links = _spatial_scope(state, selected, plan, inputs)
     view = copy.deepcopy(state)
     for field in ('entities', 'placements', 'developments'):
         view[field] = {k: v for k, v in state[field].items() if k in selected}
-    for field in ('facts', 'knowledge'):
-        view[field] = {k: v for k, v in state[field].items() if k.split(':', 1)[0] in selected}
+    view['facts'] = {k: v for k, v in state['facts'].items() if k.split(':', 1)[0] in selected}
+    topics = set(plan.get('reader_refs', [])) | {d['topic'] for d in plan.get('disclosures', [])}
+    topics.update(key for kind, key in story_memory.reading_refs(plan) if kind == 'disclosure')
+    view['knowledge'] = {k: v for k, v in state['knowledge'].items()
+                         if k.split(':', 1)[0] in selected and
+                         (not complete or k.split(':', 1)[1] in topics or ('knowledge', k) in inputs)}
+    if complete:
+        view['places'] = {k: v for k, v in state['places'].items() if k in locations}
+        for field in ('custody', 'arrivals'):
+            if field in state:
+                view[field] = {k: v for k, v in state[field].items() if k in selected}
+        if 'anchors' in state:
+            view['anchors'] = {k: v for k, v in state['anchors'].items()
+                               if k.split(':', 1)[0] in selected | locations}
+        if 'links' in state:
+            view['links'] = {k: v for k, v in state['links'].items() if k in links}
+            for link in view['links'].values():
+                for key in link.get('requires', {}):
+                    if key in state['facts']:
+                        view['facts'][key] = state['facts'][key]
     view['resources'] = {k: v for k, v in state['resources'].items() if json.loads(k)[0] in selected}
     view['relations'] = {k: v for k, v in state['relations'].items() if k.split('>')[0] in selected or k.split('>')[1].split(':')[0] in selected}
     view['historical_assertions'] = {k: v for k, v in state['historical_assertions'].items() if selected.intersection(v['subjects'])}
-    plan = plan or {}
     refs = set(plan.get('reader_refs', [])) | {d['topic'] for d in plan.get('disclosures', [])}
     view['hooks'] = {k: v for k, v in state['hooks'].items()
                      if v['status'] == 'open' and
@@ -148,12 +243,20 @@ def scoped_state(state, participants, plan=None, chapter=0, horizon=3):
         view['memory_sources'] = 'complete_state 保留全部状态和人物发展；历史原文经 history_source/recall 完整补读。未选择不代表不存在。'
     # Explicit causal inputs may refer to an off-stage character or a remote promise.
     # Participant heuristics must never erase those coordinates.
-    if plan:
-        for kind, key in story_memory.reads(plan):
-            present, value = story_memory.lookup(state, kind, key)
-            field = 'story_nodes' if kind == 'node' else kind
-            if present and kind != 'clock':
-                view.setdefault(field, {})[key] = value
+    for kind, key in inputs:
+        present, value = story_memory.lookup(state, kind, key)
+        field = 'story_nodes' if kind == 'node' else kind
+        if present and kind != 'clock':
+            view.setdefault(field, {})[key] = value
+    conservative_reason = ('场景依赖声明不完整，保留参与人的全部知情与完整空间资料；未声明不视为无关。'
+                           if allow_dependency_scope else
+                           '设计任务可能决定后续章节，不能用起章旧依赖裁剪设计范围；保留参与人的全部知情与完整空间资料。')
+    view['material_scope'] = {
+        'mode': 'declared_dependencies' if complete else 'conservative',
+        'source': 'complete_state',
+        'note': ('知情与空间按完整场景依赖选择；站位、持有链、移动路径及父地点完整保留。'
+                 if complete else conservative_reason)
+                + '未选来源可按 complete_state 补读，缺失项不代表事实不存在。'}
     return view
 
 
@@ -519,7 +622,10 @@ def build(repo: ContextStore, book, job):
     # contract and the world — so the (still nearly empty) state stays available on demand there.
     # A merged dispatch also answers chapter outlines, whose enter/exit chain is read off that same
     # state, so there it is required.
-    state_view = scoped_state(book['state'], participants, plan, anchor)
+    # An existing start chapter is not the dependency boundary of a new design batch. Only prose
+    # executes a fixed chapter contract; designers may need sources for any later chapter.
+    state_view = scoped_state(book['state'], participants, plan, anchor,
+                              allow_dependency_scope=stage in ('write', 'repair', 'redesign'))
     add('state', state_view,
         not opening_stage and (stage != 'volume_outline' or merged_outline))
     add('complete_state', book['state'], False)
@@ -656,7 +762,13 @@ def build(repo: ContextStore, book, job):
             row = written.get(n)
             if row is None:
                 continue
-            previous.append({'chapter': n, 'prose': repo.read_document(row['prose']), 'summary': row['summary']})
+            # Give each full chapter its own immutable record. Moving the two-chapter window
+            # changes only the index and the newly introduced source, not the already-read prose.
+            name = 'previous_chapter:' + str(n)
+            records[name] = row['prose']
+            required.append(name)
+            previous.append({'chapter': n, 'prose_hash': row['prose'], 'record': name,
+                             'summary': row['summary']})
         add('previous_chapters', previous)
         if stage in ('write', 'repair', 'redesign'):
             notes = []

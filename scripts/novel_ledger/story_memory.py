@@ -184,8 +184,9 @@ def packet(plan, state):
     for kind, key in sorted(reads(plan)):
         present, value = lookup(state, kind, key)
         inputs.append({'kind': kind, 'key': key, 'present': present, 'value': value})
-    return {'schema': 'novel-ledger.scene-context/1', 'chapter': plan['chapter'],
+    return {'schema': 'novel-ledger.scene-context/2', 'chapter': plan['chapter'],
             'plan_hash': digest(plan), 'state_hash': digest(state),
             'coverage': plan.get('dependency_coverage', 'partial'),
-            'plan': copy.deepcopy(plan), 'inputs': inputs,
-            'note': 'inputs 是作者可用前态；人物实际知情仍按 knowledge 与对白意图核对。缺失项不代表已成立。'}
+            'plan_record': 'chapter_outline', 'inputs': inputs,
+            'note': '场景与章纲全文见必读 chapter_outline，plan_hash 绑定同一版本，不重复交付。'
+                    'inputs 是作者可用前态；人物实际知情仍按 knowledge 与对白意图核对。缺失项不代表已成立。'}

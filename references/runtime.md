@@ -96,6 +96,8 @@ prepare-worker.ready只表示协议身份登记成功，响应的worker_presence
 
 本模式复用同一组的模型上下文；组间独立性仍由宿主提供。工程验证不等于模型写作速度或文学质量保证。
 
+开启独立核验时，watch在首次需要派读者、核验完成需原Worker重交或需要作者裁决时返回；已绑定读者的首读与比较由watch在引擎内等待并续主控租约。逐章核验仍完整执行，不以五章组缓存豁免。
+
 ## 主干循环（默认执行路径）
 
 主干执行治理命令，子 agent 负责读取材料、写卷纲与章纲、执笔和返修；workflow 决定下一任务，SQLite 保存实际状态。开书门任务（opening_options）例外：主干在同一会话内自执，换组时延续已选方向与否决记录；完成全部开书选择、进入 world_model 后恢复派工。主干只保留授权目标、owner、当前 task_id 与宿主子 agent 会话的对应关系，以及简短执行状态。
@@ -121,7 +123,9 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 | task_ready | 按任务路径派工；先核对仍在运行的子 agent 与 claim，具体见任务交接 |
 | wait_for_batch | 原 Worker 正在接续本组，用 watch 等待整组；不要为下一章另派 Worker |
 | worker_blocked | 核对 status.execution_failure 与恢复动作，修复身份、凭据或材料错误后，对同一任务 prepare-worker --reset-failures；保留稿件和文学额度，不直接重派绕过 |
-| review_required | 保留候选与执笔Worker；按[独立核验](quality.md#主控与执笔交接)实际派出另一读者，用prepare-observer绑定，先冻结纯读再比较；歧义交作者准确裁决，主控不代审 |
+| review_required | 核验尚未绑定读者；保留候选与执笔Worker，按[独立核验](quality.md#主控与执笔交接)实际派出另一读者，用prepare-observer绑定，先冻结纯读再比较，主控不代审 |
+| review_in_progress | 原读者已绑定并在首读或比较，执行watch等待并续主控租约；不另派读者，不用模型轮询等待 |
+| review_author_required | 核验报告存在未决歧义，保留候选与报告，交作者用review-resolve准确裁决；不继续派读者 |
 | review_complete | 联系原执笔Worker，保留其上下文并续有效凭据，以准确候选重做submit；仍以outcome和committed_chapter核实结果 |
 | wait_for_submit | 等待或联系当前子 agent 完成提交；它已结束时核实错误并沿允许会话恢复当前任务，不派下一个任务 |
 | resync | 放下过期的 after 回调，重新调用不带 --after 的 advance --compact，以当前任务为准 |

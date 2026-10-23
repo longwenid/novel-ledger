@@ -77,7 +77,7 @@
 ## 实际验证
 
 - `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q`：89 项测试全部通过。耗时随宿主机变化（记录本次沙箱环境约 18 秒，早前一次为 2.4 秒），不作为性能指标。
-- 技能 quick_validate：通过（Windows 控制台需 `PYTHONUTF8=1`，见 [验证](../references/validation.md)）。全部 Python 文件通过 Python 3.9 语法解析，本地文档链接与示例约定校验通过。
+- 技能 quick_validate：通过（Windows 控制台需 `PYTHONUTF8=1`，见 [验证](../../references/validation.md)）。全部 Python 文件通过 Python 3.9 语法解析，本地文档链接与示例约定校验通过。
 - 合成工程流实际经过准备开书、全书与卷设计核验、滚动章计划、人物档案、正文候选、首读冻结、独立两类章审、章节提交、范围块审、综合复核、完本快照和 HTML 导出。
 - 实际修订流覆盖保留正式分支、重写后缀、范围复核、合并、撤销、恢复原目标及保留已消耗额度。改约先独立审查，保留父稿、未解决问题和修复额度。
 - 真实子进程使用明确标记的合成 Worker，经 CLI 提交；验证未提交的正常退出、宿主启动失败、Worker 越权主控命令和原首读会话恢复边界。
@@ -96,7 +96,7 @@
 - 完整约定三个入口按项目状态判定：`init --contract`（项目未开始）、`opening --file`（`init` 后未派发门任务，导入后清除逐门选择）、`recontract --file`（已派门任务或已有约定）。派过门任务后 `opening --file` 明确拒绝而不是静默忽略。测试覆盖三条路径，并覆盖"尚无约定时 export/audit 给出 contract 错误而不是崩溃"（该崩溃在重构前即存在，本次一并修掉）。
 - 架构图一致性由测试守护：`docs/architecture.mmd`、README 中的 mermaid 块与 references/architecture.md 的真源逐字一致，防止文档复制后漂移。
 - 字面约定的执行范围只声明一处：`contracts.ENFORCEMENT` 按阶段列出被检查的字段（terms 查禁词、names 查禁字），检查循环 `planning.enforce` 与任务材料里的 `policy.scope` 都由它生成，派工说明因此不可能承诺程序不做的检查。同时在派工材料里交付当前生效版本、来源与修改入口。测试覆盖：各阶段范围声明非空、选项全文（含 premise 等非 name 字段）真实被检查、计划阶段新建人物名遵循项目策略而非内置默认（此处曾因 `validate_plans` 未穿透 policy 导致作者覆盖失效，已修）、作者设定的禁字会被拒且解除后放行。CLI 现在把 stdout/stderr 固定为 UTF-8，调用方按 UTF-8 解析不会因宿主 locale（如 GBK 管道）拿到乱码路径。
-- 脑暴方法集中为数据：`contracts.LENSES`（八个设定生成方法）与 `contracts.VOLUME_TURNS`（五个卷级转折方法），任务 payload 的 `lens_brief` 带方法全文，方案任务与卷设计任务附 [创意工具箱](../references/hatch.md)。测试覆盖方法唯一性、brief 组成与 round 顺延。
+- 脑暴方法集中为数据：`contracts.LENSES`（八个设定生成方法）与 `contracts.VOLUME_TURNS`（五个卷级转折方法），任务 payload 的 `lens_brief` 带方法全文，方案任务与卷设计任务附 [创意工具箱](../../references/hatch.md)。测试覆盖方法唯一性、brief 组成与 round 顺延。
 - 开书方案的交付契约改为"交提案，不交论证"：`pitch`（一句能记住的话）与 `scene`（2～3 个可落笔的具体画面）成为硬要求；`driver/tradeoff/fit_reason` 不得自述创意方法（`opening_voice`），同组推进方式不得同构（`opening_diversity`）。起因是实测旧契约让方案普遍以"某透镜落地"自证，作者读到的是论证而非提案。
 - 派工材料按需投递：`brief` 由 briefs.py 现生成（本门字段规则 + 本轮透镜 + 交付契约），整篇 guides 降为可选参考；开书必读只剩拒绝记录，且 `opening_rejections` 从整块板子改为只留被否的标题与一句话；记录哈希只在 task.json 出现一次。实测同一门交付从约 20.1 KB 降到约 6.7 KB（-67%），随后精简已选方向行后，第 8 门重新派工为 brief 831 B + input.json 4.0 KB。
 - 约定篇幅必须写得完：由真实的会话导出发现问题——47 章 × 章幅上限 2600 与总上限 110000 冲突（每章平均最多 2340），但旧校验只看渐近极限（`last*chapter_min <= 上限`）而放行，作者不得不靠人工核验两轮才发现。现在校验每章平均可用区间 `[ceil(下限/last), floor(上限/last)]`：为空报错，`chapter_aim` 与 `chapter_max` 越界各自报错，details 带 `per_chapter_range` 与可执行修正建议（降章幅或上调卷末章号）。仓库自带的 assets/contract.example.json 也据此从 chapter_max 6000 调整为 4400。已激活的旧约定不受影响：`_audit` 只用契约自身的章幅上下限，不重跑 `planning.validate_contract`。
@@ -166,7 +166,7 @@
 
 这是存储与查询夹具，未模拟真实模型写审完本。旧目录原本也通过哈希按需提供，上表比较来源对象与本地构建，不代表每章模型输入节省相同字节。无命中查询和指定旧章仍可能遍历完整目录；没有声称整个引擎为常数成本。
 
-当前仍为19个核心模块、63条依赖边，完整依赖图无环；核心及CLI共5,015行。Skill quick_validate、32个Python文件的3.9语法解析、本地技能引用与架构图源一致性检查通过。完整原始测量见 metrics.json，真实长篇、文学盲评和计费用量方法见 [验证](../references/validation.md)。
+当前仍为19个核心模块、63条依赖边，完整依赖图无环；核心及CLI共5,015行。Skill quick_validate、32个Python文件的3.9语法解析、本地技能引用与架构图源一致性检查通过。完整原始测量见 metrics.json，真实长篇、文学盲评和计费用量方法见 [验证](../../references/validation.md)。
 
 ## 2026-10-14 1.2.0 本地发布验证
 
@@ -600,7 +600,7 @@ python3 validation/architecture_acceptance.py --out validation/architecture-acce
 
 ## 2026-10-19 opening/6：脑洞、世界架构与格局前置
 
-仍为十三门，将世界与格局放到主角来历之前；新增空间、历史、文明、贯穿矛盾与终极谜题五项架构。作者选择逐字进入约定和指定世界字段，后续门必读完整冻结选择。脑洞、世界、格局等门按各自方法池换组；创作参考与官方来源收在 [创意工具箱](../references/hatch.md#参考作品与提炼方法)。旧项目保留 v1–v5 门序与字段要求；未增加独立核验任务。
+仍为十三门，将世界与格局放到主角来历之前；新增空间、历史、文明、贯穿矛盾与终极谜题五项架构。作者选择逐字进入约定和指定世界字段，后续门必读完整冻结选择。脑洞、世界、格局等门按各自方法池换组；创作参考与官方来源收在 [创意工具箱](../../references/hatch.md#参考作品与提炼方法)。旧项目保留 v1–v5 门序与字段要求；未增加独立核验任务。
 
 验证：全量 **591 passed / 1437 subtests passed / 0 failed**（26.99 秒）；最后的提示文字统一后，开书与世界专项 **108 passed / 563 subtests passed**。新增六项行为测试覆盖五项架构缺失/畸形、约定改写、错误字段承接、回退失效范围、冻结材料完整性与重开、按门换组方法。原跨门读取哈希测试已改为验证“新增选择后变化、同任务重读稳定”，避免旧的省读假设吞掉世界架构。
 

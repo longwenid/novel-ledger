@@ -232,7 +232,7 @@ novel-ledger/
 ├── tools/                安装脚本（install-dsh.ps1：链接到 DSH 技能根）
 ├── docs/                 架构图产物（真源在 references/architecture.md）
 ├── tests/                协议、流转和版本边界行为测试
-└── validation/           工程度量脚本与验收记录
+└── validation/           活跃验证脚本；archive/ 保存历史记录
 ```
 
 ---
@@ -281,7 +281,7 @@ python3 validation/measure.py --out validation/metrics.json          # 依赖图
 
 默认运行快速组，覆盖关键边界与主流程；需要完整回归时显式使用 full，自动收集全部工程测试；两者可从其他目录运行，失败返回非零状态。未安装 pytest-xdist 时使用串行入口。页面模板随技能安装，导出为离线单文件。
 
-测试使用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。全量项数以本机运行为准（`python3 validation/run_tests.py full`），详细记录见 [验收记录](validation/results.md)。最新工程度量见 [2026-10-20 快照修复后测量](validation/quality-metrics-fixed-2026-10-20.json)，内含 UTC 生成时间、源码提交及覆盖本地修改的 Python 源码指纹；历史快照按其原始条件解释。数百万字的上下文、累计快照与完整来源验收见 [修复报告](validation/storage-snapshot-fix-2026-10-20.md)。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
+测试使用合成回执与临时项目：**验证协议、流转、额度与边界，不验证文学质量**。全量项数以本机运行为准（`python3 validation/run_tests.py full`），详细记录见 [历史验收记录](validation/archive/results.md)。历史工程度量见 [2026-10-20 快照修复后测量](validation/archive/quality-metrics-fixed-2026-10-20.json)，内含 UTC 生成时间、源码提交及覆盖本地修改的 Python 源码指纹；历史快照按其原始条件解释。当前度量请运行上面的 `validation/measure.py`，以本次输出的生成时间和源码指纹为准。数百万字的上下文、累计快照与完整来源验收见 [修复报告](validation/archive/storage-snapshot-fix-2026-10-20.md)。改动引擎前请先读 [架构与工程目标](references/architecture.md)，并运行依赖守护测试。
 
 Windows 提示：技能自身按 UTF-8 读写，默认 GBK 控制台下测试与 CLI 均可用；若运行外部校验脚本报编码错误，加 `PYTHONUTF8=1`。
 

@@ -203,7 +203,7 @@ def apply_event(state, event, chapter):
     elif op == 'move':
         ident, dst = event.get('entity'), event.get('after')
         require(ident in state['entities'] and dst in state['places'], 'move', '站位实体或地点无效。')
-        require(ident not in state.get('custody', {}) and not any(l['kind'] == 'path' for l in state.get('links', {}).values()),
+        require(ident not in state.get('custody', {}) and not any(l['kind'] == 'path' and ((l['a'] == state['placements'].get(ident) and l['b'] == dst) or (not l.get('directed', False) and l['b'] == state['placements'].get(ident) and l['a'] == dst)) for l in state.get('links', {}).values()),
                 'move', '持有物由携带者移动；已建路径拓扑时用 travel 显式核验。')
         _before(state['placements'], ident, event)
         require(text(event.get('route')) and text(event.get('reason')), 'move', '移动须有路径和因果说明。')

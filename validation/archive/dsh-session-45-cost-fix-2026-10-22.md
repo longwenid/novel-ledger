@@ -15,11 +15,11 @@ cacheRead 占 95.5%（10.27M），全部输出仅 131K：成本几乎全部是**
 ## 四条根因与修复
 
 1. **微返修循环**：Worker 对 draft45.md 做 26 次微小编辑（每次 18—280 字符）逐项凑文风指标，每轮试算-修改重读约 14 万 token 上下文，返修段 20 次调用花 2.61M。check 本已一次算出全部 findings，但响应只回 style_report，lint/drift/字数违规要下一轮派工才可见。
-   **修复**：`submit`（含 preview）响应新增 `findings` 全量列表（`Outcome.findings`）；派工卡第 4 步与 [craft](../references/craft.md#修订原则) 改为"一次合并修正全部 findings，以完整段落为单位重写，不逐条小改反复试算"。
+   **修复**：`submit`（含 preview）响应新增 `findings` 全量列表（`Outcome.findings`）；派工卡第 4 步与 [craft](../../references/craft.md#修订原则) 改为"一次合并修正全部 findings，以完整段落为单位重写，不逐条小改反复试算"。
 2. **租约过期事故**：返修循环两次引擎调用间隔超过 300 秒租期，`worker_lease` 中断；主控重开租约、双方各多付一轮（合计约 0.9M）。Worker 侧此前没有任何续租路径，watch 只续主控租约。
    **修复**：活动自动续租——每次携带正确 token 的成功 check/submit 都把租约延长 `worker_lease_seconds`（DEFAULTS 新增，默认 300）；只有沉默（不再调用引擎）才让租约过期。空闲超期与主控恢复路径语义不变。长返修章可由主控 `prepare-worker --seconds` 直接放宽。
 3. **单章组双冷启动**：上一会话写到 44 章结束，本会话沿 `target=45` 建组被钳成 {45,45}，随后 46—50 另开新组新 Worker——快速组摊薄冷启动的机制完全没有发生，反而付了两次引导。
-   **修复**：`run` 在快速模式且剩余章数不足一组时返回 `fast_group_note` 提示（不改变授权语义）；[runtime](../references/runtime.md#快速无人值守五章一组) 增加"建组前对齐 run --through"指引。
+   **修复**：`run` 在快速模式且剩余章数不足一组时返回 `fast_group_note` 提示（不改变授权语义）；[runtime](../../references/runtime.md#快速无人值守五章一组) 增加"建组前对齐 run --through"指引。
 4. **组内重复读参考文档**：narrative.md（16K）与 craft.md（5.2K）每章都重读，既不在必读冻结表也不在组级读取缓存。
    **修复**：组内续章派工卡第 1 步注明 guides 与首章相同、已读可跳过、仅按需补读。
 

@@ -38,10 +38,16 @@ PREFIXES = ('claim:', 'branch-book:', 'history_head:', 'technical_failure:', 'ex
 # storage adapter's `usage`, so the shape is declared here instead of being an implicit agreement
 # between two layers: renaming `chars` would otherwise make reported usage silently wrong.
 READ_RECORD = ('task', 'records', 'chars')
+READ_RECORD_OPTIONAL = ('execution_id', 'record_hashes')
 
 
-def read_record(task_id, names, chars):
-    return {'task': task_id, 'records': list(names), 'chars': chars}
+def read_record(task_id, names, chars, *, execution_id=None, record_hashes=None):
+    value = {'task': task_id, 'records': list(names), 'chars': chars}
+    if execution_id is not None:
+        value['execution_id'] = execution_id
+    if record_hashes is not None:
+        value['record_hashes'] = dict(record_hashes)
+    return value
 
 
 def read_chars(value):

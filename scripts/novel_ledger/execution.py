@@ -7,6 +7,7 @@ CONTINUE_ACTIONS = {
     'wait_for_submit': 'supervise_worker',
     'wait_for_batch': 'supervise_worker',
     'review_required': 'dispatch_observer',
+    'review_in_progress': 'supervise_observer',
     'review_complete': 'resubmit_reviewed_candidate',
     'resync': 'advance',
     'revision_ready': 'process_authorized_revision',
@@ -15,12 +16,22 @@ CONTINUE_ACTIONS = {
 }
 
 
+def review_handoff(task_id, review):
+    """Only an unassigned review needs dispatch; an active reader needs supervision."""
+    action = {'await_observer': 'review_required',
+              'first_read': 'review_in_progress',
+              'comparison': 'review_in_progress',
+              'review_required': 'review_author_required',
+              'done': 'review_complete'}.get(review['phase'], 'review_blocked')
+    return {'action': action, 'task_id': task_id, 'review': review}
+
+
 def controller_handoff(response):
     action = response.get('action')
     proceed = action in CONTINUE_ACTIONS
     return {**response, 'controller': {
         'must_continue': proceed,
-        'action': CONTINUE_ACTIONS.get(action, 'handle_boundary'),
+        'action': CONTINUE_ACTIONS.get(action, 'resolve_review' if action == 'review_author_required' else 'handle_boundary'),
         'stop_reason': None if proceed else action,
         'worker_finished_ends_controller': False,
     }}

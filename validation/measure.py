@@ -1,7 +1,8 @@
 """Engineering-only dependency and frozen-record measurements; no model calls.
 
-The five-step pipeline (v2) has four dispatch classes before prose — `world_model`,
-`volume_outline`, `chapter_outline`, `write` — and no review stage at all. This tool measures what
+The five-step story pipeline (v2) has four worker classes — `world_model`,
+`volume_outline`, `chapter_outline`, `write` — plus independent continuity readers when required.
+This tool measures what
 each class costs in transported characters, what the module graph looks like, and whether the
 material a dispatch reads stays bounded as the book grows. It says nothing about literary quality,
 provider tokens or billed money, and it never calls a model.
@@ -106,15 +107,14 @@ def graph_metrics(root, package):
             'cycles_including_deferred_imports': groups, 'dependency_edges': sum(len(v) for v in graph.values())}
 
 
-def dispatch_ledger():
-    """How many dispatches the frozen stage graph spends for a book of each tier.
+def dispatch_ledger(continuity='required'):
+    """Separate story tasks, worker deliveries and the first continuity read per chapter.
 
-    This replaces the v1 review-tree measurement: `scopes.tree` is gone, and with it every dispatch
-    whose only job was to have a second agent judge the first. What is left is arithmetic the
-    contract itself declares — the opening gates (mainline, no dispatch per spec §1), one
-    `world_model`, one `volume_outline` per batch, one `chapter_outline` per volume, one `write` per
-    chapter — plus the one per-tier shape switch, `merge_chapter_outline`.
+    Counts assume each chapter passes on its first candidate. Repairs, new candidates, context
+    recovery and model/tool calls are not derivable from the static stage graph.
     """
+    if continuity not in ('required', 'off'):
+        raise ValueError('continuity must be required or off')
     rows = []
     # The gate count is derived, not hard-coded: opening/4 inserted `origin` (11 gates, `scale` is a
     # system gate and spends no dispatch), so a literal "ten" here would silently misreport the cost.
@@ -139,20 +139,27 @@ def dispatch_ledger():
         for scope in ('all', 'rolling'):
             volume_dispatches = 1 if scope == 'all' else volumes
             chapter_dispatches = 0 if merged else volumes
+            planning = 1 + volume_dispatches + chapter_dispatches
+            observers = chapters if continuity == 'required' else 0
+            story_tasks = planning + chapters
             rows.append({'tier': tier['id'], 'chapters': chapters, 'volumes': volumes,
                          'volume_scope': scope, 'merge_chapter_outline': merged,
+                         'continuity': continuity, 'continuity_observers': observers,
                          'world_model': 1, 'volume_outline': volume_dispatches,
                          'chapter_outline': chapter_dispatches, 'write': chapters,
                          'before_prose': 2 + (0 if merged else 1),
-                         'planning_total': 1 + volume_dispatches + chapter_dispatches,
+                         'planning_total': planning,
                          'fast_prose_workers': fast_prose_workers,
-                         'fast_total_workers': 1 + volume_dispatches + chapter_dispatches + fast_prose_workers,
+                         'fast_total_workers': planning + fast_prose_workers + observers,
+                         'standard_total_workers': planning + chapters + observers,
                          'initial_volume_outlines': volumes if scope == 'all' else 1,
-                         'total': 1 + volume_dispatches + chapter_dispatches + chapters})
-    return {'gates': gates, 'by_tier': rows,
+                         'story_tasks': story_tasks, 'total': story_tasks})
+    return {'gates': gates, 'continuity': continuity, 'by_tier': rows,
             'boundary': '依 PIPELINE_SHAPES 与 volume_outline.scope 的机械计数，chapter_outline.scope=volume；'
                         'before_prose 只计首章前派工，planning_total 计全程规划；fast 按首章独立、卷界与五章组计 Worker，'
-                        '逐章任务数不变；不含返修/重设计和真实模型用量或速度。'}
+                        'continuity=required 为每章另计一次独立读者交付，off 为零，total_workers 均包含读者；'
+                        'story_tasks（旧字段 total 的同义值）仅计故事任务，不含读者，也不是模型调用数。'
+                        '这是首次候选均通过时的静态下界；不含返修、重设计、重新派读和上下文恢复，不能推算 token 或速度。'}
 
 
 def _built_bytes(repo, book, job):
@@ -398,6 +405,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='工程材料与依赖度量（不调用模型）。')
     parser.add_argument('--out', type=Path)
     parser.add_argument('--only', help='逗号分隔的节名：' + ','.join(SECTIONS))
+    parser.add_argument('--continuity', choices=('required', 'off'), default='required',
+                        help='派工数量度量的独立核验策略；默认与新项目 CLI 一致为 required，不更改项目。')
     args = parser.parse_args(argv)
     wanted = [name.strip() for name in args.only.split(',')] if args.only else list(SECTIONS)
     unknown = [name for name in wanted if name not in SECTIONS]
@@ -405,11 +414,12 @@ def main(argv=None):
         parser.error('未知的节：' + ','.join(unknown))
     report = {'metadata': snapshot_metadata(),
               'scope': 'engineering_only; not feature parity, literary quality, billed tokens or end-to-end savings',
-              'pipeline': 'five steps: opening gates / world_model / volume_outline / chapter_outline / write'}
+              'pipeline': 'five story stages plus independent continuity reading when required'}
     failed = []
     for name in wanted:
         try:
-            report[name] = {'status': 'ok', 'value': SECTIONS[name]()}
+            value = dispatch_ledger(args.continuity) if name == 'dispatch' else SECTIONS[name]()
+            report[name] = {'status': 'ok', 'value': value}
         except BaseException as exc:                    # noqa: BLE001 - a section report, not a handler
             failed.append(name)
             report[name] = {'status': 'failed', 'error': type(exc).__name__ + ': ' + str(exc),

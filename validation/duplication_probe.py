@@ -8,7 +8,7 @@ v2 keeps exactly one declared projection (``context.PROJECTIONS``): ``world_core
 view of ``world_model``, so a scene dispatch reads the rules through one of them and never both. The
 v1 pairs that named deleted records (``frontier:book``/``design:book``, ``plan``/``scene_context``)
 are gone with the stages that produced them; a legacy project still lists its own numbers in
-``validation/results.md``.
+``validation/archive/results.md``.
 """
 import json
 import sys

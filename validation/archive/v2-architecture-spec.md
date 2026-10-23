@@ -1,11 +1,11 @@
 # novel-ledger 五步流水线（v2）架构规范 — 冻结版
 
-> 历史归档：本文件保留当轮版本、设计或实验条件，不是当前执行规范。旧门序、兼容条款、独立审查阶段及命令均不用于当前流程；当前唯一执行依据见 [任务协议](../references/protocol.md) 与 [运行流程](../references/runtime.md)。
+> 历史归档：本文件保留当轮版本、设计或实验条件，不是当前执行规范。旧门序、兼容条款、独立审查阶段及命令均不用于当前流程；当前唯一执行依据见 [任务协议](../../references/protocol.md) 与 [运行流程](../../references/runtime.md)。
 
 > 本文件是 2026-10-18 当轮的冻结记录，保留原貌。后续修订见：
 > [v2.1 规范](v2.1-hooks-and-style-spec.md)（伏笔账"卷纲声明、章纲执行" + 文风规格与机械代理指标）；
 > 卷纲默认已按下限 2000 汉字改为 `{scope:'all', words:2500, tolerance:500}`（现行口径见
-> [references/protocol.md](../references/protocol.md) 与 [references/narrative.md](../references/narrative.md)）；
+> [references/protocol.md](../../references/protocol.md) 与 [references/narrative.md](../../references/narrative.md)）；
 > 跨层共享的数值默认现单点声明在 `contracts.DEFAULTS`。
 
 作者决定（2026-10-18）：流程改为五步；**设计层审查与章级独立审全部取消**；删除 `book_plan` 与 `volume_plan`，世界模型直接产出各卷卷纲。

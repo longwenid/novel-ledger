@@ -50,7 +50,7 @@ protagonist_setup={id,name,identity,desire,limit} 保存主角身份、欲望和
 
 ## 冻结任务与资料读取
 
-task.json 给身份、路径和 commands，其中 records 提供冻结哈希，required 给必读名称；input.json 保存任务材料视图，记录哈希不重复写入。正文来源按本阶段冻结为 previous_chapters、base_draft 等记录，历史正文经 recall 补读；本章理解证据绑定全文、补丁或复用方式最终合成的完整正文。brief 说明当前任务规则，任务目录同时物化 `brief.md`（同一简报的 markdown 全文，直接读它，不解析 input.json）与 `dispatch.md`（Worker 自举卡：环境自举、步骤、认领状态、命令与常见坑）；重派未提交任务时，上次遗留的回执草稿由引擎隔离为 `result.stale.json`（派工卡会注明）——它不是进度也不是判断依据，从模板起稿。guides 作为相关章节的参考，不重复通读全部文档。
+task.json 给身份、路径和 commands，其中 records 提供冻结哈希，required 给必读名称；input.json 保存任务材料视图，记录哈希不重复写入。前章正文由 `previous_chapters` 索引列出章号、摘要、prose_hash 与 record；每章全文分别冻结为 `previous_chapter:N` 必读记录。同一上下文按章复用未变来源，窗口移动不会再次传送已读全文；`--all` 或新上下文仍获得全部必要原文。返修基稿使用 base_draft，历史正文经 recall 补读；本章理解证据绑定全文、补丁或复用方式最终合成的完整正文。brief 说明当前任务规则，任务目录同时物化 `brief.md`（同一简报的 markdown 全文，直接读它，不解析 input.json）与 `dispatch.md`（Worker 自举卡：环境自举、步骤、认领状态、命令与常见坑）；重派未提交任务时，上次遗留的回执草稿由引擎隔离为 `result.stale.json`（派工卡会注明）——它不是进度也不是判断依据，从模板起稿。guides 作为相关章节的参考，不重复通读全部文档。
 
 主干使用 advance --compact 获取精简 task；开书门任务（opening_options）由主干自执，其余阶段把 task_path 交给子 agent；磁盘 task.json 始终完整。除 `contracts.CONTROLLER_STAGES` 中由主干自执的 opening_options 外，新任务使用新 Worker 会话，`requires_new_worker` 要求一个会话只做一个任务（跨任务复用按 session_reuse 拒绝）；开书门不绑定主干会话，可连续执行。claim 只表示执行认领，须结合宿主中的子 agent 状态判断是否仍在执行，主干循环及动作分支见 [运行](runtime.md)。
 
@@ -63,6 +63,8 @@ task.json 给身份、路径和 commands，其中 records 提供冻结哈希，r
 `read --task ID` 只返回本任务**尚未拿到过**的必读记录（跳过的名字列在 already_read，需要原文用 `--record 名称` 或 `--all` 取回）；返回里的 `records_hash` 是本任务 required 对应名称及哈希的摘要；仅主干连续自执 opening_options 时，与前一次相同且必读名单未变可跳过本次 read；其他任务由各自 Worker 完整读取必读记录；`--record 名称` 读单个完整记录。`recall --task ID --chapter N` 读冻结目录中的完整历史章，`--state` 读完整前态。可选 history_source 以哈希冻结逐章目录；分页检索与承诺关联见 [叙事推进](narrative.md#历史补读)。必读 state 按参与人和相关开放承诺选择，派工 baseline 也取该冻结视图，complete_state 永远可补读。结构选择不证明其他事实语义无关；执笔材料包含本章章纲和相关卷纲，完整卷纲保留补读入口，见 [材料范围](narrative.md#有界材料与局部重排)。当前 state 是视图，不冒充全部资料。
 
 hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、紧凑分隔符、allow_nan=False。正文哈希也基于 JSON 字符串值，不是裸文件字节。来源完整性不证明阅读理解。
+
+`scene_context` 通过 `plan_record=chapter_outline` 与 plan_hash 指向唯一完整章纲，另交付所依赖的准确前态，不重复内嵌章纲。普通材料读取日志可带 execution_id 与 record_hashes，用于区分同一上下文的重复交付和新上下文的必要恢复；旧日志缺少这些字段时不能据记录名推断可省 token。
 
 ## 回执与格式自检
 
