@@ -132,7 +132,12 @@ def pin(source, output, *, ref=None, expected=None, project=None, task=None):
                                                    commit, '--', *PARTS], stderr=subprocess.PIPE)
                 parts = [name for name in tracked.decode('utf-8').split('\0') if name in PARTS]
                 require(parts, 'runtime_install', '所选版本没有技能发布文件。')
-                archive = subprocess.check_output(['git', '-C', str(source), 'archive', '--format=tar', commit,
+                # Force archive bytes exactly as committed: host-level autocrlf/text
+                # attributes would otherwise smear CRLF into the frozen copy and
+                # break the engine fingerprint on Windows default git installs.
+                archive = subprocess.check_output(['git', '-C', str(source), '-c', 'core.autocrlf=false',
+                                                   '-c', 'core.eol=lf', '-c', 'core.attributesFile=',
+                                                   'archive', '--format=tar', commit,
                                                    '--', *parts], stderr=subprocess.PIPE)
             except (OSError, subprocess.CalledProcessError):
                 require(False, 'runtime_install', '无法读取所选Git发布版本；核对提交或从完整发布目录固定安装。')
