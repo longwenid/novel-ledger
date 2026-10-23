@@ -9,7 +9,7 @@ from .contracts import (DEFAULTS, OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_T
 # a project that declares one is told to reopen under the current protocol, and nothing downstream
 # has to keep a second gate order, field table or alignment promise alive.
 GATES = (
-    ('genre', '题材与阅读承诺'), ('premise', '核心脑洞与世界命题'),
+    ('genre', '题材与阅读承诺'), ('premise', '核心设想与世界命题'),
     ('voice', '叙述视角与阅读质地'), ('scale', '体量与分卷'),
     ('world', '世界架构：空间、历史与文明'), ('ladder', '格局路径与终局视野'),
     ('origin', '主角来历与世界联系'), ('edge', '核心优势与成长线'),
@@ -24,8 +24,8 @@ SYSTEM_GATES = {OPENING_VERSION: ('scale',)}
 # Direct choices and the protagonist value shape come from CONTRACT_FIELDS.opening.
 DERIVATION_INPUTS = {'world': ('world_premise', 'mechanism', 'red_lines'),
                      'scale': ('tier', 'volume_count', 'chapters', 'chapter_window')}
-# Brainstorm lenses live in catalog.LENSES; this module only picks and carries them.
-LENSES = tuple(label for label, _point, _structure in catalog.LENSES)
+# Stable labels only; references/hatch.md owns the creative methods.
+LENSES = catalog.LENSES
 
 
 def opening_version(state):
@@ -68,12 +68,6 @@ def lens_index(gate, round_no, version=OPENING_VERSION):
     """Rotate methods suited to this gate."""
     pool = GATE_LENSES.get(gate)
     return LENSES.index(pool[round_no % len(pool)]) if pool else round_no % len(LENSES)
-
-
-def lens_brief(index):
-    """The method handed to the option writer: a bare label is not a method."""
-    label, point, structure = catalog.LENSES[index % len(catalog.LENSES)]
-    return '本轮创意透镜：' + label + '。' + point + ' 落地要求：' + structure
 
 
 def begin(source='', version=OPENING_VERSION):
@@ -160,73 +154,36 @@ def current(state):
 # What each gate's value must carry, in the words the option writer reads. One table for the one
 # protocol in force; a field a gate never decided does not appear here.
 VALUE_RULES = {
-    'genre': 'genre 题材与频道落点、reader_promise 读者承诺（爽点是什么、看谁赢谁）、tone 基调',
-    'premise': 'novelty 核心脑洞：这个世界比同类多出来的那一条规则/资源/分配方式（≥12字，写规则，不写外挂名字）；'
-               'first_cause 第一推动力：过去发生了哪件事、今天还在推什么（≥12字）；'
-               'stance 主角与这套规则体系的关系，只能填"顺从"/"利用"/"对抗"；'
-               'dark_side 世界恶意的来源，只能填"外神"/"天灾"/"系统"/"上层剥削"/"制度"/"人心"',
-    'voice': 'pov 叙述人称与视角范围、voice 语感、style_traits 表达要点数组；scene 必须用该方案的人称写出来',
-    'scale': 'tier 档位 ID（引擎按档位表补齐已证明的数字）、chapter_min/chapter_max/chapter_aim、volume_count、chapters、chapter_window（照抄不要改数；总字数区间是派生结果，不用填）',
-    'world': 'world_premise 世界前提、mechanism={mode:none或bounded, principle, cost, limits:数组}、'
-             'tiers 位阶阶梯数组（每级 {name,condition,gain,cost,limit}，条数按已选档位下限）、'
-             'resource 硬通货 {name,source,allocator}、red_lines 禁区数组、'
-             'allow_special_mechanism 布尔（必须等于 mode=="bounded"）',
-    'ladder': 'scale={opening 第一章可见边界（≥8字）, terminal 终局等级（局部/势力/体系/文明）, '
-              'unchanged 跨卷不变的上层结构（≥8字，写清升格为什么不作废已写的卷）}；'
-              'ladder 层级数组（每条 {stage,scope,growth,new_rule,cost}，条数按已选档位下限）：'
-              'stage 是世界里能落成一条记录的名字（地点/位面/势力/位阶，不是"第一卷"）；'
-              'scope 取 局部/一城/一域/一界/星海/诸天 且只升不降；growth 取 地盘/势力/规则/认知/文明，'
-              '三级以上至少一级是规则/认知/文明；new_rule 这一级新增或改变的规则、cost 升上去要付的新代价',
-    'edge': 'advantage 优势是什么、origin 怎么来、growth 分几层与升级条件、cost 每次使用的代价、ceiling 上限（约定字段 core_edge 直接存这五项）',
-    'protagonist': 'id、name、identity 身份与处境、desire 欲望、limit 底线',
-    'relationships': 'relationships 具体关系数组，至少一条：写清助力与背叛风险，以及感情线的分量与处理',
-    'opposition': 'opposition 主要对抗与逐卷抬高方式（第一卷对手挡着什么利益、每次胜利换来多强的对手、终局面对谁）、story_engine 持续推进的动力',
-    'payoff': 'plan={ways 兑现方式数组, cadence 短线兑现密度与章末钩, hooks 卷内高潮位置}（约定字段 payoff_plan 存这份 plan）、'
-              'ending 终局兑现的那场胜利、theme 母题、'
-              'anchor={deliverable 第 N 章前必须兑现什么（≥12字）, deadline_chapter 最迟章号（纯数字，不超过档位上限定）}',
+    'genre': 'genre、reader_promise、tone 均为非空文本。',
+    'premise': 'novelty 核心设想、first_cause 持续成因均为至少12字的非空文本；'
+               'stance 取顺从/利用/对抗；dark_side 取外神/天灾/系统/上层剥削/制度/人心。',
+    'voice': 'pov、voice 为非空文本；style_traits 为非空文本数组。',
+    'scale': 'tier、word_range、chapter_min、chapter_max、chapter_aim、volume_count、chapters、chapter_window 按系统档位表填写。',
+    'world': 'world_premise 非空；mechanism={mode:none|bounded, principle:非空文本, cost:非空文本, limits:文本数组}；'
+             'tiers 每条为 {name,condition,gain,cost,limit} 非空文本，name 至少2字且不重复，条数按已选档位下限；'
+             'resource={name,source,allocator}，各至少2字；red_lines 为文本数组；'
+             'allow_special_mechanism 必须是布尔值且等于 mode=="bounded"。',
+    'ladder': 'scale={opening,terminal,unchanged}，opening/unchanged 至少8字，terminal 取局部/势力/体系/文明；'
+              'ladder 每条为 {stage,scope,growth,new_rule,cost} 非空文本，stage 至少2字且不重复，条数按已选档位下限；'
+              'scope 取局部/一城/一域/一界/星海/诸天且只升不降；growth 取地盘/势力/规则/认知/文明，'
+              '三级以上至少一级取规则/认知/文明；terminal=局部仅限t0/t1，'
+              'terminal=势力/体系/文明时至少一级growth分别取势力/规则/文明。',
+    'origin': 'family 取魂穿/身穿/本土/其他；arrival、cost 为非空文本。',
+    'edge': 'advantage、origin、growth、cost、ceiling 均为非空文本。',
+    'protagonist': 'id、name、identity、desire、limit 均为非空文本，id 不含 : 或 >。',
+    'relationships': 'relationships 为至少一条的非空文本数组。',
+    'opposition': 'opposition、story_engine 均为非空文本。',
+    'payoff': 'plan={ways:非空文本数组,cadence:非空文本,hooks:非空文本}；ending、theme 为非空文本；'
+              'anchor={deliverable:至少12字文本,deadline_chapter:正整数}，章号不超过已选档位上限。',
+    'title': 'title 为非空文本。',
 }
-VALUE_RULES['world'] += ('；architecture 世界架构={'
-                         + '；'.join(key + ' ' + note for key, note, _section, _field in contracts.WORLD_ARCHITECTURE)
-                         + '}，五项为非空文本，保存作者已选的全书设定，完整展开留给世界模型。')
-VALUE_RULES['title'] = 'title 可用书名：承诺独特的世界意象或核心看点，可用凝练短名或清晰长名'
-GATE_NOTES = {
-    'genre': '作者没有给方向时，第一轮先把 GENRE_CATALOG 全类目铺开（十二个男频类目各配一句网文化读者承诺），让作者先挑类目或自定义；作者点了大方向后，再在类目内给 2～3 个具体方案。作者已给方向时直接在方向内出案。',
-    'origin': '世界与格局已经确定。本门在魂穿/身穿/本土/其他中给出不同来历，'
-              '说明带来的东西为何能介入既有世界矛盾，以及身份代价、谁会起疑与最初知识边界。'
-              '不推翻已选历史与机制，不替后面的主角门起名或定职业。',
-    'voice': '本门只决定"怎么讲"：人称与视角范围是硬决定，语感是同一门的阅读质地。每个方案的 scene 与 pitch 都用该方案的人称写出来，让作者读到的不是解释，而是这个人称讲出来的样子；不要在本门讨论情节走向。',
-    'edge': '本门只决定核心优势与成长线：advantage 优势是什么、origin 怎么得到、growth 分几层与每层升级条件、cost 每次使用的代价、ceiling 上限在哪。写清楚它在开篇三章内第一次怎么用上；不要写成世界观说明或力量体系百科，也不要替作者决定题材。本门排在主角门之前，主角的姓名与身份还没决定：用「主角」指代，不要在本门给他起名、定职业或写编制——本门文本会被约定逐字保留，写进去的名字会与主角门后来选定的人冲突。',
-    'protagonist': '本门决定主角身份、处境与底线，并执行反套路命名纪律：姓氏贴世界与阶层（市井用常见姓与俗字，世家才配行辈雅字，别扎堆潇洒姓）、俗字与双字名优先（单字玄乎名是重灾区）、称呼链一次想好（全名→日常称呼→诨名/职衔）、口语测试三遍（放进街坊对白念着像网文签名档就换）。套路组合（潇洒姓×玄乎单字）会以 name_warnings 出现在板面上。',
-    'world': '先定全书 architecture，再从中长出位阶与资源。space 写清已知世界、多方居所及通行边界；'
-             'history 写历史断层如何影响今天；civilizations 给出不同生存方案、依存与冲突；'
-             'conflict 写主角不行动也会持续扩大的根本矛盾；mystery 写终极真相及揭开后的问题。'
-             '这些可表现为大陆、星际与多层现实，也可表现为历史时代和现实制度网络，遵守题材与禁区。'
-             '每组至少一案保持类型主流的经典形态，靠层次与依存关系做扎实；猎奇不是本门要求。'
-             '开局只展示一个切面，世界规模不等于开篇信息量。与 premise 同源，不用更大地名掩盖局部设定。',
-    'ladder': '先想终局需要回答什么，再倒推各阶段的可行动范围。scale.opening 是第一章可见切面；'
-              'terminal 按实际问题选，宏大可以来自规则、文明或认知而不靠宇宙地图；unchanged 写旧人物与历史后果为何仍有效。'
-              '每级 new_rule 同时说明揭开的认知、由谁维持该规则；cost 说明承担的新责任。'
-              'stage 沿已有世界发展，允许同一空间内升格，不要求每卷换地图。完整字段和枚举按 value 规则。',
-    'opposition': '给各方可理解的目标、依赖和不能退让的利益。opposition 串起眼前对手与长期冲突；'
-                  'story_engine 写胜利如何改变资源、联盟或认知并引出下一次行动，避免只把敌人的战力调高。',
-    'payoff': '用 plan 安排行动、探索、关系与成长的阶段回报，ending 回答核心脑洞的全书问题并交代人的去向。'
-              'anchor 仍给准确早期兑现物与章号；不机械固定三五章打脸，也不以揭开真相代替解决矛盾。',
-    'title': '本门只决定书名：提炼独特意象或核心卖点，凝练短名和直述长名都可，贴合已选语感。',
-    'premise': '只改世界的一条根规则，并推演它对日常生活、组织利益与文明未来的连锁后果。'
-               'novelty 写清新规则及至少两类后果；first_cause 写历史选择为何在此刻失衡；'
-               'stance/dark_side 沿枚举填写，但不要强迫所有世界都由幕后黑手操纵。'
-               '同组方案用不同的规则因果与终极问题拉开差距，不能只换职业、能力或敌人；'
-               '每组至少一案走类型主流的常规路线：根规则可以普通熟悉，靠执行与兑现密度立住，怪异是选项不是默认。'
-               '大世界用一场具体事件展示，主角身份留给后门。',
-}
-
-
-def gate_note(version, gate_id):
-    return GATE_NOTES.get(gate_id, '')
+VALUE_RULES['world'] += (' architecture={'
+                         + ','.join(key for key, _note, _section, _field in contracts.WORLD_ARCHITECTURE)
+                         + '}，五项均为非空文本。')
 
 
 def value_rules(version, gate_id):
-    rule = VALUE_RULES.get(gate_id, '按已选方向给出结构化方案。')
+    rule = VALUE_RULES.get(gate_id, '')
     rule += ' value 只允许这些字段：' + '/'.join(value_fields(gate_id, version)) + '；不得携带其他门的决定或额外字段。'
     return rule
 
@@ -249,7 +206,7 @@ def value_fields(gate, version=OPENING_VERSION):
 OPTION_CONTRACT = contracts.OPTION_CONTRACT
 LEGACY_LENS_WORDS = ('混搭', '倒置', '代价递进', '认知差', '规则推演', '绑定', '闭环', '阶梯', '商业化倒推')
 LENS_WORDS = tuple(dict.fromkeys(
-    ('透镜', '落地要求', '典型落法') + tuple(row[0] for row in catalog.LENSES) + LEGACY_LENS_WORDS))
+    ('透镜', '落地要求', '典型落法') + catalog.LENSES + LEGACY_LENS_WORDS))
 
 
 def _reject_lens_language(option):
@@ -333,12 +290,12 @@ def validate_value(gate, value, version=OPENING_VERSION, choices=None):
     if gate == 'premise':
         keys = ('novelty', 'first_cause', 'stance', 'dark_side')
         require(all(text(value.get(key)) for key in keys), 'opening_option',
-                '核心脑洞需要 novelty/first_cause/stance/dark_side 四项，逐项写清，不留空。',
+                '核心设想需要 novelty/first_cause/stance/dark_side 四项，逐项写清，不留空。',
                 {'missing': [key for key in keys if not text(value.get(key))], 'expect': list(keys)})
         for key in ('novelty', 'first_cause'):
             require(len(value[key].strip()) >= 12, 'opening_option',
-                    '脑洞的 %s 至少 12 字：一句话说不清新增了什么规则/资源，就还没有脑洞。' % key,
-                    {'field': key, 'got': value[key], 'recover': '写清这条规则替世界新增了资源、分配方式还是代价。'})
+                    '核心设想的 %s 至少 12 字，须给出具体内容。' % key,
+                    {'field': key, 'got': value[key], 'recover': '写清已有规则下的具体处境、关系或持续成因；有设定变化时说明其后果。'})
         require(value['stance'] in contracts.STANCES, 'opening_option',
                 'stance 只能是顺从/利用/对抗之一：主角与这套规则体系的关系要能一眼看懂。',
                 {'valid': list(contracts.STANCES), 'got': value['stance']})
@@ -565,19 +522,12 @@ def name_warnings(gate, options):
         given = name[1:]
         if len(name) == 2 and name[0] in catalog.CLICHE_SURNAMES and given in catalog.CLICHE_GIVEN:
             warnings.append({'option': option.get('id'), 'code': 'protagonist_name_cliche',
-                             'message': '「%s」是 AI 起名重灾组合（潇洒姓×玄乎单字），读者一眼批量脸；'
-                                        '按主角门的命名纪律换贴世界与阶层的名字。' % name})
+                             'message': '「%s」命中了常见命名组合，供作者判断；提示不拦选择，也不自动改名。' % name})
     return warnings
 
 
 def premise_warnings(gate, options):
-    """Advisory flags for a core idea built on a setting the current headliners already own.
-
-    Systems, sequences, 克系+民俗, 无限流 and 幕后黑手 are public settings: free to use, and therefore
-    worth nothing as a novelty claim (validation/archive/research-brainstorm-trends.md §1.2). The warning
-    names the collision and asks what this world gained; it never blocks a choice — same severity as
-    the protagonist-name warning, for the same reason: the author decides.
-    """
+    """Flag familiar setting labels without restricting ordinary or speculative routes."""
     warnings = []
     if gate.get('id') != 'premise':
         return warnings
@@ -587,9 +537,8 @@ def premise_warnings(gate, options):
         found = [word for word in catalog.SETTING_CLICHES if word in text_value]
         if found:
             warnings.append({'option': option.get('id'), 'code': 'premise_public_setting',
-                             'message': '「%s」是被头部作品占位的公共设定组合，读者会当熟面孔：novelty 必须写清'
-                                        '这个世界因此新增的规则/资源/分配方式，而不是这套设定本身。'
-                                        '提示不拦选择：正统方向写清自己的增量即可，不必为避开它翻新设定。' % '、'.join(found)})
+                             'message': '「%s」是常见公共设定标签；提示不拦选择，也不要求新增规则。'
+                                        '常规路线可由具体处境、人物关系与行动兑现成立；需要构思时见 hatch.md。' % '、'.join(found)})
     return warnings
 
 

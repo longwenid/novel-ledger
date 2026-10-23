@@ -112,14 +112,14 @@ class BookPageTests(unittest.TestCase):
                             'deadline_chapter': '12'})
         self.repo.save(book)
         page = bookpage.render(self.repo)
-        for label in ('核心脑洞', '格局尺度', '升格阶梯', '位阶阶梯', '硬通货', '主题锚点'):
+        for label in ('核心设想', '格局尺度', '升格阶梯', '位阶阶梯', '硬通货', '主题锚点'):
             self.assertIn(label, page, label)
         for value in ('登记制度本身会记住每一个签字的人。', '第一章只见一座仓库与一条夜班线。',
                       '一阶登记员', '青云城', '登记凭证',
                       '第 12 章前必须当众兑现一次责任落位。'):
             self.assertIn(value, page, value)
         # The nested keys are labelled too: raw JSON keys would read as a field that was skipped.
-        for label in ('核心新规则', '第一推动力', '世界暗面来源', '必须兑现的东西', '最迟兑现章'):
+        for label in ('核心设想', '第一推动力', '世界暗面来源', '必须兑现的东西', '最迟兑现章'):
             self.assertIn(label, page, label)
 
     def test_powers_and_cosmology_render_as_their_own_world_sections(self):

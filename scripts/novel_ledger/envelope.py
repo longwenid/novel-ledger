@@ -19,7 +19,7 @@ WORK_OPTIONAL = ('brief', 'build')
 # container everything else travels in: the compiler wrote keys the consumers (briefs, result
 # templates, workflow, editorial) read blind, and a rename would have failed at dispatch time.
 WORK_PAYLOAD_FIELDS = (
-    'gate', 'round', 'creative_lens', 'lens_brief',            # one opening gate's board
+    'gate', 'round', 'creative_lens',                          # one opening gate's board
     'also',                                                    # combined world + contract dispatch
     'mode', 'repair',                                          # redesign / bounded outline repair
     'understanding', 'editorial',                               # capability flags the brief reads

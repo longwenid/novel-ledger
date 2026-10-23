@@ -1,35 +1,15 @@
 """Task-specific briefs generated from shared contracts and domain rules."""
 from __future__ import annotations
 
-from .creation import gate_note, gate_title, value_rules
-from .catalog import GENRE_CATALOG, OPENING_DIRECTION, OPENING_DIRECTION_GATES
+from .creation import gate_title, value_rules
 from .contracts import (OPENING_VERSION, OPTION_CONTRACT, WORLD_ARCHITECTURE)
-from . import catalog, stages, world
+from . import stages, world
 BRIEFS = {
-    'opening_options': '开书方案简报',
+    'opening_options': '开书任务卡',
     'world_model': '世界与约定简报',
     'volume_outline': '卷纲简报',
     'chapter_outline': '章纲简报',
 }
-
-
-def direction_block(gates=()):
-    """The house default the current gate set aims at, rendered for the worker drafting this dispatch.
-
-    The gate count belongs to the project's own opening version, so nothing here names a number: the
-    per-gate emphasis is read off the declared table for whichever gates this dispatch asks about.
-    It is a default, not a constraint: the brief says so next to the rules, because a worker that
-    treats the market lean as a requirement would refuse an author who wants something else.
-    """
-    lines = ['## 默认方向（起点/番茄男频长篇网文）',
-             '按这些做法给方案；作者原话或已选方向与它冲突时，一律以作者为准，本方向不是硬要求。', '']
-    lines.extend('- ' + rule for rule in OPENING_DIRECTION)
-    for gate in gates:
-        emphasis = OPENING_DIRECTION_GATES.get(gate)
-        if emphasis:
-            lines.append('- ' + emphasis)
-    lines.append('')
-    return lines
 
 
 def _check_block(title, lead, rows):
@@ -38,51 +18,20 @@ def _check_block(title, lead, rows):
     return ['## ' + title, lead, *['- ' + row for row in rows], '']
 
 
-def opening_options(gate, lens_brief, previous=(), version=OPENING_VERSION):
-    """The brief for one gate: what this gate decides, how to vary it, and what to hand back."""
+def opening_options(gate, version=OPENING_VERSION, *, creative_lens=None):
+    """A task locator and field contract; creative guidance lives in hatch.md."""
     lines = ['# ' + BRIEFS['opening_options'], '',
-             '## 本门：%s（%s）' % (gate_title(gate.get('id'), version), gate.get('id')), '',
-             'value 字段：' + value_rules(version, gate.get('id')), '']
-    note = gate_note(version, gate.get('id'))
-    if note:
-        lines.extend(['## 本门的交付要求', note, ''])
-    if gate.get('id') == 'genre' and not previous:
-        # The catalog is a chat step, not the receipt: offer() takes 2~3 options, so the
-        # controller shows this table to the author first and the receipt deepens the named
-        # direction. Inlining both sides of that instruction here keeps one authority.
-        lines.extend(['## 全类目目录（作者未给方向时先用它收方向）',
-                      '主控先在对话里把下面十二个类目铺给作者（原文照抄即可），收一句方向或自定义；',
-                      '本任务回执不列全目录——按作者点名的类目给 2～3 个深化方案，每案写该类目下的具体落点：独特阅读体验、核心冲突的可能入口与早期回报；人物身份留给后门：',
-                      *['- %s：%s' % (name, hook) for name, hook in GENRE_CATALOG],
-                      '作者已给方向时跳过铺目录，直接在方向内出案。', ''])
-    if previous:
-        lines.append('## 已选方向（不要推翻，只在此之上给方案）')
-        lines.extend('- %s：%s' % (name, text) for name, text in previous)
-        lines.append('')
-    lines.extend(direction_block([gate.get('id')]))
-    lines.extend(['## 本轮创意透镜（用来想，不要写进方案文本）', lens_brief, ''])
-    lines.extend(['## 换组纪律（本轮若是因为换组重新生成）',
-                  '- 新一组必须与被拒的旧组方向实质不同：不得换名、改写收益或微调细节冒充新组；',
-                  '- 吸收作者随换组补充的偏好（「格局太小」就把格局拉高一级：从个人困局追到历史成因、'
-                  '规则冲突与文明选择，不只放大地名；「太怪、要正常」就回到类型主流的经典框架——'
-                  '回到常规同样是实质不同的新组，不是偷懒）；',
-                  '- 已拒方向见 opening_rejections 记录，逐条避开其思路而不只是避开其措辞。', ''])
-    lines.extend(['## 交付契约', OPTION_CONTRACT])
-    lines.append('')
-    lines.append('完整方法表与选项格式见 guides 里的文件；本简报已含本门所需规则，不必为格式再读全文。')
-    lines.append('')
-    lines.append('读取纪律：先执行一次无参数 read 把必读一次拿齐（已交过的会被跳过并列名）；'
-                 '确需某份材料再 read --record 名称，不逐条拉取、不重复拉取。'
-                 '主干在同一会话连跑多门时另有豁免：上一门的 read 返回 records_hash 与本门相同、'
-                 '且本门简报未新增必读记录，可跳过本次 read 直接写回执（read 返回里带 records_hash）。')
-    lines.append('')
-    lines.append('路径自检：task.json 的 commands/guides 由当前安装渲染。先确认其中的解释器与脚本存在再执行；'
-                 '若不存在，回报主控重新 advance 刷新任务视图，不要自行改写命令，也不要假定某条路径失效。')
-    lines.append('')
-    lines.append('格式自检：写回执前用 `check` 试算（把候选 JSON 从标准输入管道进去，如 '
-                 '`python CLI --project PROJECT check < 候选.json`）。它按提交同一套校验运行但不入库，'
-                 '会直接告诉你缺哪个字段、哪个枚举不对。**不要为了确认格式去读引擎源码**——那会白花上下文，'
-                 'check 的回答就是权威。')
+             '当前门：%s（%s）' % (gate_title(gate.get('id'), version), gate.get('id')),
+             'value：' + value_rules(version, gate.get('id')), '',
+             '提交字段：' + OPTION_CONTRACT, '',
+             '来源：用 task.json.commands.read 读取完整 required；已选决定见 opening_choices，'
+             '本门否决记录见 opening_rejections。',
+             '按 result.template.json 填写；检查与提交使用 task.json.commands.check/submit。',
+             '创意说明只在 task.json.guides 指向的 hatch.md，按当前门定位。']
+    if creative_lens:
+        lines.append('本轮方法标签（按需选用）：' + creative_lens)
+    if gate.get('id') == 'genre':
+        lines.append('题材目录见 task.json.catalog_path，不复制到任务卡。')
     return '\n'.join(lines)
 
 
@@ -179,7 +128,7 @@ def _world_piece_lines(sections):
     return lines
 
 
-def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections=None):
+def world_model(previous=(), repair=False, scale=None, sections=None):
     """World plus contract in one dispatch: what the world owes, and what the contract must keep."""
     lines = ['# ' + BRIEFS['world_model'], '',
              '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。'
@@ -221,9 +170,9 @@ def world_model(lens_brief=None, previous=(), repair=False, scale=None, sections
         lines.append('## 已选方向（不得改动）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
         lines.append('')
-    lines.extend(direction_block(('world', 'ladder', 'premise', 'opposition', 'payoff', 'protagonist')))
-    lines.extend(['## 同一份提交里还要给约定', OPTION_CONTRACT,
-                  '约定必须逐字保留已选字段；模板里 contract 一节的字段骨架照填。', ''])
+    lines.extend(['## 同一份提交里还要给约定',
+                  '按 task.stages 与 payload.also 指定的阶段填写 result.template.json；'
+                  '约定逐字保留已选字段，填入 data.contract，不提交选案 options。', ''])
     lines.extend(_check_block('提交前自检（这些是机械校验会直接判的）',
                               '没有独立核验者了；下面每一条提交时都会机械判定，先自己过一遍：', WORLD_SELF_CHECK))
     return '\n'.join(lines)
@@ -306,8 +255,7 @@ def stage(name, payload=None):
     """Cold workers receive the rules of their stage without inheriting controller history."""
     payload = payload or {}
     rules = {
-        'opening_options': '按本门字段给 2～3 个用法各异的方案；本阶段下发的专用简报已含全部规则，'
-                           '本行只用于保证每个已登记阶段都有规则。',
+        'opening_options': '按当前门与 result.template.json 交 options，字段约束见任务卡；创意说明见 hatch.md。',
         'world_model': '世界模型与约定同一次提交；本阶段下发的专用简报已含全部规则。',
         'opening_contract': '把已选方向与已核验世界整理为完整约定，严格保留对齐字段，按模板逐字段填写，不增加正文事实。',
         'volume_outline': '交付 volumes：恰好覆盖本批次的每一卷（payload.volume_ids），顺序与 contract.volumes 一致。'

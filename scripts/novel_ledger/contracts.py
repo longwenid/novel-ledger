@@ -340,9 +340,8 @@ CONTRACT_FIELDS = (
     {'key': 'payoff_plan', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
      'shape': ('ways', 'cadence', 'hooks'), 'opening': ('payoff', 'plan')},
     # opening/5's core-idea gate. Four keys rather than one paragraph because each is checked: the
-    # novelty is what the world gained, the first cause is what keeps pushing it, the stance is how
-    # the protagonist stands to the rule system, and the dark side names where the world's malice
-    # comes from. A public setting can be reused for free; the novelty is the part that is owned.
+    # novelty holds the chosen premise, conventional or speculative; first_cause keeps it moving.
+    # stance and dark_side keep their registered enums without requiring an invented rule.
     {'key': 'core_premise', 'kind': 'map', 'default': '', 'alignment': True, 'optional': True,
      'shape': ('novelty', 'first_cause', 'stance', 'dark_side'), 'opening': ('premise', None)},
     # opening/5's payoff anchor: what must be delivered by which chapter, so a grand world still
@@ -485,17 +484,10 @@ POLICY_NOTE = ('本块是当前生效的项目字面约定：只覆盖上方 sco
                '违反会以 literal_policy 拒绝并给出 found 列表。作者改规则用 lexical 命令保存原话，规则逐版留档。')
 
 
-# The author-facing delivery contract for a proposed option: proposals, not arguments. The lens
-# shapes how an option is found; it never appears in what the author reads.
-OPTION_CONTRACT = ('每个方案给 id、title 短标题（真正可用的名字，不是「待定」这类占位符）、pitch 一句能记住的话（≤40字，不得出现透镜名或方法词）、'
-                   'scene 2～3 个可落笔的具体画面（谁、在哪、什么东西、正要做什么，每条≥12字）、'
-                   'premise 写清这一版的结果与收益（读者拿到什么、将触及什么规则、历史或文明问题）、driver 这一版如何推进（只写故事动作）、'
-                   'tradeoff 写清两半：确定要付出的代价，与可能发生的风险（与同组另外两案相比）、'
-                   'fit_reason 与已选方向的具体接口（承接哪条选择、因此改变了什么）、value 按本门字段。'
-                   ' 同组方案在本门负责的规则、立场或体验上拉开差距，但拉开差距不等于逐案变怪：'
-                   '每组至少一案走类型主流的常规路线，靠执行与完成度立住；后门沿用已定世界，不靠推翻前门换方案。'
-                   ' 方案里出现的数字必须前后自洽：次数、每次的量与总量要对得上（每次扣三岁、全书六次，总量就是十八年），'
-                   ' 不要断言别的门才决定的数量，也不要让观感描述冒充算术。')
+# Mechanical receipt fields for one opening board. Creative guidance lives in hatch.md.
+OPTION_CONTRACT = ('options 为2～3项数组；每项给非空 id、title、premise、driver、tradeoff、fit_reason，'
+                   'pitch 为不超过40字的非空文本，scene 为2～3条至少12字的文本，value 按当前门字段。'
+                   '同组 id/title/premise/driver 不重复；方案文本不得自述创意方法。')
 
 
 def _placeholder(row):

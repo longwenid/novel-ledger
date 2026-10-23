@@ -247,24 +247,18 @@ class DomainBoundaryTests(unittest.TestCase):
             result_templates.template('not_a_stage', 1, {})
         self.assertEqual(stages.require_stage('write'), 'write')
 
-    def test_every_gate_renders_a_rule_and_a_direction(self):
-        """The one gate set in force hands each gate a deliverable rule and a direction.
-
-        `OPENING_DIRECTION_GATES` is a flat table keyed by gate id; `VALUE_RULES` and `GATE_NOTES`
-        are single current tables, so a gate added without its rule or note fails here instead of
-        surfacing as an empty brief in a dispatch.
-        """
-        from novel_ledger import creation
-        from novel_ledger.catalog import OPENING_DIRECTION_GATES
+    def test_every_gate_has_fields_and_creative_tasks_locate_the_shared_guide(self):
+        from novel_ledger import briefs, creation
         from novel_ledger.contracts import OPENING_VERSION
-        gates = creation.gate_ids(OPENING_VERSION)
-        for gate in gates:
+        for gate in creation.gate_ids(OPENING_VERSION):
             with self.subTest(gate=gate):
                 self.assertTrue(creation.value_rules(OPENING_VERSION, gate).strip())
-                note = creation.GATE_NOTES.get(gate)
-                self.assertTrue(not note or note.strip(), '门内说明若存在必须是非空文本')
-        self.assertLessEqual(set(gates), set(OPENING_DIRECTION_GATES), '每一门必须有方向口径')
-        self.assertEqual(set(gates), set(OPENING_DIRECTION_GATES), '当前版本的门与方向表必须一一对应')
+                if gate not in creation.SYSTEM_GATES[OPENING_VERSION]:
+                    card = briefs.opening_options({'id': gate})
+                    self.assertIn(gate, card)
+                    self.assertIn('hatch.md', card)
+                    self.assertIn('opening_choices', card)
+                    self.assertIn('opening_rejections', card)
 
     def test_the_current_gate_set_owns_every_alignment_field_it_claims(self):
         """The male-channel redesign is a gate set, so its ownership must close without a project.
@@ -451,64 +445,29 @@ class HookDeclarationTests(unittest.TestCase):
 
 
 class WebnovelSettingMethodTests(unittest.TestCase):
-    """The opening's setting generators are web-serial methods with a required output.
+    """Dispatch labels must resolve to methods in the one creative guide."""
 
-    Rewriting the lenses from generic literary moves (混搭/倒置/闭环…) to web-serial setting
-    generators is an author decision, so the wording is not pinned here. What the engine can check is
-    the shape — a unique label, a method and an explicit "what must come out of it" — that the four
-    generator families the decision names are covered, and that the world/edge gate notes carry the
-    constraints the option writer has to satisfy (a visible ladder, an accountable scarce resource,
-    a first conflict inside the opening three chapters, and room to add layers).
-    """
-
-    def lenses(self):
-        from novel_ledger import contracts
-        return catalog.LENSES
-
-    def test_every_lens_is_a_nonempty_method_triple(self):
+    def test_dispatch_labels_resolve_to_unique_documented_methods(self):
         from novel_ledger import creation
-        lenses = self.lenses()
-        self.assertGreaterEqual(len(lenses), 10)
-        labels = [label for label, _point, _structure in lenses]
-        self.assertEqual(len(set(labels)), len(labels), 'lens labels must be unique')
-        self.assertEqual(list(creation.LENSES), labels,
-                         'the dispatch names the same labels the table declares')
-        for label, point, structure in lenses:
+        guide = (ROOT / 'references' / 'hatch.md').read_text(encoding='utf-8')
+        labels = catalog.LENSES + catalog.VOLUME_TURNS
+        self.assertEqual(len(set(labels)), len(labels))
+        self.assertEqual(creation.LENSES, catalog.LENSES)
+        for label in labels:
             with self.subTest(lens=label):
+                self.assertIsInstance(label, str)
                 self.assertEqual(label, label.strip())
-                self.assertGreaterEqual(len(label), 3)
-                self.assertGreaterEqual(len(point.strip()), 20,
-                                        'a lens needs a method, not a label')
-                self.assertGreaterEqual(len(structure.strip()), 15,
-                                        'a lens must state what it has to produce')
+                self.assertEqual(guide.count('| ' + label + ' |'), 1)
 
     def test_the_lenses_cover_the_four_web_serial_generator_families(self):
-        labels = [label for label, _point, _structure in self.lenses()]
-        self.assertTrue(any('金手指' in label for label in labels),
-                        'no advantage-supply generator in ' + repr(labels))
-        self.assertTrue(any('等级' in label for label in labels),
-                        'no level-ladder generator in ' + repr(labels))
-        self.assertTrue(any('换图' in label or '对手' in label for label in labels),
-                        'no opponent/stage-escalation generator in ' + repr(labels))
-        self.assertTrue(any('通货' in label for label in labels),
-                        'no hard-currency generator in ' + repr(labels))
-
-    def test_the_world_and_edge_gate_notes_state_their_constraints(self):
-        from novel_ledger import creation
-        from novel_ledger.catalog import OPENING_DIRECTION_GATES
-
-        note = creation.gate_note(creation.OPENING_VERSION, 'world')
-        self.assertTrue(note.strip())
-        for word in ('architecture', '资源', '切面'):
-            self.assertIn(word, note)
-        for word in ('历史', '文明', '矛盾', '资源'):
-            self.assertIn(word, OPENING_DIRECTION_GATES['world'])
-        self.assertIn('供料', OPENING_DIRECTION_GATES['edge'])
+        labels = catalog.LENSES
+        self.assertTrue(any('金手指' in label for label in labels))
+        self.assertTrue(any('等级' in label for label in labels))
+        self.assertTrue(any('换图' in label or '对手' in label for label in labels))
+        self.assertTrue(any('通货' in label for label in labels))
 
     def test_the_legacy_literary_labels_are_gone(self):
-        labels = {label for label, _point, _structure in self.lenses()}
-        self.assertEqual({'混搭', '倒置', '绑定', '闭环'} & labels, set(),
-                         'legacy literary lenses are back in the label table')
+        self.assertFalse({'混搭', '倒置', '绑定', '闭环'} & set(catalog.LENSES))
 
 
 if __name__ == '__main__':

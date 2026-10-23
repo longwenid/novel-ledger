@@ -66,7 +66,7 @@ class ArtifactTests(unittest.TestCase):
         brief = brief_path.read_text(encoding='utf-8')
         frozen = json.loads((brief_path.parent / 'input.json').read_text(encoding='utf-8'))['brief']
         self.assertEqual(brief, frozen)
-        self.assertIn('# 开书方案简报', brief)
+        self.assertIn('hatch.md', brief)
         # Controller-only opening must not bootstrap a worker or ask for a worker lease.
         card = dispatch_path.read_text(encoding='utf-8')
         full = json.loads(Path(task['task_path']).read_text(encoding='utf-8'))

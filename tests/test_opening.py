@@ -224,9 +224,10 @@ class CurrentOpeningTests(unittest.TestCase):
         self.assertEqual(task['stage'], 'opening_options')
         pending = self.repo.pending()['input']
         self.assertEqual(pending['payload']['gate']['id'], 'genre')
-        # The direction reaches the option writer, together with what this gate means for it.
-        self.assertIn('起点/番茄男频长篇网文', pending['brief'])
-        self.assertIn('男频题材要连承诺一起给', pending['brief'])
+        # The task locates the single creative guide; author choices remain frozen records.
+        self.assertIn('hatch.md', pending['brief'])
+        self.assertIn('opening_choices', pending['required'])
+        self.assertNotIn('lens_brief', pending['payload'])
         # The protagonist enters a world whose architecture is already decided.
         gates = creation.gate_ids(OPENING_VERSION)
         self.assertEqual(len(gates), 13)
@@ -239,8 +240,7 @@ class CurrentOpeningTests(unittest.TestCase):
         for gate in ('premise', 'origin'):
             with self.subTest(gate=gate):
                 state = walk_to(creation.begin(), gate)
-                brief = briefs.opening_options(creation.current(state),
-                                               creation.lens_brief(0), version=OPENING_VERSION)
+                brief = briefs.opening_options(creation.current(state), version=OPENING_VERSION)
                 self.assertNotIn('四个方向各给一个方案', brief)
                 options = rows_for(gate)
                 third = copy.deepcopy(options[0])
@@ -481,11 +481,24 @@ class CurrentOpeningTests(unittest.TestCase):
                                    capture_output=True, text=True, encoding='utf-8', errors='replace')
             self.assertEqual(ready.returncode, 0, ready.stdout)
 
-    def test_the_anti_cliche_naming_discipline_survives_the_gate_order(self):
-        """The naming rules live on the protagonist gate that asks it."""
-        note = creation.gate_note(OPENING_VERSION, 'protagonist')
-        self.assertTrue(note.strip())
-        self.assertIn('命名', note)
+    def test_conventional_and_speculative_premises_preserve_author_choices(self):
+        state = walk_to(creation.begin(), 'premise')
+        rows = rows_for('premise')
+        values = [
+            {'novelty': '旧厂改制后两代职工争同一批岗位，昔日互相照应的人必须重新选择。',
+             'first_cause': '厂方今年合并两个车间，旧承诺与新合同第一次直接冲突。',
+             'stance': '对抗', 'dark_side': '制度'},
+            {'novelty': '城里每次公开许诺都会留下只有当事人看见的痕迹，失信的代价由担保人承担。',
+             'first_cause': '一次集体违约让旧担保链同时到期，所有人开始追问最早的承诺。',
+             'stance': '利用', 'dark_side': '人心'},
+        ]
+        for row, value in zip(rows, values):
+            row['value'] = value
+        offered = creation.offer(state, {'gate': 'premise', 'options': rows})
+        for row, value in zip(rows, values):
+            with self.subTest(option=row['id']):
+                picked = creation.pick(offered, row['id'], offered['board']['hash'], '作者选择本案。')
+                self.assertEqual(creation.selected(picked)['premise'], value)
 
     def test_every_later_gate_receives_the_direction_already_chosen(self):
         """A promise without its channel and setting is how a later gate drifts into another era.

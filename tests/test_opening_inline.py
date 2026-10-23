@@ -104,13 +104,24 @@ class InlineOpeningTests(unittest.TestCase):
         picked = creation.pick(offered, rows[0]['id'], offered['board']['hash'], '作者就要这个名。')
         self.assertEqual(creation.selected(picked)['protagonist']['name'], '沈砚')
 
-    def test_the_first_gate_brief_spreads_the_whole_catalog_when_no_direction_given(self):
-        self.app.advance()
+    def test_first_gate_keeps_the_catalog_and_guide_outside_the_task_card(self):
+        handoff = self.app.advance()
         work = self.repo.pending()['input']
         self.assertEqual(work['payload']['gate']['id'], 'genre')
-        self.assertIn('全类目目录', work['brief'])
-        for name, _hook in __import__('novel_ledger.catalog', fromlist=['GENRE_CATALOG']).GENRE_CATALOG:
-            self.assertIn(name, work['brief'])
+        task = json.loads(Path(handoff['task']['task_path']).read_text(encoding='utf-8'))
+        toolbox = [Path(path) for path in task['guides'] if Path(path).name == 'hatch.md']
+        self.assertEqual(len(toolbox), 1)
+        self.assertTrue(toolbox[0].is_file())
+        card = Path(task['brief_path']).read_text(encoding='utf-8')
+        self.assertIn(work['payload']['creative_lens'], card)
+        catalog_path = Path(handoff['task']['catalog_path'])
+        self.assertTrue(catalog_path.is_file())
+        text = catalog_path.read_text(encoding='utf-8')
+        for name, hook in __import__('novel_ledger.catalog', fromlist=['GENRE_CATALOG']).GENRE_CATALOG:
+            self.assertIn(name, text)
+            self.assertIn(hook, text)
+            self.assertNotIn(hook, work['brief'])
+        self.assertIn('hatch.md', work['brief'])
 
 
 if __name__ == '__main__':

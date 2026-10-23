@@ -12,7 +12,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 
 ## 当前任务只读当前材料
 
-执行以本入口、当前冻结任务及对应指南为准。Worker 先读 `task.json`、`brief.md`，用生成的 commands 读取完整 required，从 `result.template.json` 起稿。简报已包含本阶段要求，`guides` 按疑点补读相关小节；不遍历全部指南、源码、测试或历史报告猜格式。
+执行以本入口、当前冻结任务及对应指南为准。Worker 先读 `task.json`、`brief.md`，用生成的 commands 读取完整 required，从 `result.template.json` 起稿。任务卡提供本阶段交付信息；开书创意说明只在 [创意工具箱](references/hatch.md)，首次出案时读取，同一会话已读且版本未变可复用。其他 `guides` 按疑点补读相关小节，不遍历源码、测试或历史报告猜格式。
 
 | 当前阶段 | 按需入口 | 关键交付 |
 |---|---|---|

@@ -40,7 +40,7 @@ FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '
                 'chapter_outline': '章纲要求', 'style_window': '文风容差',
                 # opening/5: the brainstorm gate's four questions, the ladder's scale, the tier
                 # ladder, the hard currency, and the promise anchor.
-                'world_architecture': '世界架构', 'architecture': '世界架构', 'core_premise': '核心脑洞', 'world_scale': '格局尺度', 'world_ladder': '升格阶梯',
+                'world_architecture': '世界架构', 'architecture': '世界架构', 'core_premise': '核心设想', 'world_scale': '格局尺度', 'world_ladder': '升格阶梯',
                 'world_tiers': '位阶阶梯', 'world_resource': '硬通货', 'promise_anchor': '主题锚点',
                 'anchors': '稳定设定', 'links': '空间连接'}
 # Option values that are engine bookkeeping rather than an author-facing decision: the structural gate's
@@ -81,7 +81,7 @@ SUB_LABELS.update(hooks='伏笔账', hook='伏笔', text='对读者的承诺', p
                   sentence='句长', paragraph='段长', dialogue='对白', repetition='重复度', person='人称')
 # opening/5: the brainstorm gate's four answers, the ladder and tier tables, the hard currency, the
 # promise anchor, the world's optional deep fields, and the two grand domains' own fields.
-SUB_LABELS.update(novelty='核心新规则', first_cause='第一推动力', dark_side='世界暗面来源',
+SUB_LABELS.update(novelty='核心设想', first_cause='第一推动力', dark_side='世界暗面来源',
                   opening='开局可见边界', terminal='终局等级', unchanged='跨卷不变的上层结构',
                   stage='升格层级', scope='适用范围/尺度', growth='变大的是什么', new_rule='这一级新增的规则',
                   condition='晋升条件', gain='得到什么', allocator='分配者',
@@ -673,8 +673,8 @@ def _audit(book, report):
               '<tr><th>设计世代</th><td>' + str(book.get('revision')) + '</td></tr></table></div>']
     if report['problems']:
         pieces.append('<ul class="tight">' + ''.join('<li>' + _esc(p) + '</li>' for p in report['problems']) + '</ul>')
-    pieces.append('<p class="note">开书透镜：' + _esc('、'.join(label for label, _p, _s in LENSES)) + '</p>')
-    pieces.append('<p class="note">卷级转折方法：' + _esc('、'.join(label for label, _t in VOLUME_TURNS)) + '</p>')
+    pieces.append('<p class="note">开书透镜：' + _esc('、'.join(LENSES)) + '</p>')
+    pieces.append('<p class="note">卷级转折方法：' + _esc('、'.join(VOLUME_TURNS)) + '</p>')
     return ''.join(pieces)
 
 

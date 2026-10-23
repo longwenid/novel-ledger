@@ -262,15 +262,15 @@ def scoped_state(state, participants, plan=None, chapter=0, horizon=3, *, allow_
 
 def _brief(book, job):
     """The one page this dispatch needs, generated here instead of shipping whole guides."""
-    previous = []
+    payload = job.payload or {}
     version_of_book = creation.opening_version(book.get('creation') or {})
+    if job.stage == 'opening_options':
+        return briefs.opening_options(payload.get('gate', {}), version=version_of_book,
+                                      creative_lens=payload.get('creative_lens'))
+    previous = []
     for row in (book.get('creation') or {}).get('selections', []):
         gate = row['gate']
         previous.append((creation.gate_title(gate, version_of_book), _selection_line(row['option'])))
-    payload = job.payload or {}
-    if job.stage == 'opening_options':
-        return briefs.opening_options(payload.get('gate', {}), payload.get('lens_brief', ''), previous,
-                                      creation.opening_version(book['creation']))
     if job.stage == 'world_model':
         # The brief and the validator read the same declaration: the tier's base domains plus the
         # domains this opening's own gates declared (a tier ladder needs `powers`, a grand scale
