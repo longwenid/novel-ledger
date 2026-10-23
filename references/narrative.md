@@ -83,8 +83,8 @@
     "threads": [{"thread":"line1","after":"active|dormant|resolved","reason":"…"}]
   },
   "hooks": [{"hook":"h1","action":"plant","note":"本章埋下凭据，读者第一次看到它"}],
-  "style": {"pov":"第三人称限知","rhythm":"短句推进，动作与物件密，少解释",
-            "notes":"本章对峙段允许长句"},
+  "style": {"pov":"第三人称限知","rhythm":"叙述句连贯舒展，动作与因果写满，短句只作节拍",
+            "notes":"本章对峙段允许短句节拍"},
   "resources": [{"key":"…","from":0,"to":3,"reason":"…"}],
   "places": [{"entity":"hero","from":"青云城","to":"落霞谷","reason":"…"}],
   "knowledge": [{"who":"hero","topic":"…","from":null,"to":"hinted|suspected|misled|confirmed|retracted","reason":"…"}],
@@ -173,7 +173,7 @@
 
 - 卷纲 `style.trend`（必填）写具体叙述意图，例如人物关系渐近时对白由试探变得直接；可带 `style.window` 逐项覆盖契约容差。作者要求量化时才选择数字目标，不为写趋势硬设配额。
 - 章纲 `style` 的 `pov`、`rhythm` 必填；`dialogue_ratio`（0~1）与 `notes` 可选。视角沿用作者约定，节奏结合当章内容；未声明对白目标就不补比例，`notes` 不是绕过事实约束的豁免。
-- 首章样本提供叙述气质和表达依据，静章、争吵、追逐与独处可以有不同的句段和对白密度。具体语言取舍见 [人物与表达的真实感](craft.md#人物与表达的真实感)。
+- 首章样本提供叙述气质和表达依据，静章、争吵、追逐与独处可以有不同的句段和对白密度。句法默认尽量少用短句，以连贯完整的句子叙述，短句只作节拍点缀，作者声明与首章定调优先。具体语言取舍见 [人物与表达的真实感](craft.md#人物与表达的真实感)。
 
 ### 契约容差 `style_window`
 
