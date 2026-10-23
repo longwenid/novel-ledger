@@ -143,7 +143,8 @@ flowchart TD
 | presentation | 实现交付端口，组合任务目录、修复方案、世界及全书视图 |
 | workspace | 输出位置与受保护资源别名判定；保护路径由存储适配器经组合根注入 |
 | delivery | 任务目录物化、表单保留与回收、正文和世界导出、选择板卡片（work/board.md）、提问载荷（work/question.json）、Worker 自举卡（dispatch.md）、简报全文（brief.md）与 advance 完整视图快照（work/last-advance.json）渲染 |
-| bookpage | 统一 book.html 的只读数据准备、转义与渲染；templates/ 保存 HTML 外壳及 CSS/JS，导出时全部内嵌 |
+| bookpage | 固定大小的 book.html 入口、按栏目/章渲染的转义片段与显式离线全书导出；templates/ 保存 HTML/CSS/JS |
+| preview | 本机 HTTP 只读适配器，仅监听 127.0.0.1；每个请求打开独立只读 SQLite 连接和一致读快照，按栏目或章节返回片段，目录分页，不公开数据库文件或写入接口 |
 | host | 面向 HostApplication 的外部进程执行、超时终止和实际提交核实，不访问应用内部 Repository |
 | unattended | 面向 WatchApplication 的无人值守等待循环：派工后由引擎进程等待外部提交并续租，仅在下一派工、作者决定、暂停、终点或 idle 时返回；本地组合根附写 work/watch.jsonl 派工日志 |
 | lint | 正文机械判据（跨章逐字重复、对白引号体例、西文残留），在提交与 preflight 同套执行；只依赖 contracts |
@@ -271,7 +272,7 @@ verification 是程序能力边界，不是操作系统安全沙箱。所有正�
 
 编辑能力冻结为 editorial/1，开关与字段见协议，专用字段见 [编辑能力](editorial.md)。craft/spatial/editorial 均是纯值规则，不传 Repository。章纲重排与正文重绑定由 workflow 返回，应用层单一事务保存；预检一并回滚。
 
-完本快照保存完整交付状态与正文引用，delivery/bookpage 只读取冻结版本；组合根把 LocalPresentation 注入 Application，交付、页面与只读查询均不反向调用应用层。统一 book.html 和世界导出是可重建派生物；submit 通过 after_commit 调用交付端口刷新页面，advance 返回时也刷新，页面错误独立回报，不回滚已生效内容；生成时机和实际交付范围见 [约定与交付](world.md#约定与交付)。读取观测在适配层留痕，离线评测与宿主观察不修改故事。
+完本快照保存完整交付状态与正文引用，delivery/bookpage 只读取冻结版本；组合根把 LocalPresentation 注入 Application，交付、页面与只读查询均不反向调用应用层。统一 book.html 和世界导出是可重建派生物；submit 通过 after_commit 调用交付端口维护固定大小的预览入口，advance 返回时也维护，内容未变不重写；preview 按需读库而不把书稿复制到入口，显式 html --standalone 才嵌入全书；入口错误独立回报，不回滚已生效内容；生成时机和实际交付范围见 [约定与交付](world.md#约定与交付)。读取观测在适配层留痕，离线评测与宿主观察不修改故事。
 
 承诺关联冻结为可选 hook-links/1：领域层只验证有据事件的实体/话题关联及变更理由，查询层据关联选择材料；未标注旧承诺不自动猜关系，仍能完整补读。事件解释版本随规范化事件保存，旧在途能力不被追补，旧投影不因新增字段解释而改变。派工 baseline 取任务自己的冻结 state 视图，避免在信封再灌入全量资源与承诺。read 和 recall 输出都留实际字符观测，计费仍来自宿主日志。
 

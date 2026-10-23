@@ -180,9 +180,11 @@ lexical 将新版本追加到项目记录，旧版本保留；规则不属于作
 
 ## 阶段结束与交付
 
-`book.html` 是数据库的派生视图：正式 `submit` 在事务提交后自动刷新（快速组内逐章刷新），主干 `advance` 返回时也刷新，响应 `book_view` 提供路径与章节数。`check`/`preflight`、拒绝及事务回滚不改页面。刷新失败单独返回 `book_view_error`，不撤销已提交正文；主干用 `html` 重试或在下一次 `advance` 重建，不为页面错误重写正文。浏览器已打开页面时需重新加载才能看到新内容。
+`book.html` 是固定大小的只读预览入口，不嵌入设定或正文。正式 `submit` 在事务提交后维护入口（快速组内逐章检查），主干 `advance` 返回时也检查；文件内容未变则不重写。响应 `book_view` 提供路径、章节数及 `preview_command` 启动命令。`check`/`preflight`、拒绝及事务回滚不改入口。入口失败返回 `book_view_error`，不撤销已提交正文；用 `html` 重建或在下一次 `advance` 重试，不为页面错误重写正文。
 
-target_reached 表示授权章节目标完成；ready_to_complete 仍须 complete 验收。export 可导出纯文本（`--format md`）或简化 HTML，html 生成包含设计、事实和正文的全书视图，两者返回绝对路径；导出不代替完本验收。
+作者执行 `python3 ROOT/scripts/novel.py --project PROJECT preview --open` 启动预览（Windows 用 `python`），保持进程运行，`Ctrl+C` 结束。默认自动选择端口，`--port` 可指定；省略 `--open` 只输出地址。双击入口会显示启动指引。服务仅监听本机 `127.0.0.1`，每个请求以只读连接读取一致的数据库快照，不写库或暴露数据库文件。设定按栏目加载，目录每页 100 章并可筛选，正文每次只传输选中章；切换或点击刷新读取最新提交。`Ctrl+P` 打印当前加载内容。
+
+target_reached 表示授权章节目标完成；ready_to_complete 仍须 complete 验收。export 可导出纯文本（`--format md`）或简化 HTML，html 默认生成轻量入口；完整离线全书视图显式用 `html --standalone --output book-export.html`，不能覆盖 `book.html`。这些命令返回绝对路径，导出不代替完本验收。deliver 中的 book.html 同样是轻量入口，离线正文由 book.md 提供。
 
 **卷末不是审查阶段**：卷末闭合核对卷纲的结构化资源/位置/知情/人物终值、主线时钟 `clock.to` 与必要伏笔；自然语言 `exit_state` 只作说明，不宣称语义已被机械证明，不再有卷末范围审与根问题裁决。完本仍须 `complete` 验收：章数、每章篇幅区间、required 节点与线路解清、首章认可；之后执行 `deliver`，得到 book.md/book.html/delivery.json；交付失败重试该快照的 deliver，不重新写书。`usage` 查看实际记录字符，宿主 token 用独立 observe.py 导入观测，不从字符估算。
 

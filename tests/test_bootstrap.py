@@ -11,6 +11,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
+from novel_ledger import bookpage
 from novel_ledger.bootstrap import open_local_runtime
 from novel_ledger.contracts import Error, digest
 from support import contract, drive, response
@@ -32,16 +33,18 @@ class BootstrapIntegrationTests(unittest.TestCase):
         self.runtime.close()
         self.runtime = None
 
-    def test_submit_refreshes_prose_without_a_followup_advance(self):
+    def test_submit_exposes_prose_without_growing_the_entry_or_followup_advance(self):
         drive(self.runtime.app, until='write')
         page = self.project / 'book.html'
         self.assertNotIn('<section class="chapter"', page.read_text(encoding='utf-8'))
+        before = page.read_bytes()
         receipt = response(self.runtime.app)
         result = self.runtime.app.submit(receipt)
         self.assertEqual(result['committed_chapter'], 1)
         self.assertEqual(result['book_view']['chapters'], 1)
         self.assertEqual(result['book_view']['path'], str(page))
-        text = page.read_text(encoding='utf-8')
+        self.assertEqual(page.read_bytes(), before)
+        text = bookpage.preview_fragment(self.runtime.repo, 'chapter', 1)['html']
         self.assertIn('id="read-1"', text)
         self.assertIn(receipt['data']['prose'], text)
 
@@ -91,7 +94,8 @@ class BootstrapIntegrationTests(unittest.TestCase):
         handoff = self.runtime.app.advance(compact=True)
         self.assertEqual(handoff['action'], 'await_author')
         self.assertEqual(handoff['book_view']['chapters'], 1)
-        self.assertIn('id="read-1"', page.read_text(encoding='utf-8'))
+        self.assertEqual(page.read_bytes(), before)
+        self.assertIn('id="read-1"', bookpage.preview_fragment(self.runtime.repo, 'chapter', 1)['html'])
 
     def test_advance_refreshes_paused_boundary_without_dispatching(self):
         drive(self.runtime.app, until='write')
@@ -99,7 +103,8 @@ class BootstrapIntegrationTests(unittest.TestCase):
         result = self.runtime.app.advance(compact=True)
         self.assertEqual(result['action'], 'paused')
         self.assertNotIn('task', result)
-        self.assertIn('作者临时暂停。', Path(result['book_view']['path']).read_text(encoding='utf-8'))
+        self.assertTrue(Path(result['book_view']['path']).is_file())
+        self.assertIn('作者临时暂停。', bookpage.preview_fragment(self.runtime.repo, 'section', 'overview')['html'])
 
     def cli_deliver(self):
         environment = {key: value for key, value in os.environ.items()

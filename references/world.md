@@ -96,7 +96,7 @@ world_model 候选不更新正文事实。提交时由引擎机械校验字段�
 
 | 交付对象 | 来源与时机 |
 |---|---|
-| book.html | 世界与约定机械校验通过后合并完整设定、已选方向，卷纲推进后继续更新。world_view.html_path 指向该统一页面。 |
+| book.html | 世界与约定机械校验通过后维护轻量预览入口；preview 按需读取完整设定、已选方向与后续卷纲。world_view.html_path 指向该统一入口。 |
 | world.json | 导出已采纳的完整世界；与页面一并提供绝对路径，失败后由 advance 重建视图。 |
 | 卷纲范围 | 按 outline_ready 的实际覆盖说明：默认 scope=all 一次交全部卷，rolling 进卷前交该卷；卷纲与章纲为必选阶段。见 [叙事推进](narrative.md#卷纲)。 |
 

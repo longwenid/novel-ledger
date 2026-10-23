@@ -8,12 +8,12 @@ import os
 import sys
 from pathlib import Path
 from novel_ledger.contracts import CONTENT_ERRORS, CONTROLLER_STAGES, Error, VERSION, require
-from novel_ledger.bootstrap import open_local_runtime
+from novel_ledger.bootstrap import open_local_runtime, preview_local
 
 PUBLIC = {'init', 'assurance', 'prepare-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
           'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next', 'worker', 'worker-ready', 'worker-error', 'prepare-worker'}
 OBSERVER = {'review-read', 'review-observe', 'review-report'}
-SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'} | OBSERVER
+SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver', 'preview'} | OBSERVER
 WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'worker-next', 'worker-ready', 'worker-error'}
 # Prose and frozen records belong to a dispatched task; the controller role never executes them.
 WORKER_ONLY = {'read', 'recall', 'patch', 'worker-next', 'worker-ready', 'worker-error'}
@@ -185,7 +185,13 @@ def parser():
         if command in ('export', 'html'):
             sub.add_argument('--output')
             sub.add_argument('--format', choices=('html', 'md'), default='html')
+        if command == 'html':
+            sub.add_argument('--standalone', action='store_true', help='显式导出完整离线视图，须用 --output 指定其他文件。')
+        if command == 'preview':
+            sub.add_argument('--port', type=int, default=0, help='本机预览端口，默认自动选择可用端口。')
+            sub.add_argument('--open', action='store_true', dest='open_browser', help='在浏览器打开预览。')
         if command in ('host-step', 'host-loop'):
+
             sub.add_argument('--command-json', required=True)
             sub.add_argument('--timeout', type=int, default=300)
             if command == 'host-loop':
@@ -313,6 +319,9 @@ def dispatch(args, open_runtime=open_local_runtime):
     require(args.command in PUBLIC | SEALED, 'access', '未登记命令默认拒绝。')
     if args.command == 'init':
         require(not identity.get('NOVEL_TASK_ID'), 'worker_boundary', 'Worker 不能初始化项目。')
+    if args.command == 'preview':
+        require(not identity.get('NOVEL_TASK_ID'), 'worker_boundary', 'Worker 不能启动作者预览。')
+        return preview_local(args.project, args.port, args.open_browser, entry=Path(__file__).resolve())
     runtime = open_runtime(args.project, initialize=args.command == 'init',
                            contract=load(args.contract) if args.command == 'init' and args.contract else None,
                            source=args.source if args.command == 'init' else '', entry=Path(__file__).resolve())
@@ -464,7 +473,7 @@ def dispatch(args, open_runtime=open_local_runtime):
             return runtime.export(args.output, args.format)
         if command == 'html':
             require(args.format == 'html', 'format', 'html 命令只生成 HTML 全书视图；纯文本导出用 export --format md。')
-            return runtime.html(args.output)
+            return runtime.html(args.output, standalone=args.standalone)
         if command == 'host-step':
             return runtime.host_step(load(args.command_json), owner, args.timeout)
         if command == 'host-loop':

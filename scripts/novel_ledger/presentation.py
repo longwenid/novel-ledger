@@ -27,10 +27,11 @@ class LocalPresentation:
         return path
 
     def world(self):
-        return delivery.export_world(self.repo, bookpage.render, workspace=self.workspace)
+        return delivery.export_world(self.repo, lambda repo: bookpage.live_shell(self.workspace.project, self.entry),
+                                     workspace=self.workspace)
 
     def book(self):
-        return bookpage.write(self.repo, workspace=self.workspace)
+        return bookpage.write(self.repo, workspace=self.workspace, entry=self.entry)
 
     def board(self, board):
         return delivery.write_board_card(self.workspace, board)

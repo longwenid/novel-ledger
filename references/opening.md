@@ -120,7 +120,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 
 | 阶段 | 执行者与动作 | 交接依据 |
 |---|---|---|
-| 初始化 | 主干 init，随后 advance --compact。 | 自动生成 book.html，返回 book_view 的绝对路径；无设定时不要求 source 或 contract。 |
+| 初始化 | 主干 init，随后 advance --compact。 | 自动生成轻量 book.html 入口，返回 book_view 的绝对路径与预览启动命令；无设定时不要求 source 或 contract。 |
 | 创意门 | **默认主干自执**（同一会话读 task.json、brief.md 与 required，生成方案并 submit，不派子 agent）；宿主无法内联时才派新空历史 Worker。 | 主干自执无交接等待；派工路径由主干等待结束再 --after 核实提交，委派只给任务路径和当前角色。 |
 | 结构门 | 引擎即时返回档位板，主干展示。 | await_choice，无任务或 Worker；方案回执按 opening_system 拒绝。 |
 | 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 系统不代选；换组和返回保留记录。 |

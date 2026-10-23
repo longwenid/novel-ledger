@@ -65,7 +65,7 @@ prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符�
 
 卷末闭合核对卷纲的结构化终值、绝对时钟 `clock.to` 与必要伏笔（容差 0）；自然语言 `exit_state` 只作文字说明。要追加计划外章节，只能由作者明确的新授权或改约完成，并在新章纲里重新登记增量。
 
-`complete` 核对当前全部卷的闭合状态、required 节点与线路是否 resolved、首章认可、实际篇幅（章数与每章区间），再保存不可变 completion_snapshot。当前快照必须包含当前协议规定的完整元数据，缺失时拒绝交付。`deliver` 从该快照导出 book.md/book.html/delivery.json，清单含快照引用、章节哈希及文件内容哈希（规范 JSON 字符串的 SHA256）。导出失败只重试 deliver，内容完成状态与快照不变。已完本的 export/html 同样使用冻结版本。
+`complete` 核对当前全部卷的闭合状态、required 节点与线路是否 resolved、首章认可、实际篇幅（章数与每章区间），再保存不可变 completion_snapshot。当前快照必须包含当前协议规定的完整元数据，缺失时拒绝交付。`deliver` 从该快照导出 book.md、轻量预览入口 book.html 与 delivery.json，清单含快照引用、章节哈希及文件内容哈希（规范 JSON 字符串的 SHA256）。导出失败只重试 deliver，内容完成状态与快照不变。已完本的 export/html 同样使用冻结版本。
 
 ## 按题材使用空间能力
 

@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
-from novel_ledger import store_keys, unattended
+from novel_ledger import bookpage, store_keys, unattended
 from novel_ledger.bootstrap import open_local_runtime, local_application
 from novel_ledger.authority import SignedHostAuthority
 from novel_ledger.contracts import Error, digest, dump
@@ -61,8 +61,9 @@ class FastWritingTests(unittest.TestCase):
             self.assertEqual(result['committed_chapter'], chapter)
             self.assertEqual(result['book_view']['chapters'], chapter)
             page = Path(result['book_view']['path']).read_text(encoding='utf-8')
-            self.assertEqual(page.count('<section class="chapter"'), chapter)
-            self.assertIn('id="read-' + str(chapter) + '"', page)
+            self.assertEqual(page.count('<section class="chapter"'), 0)
+            self.assertIn('id="read-' + str(chapter) + '"',
+                          bookpage.preview_fragment(self.repo, 'chapter', chapter)['html'])
             self.assertEqual(result['worker_boundary'], 'finished' if chapter == 6 else 'continue')
             if chapter < 6:
                 self.assertEqual(self.app.advance(owner=self.owner)['action'], 'wait_for_batch')

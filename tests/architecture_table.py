@@ -93,12 +93,13 @@ ALLOWED = {
                  'world', 'creation', 'understanding', 'briefs'},
     'presentation': {'ports', 'bookpage', 'delivery', 'workspace'},
     'sqlite_store': {'contracts', 'book_state', 'store_keys'},
+    'preview': {'contracts', 'sqlite_store', 'bookpage'},
     'host': {'contracts', 'ports'},
     # unattended owns the wait between dispatch and external submission; like host it sees only
     # the public application protocol, so the loop stays an adapter even though it runs long.
     'unattended': {'contracts', 'ports'},
     'bootstrap': {'contracts', 'application', 'context', 'presentation', 'sqlite_store',
-                  'workspace', 'workflow', 'host', 'unattended', 'delivery', 'bookpage', 'build_info'},
+                  'workspace', 'workflow', 'host', 'preview', 'unattended', 'delivery', 'bookpage', 'build_info'},
     'novel': {'contracts', 'bootstrap'},
 }
 
@@ -154,7 +155,7 @@ CORE_EXTERNAL = {
 # discover resources or start processes, but only through the injected surface.
 ADAPTERS = {
     'workspace', 'delivery', 'bookpage', 'presentation',
-    'sqlite_store', 'host', 'unattended', 'bootstrap', 'novel', 'authority', 'build_info',
+    'sqlite_store', 'preview', 'host', 'unattended', 'bootstrap', 'novel', 'authority', 'build_info',
 }
 
 FORBIDDEN_CORE_NAMES = {'open', '__import__', 'eval', 'exec', 'Path',

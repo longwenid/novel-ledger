@@ -51,7 +51,7 @@ python3 validation/measure.py --out /path/to/metrics.json
 | 创作记忆与场景身份 | 执笔提交的理解增量绑定准确版本；原文失效与携带恢复，场景移动保留身份，阅读关联与章纲重排，初始化即建立理解结构，预检完整回滚。 | test_workbench |
 | 历史修订与影响 | 当前章纲协议拒绝边界、阅读变化纳入完整修改区间、直接及传递依赖、连续区间输出、节点带动线路与保守扩大；表达/阅读不改事实，窄修核对后缀，扩大终点同步传播，重排章纲后重新写，重排不重复消耗正文额度。 | test_longform、test_revision_repairs、test_workbench |
 | 自动回改与授权 | 创建分支前计算影响边界，超界保留原稿与额度；准确哈希授权、来源过期拒绝与预检回滚。 | test_revision_bounds |
-| 编辑、页面与交付 | 人物增量、补丁与重新核算、完本闭合与准确快照；模板随安装复制、异地运行、离线单文件及内容转义，准确快照交付。 | test_editorial、test_bookpage、test_bootstrap |
+| 编辑、页面与交付 | 人物增量、补丁与重新核算、完本闭合与准确快照；模板随安装复制、异地运行、轻量入口不随书稿增长；只读 HTTP、已提交快照与分页/按章加载、显式离线单文件及转义、准确快照交付。 | test_editorial、test_bookpage、test_bootstrap、test_preview |
 | 协议边界 | 旧开书协议（creation/1~/5）读取即拒并给出重开指引；方案上限唯一规则无宽松解释，旧字段和旧任务能力不再接收；v4 及更早数据库拒绝且原文件不变。 | test_opening、test_creation_bounds、test_storage_boundaries |
 | 技能、文档与测试入口 | 元信息、链接锚点、命令示例及当前操作说明一致；架构图源与派生物一致；快速组无重复且为完整组的子集，保留关键边界。 | [技能指令与路由验收](#技能指令与路由验收)、test_architecture、test_validation_runner |
 

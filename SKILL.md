@@ -66,7 +66,7 @@ submit/preflight以outcome与总findings判断业务结果，不用valid/accepte
 
 ## 交付与停止
 
-正式 submit 提交后（含快速组内每章）及主干 advance 返回时，引擎自动刷新 book.html；book_view_error 表示派生页面失败，用 html 重建，不重写已提交正文。
+book.html 是固定大小的预览入口，不内嵌书稿；正式 submit 提交后及主干 advance 返回时自动维护入口，未变不重写。作者用 `preview --open` 启动本机只读预览，设定按栏目、正文按章从数据库读取，点击刷新获取新内容。book_view 返回启动命令；book_view_error 用 html 重建入口，不重写已提交正文。完整离线视图用 `html --standalone --output book-export.html` 显式导出。
 
 交付实际完成范围及文件绝对路径；开书范围以实际交付的卷纲为准——`scope=rolling` 时只交进入中的那一卷，不能称全书卷纲。`ready_to_complete` 仍须 `complete` 验收，再从准确快照 `deliver`；导出失败只恢复交付。
 

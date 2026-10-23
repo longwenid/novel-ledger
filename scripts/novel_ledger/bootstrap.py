@@ -11,7 +11,7 @@ import time
 import uuid
 from pathlib import Path
 from .application import Application
-from . import bookpage, context, delivery, host, unattended, workflow
+from . import bookpage, context, delivery, host, preview, unattended, workflow
 from .contracts import require
 from .presentation import LocalPresentation
 from .sqlite_store import SQLiteRepository
@@ -40,22 +40,24 @@ class LocalRuntime:
     """The local client's lifecycle and output operations, assembled in one place."""
     def __init__(self, repo: SQLiteRepository, entry=None):
         self.repo = repo
+        self.entry = entry
         self.workspace = local_workspace(repo)
         self.app = local_application(repo, entry, workspace=self.workspace)
 
     def book_view(self):
-        return bookpage.write(self.repo, workspace=self.workspace)
+        return bookpage.write(self.repo, workspace=self.workspace, entry=self.entry)
 
     def deliver(self):
-        result = delivery.deliver_completion(self.repo, bookpage.render, workspace=self.workspace)
+        result = delivery.deliver_completion(self.repo, lambda repo: bookpage.live_shell(self.workspace.project, self.entry),
+                                             workspace=self.workspace)
         self.app.record_delivery(result)
         return result
 
     def export(self, output=None, format='html'):
         return delivery.export_book(self.repo, output, format, workspace=self.workspace)
 
-    def html(self, output=None):
-        return bookpage.write(self.repo, output, workspace=self.workspace)
+    def html(self, output=None, *, standalone=False):
+        return bookpage.write(self.repo, output, workspace=self.workspace, standalone=standalone, entry=self.entry)
 
     def save_materials(self, result, output):
         if output == 'read_pack.json':
@@ -100,6 +102,10 @@ class LocalRuntime:
 
     def close(self):
         self.repo.close()
+
+
+def preview_local(project, port=0, open_browser=False, entry=None):
+    return preview.serve(project, port, open_browser, entry)
 
 
 def open_local_runtime(project, *, initialize=False, contract=None, source='', entry=None):

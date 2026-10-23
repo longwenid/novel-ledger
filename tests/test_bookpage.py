@@ -1,4 +1,4 @@
-"""Single-file HTML book view: derived, self-contained, and safe on an empty book."""
+"""Lightweight preview entry and explicit offline book views."""
 import json
 import re
 import sys
@@ -198,7 +198,8 @@ class BookPageTests(unittest.TestCase):
             self.assertEqual(Path(info['book_view']['path']), (project / 'book.html').resolve())
             page = (project / 'book.html').read_text(encoding='utf-8')
             self.assertIn('世界与选择', page)
-            self.assertIn('尚无已提交章节', page)
+            self.assertIn('打开作品预览', page)
+            self.assertIn('preview', info['book_view']['preview_command'])
             self.assertEqual((project / 'world.html').exists(), False)
 
     def test_graphs_preserve_explicit_links_and_escape_all_labels(self):
@@ -275,7 +276,7 @@ class BookPageTests(unittest.TestCase):
         self.assertIn('$script ${reader} &lt;b&gt;书名&lt;/b&gt; &amp; &quot;引号&quot;', page)
         self.assertEqual(page.count('<script>'), 1)
 
-    def test_copied_installation_renders_offline_from_an_unrelated_directory(self):
+    def test_copied_installation_renders_preview_from_an_unrelated_directory(self):
         install = Path(self.temp.name) / 'installed'
         shutil.copytree(ROOT / 'scripts', install / 'scripts', ignore=shutil.ignore_patterns('__pycache__'))
         project = Path(self.temp.name) / 'copied-book'

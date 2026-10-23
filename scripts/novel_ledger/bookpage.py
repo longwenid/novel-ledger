@@ -1,25 +1,22 @@
-"""Derived single-file book view: one static HTML page over the whole project.
+"""Read-only book views: a fixed preview shell and explicit offline exports.
 
-Two modes share one file: 看设定 renders every canon-level surface as cards (contract,
-opening choices, world model, volume outlines, chapter outlines, the drift ledger, ledger state,
-audit), 读正文 is a reader for the committed prose. Structured cards come first and raw JSON is
-kept only as a collapsed fallback. No server, no external assets, no writes to the project: the
-database stays the single source of truth.
-
-v2 has no review records to show: the design surfaces are the volume outline, the chapter outlines
-with their drift fields and enter/exit chain, and the deviations the engine booked while reconciling
-a writer's `drift_check`.
+Live fragments and standalone exports share escaped presentation helpers.
+Only the local preview adapter opens databases; this module accepts a reader.
 """
 from __future__ import annotations
 
 import html
 import json
+import os
+import shlex
+import subprocess
+import sys
 import time
 from decimal import Decimal
 from pathlib import Path
 from string import Template
 from .catalog import LENSES, VOLUME_TURNS
-from .contracts import CONTRACT_FIELDS, han_count
+from .contracts import CONTRACT_FIELDS, han_count, require
 from .ports import PublicationReader
 from .publication import publication
 from .workspace import LocalWorkspace
@@ -681,12 +678,8 @@ def _audit(book, report):
     return ''.join(pieces)
 
 
-def _reader(rows, repo, contract, book):
-    """Reader mode body: index plus one hidden section per chapter."""
-    pieces = ['<div id="view-read" hidden>']
-    if not rows:
-        return ''.join(pieces) + '<div class="rd-wrap"><p class="note" style="padding:24px">尚无已提交章节。</p></div></div>'
-    pieces.append('<div class="rd-tools"><span class="lab">字号</span>'
+def _reader_controls(first):
+    return ('<div class="rd-tools"><span class="lab">字号</span>'
                   '<button onclick="readerSize(-1)">A−</button><button onclick="readerSize(1)">A＋</button>'
                   '<span class="grow"></span><span class="lab">版心</span>'
                   '<button id="rw-std" onclick="readerWide(false)">适中</button>'
@@ -697,12 +690,15 @@ def _reader(rows, repo, contract, book):
                   '<i class="th-dark" onclick="readerTheme(\'dark\')" style="background:#211e18" title="夜间"></i></span>'                  '<span class="grow"></span><button id="rb-serif" onclick="readerFamily(true)">衬线</button>'
                   '<button id="rb-sans" onclick="readerFamily(false)">黑体</button>'
                   '<span class="grow"></span><input placeholder="筛选章节…" oninput="filterIndex(this.value)">'
-                  '<button onclick="openChapter(' + str(rows[0]['n']) + ')">从第一章读起</button></div>')
-    pieces.append('<div class="rd-wrap" id="rd-wrap"><div id="ch-index"><div class="book">❦ '
+                  '<button onclick="openChapter(' + str(first) + ')">从第一章读起</button></div>')
+
+
+def _reader_index(rows, contract, book, page=None):
+    pieces = ['<div class="book">❦ '
                   + _esc(contract['title'] if contract else '书稿') + ' ❦</div><div class="book-sub">'
-                  + str(len(rows)) + ' 章 · ' + format(book.get('written_han') or 0, ',') + ' 汉字 · 目录</div>')
+                  + str(len(rows)) + ' 章 · ' + format(book.get('written_han') or 0, ',') + ' 汉字 · 目录</div>']
     seen = None
-    for row in rows:
+    for row in (rows if page is None else page):
         volume = volume_for(contract, row['n']) if contract else None
         if volume and volume['id'] != seen:
             seen = volume['id']
@@ -710,22 +706,35 @@ def _reader(rows, repo, contract, book):
         pieces.append('<div class="item" onclick="openChapter(' + str(row['n']) + ')"><span class="no">第'
                       + str(row['n']) + '章</span><span class="ttl">' + _esc(row.get('title') or '') + '</span>'
                       '<span class="sum">' + _esc(row.get('summary') or '') + '</span></div>')
-    pieces.append('</div>')
-    for index, row in enumerate(rows):
-        paragraphs = [line.strip() for line in repo.read_document(row['prose']).split('\n') if line.strip()]
-        previous = rows[index - 1]['n'] if index else 0
-        following = rows[index + 1]['n'] if index + 1 < len(rows) else 0
-        pieces.append('<section class="chapter" id="read-' + str(row['n']) + '" hidden><div class="ch-head">'
-                      '<div class="orn">❖ ❖ ❖</div><h3>第' + str(row['n']) + ' 章 ' + _esc(row.get('title') or '')
-                      + '</h3><div class="meta">' + format(row.get('han') or 0, ',') + ' 汉字 · '
-                      + _esc(row.get('summary') or '') + '</div></div><div class="prose">'
-                      + ''.join('<p>' + _esc(p) + '</p>' for p in paragraphs) + '</div><div class="ch-nav">'
-                      '<button ' + ('disabled' if not previous else 'onclick="openChapter(' + str(previous) + ')"')
-                      + '>← 上一章</button><button onclick="openIndex()">目录</button><span class="pos">'
-                      + str(index + 1) + ' / ' + str(len(rows)) + '</span><button '
-                      + ('disabled' if not following else 'onclick="openChapter(' + str(following) + ')"')
-                      + '>下一章 →</button></div></section>')
-    return ''.join(pieces) + '</div></div>'
+    return ''.join(pieces)
+
+
+def _reader_chapter(rows, index, repo):
+    row = rows[index]
+    paragraphs = [line.strip() for line in repo.read_document(row['prose']).split('\n') if line.strip()]
+    previous = rows[index - 1]['n'] if index else 0
+    following = rows[index + 1]['n'] if index + 1 < len(rows) else 0
+    return ('<section class="chapter" id="read-' + str(row['n']) + '" hidden><div class="ch-head">'
+                  '<div class="orn">❖ ❖ ❖</div><h3>第' + str(row['n']) + ' 章 ' + _esc(row.get('title') or '')
+                  + '</h3><div class="meta">' + format(row.get('han') or 0, ',') + ' 汉字 · '
+                  + _esc(row.get('summary') or '') + '</div></div><div class="prose">'
+                  + ''.join('<p>' + _esc(p) + '</p>' for p in paragraphs) + '</div><div class="ch-nav">'
+                  '<button ' + ('disabled' if not previous else 'onclick="openChapter(' + str(previous) + ')"')
+                  + '>← 上一章</button><button onclick="openIndex()">目录</button><span class="pos">'
+                  + str(index + 1) + ' / ' + str(len(rows)) + '</span><button '
+                  + ('disabled' if not following else 'onclick="openChapter(' + str(following) + ')"')
+                  + '>下一章 →</button></div></section>')
+
+
+def _reader(rows, repo, contract, book):
+    if not rows:
+        return ('<div id="view-read" hidden><div class="rd-wrap">'
+                '<p class="note" style="padding:24px">尚无已提交章节。</p></div></div>')
+    return ('<div id="view-read" hidden>' + _reader_controls(rows[0]['n'])
+            + '<div class="rd-wrap" id="rd-wrap"><div id="ch-index">'
+            + _reader_index(rows, contract, book) + '</div>'
+            + ''.join(_reader_chapter(rows, index, repo) for index in range(len(rows)))
+            + '</div></div>')
 
 
 def _audit_report(book, rows):
@@ -754,10 +763,7 @@ def render(repo: PublicationReader):
     book, rows = publication(repo)
     branch = book['branch']
     contract = book.get('contract')
-    state = book.get('state') or {}
     written = book.get('written_han') or 0
-    report = _audit_report(book, rows)
-    open_hooks = {k: v for k, v in (state.get('hooks') or {}).items() if v.get('status') == 'open'}
     title = contract['title'] if contract else '未定名书稿'
     generated = time.strftime('%Y-%m-%d %H:%M', time.localtime(book['completed_at'])) if book.get('completed_at') else time.strftime('%Y-%m-%d %H:%M')
 
@@ -765,11 +771,7 @@ def render(repo: PublicationReader):
     jump = ('<select id="jump-read" class="toc-select" style="display:none" onchange="jump(this)">'
             '<option>跳转章节…</option>'
             + ''.join('<option data-n="%d">第%d章</option>' % (row['n'], row['n']) for row in rows) + '</select>')
-    settings = ''.join((
-        _overview(book, contract, rows, state, open_hooks, report, written),
-        _contract(contract) if contract else '<h2 id="contract">创作约定</h2>' + _empty('生效约定'),
-        _world(book), _outlines(book), _plans(book, contract), _understanding(book),
-        _ledger(state), _design_drift(book), _audit(book, report)))
+    settings = ''.join(section(book, rows, key) for key, _ in SECTIONS)
     templates = Path(__file__).with_name('templates')
     shell = Template((templates / 'book.html').read_text(encoding='utf-8'))
     return shell.substitute(
@@ -781,12 +783,93 @@ def render(repo: PublicationReader):
 
 
 
-def write(repo: PublicationReader, output=None, *, workspace: LocalWorkspace):
-    """Write the view (default <project>/book.html) and report where it went."""
+def write(repo: PublicationReader, output=None, *, workspace: LocalWorkspace, standalone=False, entry=None):
+    """Maintain a small preview entry; full offline content is an explicit export."""
     target = (workspace.output_path(output, 'book.html') if output
               else workspace.artifact_path(workspace.project / 'book.html'))
-    view = render(repo)
-    workspace.write_text(target, view)
+    require(not standalone or (output and not workspace.same_path(target, workspace.project / 'book.html')),
+            'output', '离线全书请用 --output 指定其他文件，例如 book-export.html。')
     _, rows = publication(repo)
+    view = render(repo) if standalone else live_shell(workspace.project, entry)
+    if target.is_symlink() or not target.is_file() or target.read_bytes() != view.encode('utf-8'):
+        workspace.write_text(target, view)
     return {'path': str(target), 'chars': len(view), 'chapters': len(rows),
+            'mode': 'standalone' if standalone else 'live',
+            'preview_command': preview_command(workspace.project, entry),
             'inside_project': target.is_relative_to(workspace.project)}
+
+
+def section(book, rows, key):
+    """Render one settings surface, without loading any chapter prose."""
+    contract = book.get('contract')
+    state = book.get('state') or {}
+    renderers = {
+        'overview': lambda: _overview(book, contract, rows, state,
+                                     {k: v for k, v in (state.get('hooks') or {}).items()
+                                      if v.get('status') == 'open'},
+                                     _audit_report(book, rows), book.get('written_han') or 0),
+        'contract': lambda: _contract(contract) if contract else
+                           '<h2 id="contract">创作约定</h2>' + _empty('生效约定'),
+        'world': lambda: _world(book),
+        'outline': lambda: _outlines(book),
+        'plans': lambda: _plans(book, contract),
+        'understanding': lambda: _understanding(book),
+        'ledger': lambda: _ledger(state),
+        'drift': lambda: _design_drift(book),
+        'audit': lambda: _audit(book, _audit_report(book, rows)),
+    }
+    require(key in renderers, 'section', '未知预览栏目。')
+    return renderers[key]()
+
+
+def preview_fragment(repo: PublicationReader, kind, value=None, *, offset=0, query=''):
+    """Live responses contain one section, one index page, or one chapter."""
+    book, rows = publication(repo)
+    contract = book.get('contract')
+    if kind == 'section':
+        content = section(book, rows, value)
+    elif kind == 'index':
+        matching = [row for row in rows if not query or query.casefold() in
+                    ('第%d章 %s %s' % (row['n'], row.get('title', ''), row.get('summary', ''))).casefold()]
+        limit = 100
+        content = _reader_index(rows, contract, book, matching[offset:offset + limit])
+        if not matching:
+            content += '<p class="note">' + ('没有匹配章节。' if rows else '尚无已提交章节。') + '</p>'
+        content += ('<div class="ch-nav"><button ' +
+                    ('disabled' if offset == 0 else 'onclick="loadIndex(%d)"' % max(0, offset - limit)) +
+                    '>← 上一页</button><span>共 %d 章</span><button ' % len(matching) +
+                    ('disabled' if offset + limit >= len(matching) else 'onclick="loadIndex(%d)"' % (offset + limit)) +
+                    '>下一页 →</button></div>')
+    else:
+        require(kind == 'chapter', 'chapter', '未知预览内容。')
+        index = next((i for i, row in enumerate(rows) if row['n'] == value), None)
+        require(index is not None, 'chapter', '正式章节不存在。')
+        content = _reader_chapter(rows, index, repo).replace(' hidden>', '>', 1)
+    return {'html': content, 'title': contract['title'] if contract else '未定名书稿',
+            'branch': book['branch'], 'chapters': len(rows), 'written': book.get('written_han') or 0}
+
+
+def preview_command(project, entry=None):
+    entry = entry or Path(__file__).resolve().parents[1] / 'novel.py'
+    return [sys.executable, str(entry), '--project', str(project), 'preview', '--open']
+
+
+def live_shell(project, entry=None):
+    """The entry is independent of book length and contains no embedded story data."""
+    templates = Path(__file__).with_name('templates')
+    command = preview_command(project, entry)
+    command_text = subprocess.list2cmdline(command) if os.name == 'nt' else shlex.join(command)
+    instructions = ('<div id="preview-help" class="card"><h2>打开作品预览</h2>'
+                    '<p>在终端运行以下命令，浏览器会打开预览。保持命令运行，结束时按 Ctrl+C。</p>'
+                    '<pre>' + _esc(command_text) + '</pre>'
+                    '<p>设定按栏目读取，正文按章读取；页面不保存整本书。</p></div>')
+    return Template((templates / 'book.html').read_text(encoding='utf-8')).substitute(
+        title='作品预览', branch='—', chapter_count='—', written='—', generated='读取时更新',
+        nav=''.join('<a href="#%s">%s</a>' % item for item in SECTIONS), jump='',
+        settings=instructions + '<div id="live-settings"></div>',
+        reader='<div id="view-read" hidden>' + _reader_controls(1)
+               + '<div class="rd-wrap" id="rd-wrap"><div id="ch-index"></div>'
+                 '<div id="chapter-slot"></div></div></div>',
+        styles=(templates / 'book.css').read_text(encoding='utf-8'),
+        script='window.NOVEL_LIVE=true;\n' + (templates / 'book.js').read_text(encoding='utf-8')
+               + '\n' + (templates / 'preview.js').read_text(encoding='utf-8'))

@@ -623,6 +623,7 @@ CONTENT_ERRORS = frozenset((
 ))
 
 TECHNICAL_ERRORS = frozenset((
+    'preview', 'section',
     'access', 'alignment_schema', 'author_decision', 'author_source', 'book_integrity',
     'book_ownership', 'book_state', 'capability', 'chapter', 'chapter_limit', 'chapter_order',
     'chapter_target', 'checks', 'claim', 'completion', 'contract', 'coverage', 'creation',
