@@ -57,6 +57,10 @@ def watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, n
         cursor = task['task_id']
         while True:
             current = app.task_status(task['task_id'])
+            review = current.get('continuity')
+            if review and (current['status'] == 'pending' or current.get('batch_active')):
+                return {'action': 'review_complete' if review['phase'] == 'done' else 'review_required',
+                        'task_id': current.get('batch_task') or task['task_id'], 'review': review, 'dispatched': waited}
             if current.get('execution_blocked'):
                 return {'action': 'worker_blocked', 'task_id': current.get('batch_task') or task['task_id'],
                         'recovery': current.get('recovery'), 'dispatched': waited,

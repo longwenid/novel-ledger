@@ -17,6 +17,8 @@
 
 ## 运行前提与初始化
 
+2.1.0新CLI项目默认启用独立连续性核验，旧项目不自动切换。`status.assurance`分别显示连续性模式与宿主可信性，完整协议见[质量与宿主](quality.md)。required核验会增加真实读者调用，不能把下文旧机械路径的历史成本比例当作新模式费用保证。
+
 ROOT/PROJECT 替换为绝对路径，项目产物不放技能目录。默认执行路径为主干循环调度子 agent；主干推进已授权目标，子 agent（Worker）只处理当前冻结任务。状态变化以真实命令返回和数据库提交为准。主干生命周期由宿主提供，本协议只约定业务推进与任务交接。
 
 进入 world_model 及后续创作派工前，主干确认宿主能实际创建独立 Worker，并把宿主返回的执行身份与 task_id 对应保存。宿主不支持时保留在途任务并报告能力缺失，不能通过新造 session、同一主干批写或新子进程冒充空模型历史。会话身份由宿主注入；环境变量和 claim 只用于协议核对，不是模型隔离证明。
@@ -41,7 +43,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 ## 快速无人值守：五章一组
 
-快速无人值守按 `run --complete --fast --source 原话` 或 `run --through N --fast --source 原话` 在原授权目标上启用；模式保存为 `writing_mode=fast`，以后未指定模式的 run 沿用，`--standard` 恢复普通模式。模式选择不增加正文或作者裁决授权。首章取得准确版本认可后，同卷内的顺序执笔**默认建议采用快速组**：2026-10-22 真实宿主实测快速组约 2.09M tokens/章、普通单章新 Worker 约 4.51M/章（省 54%），返修率不高于普通模式，见 [实测记录](../validation/dsh-run-cost-2026-10-22.md)。两组的逐章质量口径完全一致——每章单独冻结、完整成稿、自比、核账与原子提交不变。作者明确要求逐章新会话时用 `--standard`；模式属执行策略，总编在已授权目标内可直接采用，交付复盘注明实际模式。
+快速无人值守按 `run --complete --fast --source 原话` 或 `run --through N --fast --source 原话` 在原授权目标上启用；模式保存为 `writing_mode=fast`，以后未指定模式的 run 沿用，`--standard` 恢复普通模式。模式选择不增加正文或作者裁决授权。首章取得准确版本认可后，同卷内的顺序执笔可优先采用快速组，减少新上下文启动和相同来源的重复投递。两组均须逐章冻结、完整成稿、自比、核账与原子提交；启用连续性保障时逐章独立核验。历史单次运行的费用比例和返修率不证明新流程会省多少token或保持相同文学质量。作者明确要求逐章新会话时用 `--standard`；模式属执行策略，总编在已授权目标内可直接采用，交付复盘注明实际模式。
 
 首章仍单独写并取得准确版本认可；之后每组由一个真实 Worker 最多连写五章，不跨卷、不越过授权终点或缺失章纲。每章单独冻结、完整成稿、自比与提交，沿用固定章纲，事实只在该章通过后入库。不能一次交五章后跳过中间核验。返修仍使用本章有限额度，同一 Worker 只返修当前章，通过后才写下一章；暂停、停摆或需要作者决定时结束该组。
 
@@ -72,13 +74,15 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 
 Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端显示会乱；需要人读的长内容一律走引擎物化的文件（brief.md、board.md、question.json、dispatch.md、task.json、html），机器可读的短 JSON 才看控制台，或先 `$env:PYTHONUTF8=1`。自行重定向 JSON 时注意 PowerShell 5 的 `Out-File -Encoding utf8` 带 BOM，Python 读回要用 utf-8-sig。
 
-无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用：2026-10-22 实测逐事件 advance 轮询平均每次重放约 33 万 tokens，183 次 advance 占主会话消耗的大半（见 [实测记录](../validation/dsh-run-cost-2026-10-22.md)）；无人值守期间不要用 advance 代替 watch 等待。
+无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用；无人值守期间不要用 advance 代替 watch 等待，实际输入、缓存与输出费用从宿主观测核对。
 
 | action | 主干下一步 |
 |---|---|
 | task_ready | 按任务路径派工；先核对仍在运行的子 agent 与 claim，具体见任务交接 |
 | wait_for_batch | 原 Worker 正在接续本组，用 watch 等待整组；不要为下一章另派 Worker |
 | worker_blocked | 核对 status.execution_failure 与恢复动作，修复身份、凭据或材料错误后，对同一任务 prepare-worker --reset-failures；保留稿件和文学额度，不直接重派绕过 |
+| review_required | 保留候选与执笔Worker；按[独立核验](quality.md#主控与执笔交接)实际派出另一读者，用prepare-observer绑定，先冻结纯读再比较；歧义交作者准确裁决，主控不代审 |
+| review_complete | 联系原执笔Worker，保留其上下文并续有效凭据，以准确候选重做submit；仍以outcome和committed_chapter核实结果 |
 | wait_for_submit | 等待或联系当前子 agent 完成提交；它已结束时核实错误并沿允许会话恢复当前任务，不派下一个任务 |
 | resync | 放下过期的 after 回调，重新调用不带 --after 的 advance --compact，以当前任务为准 |
 | revision_ready | 修订属于当前授权目标时执行 promote，再回到 advance --compact；作者明确要求先看候选再决定时，交付候选并等待该决定 |
@@ -96,7 +100,7 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 
 outline_state 表示真实前态与固定章纲不符，保留现场交作者决定修订范围，不自动改纲。projection、chain、state_integrity、source_integrity 与 schema 是数据或版本问题：保留候选和失败信息，停止状态推进；已冻结的 read/recall 仍可用于定位来源。写作任务不调用底层存储保存投影，不改写 schema，不修改或复制临时引擎来取消判据。程序在派工/提交前和事务保存前检查聚合状态；未通过时该次状态变化回滚。
 
-submit.accepted=true 只表示回执已接受处理；写作回执还可能生成待返修候选。报告章节已完成必须核对 committed_chapter，不能用进程退出成功或 accepted 单独推断。无人值守目标不自动提供首章准确版本认可、额外返修额度或改约授权；已有相应的明确授权则直接沿用。
+submit以outcome和总findings表达业务结果：repair_required是待返修，continuity_review_required是候选已保存并等待独立连读，chapter_committed才是正式章节。valid/accepted与transaction.persisted不代替committed_chapter。预检永不耗文学轮次；相同或仅空白变化的已知失败稿返回no_progress，不吞新轮次。无人值守目标不自动提供首章认可、追加返修或改约授权；required宿主模式还须真实人类通道证明，不能自写source冒充。
 
 返修裁决的 id 绑定候选正文、约定、章节、项目版本、问题及已消耗额度；使用当前 status.author_decision.id 原样回答，不拼接固定停止点名称。改约保留候选、额度与未回答问题；作者追加额度时按问题绑定的章节处理，旧答复不能套用到另一个候选版本。
 
@@ -111,6 +115,8 @@ advance --compact 的 task 只含任务身份、阶段、task_path、identity_pa
 主干已派出的子 agent 仍在运行，或 claim.expired=false 时继续等待，不重派；claim=null 只表示没有执行认领，不证明没有运行中的子 agent。expired=true 表示提交前须重新认领，也不证明旧执行者已停止。已写好 result.json 但租约过期时，由主干沿允许会话重新 prepare-worker，Worker 使用新注入凭据后重提，保留已填回执。恢复任务先 status、再 advance --compact，以当前任务为准，不手改库；要看全部派工的生命周期用 `status --tasks`（id/状态/阶段/会话，取代直接查库）。
 
 ### 执行身份与技术恢复
+
+材料交付按execution_id及名称/hash缓存；换Worker或同名空历史重开（prepare-worker --fresh-context）重新交付全部必读，保留任务、候选和文学预算。成功read/ready不清除其他操作的失败计数，只有对应操作确实成功或正式完成才清除未阻断记录。新任务冻结引擎与规则指纹；engine_changed按返回动作固定构建或保留稿件后显式重新冻结，不换临时引擎继续。
 
 世界模型及后续派工使用 `novel-ledger.execution/1`，`task.execution.state` 为 `await_worker_identity`、`ready`、`blocked`；开书门是 `controller`。主控先创建真实独立 Worker，使它停在自举边界等待准备；用宿主返回的会话 ID 执行：
 

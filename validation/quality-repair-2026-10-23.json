@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-23",
+  "version": "2.1.0",
+  "storage_schema": "novel-ledger/5",
+  "audited_baseline": "83b1484",
+  "build": {
+    "version": "2.1.0",
+    "engine_hash": "01a261bb5f9160390bdf1386920dcd00380c207705b08f82a3091b05a2ffd2b4",
+    "rules_hash": "07c4b5d7ea410665c01af73e0d81614126c1d9d97a2112a7ce1278b67bd0a121"
+  },
+  "tests": {
+    "command": "python3 -m unittest discover -s tests -q",
+    "run": 592,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 65.966
+  },
+  "skill_validation": "passed",
+  "active_links": {
+    "files": 17,
+    "bad_references": 0
+  },
+  "original_protocol_defects_observed": {
+    "CR-01": false,
+    "CR-02": false,
+    "AR-03": false,
+    "WF-04-current": false
+  },
+  "novel_project_modified": false,
+  "deployment": {
+    "host_verifier_interface": "implemented",
+    "platform_plugin": "not_deployed",
+    "os_isolation": "not_deployed",
+    "legacy_projects": "retain_original_mode",
+    "new_cli_defaults": {
+      "continuity": "required",
+      "trust": "advisory"
+    }
+  },
+  "unmeasured": [
+    "semantic_recall_and_false_positives",
+    "literary_effect",
+    "real_model_token_cost_change"
+  ]
+}

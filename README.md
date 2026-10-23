@@ -2,7 +2,7 @@
 
 长篇小说的写作流程与事实账本：保存作者决定、设计、正文和事实状态，支持连续创作、暂停恢复与历史修订。
 
-运行仅依赖 Python 3.9+ 标准库；模型调用由宿主提供。当前 CLI 版本为 `2.0.0`，数据库为 `novel-ledger/5`，协议边界见 [协议](references/protocol.md#适用范围与字段来源)。
+运行仅依赖 Python 3.9+ 标准库；模型调用由宿主提供。当前 CLI 版本为 `2.1.0`，数据库为 `novel-ledger/5`，协议边界见 [协议](references/protocol.md#适用范围与字段来源)。
 
 入口：[SKILL.md](SKILL.md) 提供任务路由与执行边界；[运行指南](references/runtime.md) 提供命令动作与恢复方法；[架构](references/architecture.md) 维护模块职责；[返工与成本](references/rework.md) 说明工程原则。
 
@@ -14,7 +14,7 @@
 
 可选快速无人值守模式：`run --complete --fast --source 原话`，同一 Worker 最多连写五章，逐章验收和入库；首章、卷界与作者停点单独处理，见[快速模式](references/runtime.md#快速无人值守五章一组)。
 
-流程不含独立设计审或章审。机械校验与文风代理指标不能证明文学质量，阅读效果仍需人工抽读或离线盲测。
+新CLI项目默认要求独立连续性核验，先冻结纯正文观察，再读取章纲和执笔自评；报告绑定准确候选与原文。旧项目保持原模式并列出缺少的核验。受控宿主接口能校验身份及真人决定证明，本地CLI仍明确显示未验证的权限边界。两者都不证明文学质量，见[质量与宿主](references/quality.md)。
 
 ## 二、架构
 
@@ -36,6 +36,12 @@ flowchart TD
     VERIFY --> PORT
     VERIFY --> DOMAIN
     VERIFY --> DRIFTR[执笔核算 drift_reconcile]
+    APP --> GOV[治理与授权 governance]
+    GOV --> PORT
+    APP --> CONT[独立核验 continuity_service]
+    CONT --> PORT
+    CONT --> CRULE[原文与时序 continuity]
+    CRULE --> C
     APP --> WRITE[连写编排 writing_service]
     WRITE --> PORT
     WRITE --> WF

@@ -352,6 +352,7 @@ class CompletionTests(unittest.TestCase):
             if handoff['task']['stage'] not in ('write', 'repair', 'redesign'):
                 break
             result = response(self.app)
+            result['data']['prose'] += ('门关着。', '门开着。', '灯灭了。')[rounds]
             result['data']['drift_check']['items'].pop(0)
             self.app.submit(result)
             rounds += 1

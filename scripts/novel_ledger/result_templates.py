@@ -100,7 +100,7 @@ def chapter_row(number, volume=None):
     absent or null factual delta arrays just like empty arrays. Hooks remain an explicit required
     declaration: an empty hooks array says this chapter plants and pays off nothing.
     """
-    row = {'chapter': number, 'synopsis': '',
+    row = {'chapter': number, 'synopsis': '', 'story_events': [], 'reader_effect': None, 'timeline': None,
            'plot': {'beat': '', 'nodes': [], 'threads': []},
            'resources': [], 'places': [], 'knowledge': [], 'characters': [],
            'clock': {'advance_days': 0},

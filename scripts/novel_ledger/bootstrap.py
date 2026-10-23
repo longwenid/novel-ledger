@@ -16,18 +16,24 @@ from .contracts import require
 from .presentation import LocalPresentation
 from .sqlite_store import SQLiteRepository
 from .workspace import LocalWorkspace
+from .build_info import fingerprint
 
 
 def local_workspace(repo: SQLiteRepository):
     return LocalWorkspace(repo.project, protected_paths=repo.storage_paths)
 
 
-def local_application(repo: SQLiteRepository, entry=None, *, workspace=None):
+def local_application(repo: SQLiteRepository, entry=None, *, workspace=None, authority=None):
     workspace = workspace if workspace is not None else local_workspace(repo)
     entry = entry or Path(__file__).resolve().parents[1] / 'novel.py'
-    return Application(repo, compile_task=lambda book, job: context.build(repo, book, job),
+    build = fingerprint()
+
+    def compile_task(book, job):
+        return {**context.build(repo, book, job), 'build': build}
+
+    return Application(repo, compile_task=compile_task,
                        presentation=LocalPresentation(repo, workspace, entry),
-                       clock=time.time, new_id=lambda: uuid.uuid4().hex)
+                       clock=time.time, new_id=lambda: uuid.uuid4().hex, authority=authority, build_info=build)
 
 
 class LocalRuntime:

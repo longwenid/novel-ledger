@@ -159,7 +159,7 @@ class RuntimeTests(unittest.TestCase):
                 break
             stages.append(app_stage(self.repo))
             result = response(self.app)
-            result['data']['prose'] = '他走了。'
+            result['data']['prose'] = ('他走了。', '他哭了。', '他睡了。')[len(stages) - 1]
             self.app.submit(result)
         # Two repair rounds raise the same finding again: v2 stops the non-converging loop at the
         # stall point (before the budget is spent), and hands the decision to the author.
@@ -170,7 +170,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(decision_id.startswith('repair-stalled:chapter_repair:'))
         self.assertIn('第 1 章', status['author_decision']['question'])
         book = self.repo.load()
-        self.assertEqual(book['draft']['prose'], '他走了。')
+        self.assertEqual(book['draft']['prose'], '他睡了。')
         self.assertEqual(book['rework']['1']['repairs'], 2)
         # Mechanical failures cannot be accepted into the chapter. Every offered path preserves
         # the candidate; the granted round can produce a chapter that actually commits.
@@ -178,7 +178,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn(workflow.ACCEPT_OPEN, options)
         self.assertCode('author_decision', self.app.answer,
                         decision_id, workflow.ACCEPT_OPEN, '这一处我承担。')
-        self.assertEqual(self.repo.load()['draft']['prose'], '他走了。')
+        self.assertEqual(self.repo.load()['draft']['prose'], '他睡了。')
         granted = self.app.answer(decision_id, workflow.REPAIR_AGAIN, '再返修一轮。')
         self.assertEqual(granted['status'], 'running')
         self.assertEqual(self.app.advance()['task']['stage'], 'repair')

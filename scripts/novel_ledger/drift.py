@@ -20,7 +20,8 @@ VOLUME_FIELDS = ('id', 'purpose', 'stage', 'arc', 'turns', 'climax', 'nodes', 't
 
 CHAPTER_FIELDS = ('chapter', 'synopsis', 'plot', 'resources', 'places', 'knowledge', 'characters',
                   'clock', 'enter', 'exit', 'disclosures', 'world_refs', 'new_entities',
-                  'hook_refs', 'hooks', 'reader_refs', 'history_refs', 'scenes', 'pacing', 'style')
+                  'hook_refs', 'hooks', 'reader_refs', 'history_refs', 'scenes', 'pacing', 'style',
+                  'story_events', 'reader_effect', 'timeline')
 
 
 # The four increment arrays plus the clock: what a chapter declares it changes.

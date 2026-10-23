@@ -55,15 +55,15 @@ STAGE_MATERIAL = {
     'chapter_outline': ('author_feedback', 'contract', 'design_drift', 'effective_layout', 'hooks',
                         'previous_chapters', 'revision_impact', 'revision_instruction', 'state',
                         'style', 'volume_outline', 'world_model'),
-    'write': ('author_feedback', 'chapter_outline', 'contract', 'creative_memory', 'design_drift',
+    'write': ('author_feedback', 'chapter_outline', 'contract', 'continuity_feedback', 'creative_memory', 'design_drift',
               'disclosure_boundary', 'hooks', 'previous_chapters', 'scene_context', 'scene_sources',
               'state', 'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core',
               'world_records'),
-    'repair': ('author_feedback', 'base_draft', 'chapter_outline', 'contract', 'creative_memory',
+    'repair': ('author_feedback', 'base_draft', 'chapter_outline', 'contract', 'continuity_feedback', 'creative_memory',
                'design_drift', 'disclosure_boundary', 'hooks', 'previous_chapters', 'prior_candidate',
                'revision_impact', 'revision_instruction', 'scene_context', 'scene_sources', 'state',
                'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core', 'world_records'),
-    'redesign': ('author_feedback', 'base_draft', 'chapter_outline', 'contract', 'creative_memory',
+    'redesign': ('author_feedback', 'base_draft', 'chapter_outline', 'contract', 'continuity_feedback', 'creative_memory',
                  'design_drift', 'disclosure_boundary', 'hooks', 'previous_chapters', 'prior_candidate',
                  'revision_impact', 'revision_instruction', 'scene_context', 'scene_sources', 'state',
                  'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core', 'world_records'),
@@ -658,6 +658,17 @@ def build(repo: ContextStore, book, job):
                 continue
             previous.append({'chapter': n, 'prose': repo.read_document(row['prose']), 'summary': row['summary']})
         add('previous_chapters', previous)
+        if stage in ('write', 'repair', 'redesign'):
+            notes = []
+            for item in previous:
+                review = repo.read_document(written[item['chapter']]['review']).get('continuity') or {}
+                if review.get('editorial_notes') or review.get('uncertain_findings'):
+                    notes.append({'chapter': item['chapter'], 'prose_hash': written[item['chapter']]['prose'],
+                                  'report_hash': review['report_hash'], 'editorial_notes': review.get('editorial_notes', []),
+                                  'uncertain_findings': review.get('uncertain_findings', []),
+                                  'resolution': review.get('resolution')})
+            if notes:
+                add('continuity_feedback', notes)
     payload = copy.deepcopy(job.payload or {})
     if 'understanding' in book and not opening_stage:
         payload['understanding'] = True

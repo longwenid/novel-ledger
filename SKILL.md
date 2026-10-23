@@ -27,6 +27,7 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 | 延续作品理解、原文样本、移动场景 | [叙事工作台](references/workbench.md) | 按任务冻结的理解、场景身份和阅读依赖能力执行。 |
 | 人物与场景设定、完本 | [编辑能力](references/editorial.md) | 任务含 `editorial/1` 时读对应阶段；交付与失败恢复按运行指南。 |
 | 填回执、补材料、处理字段拒绝 | [任务与结果协议](references/protocol.md) | 先用当前模板和 `check` 试算；Worker 不查源码或旧回执猜格式。 |
+| 候选独立连读、连续性待决、可信宿主 | [质量与宿主](references/quality.md) | review_required / review_complete 按独立观察协议执行，不由执笔或主控代签。 |
 | 修改引擎或核对能力边界 | [架构](references/architecture.md) | 工程检查、材料测量和人工文学抽读读 [验证](references/validation.md)；**要减少返工或投递成本时先读 [返工与成本](references/rework.md)**（判据前移、窄返修、结构化账目、机械正文判据等机制与设计原则）。 |
 
 ## 共同边界
@@ -36,7 +37,7 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 | 作者决定 | 保存原话、范围和适用版本。已有准确选择或首章认可直接登记；只对真正缺失的决定等待，不扩大正文、修订或发布授权。 |
 | 真源与事实 | SQLite 是唯一持久真源，正文和事实由 `submit` 原子提交，不手改库或伪造回执。设计、人物档案和作品理解不能直接变为事实。 |
 | 章纲即结算契约 | 章纲先通过状态链模拟，生效后固定本章目标、变化与结果；正文偏离就返修本章，不能自动改纲迁就正文。改纲须有作者明确决定。执笔再逐项自比。引擎据真实投影和正文引文核账，自动生成事实与伏笔事件；失败按具体问题返修。主干只管目标、派工和治理，不读写正文、不代签自比。 |
-| 验证边界 | 流程不含独立设计审或章审。只读验收服务统一检查状态链、来源、正文机械项与完本闭合；completed 和旧报告不能豁免复验。文学质量与人物可信度需人工抽读或离线盲测，不将机械通过说成文学认可。 |
+| 验证边界 | 新CLI项目默认启用独立连续性核验：先冻结纯正文观察，再比较章纲与执笔自评。旧项目按原模式恢复；只读机械验收与独立报告分别显示覆盖及宿主可信性，均不证明文学质量。completed和旧报告不能豁免复验。 |
 | 冻结材料 | 新 Worker 完整读取本任务必要资料；历史与设计按 `read`/`recall` 补读，缺资料按任务补读，不截断正文和证据。 |
 | 修复与范围 | 预检、换 Worker、恢复、改约和修订不重置有限额度；超出自动范围的历史修订保存完整方案等作者授权，不能用 `resume` 绕过。 |
 | 判断依据 | 自比给出具体结论；偏差附原因、原文与影响范围，不自动填 pass。 |
@@ -57,7 +58,9 @@ ROOT 是本技能的绝对路径，PROJECT 是独立小说项目的绝对路径�
 | 核实提交 | 主干 | 无人值守（普通与快速模式同样）用 `watch --owner ID`：等待与续租在引擎进程内完成，任务提交后直接带回下一 task_ready，不用 advance 轮询等待；需要显式核实时再 `advance --compact --after 该任务ID`。只收身份、提交状态或错误摘要，正文与完整回执留在项目。进程退出或口头完成不替代数据库提交。 |
 | 接续或交付 | 主干 | 按 [运行动作表](references/runtime.md#动作分支) 处理选择、认可、修订、暂停和交付；章节、卷纲和卷末不是授权目标的停点。 |
 
-执行交接统一按 `novel-ledger.execution/1`：身份与租约错误立即交主控，其余连续技术失败达到 `details.recovery.limit` 后停止；主控修复原因后显式 `prepare-worker --reset-failures`。宿主工具失败用 `commands.report_error` 上报，不猜源码或数据库恢复。技术执行记录与文学返修额度分开。
+执行交接统一按 `novel-ledger.execution/1`：身份与租约错误立即交主控，其余技术失败达到 `details.recovery.limit` 后停止；无关read/ready不清失败计数。主控修复原因后显式 `prepare-worker --reset-failures`。换空历史上下文时使用 `--fresh-context`，不继承前执行者材料缓存。宿主工具失败用 `commands.report_error` 上报，技术记录与文学返修额度分开。
+
+submit/preflight以outcome与总findings判断业务结果，不用valid/accepted推断正文通过。`continuity_review_required`保留候选与原Worker，主控按[质量与宿主](references/quality.md)实际派独立读者；核验完成后原Worker重交准确候选。无进展的相同失败稿不消耗新文学轮次，禁止改自评措辞冒充修复。可信宿主缺失、治理来源异常或冻结构建变化时保留现场，按明确恢复动作处理。
 
 普通任务提交后结束（`worker_boundary=finished`）；快速模式返回 `worker_boundary=continue` 时仅用派工卡的 `worker_next` 接续同组，满五章或遇边界后结束，详见[快速无人值守](references/runtime.md#快速无人值守五章一组)。Worker 不自行 advance。命令路径确实移动时由主干重新 advance 刷新，先核实文件，不凭路径字面判失效。
 

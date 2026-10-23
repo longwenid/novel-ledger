@@ -342,7 +342,9 @@ def stage(name, payload=None):
                           'node/thread/hook id 全书唯一，不覆盖已批准 id。'
                           '不写逐章 synopsis，不写脑暴与选案理由，不写正文。',
         'chapter_outline': '交付 {volume, chapters}：章号连续、恰好覆盖本卷冻结范围 [first,last]。每章给：'
-                           'synopsis（words±tolerance 汉字：本章实际发生的事、人物处境与阅读作用）；'
+                           'synopsis（words±tolerance 汉字：本章故事内实际发生的事与人物处境）；'
+                           'story_events可列实际事件，reader_effect单列读者效果，不能把后者写成角色台词或事实证据；'
+                           'timeline可声明稳定scene_id、承接关系与已知分钟区间/期限；未知时省略，不按章号分配天数；'
                            '行动、阻力、选择与后果可以跨章承接，静章可停留于关系或余波；'
                            '写清实际承接，不要求每章六项齐备、即时结算或章末固定留钩。'
                            'plot.beat 一句话说清本章情节变化，plot.nodes=[{node,after:seeded|advanced|resolved,outcome}]、'

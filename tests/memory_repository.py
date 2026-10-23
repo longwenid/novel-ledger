@@ -246,4 +246,6 @@ class MemoryRepository:
                 'task_input_chars': sum(len(dump(t['input'])) for t in self._tasks.values()),
                 'accepted_receipt_chars': sum(len(dump(t['result'])) for t in self._tasks.values() if t['result']),
                 'supplemental_read_chars': sum(row['value']['chars'] for row in self._journal if row['action'] == 'read'),
+                'continuity_read_calls': sum(row['action'] == 'continuity_read' for row in self._journal),
+                'continuity_read_chars': sum(row['value'].get('chars', 0) for row in self._journal if row['action'] == 'continuity_read'),
                 'attempted_receipt_chars': None, 'billed_tokens': None, 'basis': 'In-memory test observations.'}

@@ -113,14 +113,95 @@ class ExecutionHandoffTests(unittest.TestCase):
         self.assertTrue(self.cli(view['commands']['ready'], restored['worker_env'])['ready'])
         self.assertEqual(self.repo.load(), before)
 
-    def test_successful_operation_clears_only_nonblocked_failure_streak(self):
+    def test_unrelated_read_does_not_clear_file_failure(self):
         prepared = self.prepare()
         view = self.full_view()
         self.cli(view['commands']['preflight'], prepared['worker_env'], code=2)
         self.cli(view['commands']['read'], prepared['worker_env'])
+        self.assertEqual(self.repo.get(store_keys.technical_failure(self.task_id))['failures'], 1)
+        second = self.cli(view['commands']['preflight'], prepared['worker_env'], code=2)
+        self.assertEqual(second['details']['recovery']['failures'], 2)
+        self.assertFalse(second['details']['recovery']['retry_allowed'])
+
+    def test_matching_operation_success_resolves_failure(self):
+        prepared = self.prepare()
+        view = self.full_view()
+        self.cli(view['commands']['preflight'], prepared['worker_env'], code=2)
+        receipt = response(self.app, session='host-real-worker')
+        receipt['session'] = ''
+        Path(view['result_path']).write_text(json.dumps(receipt), encoding='utf-8')
+        self.cli(view['commands']['preflight'], prepared['worker_env'])
         self.assertIsNone(self.repo.get(store_keys.technical_failure(self.task_id)))
-        first = self.cli(view['commands']['preflight'], prepared['worker_env'], code=2)
-        self.assertEqual(first['details']['recovery']['failures'], 1)
+
+    def test_portable_submit_replays_exact_success_and_rejects_conflict(self):
+        prepared = self.prepare()
+        view = self.full_view()
+        receipt = response(self.app, session='host-real-worker')
+        receipt['session'] = ''
+        path = Path(view['result_path'])
+        path.write_text(json.dumps(receipt), encoding='utf-8')
+        first = self.cli(view['commands']['submit'], prepared['worker_env'])
+        again = self.cli(view['commands']['submit'], prepared['worker_env'])
+        self.assertTrue(again['idempotent'])
+        self.assertEqual(again['committed_chapter'], first['committed_chapter'])
+        self.assertEqual(again['outcome'], 'chapter_committed')
+        self.assertEqual(len(self.repo.headers('main')), 1)
+        receipt['data']['summary'] += '不同提交'
+        path.write_text(json.dumps(receipt), encoding='utf-8')
+        self.assertEqual(self.cli(view['commands']['submit'], prepared['worker_env'], code=2)['error'], 'replay_conflict')
+
+    def test_replacement_worker_and_empty_context_get_all_required(self):
+        prepared = self.prepare()
+        view = self.full_view()
+        original = self.cli(view['commands']['read'], prepared['worker_env'])
+        self.assertTrue(original['records'])
+        self.assertFalse(self.cli(view['commands']['read'], prepared['worker_env'])['records'])
+        # Expiry is clock injection, not a direct mutation of story or task data.
+        with patch.object(self.app, 'clock', return_value=self.app.clock() + 301):
+            replacement = self.app.prepare_worker(self.task_id, 'host-real-replacement')
+        fresh = self.cli(view['commands']['read'], replacement['worker_env'])
+        self.assertEqual(set(fresh['records']), set(original['records']))
+        self.assertNotEqual(fresh['execution_id'], original['execution_id'])
+        reopened = self.app.prepare_worker(self.task_id, 'host-real-replacement', fresh_context=True)
+        all_again = self.cli(view['commands']['read'], reopened['worker_env'])
+        self.assertEqual(set(all_again['records']), set(original['records']))
+
+    def test_business_failure_returns_all_findings_in_preview_and_submit(self):
+        receipt = response(self.app)
+        receipt['data']['prose'] += '他等了许久，窗外的雨沿着破损的玻璃往下流。值班室另一头有人收起了钥匙，走廊的灯熄了一盏，门后的脚步声渐渐远去。'
+        before = self.repo.load()
+        preview = self.app.submit(receipt, preview=True)
+        self.assertEqual(self.repo.load(), before)
+        self.assertEqual(preview['outcome'], 'repair_required')
+        failure = next(f for f in preview['findings'] if f['criterion'] == 'substance')
+        self.assertGreater(failure['actual_han'], failure['allowed'][1])
+        submitted = self.app.submit(receipt)
+        self.assertEqual(preview['findings'], submitted['findings'])
+        self.assertIsNone(submitted['committed_chapter'])
+        self.assertTrue(submitted['transaction']['persisted'])
+
+    def test_unchanged_or_whitespace_repair_does_not_consume_budget(self):
+        receipt = response(self.app)
+        receipt['data']['prose'] += '他等了许久，窗外的雨沿着破损的玻璃往下流。值班室另一头有人收起了钥匙，走廊的灯熄了一盏，门后的脚步声渐渐远去。'
+        self.app.submit(receipt)
+        self.app.advance()
+        before = self.repo.load()
+        repair = response(self.app)
+        repair['data'] = copy.deepcopy(receipt['data'])
+        repair['data']['prose'] = '\n ' + repair['data']['prose'] + '  '
+        with self.assertRaises(Error) as caught:
+            self.app.submit(repair)
+        self.assertEqual(caught.exception.code, 'no_progress')
+        self.assertEqual(self.repo.load(), before)
+
+    def test_frozen_build_rejects_changed_engine_before_materials_or_budget(self):
+        self.assertIn('build', self.repo.task(self.task_id)['input'])
+        self.app.build_info = {**self.app.build_info, 'engine_hash': 'different-build'}
+        before = tuple(self.repo.db.iterdump())
+        with self.assertRaises(Error) as caught:
+            self.app.read(self.task_id)
+        self.assertEqual(caught.exception.code, 'engine_changed')
+        self.assertEqual(tuple(self.repo.db.iterdump()), before)
 
     def test_watch_returns_when_worker_reports_external_tool_failures(self):
         prepared = self.prepare()

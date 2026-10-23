@@ -40,6 +40,9 @@ class RepairConvergenceTests(unittest.TestCase):
         """The same mechanical defect, filed by the same producer: a Latin run in Chinese prose."""
         result = response(self.app)
         result['data']['prose'] = result['data']['prose'].replace('要求先核对', '要求 check 核对')
+        budget = (self.repo.load().get('rework') or {}).get('1', {})
+        attempt = int(bool(budget.get('initial_used'))) + budget.get('repairs', 0)
+        result['data']['prose'] += ('门关着。', '门开着。', '灯灭了。')[attempt]
         return result
 
     def test_the_same_finding_twice_unresolved_stalls_into_an_author_decision(self):

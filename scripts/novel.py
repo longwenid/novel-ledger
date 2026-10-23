@@ -10,9 +10,10 @@ from pathlib import Path
 from novel_ledger.contracts import CONTROLLER_STAGES, Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
-PUBLIC = {'init', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
+PUBLIC = {'init', 'assurance', 'prepare-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
           'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next', 'worker', 'worker-ready', 'worker-error', 'prepare-worker'}
-SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'}
+OBSERVER = {'review-read', 'review-observe', 'review-report'}
+SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver'} | OBSERVER
 WORKER = {'status', 'read', 'recall', 'patch', 'submit', 'preflight', 'check', 'worker-next', 'worker-ready', 'worker-error'}
 # Prose and frozen records belong to a dispatched task; the controller role never executes them.
 WORKER_ONLY = {'read', 'recall', 'patch', 'worker-next', 'worker-ready', 'worker-error'}
@@ -65,6 +66,25 @@ def parser():
         if command == 'init':
             sub.add_argument('--contract')
             sub.add_argument('--source', default='')
+        if command in ('init', 'assurance'):
+            sub.add_argument('--trust', choices=('advisory', 'required'), default='advisory')
+            sub.add_argument('--continuity', choices=('off', 'required'), default='required')
+        if command == 'assurance':
+            sub.add_argument('--source', required=True)
+        if command == 'resume':
+            sub.add_argument('--source', default='')
+        if command in OBSERVER | {'prepare-observer', 'review-resolve'}:
+            sub.add_argument('--request', required=True)
+        if command == 'prepare-observer':
+            sub.add_argument('--session', required=True)
+        if command == 'review-read':
+            sub.add_argument('--chapter', type=int)
+            sub.add_argument('--compare', action='store_true')
+        if command in ('review-observe', 'review-report'):
+            sub.add_argument('--file', required=True)
+        if command == 'review-resolve':
+            sub.add_argument('--disposition', choices=('accept_uncertainty', 'repair'), required=True)
+            sub.add_argument('--source', required=True)
         if command in ('submit', 'preflight', 'recontract', 'opening', 'lexical', 'intake'):
             sub.add_argument('--file', required=True)
         if command == 'check':
@@ -118,6 +138,7 @@ def parser():
         if command == 'prepare-worker':
             sub.add_argument('--task', required=True)
             sub.add_argument('--reset-failures', action='store_true')
+            sub.add_argument('--fresh-context', action='store_true', help='同身份空历史重开；重新交付材料并轮换凭据。')
         if command == 'worker':
             sub.add_argument('--task', required=True)
             sub.add_argument('--session')
@@ -217,6 +238,10 @@ def normalize_worker(args):
 
 def role_guard(args):
     """A dispatched worker and the controller are different roles; prose is worker-only."""
+    if args.command in OBSERVER:
+        require(os.environ.get('NOVEL_OBSERVER_SESSION') and os.environ.get('NOVEL_REVIEW_TOKEN')
+                and os.environ.get('NOVEL_REVIEW_REQUEST') == args.request,
+                'continuity_identity', '核验命令只交给宿主准备的独立读者上下文。')
     if args.command in WORKER_ONLY:
         task = worker_identity(args).get('NOVEL_TASK_ID')
         asked = getattr(args, 'task', None)
@@ -292,17 +317,38 @@ def dispatch(args, open_runtime=open_local_runtime):
         role_guard(args)
         worker_guard(app, args)
         if portable and args.command != 'worker-next':
-            app.worker_ready(identity['NOVEL_TASK_ID'], identity['NOVEL_SESSION'], identity['NOVEL_EXECUTION_CLAIM'])
+            app.worker_ready(identity['NOVEL_TASK_ID'], identity['NOVEL_SESSION'], identity['NOVEL_EXECUTION_CLAIM'],
+                             terminal_replay=args.command == 'submit')
         if args.command in SEALED:
             app.content_guard()
         command, owner = args.command, args.owner
         if command == 'init':
+            app.configure_assurance(args.trust, args.continuity, args.source or '新项目保障策略', owner)
             result = app.status()
             try:
                 result['book_view'] = runtime.book_view()
             except OSError as exc:
                 result['book_view_error'] = str(exc)
             return result
+        if command == 'assurance':
+            return app.configure_assurance(args.trust, args.continuity, args.source, owner)
+        if command == 'prepare-observer':
+            result = app.prepare_observer(args.request, args.session, owner)
+            result['observer_env'] = {'NOVEL_OBSERVER_SESSION': args.session,
+                                      'NOVEL_REVIEW_TOKEN': result['token'], 'NOVEL_REVIEW_REQUEST': args.request}
+            result['commands'] = {name: [sys.executable, str(Path(__file__).resolve()), '--project', args.project,
+                                         name, '--request', args.request] for name in sorted(OBSERVER)}
+            return result
+        if command in OBSERVER:
+            session, token = os.environ['NOVEL_OBSERVER_SESSION'], os.environ['NOVEL_REVIEW_TOKEN']
+            if command == 'review-read':
+                return app.read_review(args.request, session, token, args.chapter, args.compare)
+            payload = load(args.file)
+            require(isinstance(payload, dict) and payload.get('request_id') == args.request,
+                    'continuity_version', '核验回执不得改投其他请求。')
+            return (app.observe_review if command == 'review-observe' else app.report_review)(payload, session, token)
+        if command == 'review-resolve':
+            return app.resolve_review(args.request, args.disposition, args.source, owner)
         if command == 'status':
             return app.task_list() if args.tasks else app.status()
         if command == 'advance':
@@ -331,7 +377,7 @@ def dispatch(args, open_runtime=open_local_runtime):
             kind = next((k for k in ('entity', 'node', 'topic', 'thread') if getattr(args, k)), None)
             return app.recall(args.task, args.chapter, args.state, kind, getattr(args, kind) if kind else None, args.limit, args.before)
         if command == 'prepare-worker':
-            return app.prepare_worker(args.task, args.session, owner, args.seconds, args.reset_failures)
+            return app.prepare_worker(args.task, args.session, owner, args.seconds, args.reset_failures, args.fresh_context)
         if command == 'worker-ready':
             return app.worker_ready(args.task, identity.get('NOVEL_SESSION'), identity.get('NOVEL_EXECUTION_CLAIM'))
         if command == 'worker-error':
@@ -361,7 +407,7 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'pause':
             return app.pause(args.reason, args.cancel, owner)
         if command == 'resume':
-            return app.resume(owner)
+            return app.resume(owner, args.source)
         if command == 'answer':
             return app.answer(args.decision_id, args.option, args.source, owner)
         if command == 'revise':
@@ -423,7 +469,7 @@ def dispatch(args, open_runtime=open_local_runtime):
     finally:
         try:
             if portable and sys.exc_info()[0] is None and args.command not in ('worker-ready', 'worker-error'):
-                app.worker_succeeded(identity['NOVEL_TASK_ID'])
+                app.worker_succeeded(identity['NOVEL_TASK_ID'], args.command)
         finally:
             runtime.close()
 

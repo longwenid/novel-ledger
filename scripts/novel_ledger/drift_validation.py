@@ -2,6 +2,8 @@
 policy, declared deltas/enter rows and the normalized chapter shape simulated before prose."""
 from __future__ import annotations
 
+from .continuity import timeline_findings
+
 import copy
 
 from .contracts import han_count, require, text
@@ -350,8 +352,17 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     world_ids = _world_index(world)
     scratch = copy.deepcopy((state0 or {}).get('entities') or {})
     anchor = _anchor(data, chapters, numbers, first, end, state0, world)
-    for row in chapters:
+    previous_timeline = None
+    for position, row in enumerate(chapters):
         chapter_no = row['chapter']
+        if row.get('story_events') is not None:
+            require(isinstance(row['story_events'], list) and all(text(item) for item in row['story_events']),
+                    'chapter_outline', 'story_events只列故事内发生的事件。')
+        require(row.get('reader_effect') is None or text(row['reader_effect']), 'chapter_outline',
+                'reader_effect只作读者效果注释，不参与事实结算。')
+        findings.extend(timeline_findings(row, previous_timeline))
+        if (row.get('timeline') or {}).get('relation') not in ('parallel', 'flashback'):
+            previous_timeline = row
         synopsis = row.get('synopsis')
         if not text(synopsis):
             findings.append(_finding(chapter_no, 'synopsis', 'synopsis', '章节推进说明', None,

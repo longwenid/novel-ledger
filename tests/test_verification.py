@@ -92,13 +92,15 @@ class VerificationTests(unittest.TestCase):
         book['draft'] = {'chapter': 1, 'prose': '第一版候选。', 'stage': 'exhausted', 'findings': []}
         book['rework']['1'] = {'repairs': 2, 'redesigns': 1, 'initial_used': True}
         first = workflow.hold_for_draft_exhaustion(book)['id']
-        self.repo.save(book)
+        with self.repo.transaction():
+            self.app._save(book)  # Trusted fixture setup; direct tampering is separately rejected.
         self.app.answer(first, workflow.REPAIR_AGAIN, '作者为这个版本追加一轮。', self.owner)
         book = self.repo.load()
         book['draft']['prose'] = '第二版候选。'
         book['rework']['1']['repairs'] = 2
         second = workflow.hold_for_draft_exhaustion(book)['id']
-        self.repo.save(book)
+        with self.repo.transaction():
+            self.app._save(book)
         self.assertNotEqual(first, second)
         before = tuple(self.repo.db.iterdump())
         self.assertCode('author_decision', self.app.answer, first, workflow.REPAIR_AGAIN,
@@ -108,7 +110,7 @@ class VerificationTests(unittest.TestCase):
         book['author_block']['subject']['prose_hash'] = '0' * 64
         self.repo.save(book)
         before = tuple(self.repo.db.iterdump())
-        self.assertCode('author_decision', self.app.answer, second, workflow.REPAIR_AGAIN,
+        self.assertCode('governance_integrity', self.app.answer, second, workflow.REPAIR_AGAIN,
                         '对象已被另行修改的答复。', self.owner)
         self.assertEqual(tuple(self.repo.db.iterdump()), before)
 
@@ -156,6 +158,12 @@ class VerificationTests(unittest.TestCase):
         status = self.app.status()
         self.assertEqual(status['written_han'], completed['written_han'])
         self.assertTrue(self.app.complete(self.owner)['idempotent'])
+
+    def test_completed_review_coverage_uses_frozen_chapter_rows(self):
+        self.finish()
+        before = self.app.audit()['continuity_review']
+        self.repo.db.execute("UPDATE chapters SET review=? WHERE branch='main' AND n=1", ('0' * 64,))
+        self.assertEqual(self.app.audit()['continuity_review'], before)
 
     def test_snapshot_replay_does_not_depend_on_revision_mutation_service(self):
         self.finish()

@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 # The five-step pipeline is a protocol generation change: v2 removed every reviewer dispatch, so a
 # task frozen by v1 (checks_version, obligations, blind first read, plan/book_plan stages) can no
 # longer be executed by this build. The pipeline and storage carry independent version identifiers.
-VERSION = '2.0.1'
+VERSION = '2.1.0'
 
 
 SCHEMA = 'novel-ledger/5'
@@ -592,9 +592,21 @@ CONTROLLER_ERRORS = frozenset((
     'controller_lease', 'role_boundary', 'worker_boundary', 'stale_task',
     'writing_batch', 'technical_blocked', 'source_integrity', 'state_integrity',
     'projection', 'chain', 'schema_version',
+    'host_authority', 'host_actor', 'authorization_replay', 'governance_integrity',
+    'engine_changed', 'continuity_identity', 'continuity_stale',
+    'continuity_pending', 'continuity_settlement',
 ))
 
 RECOVERY_ROUTES = {
+    'continuity_pending': ('await_existing_review', '保留原候选，完成正在进行的独立阅读或作者裁决；不重新派读换稿。'),
+    'continuity_settlement': ('settle_reviewed_candidate', '把原候选的准确回执交还原Worker提交，先结算返修再写新稿。'),
+    'engine_changed': ('pin_engine', '恢复冻结构建，或沿已获升级授权保留稿件、取消旧任务并重新冻结；不复用旧input_hash。'),
+    'governance_integrity': ('inspect_integrity', '核对治理事件与检查点，保留异常现场；不清预算或覆盖检查点继续。'),
+    'host_authority': ('connect_trusted_host', '接入受控宿主证明；本地CLI不能自行生成可信作者授权或独立模型身份。'),
+    'host_actor': ('restore_host_channel', '把调用交还已登记的实际上下文；不要改会话字符串冒充其他角色。'),
+    'authorization_replay': ('request_current_authorization', '重新核对准确对象与真实人类回复，不能重放旧授权。'),
+    'continuity_stale': ('resync_review', '核对当前候选与核验请求；旧报告不能覆盖新候选。'),
+    'continuity_identity': ('restore_observer', '核对独立读者的实际宿主上下文和核验凭据；主控和执笔者不能代审。'),
     'controller_lease': ('renew_controller', '主控核对 owner；有效租约由原主控 renew，已失效则沿原授权 run 重新认领，再恢复 Worker。'),
     'stale_task': ('resync_task', '主控核对 status 与当前任务；不修改旧任务身份重投稿件。'),
     'writing_batch': ('resync_task', '主控核对当前组和原执行者；保留已提交章节，不把旧回调转成下一任务。'),
@@ -622,9 +634,11 @@ class Error(Exception):
         recovery = execution_recovery(code)
         self.details.setdefault('recovery', recovery)
         if code in CONTROLLER_ERRORS:
+            action_desc = ('由主控 prepare-worker 绑定 NOVEL_TASK_ID/NOVEL_SESSION 并注入凭据。' if recovery['action'] == 'prepare_worker'
+                           else '主控按 recovery.action 恢复对应能力，不靠重置计数跳过原因。')
             self.details['recover'] = (RECOVERY_ROUTES.get(code, ('', ''))[1] +
-                                       '保留任务与已填稿件，将 task_id、真实会话和错误码交回主控；'
-                                       '由主控 prepare-worker 绑定 NOVEL_TASK_ID/NOVEL_SESSION 并注入凭据。'
+                                       '保留任务与已填稿件，将 task_id、真实会话和错误码交回主控；' +
+                                       action_desc +
                                        'Worker 不执行 claim/advance/run。')
         else:
             self.details.setdefault('recover', '按当前任务模板修正后重提；不要改库或替换任务身份。')
@@ -669,3 +683,4 @@ class Outcome:
     book: Dict[str, Any]
     chapter: Optional[Dict[str, Any]] = None
     style_report: Optional[Dict[str, Any]] = None
+    findings: Optional[list] = None

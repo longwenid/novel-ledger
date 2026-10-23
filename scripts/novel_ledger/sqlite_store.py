@@ -569,8 +569,11 @@ class SQLiteRepository:
     def usage(self):
         rows = self.db.execute('SELECT input,result FROM tasks').fetchall()
         reads = self.db.execute("SELECT value FROM journal WHERE action='read'").fetchall()
+        review_reads = self.db.execute("SELECT value FROM journal WHERE action='continuity_read'").fetchall()
         return {'tasks': len(rows), 'task_input_chars': sum(len(r['input']) for r in rows),
                 'accepted_receipt_chars': sum(len(r['result'] or '') for r in rows),
                 'supplemental_read_chars': sum(store_keys.read_chars(json.loads(r['value'])) for r in reads),
+                'continuity_read_calls': len(review_reads),
+                'continuity_read_chars': sum(json.loads(r['value']).get('chars', 0) for r in review_reads),
                 'attempted_receipt_chars': None, 'billed_tokens': None,
-                'basis': '仅冻结信封、已接受回执和 CLI 实际读取；不含宿主历史、工具包装与缓存计费。'}
+                'basis': '仅冻结信封、已接受回执和实际材料读取；独立核验字符单列，不含宿主历史、工具包装与缓存计费。'}

@@ -260,7 +260,8 @@ class WorkbenchTests(unittest.TestCase):
                     status='paused', pause_reason='额度用尽。')
         workflow.hold_for_draft_exhaustion(book)
         spent = dict(book['rework']['1'])
-        self.repo.save(book)
+        with self.repo.transaction():
+            self.app._save(book)  # Trusted setup of the exhausted fixture, not an ordinary recovery path.
         changed = contract(6)
         changed['reader_promise'] = '重新激活规划链。'
         self.app.recontract(changed, '零进度重开。', self.owner)

@@ -13,7 +13,7 @@ from .contracts import require
 WORK_FIELDS = ('schema', 'stage', 'chapter', 'scope', 'first', 'last', 'payload', 'branch',
                'revision', 'records', 'required', 'narrative_tracking',
                'capabilities', 'policy')
-WORK_OPTIONAL = ('brief',)
+WORK_OPTIONAL = ('brief', 'build')
 # `payload` is the one work field whose contents a stage decides on, so its keys are declared as
 # well. Without this, "an undeclared field is rejected" held for the envelope but not for the
 # container everything else travels in: the compiler wrote keys the consumers (briefs, result

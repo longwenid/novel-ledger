@@ -15,6 +15,12 @@ flowchart TD
     VERIFY --> PORT
     VERIFY --> DOMAIN
     VERIFY --> DRIFTR[执笔核算 drift_reconcile]
+    APP --> GOV[治理与授权 governance]
+    GOV --> PORT
+    APP --> CONT[独立核验 continuity_service]
+    CONT --> PORT
+    CONT --> CRULE[原文与时序 continuity]
+    CRULE --> C
     APP --> WRITE[连写编排 writing_service]
     WRITE --> PORT
     WRITE --> WF

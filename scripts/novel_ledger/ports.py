@@ -123,3 +123,10 @@ class WatchApplication(Protocol):
 
 
 TaskCompiler = Callable[[Dict[str, Any], Job], Dict[str, Any]]
+
+
+class HostAuthority(Protocol):
+    """Injected by a protected host, never constructed from model-supplied identity alone."""
+    context_id: str
+    audience: str
+    def verify(self, kind, subject, source=''): ...

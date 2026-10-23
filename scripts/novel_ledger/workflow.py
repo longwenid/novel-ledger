@@ -483,7 +483,7 @@ def resolve_draft_exhaustion(book, option, subject=None):
     return book
 
 
-def apply(book, task, data, actor, sources, priors=None):
+def apply(book, task, data, actor, sources, priors=None, external_findings=None):
     require(isinstance(data, dict), 'result', 'data 须为对象。')
     data = copy.deepcopy(data)
     book = copy.deepcopy(book)
@@ -497,6 +497,7 @@ def apply(book, task, data, actor, sources, priors=None):
     contract = editorial.effective_contract(book) if book.get('contract') else None
     row = None
     style_report = None
+    findings = []
     if stage == 'opening_options':
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         book['creation'] = creation.offer(book['creation'], data)
@@ -656,6 +657,7 @@ def apply(book, task, data, actor, sources, priors=None):
         data = {**data, 'prose': prose}
         sources = {**sources, chapter: prose}
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
+        prior_budget = copy.deepcopy((book.get('rework') or {}).get(str(chapter)))
         spend(book, chapter, stage)
         old = book['draft'] or {}
         draft = {'chapter': chapter, 'title': data['title'], 'prose': data['prose'], 'producer': actor,
@@ -694,7 +696,22 @@ def apply(book, task, data, actor, sources, priors=None):
                                      style.merged_window(book.get('contract'), volume_style), chapter,
                                      contract=book.get('contract'))
         findings.extend(style_report['findings'])
+        findings.extend(copy.deepcopy(external_findings or []))
         if findings:
+            signature = digest({'prose': ''.join(prose.split()), 'findings': findings})
+            attempts = old.get('attempt_signatures', [])
+            if old.get('findings') and not attempts:
+                attempts = [digest({'prose': ''.join(old['prose'].split()),
+                                    'findings': old.get('current_findings', old['findings'])})]
+            # Repeating a known failed candidate is diagnosis, not a new literary attempt.
+            # Use actual diagnostics, not edits to self-check/reason fields as "progress".
+            # Correcting evidence changes findings; a passing candidate is never refused.
+            require(stage == 'write' or signature not in attempts, 'no_progress',
+                    '候选与已知失败稿相同，未消耗新的文学返修轮次。',
+                    {'findings': findings, 'next_action': 'revise_candidate',
+                     'rework': prior_budget})
+            draft['attempt_signatures'] = attempts + [signature]
+            draft['current_findings'] = copy.deepcopy(findings)
             route_repair(book, draft, findings, after_repair=stage != 'write')
         else:
             raw_events = facts.prepare_hook_links(settlement['events'])
@@ -747,4 +764,4 @@ def apply(book, task, data, actor, sources, priors=None):
         book['understanding'] = understanding.update(book.get('understanding'), data.get('understanding'),
                                                      sources, evidence, actor)
     book['revision'] += 1
-    return Outcome(book, row, style_report)
+    return Outcome(book, row, style_report, findings)

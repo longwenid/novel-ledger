@@ -19,6 +19,11 @@ ALLOWED = {
     'stages': {'contracts'},
     'envelope': {'contracts'},
     'ports': {'contracts'},
+    'governance': {'contracts', 'store_keys', 'ports'},
+    'authority': {'contracts'},
+    'build_info': {'contracts'},
+    'continuity': {'contracts'},
+    'continuity_service': {'contracts', 'continuity', 'store_keys', 'ports'},
     'book_state': {'contracts'},
     'craft': {'contracts'},
     # lint judges mechanical prose defects (verbatim reuse, quote family, foreign residue) against
@@ -49,7 +54,7 @@ ALLOWED = {
     # a word is written.
     'drift': {'contracts', 'facts', 'narrative', 'spatial', 'world'},
     'drift_simulation': {'contracts', 'drift', 'evidence', 'facts', 'world'},
-    'drift_validation': {'contracts', 'drift', 'drift_simulation', 'entities', 'world'},
+    'drift_validation': {'contracts', 'drift', 'drift_simulation', 'entities', 'world', 'continuity'},
     'drift_reconcile': {'contracts', 'drift', 'drift_simulation', 'evidence', 'world'},
     'result_templates': {'contracts', 'world', 'editorial', 'narrative', 'stages', 'drift'},
     'revision_impact': {'contracts', 'story_memory'},
@@ -71,7 +76,7 @@ ALLOWED = {
     # key space). book_state stays a pure declaration module: it imports nothing but contracts.
     'application': {'contracts', 'ports', 'store_keys', 'book_state', 'creation', 'facts', 'narrative', 'planning',
                     'workflow', 'world', 'craft', 'editorial',
-                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'opening_service', 'verification', 'lint', 'writing_service'},
+                    'story_memory', 'understanding', 'revision_service', 'contract_activation', 'opening_service', 'verification', 'lint', 'writing_service', 'governance', 'continuity_service'},
     'writing_service': {'contracts', 'ports', 'store_keys', 'editorial', 'planning', 'workflow'},
     'revision_service': {'contracts', 'ports', 'store_keys', 'editorial', 'facts', 'narrative', 'revision_impact',
                          'story_memory', 'understanding', 'workflow', 'verification'},
@@ -93,7 +98,7 @@ ALLOWED = {
     # the public application protocol, so the loop stays an adapter even though it runs long.
     'unattended': {'contracts', 'ports'},
     'bootstrap': {'contracts', 'application', 'context', 'presentation', 'sqlite_store',
-                  'workspace', 'workflow', 'host', 'unattended', 'delivery', 'bookpage'},
+                  'workspace', 'workflow', 'host', 'unattended', 'delivery', 'bookpage', 'build_info'},
     'novel': {'contracts', 'bootstrap'},
 }
 
@@ -106,6 +111,9 @@ CORE_EXTERNAL = {
     'stages': {'__future__', 'contracts'},
     'envelope': {'__future__', 'contracts'},
     'ports': {'__future__', 'typing'},
+    'governance': {'__future__'},
+    'continuity': {'__future__'},
+    'continuity_service': {'__future__'},
     'book_state': {'__future__', 'copy'},
     'craft': {'__future__', 'copy'},
     'lint': {'__future__', 're'},
@@ -146,7 +154,7 @@ CORE_EXTERNAL = {
 # discover resources or start processes, but only through the injected surface.
 ADAPTERS = {
     'workspace', 'delivery', 'bookpage', 'presentation',
-    'sqlite_store', 'host', 'unattended', 'bootstrap', 'novel',
+    'sqlite_store', 'host', 'unattended', 'bootstrap', 'novel', 'authority', 'build_info',
 }
 
 FORBIDDEN_CORE_NAMES = {'open', '__import__', 'eval', 'exec', 'Path',

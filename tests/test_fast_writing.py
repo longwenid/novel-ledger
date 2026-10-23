@@ -1,5 +1,7 @@
 """Fast writing reuses one real execution identity in a bounded five-chapter group."""
 import copy
+import hashlib
+import hmac
 import json
 import os
 import subprocess
@@ -11,8 +13,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from novel_ledger import store_keys, unattended
-from novel_ledger.bootstrap import open_local_runtime
-from novel_ledger.contracts import Error, digest
+from novel_ledger.bootstrap import open_local_runtime, local_application
+from novel_ledger.authority import SignedHostAuthority
+from novel_ledger.contracts import Error, digest, dump
 from support import contract, drive, response
 
 
@@ -90,6 +93,57 @@ class FastWritingTests(unittest.TestCase):
                                    sleep=lambda _: self.fail('blocked group must not keep waiting'))
         self.assertEqual(stopped['action'], 'worker_blocked')
         self.assertEqual(stopped['task_id'], current['task_id'])
+
+    def test_required_host_provenance_survives_group_continuation(self):
+        self.app.submit(response(self.app))
+        pilot = self.app.advance(owner=self.owner)
+        self.app.approve(pilot['prose_hash'], '作者认可准确首章。', self.owner)
+        self.app.configure_assurance('required', 'off', '接入受控宿主。', self.owner)
+        audience = self.app.status()['assurance']['project_id']
+        task = self.app.advance(owner=self.owner)['task']
+        session = 'actual-fast-child'
+        subject = {'task': task['task_id'], 'session': session}
+        key = b'host-only-fixture-key-for-fast-group-proof'
+        claims = {'kind': 'worker', 'subject': digest(subject), 'source_hash': digest(''), 'audience': audience,
+                  'caller_context': 'actual-controller', 'context_id': session, 'isolated': True,
+                  'nonce': 'fast-registration', 'issued_at': 100, 'expires_at': 200}
+        proof = {'claims': claims, 'signature': hmac.new(key, dump(claims).encode(), hashlib.sha256).hexdigest()}
+        controller = local_application(self.repo, authority=SignedHostAuthority(
+            key, proof, context_id='actual-controller', audience=audience, clock=lambda: 150))
+        prepared = controller.prepare_worker(task['task_id'], session, self.owner)
+        token = prepared['worker_env']['NOVEL_EXECUTION_CLAIM']
+        child = local_application(self.repo, authority=SignedHostAuthority(
+            key, None, context_id=session, audience=audience, clock=lambda: 150))
+        self.assertEqual(child.submit(response(child, session=session, claim=token))['committed_chapter'], 2)
+        with self.assertRaises(Error):
+            controller.continue_writing(task['task_id'], session, token)
+        next_step = child.continue_writing(task['task_id'], session, token)
+        next_task = next_step['task']['task_id']
+        next_token = next_step['execution_claim']
+        self.assertTrue(child.worker_ready(next_task, session, next_token)['ready'])
+        self.assertEqual(child.submit(response(child, session=session, claim=next_token))['committed_chapter'], 3)
+
+    def test_portable_old_receipt_still_confirms_after_next_task_and_group_finish(self):
+        first, first_lease = self.start_group()
+        receipt, _ = self.submit('fast-worker', first_lease)
+        view = json.loads(Path(first['task_path']).read_text())
+        Path(view['result_path']).write_text(json.dumps(receipt), encoding='utf-8')
+        env = {**{k: v for k, v in os.environ.items() if not k.startswith('NOVEL_')},
+               'NOVEL_TASK_ID': first['task_id'], 'NOVEL_SESSION': 'fast-worker',
+               'NOVEL_EXECUTION_CLAIM': first_lease['token']}
+        current, lease = self.next(first, first_lease)
+        for phase in ('next_task_active', 'group_finished'):
+            if phase == 'group_finished':
+                for chapter in range(3, 7):
+                    self.submit('fast-worker', lease)
+                    if chapter < 6:
+                        current, lease = self.next(current, lease)
+            process = subprocess.run(view['commands']['submit'], env=env, capture_output=True, text=True, timeout=20)
+            self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+            result = json.loads(process.stdout)
+            self.assertTrue(result['idempotent'])
+            self.assertEqual(result['committed_chapter'], 2)
+            self.assertEqual(len(self.repo.headers('main')), 2 if phase == 'next_task_active' else 6)
 
     def test_failed_prose_repairs_the_same_chapter_without_spending_the_next_chapter_budget(self):
         task, lease = self.start_group()
@@ -206,6 +260,7 @@ class FastWritingTests(unittest.TestCase):
         for round_number in range(3):
             receipt = response(self.app)
             receipt.update(session='fast-worker', execution_claim=lease['token'])
+            receipt['data']['prose'] += ('门关着。', '门开着。', '灯灭了。')[round_number]
             receipt['data']['drift_check']['items'].pop()
             result = self.app.submit(receipt)
             if round_number < 2:
