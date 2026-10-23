@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,32 @@ from novel_ledger.bootstrap import open_local_runtime
 from novel_ledger.contracts import Error, execution_recovery, policy_default
 from novel_ledger import delivery, store_keys, unattended
 from support import contract, drive, response
+
+
+def shell_roundtrip(argv):
+    """Parse the rendered command back into argv on the current platform."""
+    quoted = delivery._quoted_argv(argv)
+    if sys.platform != 'win32':
+        return shlex.split(quoted)
+    parts, i, n = [], 2, len(quoted)  # skip the leading '& '
+    while i < n:
+        if quoted[i] != "'":
+            i += 1
+            continue
+        i += 1
+        part = []
+        while i < n:
+            if quoted.startswith("''", i):
+                part.append("'")
+                i += 2
+            elif quoted[i] == "'":
+                i += 1
+                break
+            else:
+                part.append(quoted[i])
+                i += 1
+        parts.append(''.join(part))
+    return parts
 
 
 class ExecutionHandoffTests(unittest.TestCase):
@@ -71,7 +98,7 @@ class ExecutionHandoffTests(unittest.TestCase):
         argv[index:index] = ['--session', env['NOVEL_SESSION'], '--execution-claim', env['NOVEL_EXECUTION_CLAIM']]
         self.assertTrue(self.cli(argv)['ready'])
         # A POSIX command must remain executable with spaces and apostrophes in paths.
-        self.assertEqual(self.cli(__import__('shlex').split(delivery._quoted_argv(argv)))['session'], env['NOVEL_SESSION'])
+        self.assertEqual(self.cli(shell_roundtrip(argv))['session'], env['NOVEL_SESSION'])
 
     def test_receipt_identity_is_injected_in_memory_and_preflight_keeps_story_unchanged(self):
         prepared = self.prepare()

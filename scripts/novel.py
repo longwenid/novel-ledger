@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from novel_ledger.contracts import CONTROLLER_STAGES, Error, VERSION, require
+from novel_ledger.contracts import CONTENT_ERRORS, CONTROLLER_STAGES, Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime
 
 PUBLIC = {'init', 'assurance', 'prepare-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
@@ -123,6 +123,8 @@ def parser():
             sub.add_argument('--record')
             sub.add_argument('--all', action='store_true', dest='everything',
                              help='取回全部必读记录（默认只给本任务还没拿到过的那些）。')
+        if command == 'read':
+            sub.add_argument('--save', nargs='?', const='read_pack.json', default=None)
         if command == 'recall':
             group = sub.add_mutually_exclusive_group(required=True)
             group.add_argument('--chapter', type=int)
@@ -131,8 +133,10 @@ def parser():
                 group.add_argument('--' + kind)
             sub.add_argument('--limit', type=int, default=5)
             sub.add_argument('--before', type=int)
-        if command in ('claim', 'run', 'renew', 'prepare-worker'):
+        if command in ('run', 'renew'):
             sub.add_argument('--seconds', type=int, default=300)
+        if command in ('claim', 'prepare-worker'):
+            sub.add_argument('--seconds', type=int, default=None)
         if command in ('claim', 'prepare-worker'):
             sub.add_argument('--session', required=True)
         if command == 'prepare-worker':
@@ -312,6 +316,7 @@ def dispatch(args, open_runtime=open_local_runtime):
     runtime = open_runtime(args.project, initialize=args.command == 'init',
                            contract=load(args.contract) if args.command == 'init' and args.contract else None,
                            source=args.source if args.command == 'init' else '', entry=Path(__file__).resolve())
+    preview_refused = False
     try:
         app = runtime.app
         role_guard(args)
@@ -363,16 +368,29 @@ def dispatch(args, open_runtime=open_local_runtime):
             return runtime.deliver()
         if command in ('submit', 'preflight'):
             result = worker_receipt(load(args.file), identity, portable)
-            return app.submit(result, command == 'preflight')
+            outcome = app.submit(result, command == 'preflight')
+            if portable and command == 'preflight':
+                outcome.update(app.preview_feedback(identity['NOVEL_TASK_ID'], outcome.get('findings', []),
+                                                    identity.get('NOVEL_SESSION'), identity.get('NOVEL_EXECUTION_CLAIM')))
+            if outcome.get('stalled'):
+                outcome['next_action'] = {'actor': 'controller', 'action': 'inspect_content'}
+            return outcome
         if command == 'check':
             # Same validation as submit, but the receipt may omit task identity and may be piped in:
             # a worker learns which field is wrong without reading the engine's source.
             payload = load(args.file) if args.file else stdin_json()
             if portable:
                 payload = worker_receipt(payload, identity, True)
-            return app.check(payload, getattr(args, 'task', None), session=identity.get('NOVEL_SESSION'))
+            outcome = app.check(payload, getattr(args, 'task', None), session=identity.get('NOVEL_SESSION'))
+            if portable:
+                outcome.update(app.preview_feedback(identity['NOVEL_TASK_ID'], outcome.get('findings', []),
+                                                    identity.get('NOVEL_SESSION'), identity.get('NOVEL_EXECUTION_CLAIM')))
+            if outcome.get('stalled'):
+                outcome['next_action'] = {'actor': 'controller', 'action': 'inspect_content'}
+            return outcome
         if command == 'read':
-            return app.read(args.task, args.record, everything=getattr(args, 'everything', False))
+            return app.read(args.task, args.record, everything=getattr(args, 'everything', False),
+                            receive=(lambda result: runtime.save_materials(result, args.save)) if args.save else None)
         if command == 'recall':
             kind = next((k for k in ('entity', 'node', 'topic', 'thread') if getattr(args, k)), None)
             return app.recall(args.task, args.chapter, args.state, kind, getattr(args, kind) if kind else None, args.limit, args.before)
@@ -456,8 +474,29 @@ def dispatch(args, open_runtime=open_local_runtime):
             return runtime.watch(args.owner, args.steps, args.poll, args.idle_limit)
         require(False, 'access', '未实现命令。')
     except (Error, OSError, ValueError) as exc:
+        error = exc if isinstance(exc, Error) else Error('worker_io', str(exc))
+        if error.code in CONTENT_ERRORS:
+            if args.command in ('check', 'preflight'):
+                preview_refused = True
+                if portable:
+                    app.worker_heartbeat(identity['NOVEL_TASK_ID'], identity.get('NOVEL_SESSION'),
+                                         identity.get('NOVEL_EXECUTION_CLAIM'))
+                findings = error.details.get('findings') or [{'criterion': error.code, 'reason': error.message,
+                                                            'details': error.details}]
+                feedback = (app.preview_feedback(identity['NOVEL_TASK_ID'], findings, identity.get('NOVEL_SESSION'),
+                                                 identity.get('NOVEL_EXECUTION_CLAIM')) if portable else {})
+                candidate = locals().get('payload' if args.command == 'check' else 'result')
+                task_id = identity.get('NOVEL_TASK_ID') or getattr(args, 'task', None)
+                task_id = task_id or (candidate.get('task_id') if isinstance(candidate, dict) else None)
+                return {'valid': False, 'accepted': False, 'committed': False, 'checked': True,
+                        'outcome': 'repair_required', 'task_id': task_id, **feedback,
+                        'error': error.code, 'message': error.message, 'findings': findings,
+                        'findings_count': len(findings), 'transaction': {'persisted': False, 'preview': True},
+                        'next_action': {'actor': 'controller' if feedback.get('stalled') else 'worker',
+                                        'action': 'inspect_content' if feedback.get('stalled') else
+                                                  error.details.get('next_action', 'revise_candidate')}}
+            raise error from None
         if portable:
-            error = exc if isinstance(exc, Error) else Error('worker_io', str(exc))
             try:
                 error.details['recovery'] = app.worker_failure(identity['NOVEL_TASK_ID'], identity.get('NOVEL_SESSION'), args.command, error.code)
             except Error:
@@ -468,8 +507,11 @@ def dispatch(args, open_runtime=open_local_runtime):
         raise
     finally:
         try:
-            if portable and sys.exc_info()[0] is None and args.command not in ('worker-ready', 'worker-error'):
-                app.worker_succeeded(identity['NOVEL_TASK_ID'], args.command)
+            if portable and not preview_refused and sys.exc_info()[0] is None and args.command != 'worker-error':
+                app.worker_heartbeat(identity['NOVEL_TASK_ID'], identity.get('NOVEL_SESSION'),
+                                     identity.get('NOVEL_EXECUTION_CLAIM'))
+                if args.command != 'worker-ready':
+                    app.worker_succeeded(identity['NOVEL_TASK_ID'], args.command)
         finally:
             runtime.close()
 

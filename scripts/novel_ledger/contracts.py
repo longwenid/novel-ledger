@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 # The five-step pipeline is a protocol generation change: v2 removed every reviewer dispatch, so a
 # task frozen by v1 (checks_version, obligations, blind first read, plan/book_plan stages) can no
 # longer be executed by this build. The pipeline and storage carry independent version identifiers.
-VERSION = '2.1.0'
+VERSION = '2.1.2'
 
 
 SCHEMA = 'novel-ledger/5'
@@ -78,6 +78,9 @@ DEFAULTS = {
     'revision_limit': 3,
     'fast_batch_chapters': 5,
     'technical_retries': 2,
+    'worker_lease_seconds': 300,
+    'single_delivery_lease_seconds': 3600,
+    'design_stall_rounds': 3,
     # opening/5's two new gates are the ones a web serial lives on, so their floors are numbers, not
     # prose: how many rungs the reader-visible ladder must show at each size class, how many stages
     # the 格局 ladder must walk, and how late the theme anchor may land. `anchor_max_chapter` is the
@@ -596,6 +599,53 @@ CONTROLLER_ERRORS = frozenset((
     'engine_changed', 'continuity_identity', 'continuity_stale',
     'continuity_pending', 'continuity_settlement',
 ))
+
+SINGLE_DELIVERY_STAGES = frozenset({'world_model', 'opening_contract', 'volume_outline', 'chapter_outline'})
+
+CONTENT_ERRORS = frozenset((
+    'alias', 'alias_conflict', 'amount', 'anchor', 'anchor_fixed', 'chapter_outline',
+    'character_current', 'clock', 'custody', 'design_drift', 'development', 'dialogue',
+    'draft', 'drift_check', 'drift_reason', 'elapsed_days', 'entity', 'entity_coverage',
+    'evidence', 'evidence_scope', 'event', 'event_op', 'events', 'historical', 'hook',
+    'hook_due', 'hook_extension',
+    'hook_reference', 'initial_fact', 'insufficient_resource', 'knowledge', 'ledger', 'link',
+    'literal_policy', 'move', 'opening_alignment', 'opening_diversity', 'opening_gate',
+    'opening_option', 'opening_options', 'opening_scene', 'opening_voice', 'outline_alignment',
+    'outline_state', 'patch', 'patch_base', 'path', 'path_time', 'perceive', 'place',
+    'place_cycle', 'placement', 'precondition', 'reader_knowledge', 'reading_dependency',
+    'relation', 'repair_scope', 'resource', 'resurrection', 'revision_outline', 'scene',
+    'scene_identity', 'scene_time', 'schedule', 'spatial_protocol', 'state', 'story_closure',
+    'story_criteria', 'story_dependency', 'story_node', 'story_precondition', 'story_protocol',
+    'story_thread', 'thread_due', 'time_conflict', 'time_evidence', 'understanding',
+    'understanding_reference', 'volume_outline', 'word_budget', 'world', 'world_alignment',
+    'world_fields', 'world_id', 'world_identity', 'world_links', 'world_optional',
+    'world_record', 'world_reference', 'world_section', 'writer_events',
+))
+
+TECHNICAL_ERRORS = frozenset((
+    'access', 'alignment_schema', 'author_decision', 'author_source', 'book_integrity',
+    'book_ownership', 'book_state', 'capability', 'chapter', 'chapter_limit', 'chapter_order',
+    'chapter_target', 'checks', 'claim', 'completion', 'contract', 'coverage', 'creation',
+    'criterion', 'delivery', 'editorial_protocol', 'edits', 'envelope_identity', 'envelope_input',
+    'envelope_task', 'execution_claim', 'exists', 'feedback', 'file', 'findings', 'first_read',
+    'first_read_frozen', 'format', 'gold', 'history_integrity', 'host_command', 'host_loop',
+    'host_timeout', 'host_transport', 'input_version', 'intake', 'lease', 'length',
+    'lexical_policy', 'lint', 'manifest', 'observation', 'observation_conflict', 'opening',
+    'opening_back', 'opening_incomplete', 'opening_state', 'opening_system', 'opening_version',
+    'outline_policy', 'output', 'pause', 'paused', 'payoffs', 'pilot_version', 'plan_guard',
+    'plan_preconditions', 'project', 'project_isolation', 'prose_integrity', 'recall', 'record',
+    'remedy_exhausted', 'repair_budget', 'replan', 'replay_conflict', 'result', 'resume',
+    'review', 'revision', 'revision_bounds', 'revision_carry', 'revision_impact',
+    'revision_proposal', 'revision_scope', 'revision_target', 'schema', 'severity', 'source',
+    'stage', 'stage_brief', 'stage_template', 'stale_case', 'stdin_encoding', 'stdin_json',
+    'target', 'task', 'task_integrity', 'transaction', 'understanding_source', 'verdict',
+    'volume', 'watch', 'worker_io', 'world_view', 'writing_mode',
+))
+
+CONTENT_ERRORS = CONTENT_ERRORS | frozenset(('no_progress', 'timeline', 'continuity_evidence',
+                                               'continuity_observation', 'continuity_report'))
+TECHNICAL_ERRORS = TECHNICAL_ERRORS | frozenset(('assurance_policy', 'continuity_request',
+    'continuity_phase', 'continuity_resolution', 'continuity_version', 'continuity_source', 'continuity_coverage'))
 
 RECOVERY_ROUTES = {
     'continuity_pending': ('await_existing_review', '保留原候选，完成正在进行的独立阅读或作者裁决；不重新派读换稿。'),

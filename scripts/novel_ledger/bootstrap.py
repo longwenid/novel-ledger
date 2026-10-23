@@ -57,6 +57,25 @@ class LocalRuntime:
     def html(self, output=None):
         return bookpage.write(self.repo, output, workspace=self.workspace)
 
+    def save_materials(self, result, output):
+        if output == 'read_pack.json':
+            output = self.repo.project / 'work' / result['task_id'] / output
+        target = self.workspace.artifact_path(output)
+        bodies = {'response': target, **{name: self.workspace.artifact_path(target.with_name(name))
+                                      for name in ('read_pack.md', 'read_ref.md')}}
+        # Validate every destination before writing any artifact.
+        paths = list(bodies.values())
+        require(not any(self.workspace.same_path(left, right) for index, left in enumerate(paths)
+                        for right in paths[index + 1:]), 'output', '材料响应与两份材料包必须使用不同文件。')
+        self.workspace.write_json(bodies['response'], result)
+        for name, content in delivery.pack_markdowns(result).items():
+            self.workspace.write_text(bodies[name], content)
+        return {'task_id': result['task_id'], 'saved': str(target),
+                'packs': [str(bodies[name]) for name in ('read_pack.md', 'read_ref.md')],
+                'records': sorted(result['records']), 'records_hash': result.get('records_hash'),
+                'execution_id': result.get('execution_id'), 'already_read': result.get('already_read', []),
+                'note': '完整材料已落盘；首次读取两包，不省略前章原文或必要来源。'}
+
     def host_step(self, command, owner=None, timeout=300):
         return host.step(self.app, command, owner, timeout)
 

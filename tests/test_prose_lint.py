@@ -150,6 +150,22 @@ class LintFlowTests(unittest.TestCase):
         self.assertTrue(any(row.get('matches') == ['check'] for row in findings))
         self.assertEqual(self.repo.headers('main')[-1]['n'], 1)      # the defect never committed
 
+    def test_preview_answers_every_defect_in_one_call(self):
+        owner = self.first_chapter_is_committed()
+        drive(self.app, owner=owner, until='write')
+        first = self.committed()[1]
+        result = response(self.app)
+        result['data']['prose'] = ('第二章重起炉灶，另立一案。' + first).replace('要求先核对', '要求先 check 再核对')
+        preview = self.app.submit({**result}, preview=True)
+        self.assertFalse(preview['committed'])
+        self.assertEqual(preview['next_stage'], 'repair')
+        # Both defects — a reused committed span and western residue — answer in the same
+        # preview, so one rewrite can address the whole list at once.
+        criteria = [row['criterion'] for row in preview['findings']]
+        self.assertIn('repetition', criteria)
+        self.assertIn('language', criteria)
+        self.assertEqual(self.repo.headers('main')[-1]['n'], 1)
+
 
 if __name__ == '__main__':
     unittest.main()

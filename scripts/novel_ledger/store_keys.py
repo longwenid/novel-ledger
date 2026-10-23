@@ -32,7 +32,7 @@ GOVERNANCE_CHECKPOINT = 'governance_checkpoint'
 BOOK_ROOT = 'book'
 
 PREFIXES = ('claim:', 'branch-book:', 'history_head:', 'technical_failure:', 'execution_reads:', 'task_outcome:',
-            'authorization:', 'continuity_review:', 'pending_review:', 'review_candidates:')
+            'authorization:', 'continuity_review:', 'pending_review:', 'review_candidates:', 'content_rounds:')
 
 # The journal row an actual read leaves behind. It is written by the application and summed by the
 # storage adapter's `usage`, so the shape is declared here instead of being an implicit agreement
@@ -59,6 +59,10 @@ def technical_failure(task_id):
 
 def execution_reads(execution_id):
     return 'execution_reads:' + execution_id
+
+
+def content_rounds(task_id):
+    return 'content_rounds:' + task_id
 
 
 def task_outcome(task_id):

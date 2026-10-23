@@ -155,7 +155,8 @@ class WritingService:
         lease = {'session': session, 'token': self.new_id(),
                  'execution_id': (lease.get('execution_id') if lease else None) or self.new_id(),
                  'provenance': (lease.get('provenance') if lease else None),
-                 'until': self.clock() + group.get('lease_seconds', 300)}
+                 'until': self.clock() + group.get('lease_seconds', 300),
+                 'seconds': group.get('lease_seconds', 300)}
         self.repo.put(store_keys.claim(task['id']), lease)
         return task, lease
 

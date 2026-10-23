@@ -576,7 +576,8 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None)
                 simulated, chain_findings = drift_simulation.simulate(validated, simulated, book.get('world'),
                                                            volume, outlines[volume_id])
                 require(not chain_findings, 'design_drift', '合并回执的卷内状态链核账未通过。',
-                        {'volume': volume_id, 'findings': chain_findings[:12]})
+                        {'volume': volume_id, 'findings': chain_findings,
+                         'findings_count': len(chain_findings)})
     elif stage == 'chapter_outline':
         # Step four: the volume's chapter outlines, each declaring what it changes and what state
         # it enters and leaves. The engine simulates the whole chain here, before a word is written.

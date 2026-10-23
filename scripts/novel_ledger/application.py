@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION,
+from .contracts import (CONTENT_ERRORS, SINGLE_DELIVERY_STAGES, policy_default, CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION,
                         execution_recovery,
                         digest, dump, require, text)
 from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint
@@ -166,7 +166,7 @@ class Application:
         self._session(task, session, claim)
         return {'schema': EXECUTION, 'task_id': task_id, 'session': session, 'ready': True}
 
-    def prepare_worker(self, task_id, session, owner=None, seconds=300, reset_failures=False, fresh_context=False):
+    def prepare_worker(self, task_id, session, owner=None, seconds=None, reset_failures=False, fresh_context=False):
         """Controller binds the host-returned identity; no invented session or prose edits."""
         self.controller_guard(owner)
         task = self.repo.task(task_id)
@@ -196,6 +196,10 @@ class Application:
             old = self.repo.get(store_keys.technical_failure(task_id)) or {}
             if old.get('blocked'):
                 return {**execution_recovery(old['code'], old['failures']), 'task_id': task_id}
+            if code in CONTENT_ERRORS:
+                return {'actor': 'worker', 'action': 'correct_content', 'retry_allowed': True,
+                        'failures': old.get('failures', 0), 'limit': policy_default('technical_retries'),
+                        'content_error': True}
             count = old.get('failures', 0) + 1
             recovery = execution_recovery(code, count)
             row = {'task': task_id, 'session': session, 'operation': operation,
@@ -204,6 +208,25 @@ class Application:
             self.repo.put(store_keys.technical_failure(task_id), row)
             self.repo.record('worker_failure', row)
             return {**recovery, 'task_id': task_id}
+
+    def worker_heartbeat(self, task_id, session, claim):
+        """Execution-channel activity, separate from read-only business previews.
+
+        Only an authenticated, unexpired pending lease renews. Completed receipt
+        confirmations do not create or extend a new execution.
+        """
+        with self.repo.transaction():
+            task = self.repo.task(task_id)
+            if task['status'] != 'pending':
+                return False
+            self._live(task, verify=False)
+            self._worker_actor(task, session)
+            self._session(task, session, claim)
+            lease = self.repo.get(store_keys.claim(task_id))
+            require(lease is not None, 'worker_identity', '续租必须来自已准备的执行通道。')
+            lease['until'] = self.clock() + lease.get('seconds', policy_default('worker_lease_seconds'))
+            self.repo.put(store_keys.claim(task_id), lease)
+        return True
 
     def worker_succeeded(self, task_id, operation=None):
         old = self.repo.get(store_keys.technical_failure(task_id))
@@ -214,6 +237,26 @@ class Application:
             with self.repo.transaction():
                 self.repo.put(store_keys.technical_failure(task_id), None)
                 self.repo.record('worker_progress', {'task': task_id, 'operation': operation})
+
+    def preview_feedback(self, task_id, findings, session, claim):
+        """Execution telemetry for repeated content previews; never a literary allowance.
+
+        The CLI host calls this after a business preview has rolled back. Pure API
+        previews do not acquire writes merely to report an error or run diagnostics.
+        """
+        with self.repo.transaction():
+            task = self.repo.task(task_id)
+            self._live(task, verify=False)
+            self._worker_actor(task, session)
+            self._session(task, session, claim)
+            key = store_keys.content_rounds(task_id)
+            old = self.repo.get(key) or {}
+            signature = digest(sorted(digest(item) for item in findings))
+            rounds = (old.get('rounds', 0) + 1 if old.get('signature') == signature else 1) if findings else 0
+            stalled = rounds >= policy_default('design_stall_rounds')
+            self.repo.put(key, {'signature': signature, 'rounds': rounds, 'stalled': stalled})
+            self.repo.record('content_preview', {'task': task_id, 'signature': signature, 'rounds': rounds})
+        return {'content_rounds': rounds, 'stalled': stalled}
 
     def _cancel_pending(self, reason):
         self._writing.close(reason)
@@ -406,7 +449,7 @@ class Application:
             return {**boundary, **view}
         return {'action': 'task_ready', 'task': self.presentation.task(task, self._baseline(book, task), compact=compact), 'status': self.status(), **view}
 
-    def read(self, task_id, record=None, everything=False):
+    def read(self, task_id, record=None, everything=False, receive=None):
         task = self.repo.task(task_id)
         self._live(task, verify=False)
         work = task['input']
@@ -443,9 +486,9 @@ class Application:
                 result['already_read'] = already
                 result['already_read_note'] = ('这些记录此前已交给本执行上下文；需要原文时用 read --record 名称重取，'
                                                '或用 read --all 取回全部必读记录。')
-        return self._observe_read(task_id, names, result)
+        return self._observe_read(task_id, names, result, receive)
 
-    def _observe_read(self, task_id, names, result):
+    def _observe_read(self, task_id, names, result, receive=None):
         """Count actual supplemental output, including recall; this is not billed usage."""
         with self.repo.transaction():
             task = self.repo.task(task_id)
@@ -458,6 +501,10 @@ class Application:
                 self.repo.put(key, delivered)
             self._writing.record_read(task, names)
             self.repo.record('read', store_keys.read_record(task_id, names, len(dump(result))))
+            if receive is not None:
+                # Cache only successfully delivered material. The adapter's file failure
+                # rolls back this execution's delivery marks and read journal together.
+                return receive(result)
         return result
 
     def check(self, payload, task_id=None, session=None):
@@ -600,10 +647,13 @@ class Application:
             self.repo.after_commit(lambda: self._refresh_book(response))
         return response
 
-    def claim(self, task_id, session, seconds=300, fresh_context=False):
-        require(text(session) and type(seconds) is int and seconds > 0, 'claim', '认领需要会话和正整数租期。')
+    def claim(self, task_id, session, seconds=None, fresh_context=False):
+        require(text(session), 'claim', '认领需要真实会话。')
         with self.repo.transaction():
             task = self.repo.task(task_id)
+            if seconds is None:
+                seconds = policy_default('single_delivery_lease_seconds' if task['input']['stage'] in SINGLE_DELIVERY_STAGES else 'worker_lease_seconds')
+            require(type(seconds) is int and seconds > 0, 'claim', '租期须为正整数。')
             self._live(task)
             self._session(task, session, check_lease=False)
             old = self.repo.get(store_keys.claim(task_id))
@@ -613,7 +663,7 @@ class Application:
             lease = {'session': session, 'token': old['token'] if reuse else self.new_id(),
                      'execution_id': (old.get('execution_id') if reuse else None) or self.new_id(),
                      'provenance': provenance,
-                     'until': self.clock() + seconds}
+                     'until': self.clock() + seconds, 'seconds': seconds}
             self.repo.put(store_keys.claim(task_id), lease)
             self._writing.bind(task, session, seconds)
             if fresh_context:

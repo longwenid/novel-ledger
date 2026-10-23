@@ -21,6 +21,30 @@ def json_write(path, value):
     atomic_write(path, json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
 
 
+PACK_RECORDS = ('chapter_outline', 'previous_chapters', 'state', 'style_anchor', 'word_budget',
+                'hooks', 'author_feedback', 'continuity_feedback')
+
+
+def pack_markdowns(result):
+    """Group delivered records into two files without summarizing or dropping prose.
+
+    Both files belong to the execution's material set. Grouping saves file reads;
+    it never proves the reference material was understood or survived compaction.
+    """
+    records = result['records']
+
+    def section(name):
+        return '## ' + name + '\n```json\n' + json.dumps(
+            records[name]['value'], ensure_ascii=False, indent=2, allow_nan=False) + '\n```\n'
+
+    names = [name for name in PACK_RECORDS if name in records]
+    other = [name for name in records if name not in names]
+    notice = ('本次实际交付的完整材料；新上下文须完整读取两包。'
+              '同一上下文仅可复用已读且哈希未变的记录；历史丢失时由主控重新交付，不能只读前章尾。\n\n')
+    return {'read_pack.md': '# 写作材料：' + result['task_id'] + '\n' + notice + ''.join(section(name) for name in names),
+            'read_ref.md': '# 参考材料：' + result['task_id'] + '\n' + notice + ''.join(section(name) for name in other)}
+
+
 # The author-facing card for one choice board. The controller hands this file's content over
 # verbatim instead of re-deriving a presentation from the JSON return: a live run had to redirect
 # advance's stdout to a file (GBK consoles garble UTF-8) and then hand-write a markdown card for
@@ -181,10 +205,10 @@ def render_dispatch_card(envelope, identity):
                     "    if (-not $env:NOVEL_SESSION) { throw '缺少宿主执行身份：由主干注入真实会话标识，不得自拟。' }")
     commands = envelope.get('commands') or {}
     steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。',
-             '2. 执行一次无参数 read（命令见下）把必读记录拿齐；确需某份再 read --record 名称。',
+             '2. 执行一次无参数 read（命令见下）把必读记录拿齐；可加 --save 集中落盘并通读两包，不截断前章；确需某份再 read --record 名称。',
              '3. 复制 `result.template.json` 为 `result.json` 起稿，只改 data；'
              'Python worker 入口在内存中注入真实 session/execution_claim，不写回草稿；schema/task_id/input_hash 不手写。',
-             '4. 执行 commands.preflight 试算，按 details.expect 与 details.recovery 修正；不为确认格式读引擎源码。',
+             '4. 执行 commands.preflight 试算，以 outcome 和总 findings 判断；内容拒绝不计技术错误，stalled=true 时停止盲试交主控，不为确认格式读引擎源码。',
              '5. `submit` 提交；worker_boundary=finished 后结束：不自行 advance，不执行作者或主干命令，不改写 commands/guides。']
     command_names = ('ready', 'read', 'check', 'preflight', 'submit')
     if envelope.get('worker_batch'):

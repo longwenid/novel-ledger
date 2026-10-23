@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-23",
+  "version": "2.1.2",
+  "local_parent": "c9f3222e5a07218968b0808dc10c557d0799d0e4",
+  "remote_parent": "8eff9b42efcf51cac03c648e491d6e348fb03896",
+  "strategy": "selective merge preserving both histories",
+  "build": {
+    "version": "2.1.2",
+    "engine_hash": "cc68a69a5cf9e52f4c1f8fa125a6b4ea6f9968d729ed447db1c27d7d329aea79",
+    "rules_hash": "515ce90a22863bb3b1445e888bd8eaa5ec8fdea271c4ec75fbd2f3a4c92aab14"
+  },
+  "tests": {
+    "run": 603,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 65.467,
+    "command": "python3 -m unittest discover -s tests -q"
+  },
+  "skill_validation": "passed",
+  "active_links": {
+    "files": 17,
+    "bad_references": 0
+  },
+  "adopted": [
+    "error taxonomy",
+    "full diagnostic lists",
+    "authenticated execution heartbeat",
+    "stage-sized leases",
+    "unabridged material packs",
+    "execution content-preview stall feedback",
+    "platform-aware command tests"
+  ],
+  "not_adopted": [
+    "automatic kept/clean and arbitrary evidence quotes",
+    "previous-prose truncation",
+    "unrelated success clearing failures",
+    "weakened controller/integrity blocking",
+    "persistent business-preview mutation",
+    "universal sentence-length preference",
+    "stale release manifest"
+  ],
+  "remote_pushed": false,
+  "novel_project_modified": false
+}
