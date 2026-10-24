@@ -535,7 +535,7 @@ def style_material(book, volume, chapter_row=None):
             'anchor': style.baseline(book),
             'window': style.merged_window(contract, volume_style),
             'volume': dict(volume_style), 'chapter': dict(chapter_style),
-            'source': '文风规格：契约 voice/tone/pov/style_traits 是底线，anchor 是作者认可首章的实测指标，'
+            'source': '文风规格：契约 voice/tone/pov/style_traits 是底线，anchor 是作者认可首章的实测指标（无认可锚点时为 origin=default 的默认文风档案），'
                       'volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。'
                       'guard=observe 默认只观察首章形状变化，strict 才执行锚点容差；'
                       '显式对白目标和高重复检查仍生效，实际视角须结合正文自比。'}
@@ -645,8 +645,14 @@ def build(repo: ContextStore, book, job):
                     'boundary': '这是可修订的作品理解，含原文样本和反证，不是事实或写作命令；作者约定仍为方向来源。'})
     if enhanced:
         add('effective_layout', editorial.effective_contract(book)['volumes'], stage in LAYOUT_STAGES)
-        if book.get('style_anchor'):
-            add('style_anchor', book['style_anchor'])
+        voice_anchor = book.get('style_anchor')
+        if voice_anchor:
+            add('style_anchor', voice_anchor)
+        elif stage in ('write', 'repair', 'redesign'):
+            # No approved pilot yet: the prose writer still gets a declared voice floor instead
+            # of free-styling chapter 1; the default profile is labeled for what it is. Design
+            # stages (outlines) do not carry prose and keep their material surface unchanged.
+            add('style_anchor', policy_default('style_default_anchor'))
     design_stages = ('volume_outline', 'chapter_outline')
     writing_stages = ('write', 'repair', 'redesign')
     if stage in design_stages or stage in writing_stages:

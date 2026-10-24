@@ -195,11 +195,18 @@ class BaselineTests(unittest.TestCase):
         book = {'style_anchor': {'prose_hash': 'h', 'sample': sample, 'source': '作者认可。'}}
         self.assertEqual(style.baseline(book), style.metrics(sample))
 
-    def test_a_sample_too_short_to_measure_is_not_a_baseline(self):
-        self.assertIsNone(style.baseline({'style_anchor': {'sample': '他走了。'}}))
-        self.assertIsNone(style.baseline({}))
-        self.assertIsNone(style.baseline({'style_anchor': None}))
-        self.assertIsNone(style.baseline({'style_anchor': {'sample': ''}}))
+    def test_a_missing_or_short_anchor_falls_back_to_the_default_profile(self):
+        """A project never runs voiceless: no anchor means the declared default floor."""
+        from novel_ledger.contracts import policy_default
+        default = policy_default('style_default_anchor')
+        for book in ({'style_anchor': {'sample': '他走了。'}}, {}, {'style_anchor': None},
+                     {'style_anchor': {'sample': ''}}):
+            baseline = style.baseline(book)
+            self.assertEqual(baseline, default)
+            self.assertEqual(baseline['origin'], 'default')
+            for key in ('han', 'sentences', 'sentence_mean', 'sentence_short_share',
+                        'paragraph_mean', 'paragraph_max', 'dialogue_share'):
+                self.assertGreater(baseline[key], 0, key)
 
 
 class CompareTests(unittest.TestCase):
@@ -429,15 +436,19 @@ class StyleIntegrationTests(unittest.TestCase):
         self.assertEqual(self.app.submit(repaired)['committed_chapter'], 2)
         self.assertEqual([row['n'] for row in self.repo.headers('main')], [1, 2])
 
-    def test_a_project_without_an_anchor_does_not_judge_sentence_style(self):
-        """No approved pilot means no baseline: the same prose is not refused for being short."""
+    def test_a_project_without_an_anchor_judges_against_the_default_profile(self):
+        """No approved pilot means the declared default floor: observed, never a silent pass.
+
+        The default anchor is compared (origin=default) but the observe guard keeps shape drift
+        non-blocking, so chapter one still commits — the floor records, it does not refuse."""
+        from novel_ledger.contracts import policy_default
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary) / 'no-anchor'
             repo = SQLiteRepository.initialize(project, seeded_book(contract(2)))
             try:
                 app = Application(repo)
                 owner = app.run(through=2, source='工程夹具：无锚点。')['owner']
-                self.assertIsNone(style.baseline(repo.load()))
+                self.assertEqual(style.baseline(repo.load()), policy_default('style_default_anchor'))
                 drive(app, owner, until='write')
                 candidate = response(app)
                 candidate['data']['prose'] = candidate['data']['prose'][:14] + sentences(4, 8, start=0x7000)

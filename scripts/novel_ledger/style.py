@@ -156,13 +156,18 @@ def merged_window(contract, volume_style=None):
 
 
 def baseline(book):
-    """The anchor sample's metrics: the chapter the author approved, or None before that."""
+    """The anchor sample's metrics, or the declared default profile before any approval.
+
+    A project never runs voiceless: without an approved pilot (or with one too short to
+    measure) the shape comparison falls back to the declared default anchor, labeled
+    `origin=default` so reports can tell a default floor from an author-approved baseline.
+    `approve` replaces it with the real measured sample."""
     anchor = (book or {}).get('style_anchor') or {}
     sample = anchor.get('sample')
-    if not text(sample):
-        return None
-    measured = metrics(sample)
-    return measured if measured['han'] >= MIN_HAN else None
+    measured = metrics(sample) if text(sample) else None
+    if measured and measured['han'] >= MIN_HAN:
+        return measured
+    return policy_default('style_default_anchor')
 
 
 def _finding(chapter, metric, expect, got, reason):
