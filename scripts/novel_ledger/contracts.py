@@ -90,6 +90,9 @@ DEFAULTS = {
     'worker_lease_seconds': 300,
     'single_delivery_lease_seconds': 3600,
     'controller_lease_seconds': 300,
+    # The highest chapter word ceiling a contract may declare (tier tables open lower; the author
+    # may patch a live contract up to this ceiling via recontract --patch).
+    'chapter_max_ceiling': 10000,
     # Unattended supervision cadence: how often watch polls task status, and how long a silent
     # worker may hold a task before the host is told (`idle`). Both stay facts for the caller;
     # neither fires a redispatch on its own.
@@ -273,24 +276,24 @@ FORM_ARTIFACTS = ('input.json', 'result.template.json', 'brief.md', 'dispatch.md
 #   chapters       recommended total chapters for the tier
 #   chapter_window the chapter counts at which the tier's band is actually reachable
 SCALE_TIERS = (
-    {'id': 't0', 'name': '微型', 'word_range': [6000, 59500], 'chapter_min': 2000, 'chapter_aim': 2600,
-     'chapter_max': 3500, 'volume_count': 1, 'chapters': 17, 'chapter_window': [2, 19],
+    {'id': 't0', 'name': '微型', 'word_range': [6000, 59500], 'chapter_min': 2000, 'chapter_aim': 3500,
+     'chapter_max': 10000, 'volume_count': 1, 'chapters': 17, 'chapter_window': [2, 19],
      'note': '单一事件的完整闭环：两三章的短篇到十七回的微型连载都算这一档；一条主线、两三个人物，'
              '没有卷内转折与支线并行的余地'},
-    {'id': 't1', 'name': '短篇', 'word_range': [90000, 175000], 'chapter_min': 1800, 'chapter_aim': 2500,
-     'chapter_max': 3500, 'volume_count': 2, 'chapters': 50, 'chapter_window': [40, 57],
+    {'id': 't1', 'name': '短篇', 'word_range': [90000, 175000], 'chapter_min': 2000, 'chapter_aim': 4000,
+     'chapter_max': 10000, 'volume_count': 2, 'chapters': 50, 'chapter_window': [40, 57],
      'note': '一次完整的因果闭环；没有中段铺陈与多线并行的余地'},
-    {'id': 't2', 'name': '精简', 'word_range': [220000, 400000], 'chapter_min': 2200, 'chapter_aim': 3000,
-     'chapter_max': 4000, 'volume_count': 4, 'chapters': 100, 'chapter_window': [84, 112],
+    {'id': 't2', 'name': '精简', 'word_range': [220000, 400000], 'chapter_min': 2000, 'chapter_aim': 4500,
+     'chapter_max': 10000, 'volume_count': 4, 'chapters': 100, 'chapter_window': [84, 112],
      'note': '一条主线的完整起落与两三处关系变化；卷内很难安排中期翻盘'},
-    {'id': 't3', 'name': '标准', 'word_range': [450000, 810000], 'chapter_min': 2500, 'chapter_aim': 3500,
-     'chapter_max': 4500, 'volume_count': 6, 'chapters': 180, 'chapter_window': [143, 200],
+    {'id': 't3', 'name': '标准', 'word_range': [450000, 810000], 'chapter_min': 2000, 'chapter_aim': 5000,
+     'chapter_max': 10000, 'volume_count': 6, 'chapters': 180, 'chapter_window': [143, 200],
      'note': '两三条线索交错、一次卷中转折与中期对手揭露；群像与代际铺陈仍要克制'},
-    {'id': 't4', 'name': '长篇', 'word_range': [900000, 1500000], 'chapter_min': 3000, 'chapter_aim': 4000,
-     'chapter_max': 5000, 'volume_count': 8, 'chapters': 300, 'chapter_window': [250, 360],
+    {'id': 't4', 'name': '长篇', 'word_range': [900000, 1500000], 'chapter_min': 2000, 'chapter_aim': 5500,
+     'chapter_max': 10000, 'volume_count': 8, 'chapters': 300, 'chapter_window': [250, 360],
      'note': '多线并行、次要人物弧线与多次代价递进；再多的人物网需要更长篇幅'},
-    {'id': 't5', 'name': '超长', 'word_range': [1800000, 3600000], 'chapter_min': 3000, 'chapter_aim': 4500,
-     'chapter_max': 6000, 'volume_count': 10, 'chapters': 600, 'chapter_window': [489, 666],
+    {'id': 't5', 'name': '超长', 'word_range': [1800000, 3600000], 'chapter_min': 2000, 'chapter_aim': 6000,
+     'chapter_max': 10000, 'volume_count': 10, 'chapters': 600, 'chapter_window': [489, 666],
      'note': '群像规模的多线交织、反复的势力更替与长期伏笔回收；对节奏控制要求最高'},
 )
 
@@ -319,10 +322,17 @@ PIPELINE_SHAPES = {
 
 
 def tier_of(contract):
-    """The tier row a contract's chapter band was sized to, or None for a custom band."""
+    """The tier row a contract's chapter band was sized to, or None for a custom band.
+
+    The scale gate stores the author's tier choice explicitly; chapter bounds alone
+    cannot discriminate tiers when they share the same band."""
+    tier_id = contract.get('tier')
+    if tier_id:
+        return next((row for row in SCALE_TIERS if row['id'] == tier_id), None)
     return next((row for row in SCALE_TIERS
                  if row['chapter_min'] == contract.get('chapter_min')
-                 and row['chapter_max'] == contract.get('chapter_max')), None)
+                 and row['chapter_max'] == contract.get('chapter_max')
+                 and row['chapter_aim'] == contract.get('chapter_aim')), None)
 
 
 # Male-channel serials live in the long tiers, so the first board opens on 标准/长篇/超长; 精简 and
