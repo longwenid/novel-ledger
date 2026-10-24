@@ -29,7 +29,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 本技能允许委派子 agent，沿用当前模型设置。宿主须能创建真实独立模型会话并提供身份；`host-check` 不能证明宿主具备派工能力。能力缺失时保留任务并报告，不编造 session 或用普通脚本冒充 Worker。
 
 1. 主干执行 `advance --compact`，已有 owner 时携带。`opening_options` 按开书指南自执；世界及后续阶段派真实 Worker。先核实原执行者与 claim，租约过期或未认领不证明原执行者已停止。
-2. 新 Worker 停在自举边界；主干取得真实会话 ID 后执行 `prepare-worker`，仅向该 Worker 注入返回的 worker_env，并交付 `dispatch.md` 路径、角色、task_path 和一句背景。环境自举、命令与模板由引擎生成，不手写一套协议。
+2. 新 Worker 停在自举边界；主干取得真实会话 ID 后执行 `prepare-worker`（正文 write/repair 阶段一律带 `--seconds 1200`——整章生成期间无心跳，默认 300 秒会在过半章节上撞线；世界/卷纲/章纲等单交付阶段不传，引擎默认 3600），仅向该 Worker 注入返回的 worker_env，并交付 `dispatch.md` 路径、角色、task_path 和一句背景。环境自举、命令与模板由引擎生成，不手写一套协议。
 3. Worker 完成当前冻结任务并提交；格式不确定用 `check`，资料不足用 `read`/`recall`。`await_review` 保留原 Worker 与候选，`finished` 才结束任务；快速组仅在 `worker_boundary=continue` 时沿 `commands.worker_next` 接续。新组用空历史 Worker，同组只复用实际已读且名称/hash 未变的材料；上下文丢失按 `--fresh-context` 重交材料。
 4. 主干用 `watch --owner ID` 等待与续租，只收提交状态或错误摘要。恢复或遇执行错误时先用 `diagnose` 一次核对任务、版本与租约；按 [小上下文交接](references/runtime.md#诊断与主控上下文交接) 保留摘要，将源码排障交给独立工程上下文。按动作分支继续派工、核验或交作者决定，不用模型轮询等待。
 5. `controller.must_continue=true`、下一 task_ready 或五章组完成都继续当前授权目标。只有实际目标交付、作者边界、无法恢复的阻碍或宿主能力缺失时停止；宿主中断如实交接。

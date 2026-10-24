@@ -101,7 +101,7 @@ prepare-worker.ready只表示协议身份登记成功，响应的worker_presence
 
 首章仍单独写并取得准确版本认可；之后每组由一个真实 Worker 最多连写五章，不跨卷、不越过授权终点或缺失章纲。每章单独冻结、完整成稿、自比与提交，沿用固定章纲，事实只在该章通过后入库。不能一次交五章后跳过中间核验。返修仍使用本章有限额度，同一 Worker 只返修当前章，通过后才写下一章；暂停、停摆或需要作者决定时结束该组。
 
-- 主干按原路径 advance 派出本组首任务，取得真实 Worker 会话 ID 后 prepare-worker 并注入返回的 worker_env；随后 `watch --owner ID` 等整组完成，不逐章另派 Worker。
+- 主干按原路径 advance 派出本组首任务，取得真实 Worker 会话 ID 后 prepare-worker（正文阶段带 `--seconds 1200`，见任务交接一节）并注入返回的 worker_env；随后 `watch --owner ID` 等整组完成，不逐章另派 Worker。
 - Worker 提交返回 `worker_boundary=continue` 时，执行当前 task.json 的 `commands.worker_next`。该命令只允许从本人已提交的最新任务接续当前组，不授予 advance、认领主控、改纲或作者权限。
 - 返回下一任务后，按返回值更新 `NOVEL_TASK_ID`、`NOVEL_TASK_PATH`、`NOVEL_EXECUTION_CLAIM`，保留同一 `NOVEL_SESSION`；读取新 task.json、brief 和 read 返回的新增/变更必读材料。执行身份只在引擎授权的组内接续时更新。
 - 同一组中已经实际读取、名称与哈希都相同的记录可复用；变更记录重新读取，`read --all` 始终可取完整材料。新组不继承此缓存，也不能复用旧组会话。
@@ -168,7 +168,7 @@ advance --compact 的 task 只含任务身份、阶段、task_path、identity_pa
 
 每个任务目录另写 identity.json 与 dispatch.md：identity.json 是该任务自己的身份副本（task_id、input_hash、阶段、chapter/scope、delivery_phase、requires_new_worker、入口与版本，以及 worker_env 里应注入的变量名）；dispatch.md 是引擎从冻结任务渲染的 **Worker 自举卡**（宿主身份注入、文件落稿步骤、认领状态、argv 命令行、常见坑）。identity 供 Worker 与主控核对身份、供失败信息说明该注入什么，**不授予任何权限**：除 opening_options 对主干放行 read/recall 外，read/recall/patch 仍只对宿主注入 NOVEL_TASK_ID 与 NOVEL_SESSION 的派工进程开放，且命令里的 --task 必须等于 NOVEL_TASK_ID；worker_env.NOVEL_SESSION 为空表示宿主尚未注入执行身份，不能自行编造；已有 claim 时派工身份沿用其 session。身份凭据只存在于宿主环境，不进任务文件、也不由 Worker 写回。
 
-除主干自执的 opening_options 外，新任务派真实新 Worker，填真实 session（普通模式一个会话只做一个任务；快速模式仅冻结的同组正文及其返修可接续，跨组仍按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**初始身份准备由主干执行**：用 `prepare-worker --task ID --session 宿主真实会话ID`，按下节交付 worker_env；Worker 不执行 claim。快速组内下一任务的凭据由 worker-next 生成。claim=null 表示尚未认领，不表示新 Worker 已可读取正文。
+除主干自执的 opening_options 外，新任务派真实新 Worker，填真实 session（普通模式一个会话只做一个任务；快速模式仅冻结的同组正文及其返修可接续，跨组仍按 session_reuse 拒绝）；**委派 = 转发 dispatch.md 路径 + 角色、task_path、一句背景和简短提交状态要求**，不手写环境自举与协议复述（手写派工提示曾教 Worker 执行 claim 而被 worker_boundary 拒绝）。子 agent 直接完成当前任务并 submit，worker_boundary=finished 后结束，不自行 advance 或代行作者与主干命令。**初始身份准备由主干执行**：用 `prepare-worker --task ID --session 宿主真实会话ID`，正文阶段加 `--seconds 1200`（整章生成期间无心跳，默认300秒不够；世界/约定/卷纲/章纲不传，沿用3600默认），按下节交付 worker_env；Worker 不执行 claim。快速组内下一任务的凭据由 worker-next 生成。claim=null 表示尚未认领，不表示新 Worker 已可读取正文。
 
 主干已派出的子 agent 仍在运行，或 claim.expired=false 时继续等待，不重派；claim=null 只表示没有执行认领，不证明没有运行中的子 agent。expired=true 表示提交前须重新认领，也不证明旧执行者已停止。已写好 result.json 但租约过期时，由主干沿允许会话重新 prepare-worker，Worker 使用新注入凭据后重提，保留已填回执。恢复任务先 status、再 advance --compact，以当前任务为准，不手改库；要看全部派工的生命周期用 `status --tasks`（id/状态/阶段/会话，取代直接查库）。
 
@@ -179,8 +179,10 @@ advance --compact 的 task 只含任务身份、阶段、task_path、identity_pa
 世界模型及后续派工使用 `novel-ledger.execution/1`，`task.execution.state` 为 `await_worker_identity`、`ready`、`blocked`；开书门是 `controller`。主控先创建真实独立 Worker，使它停在自举边界等待准备；用宿主返回的会话 ID 执行：
 
 ```bash
-python3 "$ROOT/scripts/novel.py" --project "$PROJECT" --owner "$OWNER" prepare-worker --task "$TASK" --session "$SESSION"
+python3 "$ROOT/scripts/novel.py" --project "$PROJECT" --owner "$OWNER" prepare-worker --task "$TASK" --session "$SESSION" --seconds 1200
 ```
+
+正文（write/repair）阶段按上面带 `--seconds 1200`：Worker 的每次执行命令按**授予时长**续租，一次长授予全程有效；世界模型/约定/卷纲/章纲省略 `--seconds`（引擎默认3600）。
 
 宿主将响应的 `worker_env`（含当次凭据）仅交给该 Worker。`prepare-worker` 认领同一任务并刷新派工卡，保留 `result.json`，不把它当遗留草稿隔离。初次 `session` 为空时 Worker 等待主控准备，不遍历历史、不复制旧身份。不能提供真实身份的宿主应报告能力缺失。这个入口核对宿主声明的身份与租约，不证明实际模型隔离。
 
@@ -194,7 +196,7 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" --owner "$OWNER" prepare-w
 
 2.1.2保留以下便利功能，原有宿主、独立核验、执行世代和有限返修边界继续生效：
 
-- 成功的Python worker命令在执行通道单独续租，按该租约原授予时长延长；不恢复已过期租约，不替换身份，也不因续租清除失败。世界模型、约定、卷纲、章纲默认授予3600秒以覆盖静默起草，正文默认300秒，主控显式seconds优先。直接嵌入API的宿主可调用worker_heartbeat，业务check/preflight本身仍可只读试算。
+- 成功的Python worker命令在执行通道单独续租，按该租约原授予时长延长；不恢复已过期租约，不替换身份，也不因续租清除失败。世界模型、约定、卷纲、章纲默认授予3600秒以覆盖静默起草；正文引擎默认300秒，但一整章静默生成中位约5分钟、尾部更长，read 与 submit 之间没有任何心跳，300秒租期会在过半章节上撞线——**正文（write/repair）派工一律显式 `--seconds 1200`**，单交付阶段省略 `--seconds` 沿用3600默认；主控显式seconds优先。直接嵌入API的宿主可调用worker_heartbeat，业务check/preflight本身仍可只读试算。
 - CLI check/preflight遇到内容异常时返回outcome=repair_required、valid=false和完整findings，不消耗技术失败计数；原有结构化正文判据仍以outcome判断。执行通道另记内容预览连续轮次；相同诊断连续三轮返回stalled=true，停止盲试并交主控，不能借换会话清零；诊断改善或通过才更新这项观测。它不消耗文学额度，直接业务API试算仍不写库。协议、身份、完整性和宿主错误继续走原恢复规则；无关操作不能清空旧失败。直接API保留既有Error契约。
 - `commands.read --save`将本次完整交付落到任务目录的read_pack.json、read_pack.md、read_ref.md；也可指定项目内输出路径。首次读取两份Markdown包，前章全文与证据不截断；同一上下文只复用已读且哈希不变的记录。压缩后遗失历史由主控用--fresh-context重新交付，不凭文件存在宣称已读。写盘失败回滚读取缓存；输出不能覆盖账本或互相别名。
 - 程序不自动声明kept/clean，不给任意正文片段补造证据。自评与引文仍由实际执笔者逐项核对。减少碎短句仅在它割裂动作、思绪或因果时适用，以作者风格和本章节拍为准。
