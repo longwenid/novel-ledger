@@ -87,7 +87,7 @@ prepare-worker.ready只表示协议身份登记成功，响应的worker_presence
 
 `commands` 是已填入真实入口和项目的 argv；版本恢复另列 `required_inputs`，不伪造升级授权或原执行者停止证明。`runtime.pinned=false` 时先按固定版本流程建立副本。`worker_running=null` 和租约过期都不能证明原写手已退出；重新派工前仍核实宿主状态。元数据的 `next_action` 仅提示核对方向，真正的阶段、派工和提交仍由原命令校验。
 
-在五章组结束、独立排障完成等安全交接点，由宿主压缩主控历史或换到新主控上下文；交接保留本次 diagnose 摘要、作者原授权位置、实际宿主会话对应关系，以及尚未解决的错误和决定。新主控先重跑摘要中的 `handoff.resume`，复核当前任务后接续，避免使用旧摘要直接恢复。原主控仍在运行时不并发接管同一 owner。引擎不控制模型历史，`diagnose` 不会自动清空上下文；`compact` 是存储整理，不能用于模型上下文压缩。
+在十章组结束、独立排障完成等安全交接点，由宿主压缩主控历史或换到新主控上下文；交接保留本次 diagnose 摘要、作者原授权位置、实际宿主会话对应关系，以及尚未解决的错误和决定。新主控先重跑摘要中的 `handoff.resume`，复核当前任务后接续，避免使用旧摘要直接恢复。原主控仍在运行时不并发接管同一 owner。引擎不控制模型历史，`diagnose` 不会自动清空上下文；`compact` 是存储整理，不能用于模型上下文压缩。
 
 身份、构建或完整性错误先读这份摘要与原错误；需要源码排障时交给独立工程上下文，带任务 ID、构建、错误及候选路径即可，主控只接收根因、修复范围和验证结果。写手缺字段或资料时继续使用冻结模板、`read --record`、`recall`，不猜数据库表列或内部类名。相同错误再次出现且无新证据时停止原样重试，保留现场按 recovery 分流，不把换写手作为消除错误的手段。
 
@@ -95,22 +95,22 @@ prepare-worker.ready只表示协议身份登记成功，响应的worker_presence
 
 直接导入完整约定的默认目标为试章；逐门流程按当前卷纲策略交付开书设计，不自动获得正文授权。作者已授权正文后，用 `run --through N --source 原话` 或 `run --complete --source 原话` 保存目标并取得 owner。后续主控治理命令带 `--owner 返回值`；`renew --owner 返回值` 续租。过期后重新 run 认领，沿用已经授权的实际目标，不扩大范围。
 
-## 快速无人值守：五章一组
+## 快速无人值守：十章一组
 
 快速无人值守按 `run --complete --fast --source 原话` 或 `run --through N --fast --source 原话` 在原授权目标上启用；模式保存为 `writing_mode=fast`，以后未指定模式的 run 沿用，`--standard` 恢复普通模式。模式选择不增加正文或作者裁决授权。首章取得准确版本认可后，同卷内的顺序执笔可优先采用快速组，减少新上下文启动和相同来源的重复投递。两组均须逐章冻结、完整成稿、自比、核账与原子提交；启用连续性保障时逐章独立核验。历史单次运行的费用比例和返修率不证明新流程会省多少token或保持相同文学质量。作者明确要求逐章新会话时用 `--standard`；模式属执行策略，总编在已授权目标内可直接采用，交付复盘注明实际模式。
 
-首章仍单独写并取得准确版本认可；之后每组由一个真实 Worker 最多连写五章，不跨卷、不越过授权终点或缺失章纲。每章单独冻结、完整成稿、自比与提交，沿用固定章纲，事实只在该章通过后入库。不能一次交五章后跳过中间核验。返修仍使用本章有限额度，同一 Worker 只返修当前章，通过后才写下一章；暂停、停摆或需要作者决定时结束该组。
+首章仍单独写并取得准确版本认可；之后每组由一个真实 Worker 最多连写十章，不跨卷、不越过授权终点或缺失章纲。每章单独冻结、完整成稿、自比与提交，沿用固定章纲，事实只在该章通过后入库。不能一次交十章后跳过中间核验。返修仍使用本章有限额度，同一 Worker 只返修当前章，通过后才写下一章；暂停、停摆或需要作者决定时结束该组。
 
 - 主干按原路径 advance 派出本组首任务，取得真实 Worker 会话 ID 后 prepare-worker（正文阶段带 `--seconds 1200`，见任务交接一节）并注入返回的 worker_env；随后 `watch --owner ID` 等整组完成，不逐章另派 Worker。
 - Worker 提交返回 `worker_boundary=continue` 时，执行当前 task.json 的 `commands.worker_next`。该命令只允许从本人已提交的最新任务接续当前组，不授予 advance、认领主控、改纲或作者权限。
 - 返回下一任务后，按返回值更新 `NOVEL_TASK_ID`、`NOVEL_TASK_PATH`、`NOVEL_EXECUTION_CLAIM`，保留同一 `NOVEL_SESSION`；读取新 task.json、brief 和 read 返回的新增/变更必读材料。执行身份只在引擎授权的组内接续时更新。
 - 同一组中已经实际读取、名称与哈希都相同的记录可复用；变更记录重新读取，`read --all` 始终可取完整材料。新组不继承此缓存，也不能复用旧组会话。
-- 满五章、卷界、目标、规划阶段或作者边界时，submit 返回 `worker_boundary=finished`；`worker-next` 返回 `batch_finished` 同样结束。下一组由主干派新 Worker。重复接续返回同一个待办任务，旧回调不能跳过它。
+- 满十章、卷界、目标、规划阶段或作者边界时，submit 返回 `worker_boundary=finished`；`worker-next` 返回 `batch_finished` 同样结束。下一组由主干派新 Worker。重复接续返回同一个待办任务，旧回调不能跳过它。
 - 主干收到 `wait_for_batch` 时继续等待本组，不另派工。进程退出但组仍 active 属于未完成；确认原执行者已停止后，可用 `pause --cancel` 结束该组，再 resume/advance 派新 Worker，已提交章节与返修额度保留。活跃组内不切换模式或改变目标。
 
 本模式复用同一组的模型上下文；组间独立性仍由宿主提供。工程验证不等于模型写作速度或文学质量保证。
 
-开启独立核验时，watch在首次需要派读者、核验完成需原Worker重交或需要作者裁决时返回；已绑定读者的首读与比较由watch在引擎内等待并续主控租约。逐章核验仍完整执行，不以五章组缓存豁免。
+开启独立核验时，watch在首次需要派读者、核验完成需原Worker重交或需要作者裁决时返回；已绑定读者的首读与比较由watch在引擎内等待并续主控租约。逐章核验仍完整执行，不以十章组缓存豁免。
 
 ## 主干循环（默认执行路径）
 
@@ -130,7 +130,7 @@ prepare-worker.ready只表示协议身份登记成功，响应的worker_presence
 
 Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端显示会乱；需要人读的长内容一律走引擎物化的文件（brief.md、board.md、question.json、dispatch.md、task.json、html），机器可读的短 JSON 才看控制台，或先 `$env:PYTHONUTF8=1`。自行重定向 JSON 时注意 PowerShell 5 的 `Out-File -Encoding utf8` 带 BOM，Python 读回要用 utf-8-sig。
 
-无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。返回task_ready是下一次派工，不是停止；五章组完成不需要作者再说“继续”。advance/watch附controller.must_continue与下一动作，正式submit附continuation，区分Worker组内接续与主控跨组接续。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用；无人值守期间不要用 advance 代替 watch 等待，实际输入、缓存与输出费用从宿主观测核对。
+无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。返回task_ready是下一次派工，不是停止；十章组完成不需要作者再说“继续”。advance/watch附controller.must_continue与下一动作，正式submit附continuation，区分Worker组内接续与主控跨组接续。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用；无人值守期间不要用 advance 代替 watch 等待，实际输入、缓存与输出费用从宿主观测核对。
 
 | action | 主干下一步 |
 |---|---|

@@ -1,7 +1,7 @@
 ---
 name: novel-ledger
 description: >-
-  在用户要求开书、续写网络小说、修订正文或恢复小说项目时使用。通过十三门设定、世界模型、卷纲与章纲，按作者授权写作并交付；支持单 Worker 五章快速无人值守。
+  在用户要求开书、续写网络小说、修订正文或恢复小说项目时使用。通过十三门设定、世界模型、卷纲与章纲，按作者授权写作并交付；支持单 Worker 十章快速无人值守。
 ---
 
 # novel-ledger
@@ -32,9 +32,9 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 2. 新 Worker 停在自举边界；主干取得真实会话 ID 后执行 `prepare-worker`（正文 write/repair 阶段一律带 `--seconds 1200`——整章生成期间无心跳，默认 300 秒会在过半章节上撞线；世界/卷纲/章纲等单交付阶段不传，引擎默认 3600），仅向该 Worker 注入返回的 worker_env，并交付 `dispatch.md` 路径、角色、task_path 和一句背景。环境自举、命令与模板由引擎生成，不手写一套协议。
 3. Worker 完成当前冻结任务并提交；格式不确定用 `check`，资料不足用 `read`/`recall`。`await_review` 保留原 Worker 与候选，`finished` 才结束任务；快速组仅在 `worker_boundary=continue` 时沿 `commands.worker_next` 接续。新组用空历史 Worker，同组只复用实际已读且名称/hash 未变的材料；上下文丢失按 `--fresh-context` 重交材料。
 4. 主干用 `watch --owner ID` 等待与续租，只收提交状态或错误摘要。恢复或遇执行错误时先用 `diagnose` 一次核对任务、版本与租约；按 [小上下文交接](references/runtime.md#诊断与主控上下文交接) 保留摘要，将源码排障交给独立工程上下文。按动作分支继续派工、核验或交作者决定，不用模型轮询等待。
-5. `controller.must_continue=true`、下一 task_ready 或五章组完成都继续当前授权目标。只有实际目标交付、作者边界、无法恢复的阻碍或宿主能力缺失时停止；宿主中断如实交接。
+5. `controller.must_continue=true`、下一 task_ready 或十章组完成都继续当前授权目标。只有实际目标交付、作者边界、无法恢复的阻碍或宿主能力缺失时停止；宿主中断如实交接。
 
-快速模式保留首章单独认可，同卷内每组最多五章，逐章冻结、完整成稿、核验和提交。原 Worker 的 finished 只结束其任务；主干继续接续下一组。详细操作见 [快速无人值守](references/runtime.md#快速无人值守五章一组)。
+快速模式保留首章单独认可，同卷内每组最多十章，逐章冻结、完整成稿、核验和提交。原 Worker 的 finished 只结束其任务；主干继续接续下一组。详细操作见 [快速无人值守](references/runtime.md#快速无人值守十章一组)。
 
 ## 后台保障
 

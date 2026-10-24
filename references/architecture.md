@@ -140,7 +140,7 @@ flowchart TD
 | publication | 面向 PublicationReader 的只读交付快照查询；完本来源先经 verification 复验，再提供给页面和导出 |
 | verification | 只读来源验收：推进前与保存前校验聚合状态及链头，完整事件重放、正文机械复验、必需线路与首章认可闭合；不信任 completed 或缓存 audit，不承担修改、派工和文学裁决 |
 | application | 公开用例、作者与运行授权、准确方案授权和单一事务入口；组合领域及专项应用服务，不解析输入文件或生成交付文件 |
-| writing_service | 五章组的执行范围、会话绑定、逐章接续、材料哈希复用与停止；只创建当前一章的冻结任务，不修改章纲，不代行作者和主控决定 |
+| writing_service | 十章组的执行范围、会话绑定、逐章接续、材料哈希复用与停止；只创建当前一章的冻结任务，不修改章纲，不代行作者和主控决定 |
 | revision_service / contract_activation | 同事务内的历史修订、后缀重放、理解恢复及已采纳约定激活；依赖端口与纯规则，不反向调用应用用例 |
 | opening_service | 逐门开书的门内决策机制（choice/intake/regroup/back 的状态变更、冻结与留痕）；在调用方事务内工作，主控租约与加载/保存留在应用层 |
 | sqlite_store | 持久化、唯一 pending、幂等回执、不可变材料及分支；逐章历史来源与增量目录缓存；未达文档回收 |
@@ -190,7 +190,7 @@ CLI 的 Python worker 入口只执行 Worker 公开命令，先验证会话与�
 
 ## 不变量
 
-- 快速模式是可选执行策略：每组最多五章，同组共享会话，跨组继续隔离；逐章冻结、自比、核账和原子提交，额度按章不变。worker-next 仅能从本人已提交的当前任务推进组内下一步，不能执行规划、改纲、首章认可或超出授权目标。组进度与章节提交同事务，重试不重复入库。writing_mode 属 execution，writing_batch 为声明的执行元数据；常规新任务仍禁止会话复用。
+- 快速模式是可选执行策略：每组最多十章，同组共享会话，跨组继续隔离；逐章冻结、自比、核账和原子提交，额度按章不变。worker-next 仅能从本人已提交的当前任务推进组内下一步，不能执行规划、改纲、首章认可或超出授权目标。组进度与章节提交同事务，重试不重复入库。writing_mode 属 execution，writing_batch 为声明的执行元数据；常规新任务仍禁止会话复用。
 
 - 所有 import（含函数内、相对与绝对包内 import）满足逐模块依赖白名单并构成无环图。纯规则不依赖应用端口、SQLite、文件、模型宿主、应用层或可变全局缓存；应用只依赖纯规则与端口。核心禁止 I/O 导入、内建 open、动态导入、eval/exec 和 Path 访问。
 - **跨层共享的数值默认只有一处声明**：`contracts.DEFAULTS`（卷纲/章纲策略、`style_window` 与文风门槛、返修额度），经 `contracts.policy_default(key)` 取副本使用；契约字段默认值、`drift`/`style` 的校验、`context`/`workflow` 的兜底与测试夹具都读它，`tests/test_architecture.py::test_shared_numeric_defaults_are_declared_once` 防止重新硬编码。**分层边界仍由 `tests/architecture_table.py` 的依赖白名单管**，`DEFAULTS` 只管“同一个值只能有一个来源”，两者不是一回事。

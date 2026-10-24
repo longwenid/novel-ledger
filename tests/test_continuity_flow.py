@@ -417,7 +417,7 @@ class ContinuityReadBoundsTests(unittest.TestCase):
             with patch.object(service, '_observer', return_value=(row, candidate)):
                 read = service.read('request', 'reader', 'token')
                 sizes.append(len(dump(read)))
-                self.assertEqual(set(read['sources']), {'candidate'} | {str(n) for n in range(chapter - 4, chapter)})
+                self.assertEqual(set(read['sources']), {'candidate'} | {str(n) for n in range(chapter - 9, chapter)})
                 self.assertEqual(read['sources']['candidate']['prose'], candidate['prose'])
                 for name, source in read['sources'].items():
                     self.assertEqual(source['prose_hash'], digest(source['prose']))

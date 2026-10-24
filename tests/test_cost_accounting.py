@@ -123,9 +123,9 @@ class DispatchAccountingTests(unittest.TestCase):
             rows[mode] = next(row for row in report['by_tier']
                               if row['tier'] == 't2' and row['volume_scope'] == 'all')
         self.assertEqual(rows['required']['continuity_observers'], 100)
-        self.assertEqual(rows['required']['fast_total_workers'], 127)
+        self.assertEqual(rows['required']['fast_total_workers'], 119)
         self.assertEqual(rows['off']['continuity_observers'], 0)
-        self.assertEqual(rows['off']['fast_total_workers'], 27)
+        self.assertEqual(rows['off']['fast_total_workers'], 19)
         self.assertEqual(rows['required']['story_tasks'], 106)
         self.assertEqual(rows['off']['story_tasks'], 106)
         self.assertEqual(rows['required']['standard_total_workers'], 206)

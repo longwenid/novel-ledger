@@ -76,7 +76,7 @@ DEFAULTS = {
     'redesigns': 1,
     'stall_after_rounds': 2,
     'revision_limit': 3,
-    'fast_batch_chapters': 5,
+    'fast_batch_chapters': 10,
     'technical_retries': 2,
     'worker_lease_seconds': 300,
     'single_delivery_lease_seconds': 3600,

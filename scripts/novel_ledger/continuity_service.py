@@ -131,7 +131,7 @@ class ContinuityService:
             require(str(chapter) in all_sources, 'continuity_source', '补读章节不属于冻结历史。')
             sources = {str(chapter): all_sources[str(chapter)]}
         else:
-            window = 4 if candidate['chapter'] % 5 == 0 else 2
+            window = 9 if candidate['chapter'] % 10 == 0 else 2
             selected = candidate['history'][-window:]
             sources = {'candidate': {'prose': candidate['prose'], 'prose_hash': candidate['prose_hash']}}
             sources.update({str(item['chapter']): {'prose': self.repo.read_document(item['prose_hash']),
@@ -157,7 +157,7 @@ class ContinuityService:
         row, candidate = self._observer(ident, session, token)
         require(payload.get('schema') == SCHEMA and payload.get('candidate_hash') == row['candidate_hash'],
                 'continuity_version', '观察不属于当前候选版本。')
-        required = {'candidate'} | {str(item['chapter']) for item in candidate['history'][-(4 if candidate['chapter'] % 5 == 0 else 2):]}
+        required = {'candidate'} | {str(item['chapter']) for item in candidate['history'][-(9 if candidate['chapter'] % 10 == 0 else 2):]}
         read_sources = payload.get('read_sources')
         limitations = payload.get('limitations', [])
         require(isinstance(read_sources, list) and all(text(name) for name in read_sources)

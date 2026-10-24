@@ -107,7 +107,7 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 `run --fast` 是执行模式，不属于创作约定，不改变章纲、篇幅或返修限额。普通任务的会话绑定任务 ID；快速正文任务声明 `continuous_writing=continuous-writing/1` 与 `payload.worker_batch={id,first,last}`，会话绑定组 ID，仅组内允许接续。每章仍有独立 task_id、input_hash、结果及事务；组内版本只随已验证的本任务提交推进。组冻结约定、分支及各章章纲哈希，其他修改使接续失效。
 
-submit 的 `worker_boundary=continue` 表示当前任务结束但本组未结束，Worker 只执行 `commands.worker_next`。返回的新任务与 execution_claim 指定下一步身份；更新环境后读取新任务。finished/batch_finished 表示 Worker 结束。重复回调仅恢复当前待办，不创造多条任务分支。预检同时回滚章节、组进度、绑定和凭据。运行与恢复见[快速无人值守](runtime.md#快速无人值守五章一组)。
+submit 的 `worker_boundary=continue` 表示当前任务结束但本组未结束，Worker 只执行 `commands.worker_next`。返回的新任务与 execution_claim 指定下一步身份；更新环境后读取新任务。finished/batch_finished 表示 Worker 结束。重复回调仅恢复当前待办，不创造多条任务分支。预检同时回滚章节、组进度、绑定和凭据。运行与恢复见[快速无人值守](runtime.md#快速无人值守十章一组)。
 
 ## 漂移核算
 
