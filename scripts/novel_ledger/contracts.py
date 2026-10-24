@@ -65,11 +65,12 @@ DEFAULTS = {
     'style_guard': 'observe',
     # The voice floor every project gets before its first chapter is approved: with no
     # author-approved anchor, shape metrics compare against this declared default instead of
-    # silently not judging. A mainstream chapter profile (~3.2k han, ~180 sentences, ~18-char
-    # sentence mean, ~0.25 short-sentence share, ~0.30 dialogue; paragraph units are characters). Observe guard records the drift
+    # silently not judging. A mainstream chapter profile (~180 sentences, ~18-char sentence mean,
+    # ~0.25 short-sentence share, ~0.30 dialogue; paragraph units are characters).
+    # han mirrors chapter_min so the anchor never implies a word count floor.. Observe guard records the drift
     # as observations; strict makes it actionable. approve replaces this with the real anchor.
     'style_default_anchor': {
-        'han': 3200, 'sentences': 180, 'sentence_mean': 18.0, 'sentence_short_share': 0.25,
+        'han': 2000, 'sentences': 180, 'sentence_mean': 18.0, 'sentence_short_share': 0.25,
         'paragraph_mean': 50.0, 'paragraph_max': 160.0, 'dialogue_share': 0.30, 'origin': 'default',
     },
     # Where a style metric is worth measuring at all: below these floors the sample says nothing and

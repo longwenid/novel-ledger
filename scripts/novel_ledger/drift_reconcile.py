@@ -225,6 +225,11 @@ def reconcile(drift_check, row, state, world):
                          else entry['planned'].get('action') if kind == 'hook'
                          else entry['planned'].get('after') if kind in ('node', 'thread', 'disclosure')
                          else entry['planned'].get('to'))
+        # Normalize place names to registered IDs so the kept comparison and the move
+        # event speak the same key the outline's entity registry uses (the unplanned
+        # path already does this at line 298).
+        if kind == 'places' and actual_to is not None:
+            actual_to = _declared(kind, key, actual_to, shadow, world) or actual_to
         if status == 'kept' and not _same(kind, actual_to, expected_kept):
             findings.append(_finding(chapter, kind, key, expected_kept, actual_to,
                                      '实际结果必须与已固定章纲一致；须返修正文，改为 deviated 不能豁免。',
