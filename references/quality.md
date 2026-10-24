@@ -6,7 +6,7 @@
 
 2.1.0的新CLI项目默认 `continuity=required, trust=advisory`。旧项目恢复保持原模式，不追填旧报告；每次正式状态写入建立治理检查点，之后直接清返修记录会报 `governance_integrity`。同系统账户仍能同时篡改数据和检查点，因此它是来源异常检测，不是OS安全隔离。
 
-- `continuity=required`：通过机械判据的正文先成为候选，独立观察和比较完成后才正式提交。每章重新绑定准确候选；每十章一轮的默认首读包含此前九章，其余包含此前两章，均为全文。远距相关原文按冻结历史补读。
+- `continuity=required`：通过机械判据的正文先成为候选，独立观察和比较完成后才正式提交。每章重新绑定准确候选；每十章一轮的默认首读包含此前九章，其余包含此前两章，均为全文。远距相关原文按冻结历史补读。首读返回附 observation_template 信封与 observation_example 行级示例：观察的 entity/predicate/value/certainty/time_frame 与 evidence 逐字引文按示例填写，不需要读引擎源码猜格式。
 - `continuity=off`：保留机械路径，验收列出未经独立核验的章节；不据此宣称全文连续或人物可信。需要切换时使用 `assurance --trust advisory --continuity off|required --source 作者原话`，先确认原Worker已停止，保留候选并取消在途任务；不自动降低保障模式来恢复。
 - `trust=advisory`：宿主仍须实际派出独立模型，但程序只能核对其声明和证据，报告显示未验证身份/人类来源。
 - `trust=required`：必须由受控宿主注入真实调用上下文及签名证明；本地CLI没有该能力，prepare、作者决定与冒名提交会拒绝。这个模式不因为UUID形状正确就放行。

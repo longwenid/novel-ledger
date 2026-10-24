@@ -132,6 +132,8 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 
 无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。返回task_ready是下一次派工，不是停止；十章组完成不需要作者再说“继续”。advance/watch附controller.must_continue与下一动作，正式submit附continuation，区分Worker组内接续与主控跨组接续。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用；无人值守期间不要用 advance 代替 watch 等待，实际输入、缓存与输出费用从宿主观测核对。
 
+**改变授权目标（扩大或调整终点）的固定序列**：活跃连写组会挡住改约（`writing_batch`：连写期间不能改变授权终点）。正确顺序是 `pause --cancel` 结束当前组（已提交章节与返修额度保留）→ 带当前 owner 与新目标 `run`（组不活跃才接受新终点）→ `advance` 取新组首任务。**不要在 cancel 后 `resume`**：resume 恢复的是被取消的旧组连同旧目标，然后 advance 又按旧目标重开组——扩目标的场景里 resume 是回头路。连写期间确需暂停不改目标时才用 pause + resume。
+
 | action | 主干下一步 |
 |---|---|
 | task_ready | 按任务路径派工；先核对仍在运行的子 agent 与 claim，具体见任务交接 |

@@ -436,6 +436,19 @@ class ContinuityReadBoundsTests(unittest.TestCase):
         # The history grows a hundredfold; only chapter-number digits grow in the response.
         self.assertLess(sizes[1] - sizes[0], 200)
 
+    def test_first_read_carries_the_observation_example(self):
+        """The observer fills rows from the returned example, never from engine source."""
+        service, row, candidate, _documents = self.read_fixture(3)
+        with patch.object(service, '_observer', return_value=(row, candidate)):
+            read = service.read('request', 'reader', 'token')
+        example = read['observation_example']
+        for field in ('entity', 'predicate', 'value', 'certainty', 'time_frame', 'evidence'):
+            self.assertIn(field, example)
+        self.assertIn(example['certainty'], ('explicit', 'apparent', 'reported', 'uncertain'))
+        self.assertIn('entity/predicate/value/certainty', read['instructions'])
+        self.assertIn('life_state', read['instructions'])
+        self.assertEqual(read['observation_template']['observations'], [])
+
     def test_regular_chapter_keeps_the_complete_two_chapter_window(self):
         service, row, candidate, _documents = self.read_fixture(11)
         with patch.object(service, '_observer', return_value=(row, candidate)):

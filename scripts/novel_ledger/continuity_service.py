@@ -149,7 +149,13 @@ class ContinuityService:
                             'read': 'commands.review-read --chapter N'},
                 'observation_template': {'schema': SCHEMA, 'request_id': ident, 'candidate_hash': row['candidate_hash'],
                                          'read_sources': seen, 'observations': [], 'limitations': []},
-                'instructions': '先通读正文，记录生死、行动、时间期限、地点/证物、知情与表达；未证实的旧账目只作线索。'}
+                'observation_example': {'entity': '主角名', 'predicate': 'location', 'value': '正文里的具体地点',
+                                        'certainty': 'explicit', 'time_frame': 'present',
+                                        'evidence': {'chapter': 1, 'quote': '从所读正文逐字摘出的原句', 'start': 0}},
+                'instructions': '先通读正文，记录生死、行动、时间期限、地点/证物、知情与表达；未证实的旧账目只作线索。'
+                                '每条观察须含 entity/predicate/value/certainty（explicit|apparent|reported|uncertain）'
+                                '与 time_frame（present|flashback|parallel|uncertain，缺省 present）；evidence 引文逐字'
+                                '取自所读正文并给起始偏移；life_state 只用 alive/dead/unknown。'}
         self.repo.record('continuity_read', {**store_keys.read_record(row['task_id'], sources, len(dump(result))),
                                             'request': ident, 'phase': 'blind'})
         return result

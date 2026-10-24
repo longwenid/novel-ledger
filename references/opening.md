@@ -104,7 +104,9 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 - **当期参照**：候选的机制、节奏与审美锚定开书上下文带来的最新市场快照（当期在跑什么、什么已饱和），不引用执行者记忆里的旧热点；没有快照可用时如实按"无当期证据"构思并在取舍里注明，不伪装已核对当期。紧跟主流指的是当期周期的机制与审美，不是供给已饱和的旧热点换皮。
 - **俗套命中自审**：premise / protagonist / opposition 门的每个候选，构思时先自审——最像的三本现有作品是什么、本书有什么它们没有的；差异是机制级的（怎么涨、怎么限、怎么兑现、读者在哪里动感情）才可入选，只是外衣（换朝代、换器物、换地名）就重出该候选。化石组合默认命中：遗孤血统＋残缺信物＋器物认主、无代价的圣人式主角底线、逐层升高的四层敌人梯。
 
-程序对每份方案回执按去除首尾空白后的字符数执行 pitch≤40、scene 最多 3 条；这是唯一规则，没有旧任务的宽松解释。
+程序对每份方案回执按去除首尾空白后的字符数执行 pitch≤40、scene 最多 3 条、每条 scene ≥12 字；这是唯一规则，没有旧任务的宽松解释。
+
+**结构字段以当前门任务卡的 value 规则为准，不凭记忆猜格式**：stance/dark_side/family/ladder.terminal 等是枚举（合法值写在各门规则里），mechanism（mode/principle/cost/limits）、resource（name/source/allocator）、architecture（space/history/civilizations/conflict/mystery）、ladder.scale（opening/terminal/unchanged）、payoff.plan（ways/cadence/hooks）与 payoff.anchor（deliverable/deadline_chapter，纯数字章号）是结构体。生成方案前先读当前门 brief 的 value 规则一行，再落笔；`check` 的 findings 会逐字段指出违规与合法值，按它修正，不要连续盲试。
 
 创意门执行者（默认主干，派工时为 Worker）先读 task.json、任务卡 `brief.md` 与 required 中的完整记录，含 opening_choices 与 opening_rejections。创意说明只读 [创意工具箱](hatch.md)；同一主干跨门已读且版本未变可复用。完整回执示例见 `assets/opening-options.example.json`；单一决定门按任务卡的字段边界交付。结构门由主干展示引擎档位板，不派 Worker 或提交方案回执。
 
