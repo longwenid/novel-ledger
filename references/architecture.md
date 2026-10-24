@@ -117,7 +117,7 @@ flowchart TD
 | runtime_install | 完整固定运行副本、Git归档选择、文件清单核验与只读文件模式；独立于小说库，不改变开发检出；用于隔离正常开发更新，不声称OS隔离 |
 | execution | 纯值的主控接续指令与执行活动观察；不从租约推断进程存活 |
 | build_info | 安装包代码与执行规则指纹；不包含历史validation产物，新冻结任务绑定此构建 |
-| contracts | 协议标识、约定字段表与当前开书对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、共享数值默认（`DEFAULTS`，含 `world_ladder` 的位阶/阶梯条数下限与主题锚点上限）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
+| contracts | 协议标识、约定字段表与当前开书对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、共享数值默认（`DEFAULTS`：卷纲/章纲/文风策略、返修与重试额度、快速组章数、租约时长、watch 节奏、相邻章与核验宽读窗口、`world_ladder` 下限）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
 | catalog | 开书内容目录：类型库、创意透镜、卷型转折、开书方向与门序、雷同戒律与档位板文案；纯数据无依赖，creation/briefs/delivery/bookpage 读取渲染选择板与简报 |
 | ports | 持久化、只读查询、冻结编译、交付与宿主用例的能力契约；只依赖 contracts，不持有具体资源 |
 | creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；只有当前门序（creation/6，13 门先定世界与格局），更早协议读取即拒；结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
@@ -193,7 +193,7 @@ CLI 的 Python worker 入口只执行 Worker 公开命令，先验证会话与�
 - 快速模式是可选执行策略：每组最多十章，同组共享会话，跨组继续隔离；逐章冻结、自比、核账和原子提交，额度按章不变。worker-next 仅能从本人已提交的当前任务推进组内下一步，不能执行规划、改纲、首章认可或超出授权目标。组进度与章节提交同事务，重试不重复入库。writing_mode 属 execution，writing_batch 为声明的执行元数据；常规新任务仍禁止会话复用。
 
 - 所有 import（含函数内、相对与绝对包内 import）满足逐模块依赖白名单并构成无环图。纯规则不依赖应用端口、SQLite、文件、模型宿主、应用层或可变全局缓存；应用只依赖纯规则与端口。核心禁止 I/O 导入、内建 open、动态导入、eval/exec 和 Path 访问。
-- **跨层共享的数值默认只有一处声明**：`contracts.DEFAULTS`（卷纲/章纲策略、`style_window` 与文风门槛、返修额度），经 `contracts.policy_default(key)` 取副本使用；契约字段默认值、`drift`/`style` 的校验、`context`/`workflow` 的兜底与测试夹具都读它，`tests/test_architecture.py::test_shared_numeric_defaults_are_declared_once` 防止重新硬编码。**分层边界仍由 `tests/architecture_table.py` 的依赖白名单管**，`DEFAULTS` 只管“同一个值只能有一个来源”，两者不是一回事。
+- **跨层共享的数值默认只有一处声明**：`contracts.DEFAULTS`（卷纲/章纲策略、`style_window` 与文风门槛、返修额度、快速组章数、三类租约时长、watch 轮询与静默上限、相邻章窗口与核验宽读轮距），经 `contracts.policy_default(key)` 取副本使用；CLI 的 `--seconds/--poll/--idle-limit` 缺省与 `run`/`renew`/`watch` 的签名缺省都从这里解析，不另设第二处数字；契约字段默认值、`drift`/`style` 的校验、`context`/`workflow` 的兜底与测试夹具都读它，`tests/test_architecture.py::test_shared_numeric_defaults_are_declared_once` 防止重新硬编码。**分层边界仍由 `tests/architecture_table.py` 的依赖白名单管**，`DEFAULTS` 只管“同一个值只能有一个来源”，两者不是一回事。
 - 应用进入状态变更前及保存前通过 verification 校验当前投影属于已提交链头（零章时属于约定初态）、累计字数和链头与约定绑定。冻结材料的只读补读仍可用于诊断损坏，不借此放行新派工或提交。
 - 任务输入与来源按哈希冻结；预检运行同一提交逻辑并回滚。同一任务已提交的相同结果幂等，不同结果拒绝。
 - 领域判断、章节证据、事件结算、任务完成和状态转换全部成功才 commit；一个阶段只由一个事务入口提交。取消只更新持久状态并返回任务 ID，文件回收通过 after_commit 在提交后执行；预检与异常回滚丢弃回调。回调失败会报告交付失败，已提交的数据仍然保留。

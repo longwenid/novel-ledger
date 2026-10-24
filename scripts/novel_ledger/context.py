@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (DEFAULTS, SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, require, tier_of)
+from .contracts import (DEFAULTS, SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, policy_default, require, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY,
                         SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
@@ -758,7 +758,7 @@ def build(repo: ContextStore, book, job):
         # to fail the whole dispatch.
         written = {row['n']: row for row in repo.headers(book['branch'])}
         previous = []
-        for n in range(max(1, anchor - 2), anchor):
+        for n in range(max(1, anchor - policy_default('adjacent_window_chapters')), anchor):
             row = written.get(n)
             if row is None:
                 continue

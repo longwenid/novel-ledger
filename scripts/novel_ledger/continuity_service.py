@@ -5,7 +5,7 @@ Host authenticity is delegated to Governance; advisory mode stays visibly unveri
 """
 from __future__ import annotations
 
-from .contracts import digest, dump, require, text
+from .contracts import digest, dump, policy_default, require, text
 from .ports import Repository
 from . import continuity, store_keys
 
@@ -131,7 +131,9 @@ class ContinuityService:
             require(str(chapter) in all_sources, 'continuity_source', '补读章节不属于冻结历史。')
             sources = {str(chapter): all_sources[str(chapter)]}
         else:
-            window = 9 if candidate['chapter'] % 10 == 0 else 2
+            cadence = policy_default('continuity_wide_cadence')
+            window = (policy_default('continuity_wide_window') if cadence and candidate['chapter'] % cadence == 0
+                      else policy_default('adjacent_window_chapters'))
             selected = candidate['history'][-window:]
             sources = {'candidate': {'prose': candidate['prose'], 'prose_hash': candidate['prose_hash']}}
             sources.update({str(item['chapter']): {'prose': self.repo.read_document(item['prose_hash']),
@@ -157,7 +159,10 @@ class ContinuityService:
         row, candidate = self._observer(ident, session, token)
         require(payload.get('schema') == SCHEMA and payload.get('candidate_hash') == row['candidate_hash'],
                 'continuity_version', '观察不属于当前候选版本。')
-        required = {'candidate'} | {str(item['chapter']) for item in candidate['history'][-(9 if candidate['chapter'] % 10 == 0 else 2):]}
+        cadence = policy_default('continuity_wide_cadence')
+        window = (policy_default('continuity_wide_window') if cadence and candidate['chapter'] % cadence == 0
+                  else policy_default('adjacent_window_chapters'))
+        required = {'candidate'} | {str(item['chapter']) for item in candidate['history'][-window:]}
         read_sources = payload.get('read_sources')
         limitations = payload.get('limitations', [])
         require(isinstance(read_sources, list) and all(text(name) for name in read_sources)

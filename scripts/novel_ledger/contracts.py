@@ -80,6 +80,20 @@ DEFAULTS = {
     'technical_retries': 2,
     'worker_lease_seconds': 300,
     'single_delivery_lease_seconds': 3600,
+    'controller_lease_seconds': 300,
+    # Unattended supervision cadence: how often watch polls task status, and how long a silent
+    # worker may hold a task before the host is told (`idle`). Both stay facts for the caller;
+    # neither fires a redispatch on its own.
+    'watch_poll_seconds': 20.0,
+    'watch_idle_limit_seconds': 1800.0,
+    # Adjacent-prose context: how many previous chapters the writer's required pack and the
+    # continuity reviewer's regular window both carry in full. The sliding window keeps each
+    # chapter's marginal cost at one new chapter.
+    'adjacent_window_chapters': 2,
+    # The reviewer's periodic deep re-read: every `cadence` chapters it reads `wide_window`
+    # preceding chapters in full instead of the adjacent two, auditing a whole fast group at once.
+    'continuity_wide_cadence': 10,
+    'continuity_wide_window': 9,
     'design_stall_rounds': 3,
     # opening/5's two new gates are the ones a web serial lives on, so their floors are numbers, not
     # prose: how many rungs the reader-visible ladder must show at each size class, how many stages

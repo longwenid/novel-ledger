@@ -821,7 +821,8 @@ class Application:
             self.repo.put(store_keys.claim(task_id), None)
             self.repo.record('worker_release', {'task': task_id})
 
-    def run(self, through=None, finish=False, owner=None, seconds=300, source='', mode=None):
+    def run(self, through=None, finish=False, owner=None, seconds=None, source='', mode=None):
+        seconds = policy_default('controller_lease_seconds') if seconds is None else seconds
         require(type(seconds) is int and seconds > 0, 'lease', '租期须为正整数。')
         require(mode in (None, 'standard', 'fast'), 'writing_mode', '写作模式须为 standard 或 fast。')
         with self.repo.transaction():
@@ -867,7 +868,8 @@ class Application:
                 'task': self.presentation.task(task, self._baseline(book, task), compact=True),
                 'execution_claim': lease['token'] if lease else None}
 
-    def renew(self, owner, seconds=300):
+    def renew(self, owner, seconds=None):
+        seconds = policy_default('controller_lease_seconds') if seconds is None else seconds
         require(type(seconds) is int and seconds > 0, 'lease', '租期须为正整数。')
         with self.repo.transaction():
             run = self.repo.get(store_keys.CONTROLLER)

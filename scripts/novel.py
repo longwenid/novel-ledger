@@ -142,7 +142,7 @@ def parser():
             sub.add_argument('--limit', type=int, default=5)
             sub.add_argument('--before', type=int)
         if command in ('run', 'renew'):
-            sub.add_argument('--seconds', type=int, default=300)
+            sub.add_argument('--seconds', type=int, default=None)
         if command in ('claim', 'prepare-worker'):
             sub.add_argument('--seconds', type=int, default=None)
         if command in ('claim', 'prepare-worker'):
@@ -207,8 +207,8 @@ def parser():
         if command == 'watch':
             sub.add_argument('--steps', type=int, default=1,
                              help='监督并等待多少轮派工（默认 1：等当前任务完成后取下一派工）；0 表示一直运行到作者边界、暂停或目标终点。')
-            sub.add_argument('--poll', type=float, default=20.0)
-            sub.add_argument('--idle-limit', type=float, default=1800.0,
+            sub.add_argument('--poll', type=float, default=None)
+            sub.add_argument('--idle-limit', type=float, default=None,
                              help='Worker 未提交的最长等待秒数，超过即返回 idle 交给主控处置。')
     return root
 

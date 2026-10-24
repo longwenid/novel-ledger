@@ -9,7 +9,7 @@ controller lease is renewed, and the caller is returned to only when something a
 from __future__ import annotations
 
 import time
-from .contracts import require, text
+from .contracts import policy_default, require, text
 from .execution import controller_handoff, review_handoff
 
 # The controller lease defaults to 300 seconds; renewing well inside that keeps a long wait from
@@ -17,7 +17,7 @@ from .execution import controller_handoff, review_handoff
 RENEW_EVERY = 30.0
 
 
-def _watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, now=time.monotonic,
+def _watch(app, owner, steps=1, poll=None, idle_limit=None, sleep=time.sleep, now=time.monotonic,
           on_dispatch=None):
     """Advance whenever the project can move, waiting quietly while a worker holds the task.
 
@@ -34,6 +34,8 @@ def _watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, 
     so the host's per-task cost is one call to this command, not a polling sequence. `steps=0`
     loops until a stop point — pair it with an external dispatcher reading the journal.
     """
+    poll = policy_default('watch_poll_seconds') if poll is None else poll
+    idle_limit = policy_default('watch_idle_limit_seconds') if idle_limit is None else idle_limit
     require(text(owner), 'watch', '持续监督需要主控 owner（run 命令返回的 owner）。')
     require(type(steps) is int and steps >= 0, 'watch', 'steps 须为非负整数（0 表示一直到停止点）。')
     require(poll > 0 and idle_limit > 0, 'watch', 'poll 与 idle-limit 须为正数秒。')
@@ -85,6 +87,6 @@ def _watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, 
         rounds += 1
 
 
-def watch(app, owner, steps=1, poll=20.0, idle_limit=1800.0, sleep=time.sleep, now=time.monotonic,
+def watch(app, owner, steps=1, poll=None, idle_limit=None, sleep=time.sleep, now=time.monotonic,
           on_dispatch=None):
     return controller_handoff(_watch(app, owner, steps, poll, idle_limit, sleep, now, on_dispatch))
