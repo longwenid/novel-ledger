@@ -280,4 +280,4 @@
 
 仅当冻结任务声明 payload.allow_retained_suffix 时，可先按需读取冻结的 prior_chapter_outlines 核对原后缀，章纲重排可增加 through_chapter（最后修改章），chapters 连续覆盖 from_chapter 至 through_chapter。引擎接回已保存的后续章纲并从真实前态验证整条剩余链、卷末闭合及场景/阅读绑定。任一不兼容即拒绝，须扩大范围重交；未给 through_chapter 时继续交到卷末。已写章节和未替换的后缀不因重排被改写。
 
-若连续碎短句割裂了动作、思绪或因果，可合为连贯完整的句子；需要停顿和节拍时保留短句。以作者文风、首章锚点和本章 style 为准，不以句长统一作品声线。
+句段取舍以 [文风](style.md) 为唯一源，判据用作者文风、首章锚点和本章 style，不以句长统一作品声线。

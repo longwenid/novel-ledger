@@ -19,7 +19,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 | 开书、导入设定 | [逐门开书](references/opening.md)；构思或换组时读 [创意工具箱](references/hatch.md) | 主干自执门任务，真实作者选择后推进；不重复询问已有决定。 |
 | 世界模型 | [世界模型](references/world.md) | 在同一任务推演历史选择如何留下当下制度、利益与生活约束；按要求同时交付作者约定。 |
 | 卷纲、章纲 | [创作与自比](references/craft.md#开书与规划)；字段与状态链查 [叙事推进](references/narrative.md) | 卷纲给长期冲突和兑现，章纲固定本章事实、变化与结果，保留场景表达空间。 |
-| 首章、后续执笔、当前章返修 | [创作与自比](references/craft.md#执笔)；格式疑点查 [协议](references/protocol.md) | 首章由作者认可准确版本以定调；后续沿人物处境与原文声线写作，逐项自比，局部问题按影响范围修。 |
+| 首章、后续执笔、当前章返修 | [创作与自比](references/craft.md#执笔)；写作纪律唯一源见 [文风](references/style.md)，格式疑点查 [协议](references/protocol.md) | 首章由作者认可准确版本以定调；后续沿人物处境写作、逐项自比，局部问题按影响范围修。 |
 | 续写、无人值守、恢复、交付 | [运行与恢复](references/runtime.md#主干循环默认执行路径) | 按真实 action 接续授权目标，完成验收和交付后结束。 |
 
 ## 无人值守执行
@@ -44,7 +44,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 - **固定章纲与有限返修**：先核验章纲状态链，再执笔与核账。偏差附原因、正文引文与范围，不能自动改纲迁就正文；核账说明留在回执，正文呈现人物实际经历。预检、恢复或换 Worker 不重置额度，耗尽或超范围交作者决定。
 - **独立连续性核验**：新 CLI 项目默认逐章核验，旧项目保持原模式。`review_required` 实际派独立读者；`review_in_progress` 用 watch 等待；`review_author_required` 交作者裁决；`review_complete` 由原执笔者重交准确候选。主干与执笔者不代签，具体见 [核验交接](references/quality.md#主控与执笔交接)。
 - **结果判定**：submit/preflight 看 outcome 与总 findings，正式章节看 committed_chapter，不用 accepted 或口头完成推断正文通过。不自动填 kept/clean/pass。身份与技术错误按 recovery 返回处理，完整性失败保留现场。
-- **作者与文风**：只推进已有授权，已有准确选择和首章认可直接登记。人物关注、对白与节奏依据处境和首章原文；数值形状默认只观察，不增加逐章“去 AI 味”评分或整章润色任务。机械通过不证明文学质量。
+- **作者与文风**：只推进已有授权，已有准确选择和首章认可直接登记。写作纪律唯一源是 [文风](references/style.md)：无档案按其默认文风，项目内存有作者确认的文风档案（`PROJECT/style-profile.md`）时风格项以档案覆盖默认文风；数值形状默认只观察，不增加逐章“去 AI 味”评分或整章润色任务。机械通过不证明文学质量。
 
 ## 按需操作与开发
 
@@ -55,6 +55,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 | 作者要求改约、暂停或修改字面规则 | [暂停与修改](references/runtime.md#暂停与修改)；保留原话、范围和版本。 |
 | 作者要求改写历史正文、分析影响或采纳候选 | [修订影响分析](references/runtime.md#修订影响分析)；原稿保留，超范围方案等待准确授权。 |
 | 作品理解、原文样本或场景身份需要维护 | [叙事工作台](references/workbench.md)；解释与已成立事实分开。 |
+| 执笔默认文风；作者提供对标小说，或要求提取、使用文风档案 | [文风](references/style.md)；默认文风为无档案时的缺省文风，档案经作者确认后登记入项目并覆盖默认文风，执笔与自比对照声线、口癖与 MUST/AVOID。 |
 | 当前任务涉及人物/空间字段、版本补丁 | [编辑能力](references/editorial.md) 对应小节。 |
 | 接入可信执行宿主 | [质量与宿主](references/quality.md#受控宿主的部署契约)。 |
 | 修改引擎、核对能力或排查消耗 | [架构](references/architecture.md)、[返工与成本](references/rework.md)、[验证](references/validation.md)；按变更范围运行检查。 |
