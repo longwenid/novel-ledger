@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 from . import catalog, contracts
-from .contracts import (DEFAULTS, OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_TIERS, SCALE_WINDOW, alignment_for, digest, require, text)
+from .contracts import (DEFAULTS, OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_TIERS, SCALE_WINDOW, alignment_for, digest, policy_default, require, text)
 
 # The one gate set in force. Older protocols (opening/1../5) are refused rather than re-planned:
 # a project that declares one is told to reopen under the current protocol, and nothing downstream
@@ -153,29 +153,77 @@ def current(state):
 
 # What each gate's value must carry, in the words the option writer reads. One table for the one
 # protocol in force; a field a gate never decided does not appear here.
+# Structured per-field rules: the brief renders these as a bullet list so the executor
+# can read each field's constraint without parsing a dense prose paragraph.
 VALUE_RULES = {
-    'genre': 'genre、reader_promise、tone 均为非空文本。',
-    'premise': 'novelty 核心设想、first_cause 持续成因均为至少12字的非空文本；'
-               'stance 取顺从/利用/对抗；dark_side 取外神/天灾/系统/上层剥削/制度/人心。',
-    'voice': 'pov、voice 为非空文本；style_traits 为非空文本数组。',
-    'scale': 'tier、word_range、chapter_min、chapter_max、chapter_aim、volume_count、chapters、chapter_window 按系统档位表填写。',
-    'world': 'world_premise 非空；mechanism={mode:none|bounded, principle:非空文本, cost:非空文本, limits:文本数组}；'
-             'tiers 每条为 {name,condition,gain,cost,limit} 非空文本，name 至少2字且不重复，条数按已选档位下限；'
-             'resource={name,source,allocator}，各至少2字；red_lines 为文本数组；'
-             'allow_special_mechanism 必须是布尔值且等于 mode=="bounded"。',
-    'ladder': 'scale={opening,terminal,unchanged}，opening/unchanged 至少8字，terminal 取局部/势力/体系/文明；'
-              'ladder 每条为 {stage,scope,growth,new_rule,cost} 非空文本，stage 至少2字且不重复，条数按已选档位下限；'
-              'scope 取局部/一城/一域/一界/星海/诸天且只升不降；growth 取地盘/势力/规则/认知/文明，'
-              '三级以上至少一级取规则/认知/文明；terminal=局部仅限t0/t1，'
-              'terminal=势力/体系/文明时至少一级growth分别取势力/规则/文明。',
-    'origin': 'family 取魂穿/身穿/本土/其他；arrival、cost 为非空文本。',
-    'edge': 'advantage、origin、growth、cost、ceiling 均为非空文本。',
-    'protagonist': 'id、name、identity、desire、limit 均为非空文本，id 不含 : 或 >。',
-    'relationships': 'relationships 为至少一条的非空文本数组。',
-    'opposition': 'opposition、story_engine 均为非空文本。',
-    'payoff': 'plan={ways:非空文本数组,cadence:非空文本,hooks:非空文本}；ending、theme 为非空文本；'
-              'anchor={deliverable:至少12字文本,deadline_chapter:正整数}，章号不超过已选档位上限。',
-    'title': 'title 为非空文本。',
+    'genre': [
+        'genre：非空文本',
+        'reader_promise：非空文本',
+        'tone：非空文本',
+    ],
+    'premise': [
+        'novelty：至少12字的非空文本',
+        'first_cause：至少12字的非空文本',
+        'stance：枚举 → 顺从 | 利用 | 对抗',
+        'dark_side：枚举 → 外神 | 天灾 | 系统 | 上层剥削 | 制度 | 人心',
+    ],
+    'voice': [
+        'pov：非空文本',
+        'voice：非空文本',
+        'style_traits：非空文本数组',
+    ],
+    'scale': '按系统档位表填写（tier、word_range、chapter_min/max/aim、volume_count、chapters、chapter_window）。',
+    'world': [
+        'world_premise：非空文本',
+        'mechanism：{mode: none|bounded, principle: 非空文本, cost: 非空文本, limits: 文本数组}',
+        'architecture：{space, history, civilizations, conflict, mystery}，五项均为非空文本',
+        'tiers：数组，每条 {name, condition, gain, cost, limit} 非空文本，name≥2字不重复，条数按档位下限',
+        'resource：{name, source, allocator}，各≥2字',
+        'red_lines：文本数组',
+        'allow_special_mechanism：布尔值，必须等于 (mode == "bounded")',
+    ],
+    'ladder': [
+        'scale：{opening: ≥8字, terminal: 枚举→局部|势力|体系|文明, unchanged: ≥8字}',
+        'ladder：数组，每条 {stage, scope, growth, new_rule, cost} 非空文本，stage≥2字不重复，条数按档位下限',
+        'scope：枚举 → 局部 | 一城 | 一域 | 一界 | 星海 | 诸天（只升不降）',
+        'growth：枚举 → 地盘 | 势力 | 规则 | 认知 | 文明（三级以上至少一级取规则/认知/文明）',
+        'terminal=势力时至少一级growth=势力；terminal=体系时至少一级growth=规则；terminal=文明时至少一级growth=文明',
+    ],
+    'origin': [
+        'family：枚举 → 魂穿 | 身穿 | 本土 | 其他',
+        'arrival：非空文本',
+        'cost：非空文本',
+    ],
+    'edge': [
+        'advantage：非空文本',
+        'origin：非空文本',
+        'growth：非空文本',
+        'cost：非空文本',
+        'ceiling：非空文本',
+    ],
+    'protagonist': [
+        'id：非空文本，不含 : 或 >',
+        'name：非空文本',
+        'identity：非空文本',
+        'desire：非空文本',
+        'limit：非空文本',
+    ],
+    'relationships': [
+        'relationships：至少一条的非空文本数组',
+    ],
+    'opposition': [
+        'opposition：非空文本',
+        'story_engine：非空文本',
+    ],
+    'payoff': [
+        'plan：{ways: 非空文本数组, cadence: 非空文本, hooks: 非空文本}',
+        'ending：非空文本',
+        'theme：非空文本',
+        'anchor：{deliverable: ≥12字文本, deadline_chapter: 正整数（不超过档位上限）}',
+    ],
+    'title': [
+        'title：非空文本',
+    ],
 }
 VALUE_RULES['world'] += (' architecture={'
                          + ','.join(key for key, _note, _section, _field in contracts.WORLD_ARCHITECTURE)
@@ -183,9 +231,13 @@ VALUE_RULES['world'] += (' architecture={'
 
 
 def value_rules(version, gate_id):
-    rule = VALUE_RULES.get(gate_id, '')
-    rule += ' value 只允许这些字段：' + '/'.join(value_fields(gate_id, version)) + '；不得携带其他门的决定或额外字段。'
-    return rule
+    rules = VALUE_RULES.get(gate_id, [])
+    if isinstance(rules, str):
+        lines = [rules]
+    else:
+        lines = ['- ' + row for row in rules]
+    lines.append('value 只允许这些字段：' + '/'.join(value_fields(gate_id, version)) + '；不得携带其他门的决定或额外字段。')
+    return chr(10).join(lines)
 
 
 def value_fields(gate, version=OPENING_VERSION):
@@ -680,11 +732,30 @@ def validate_contract(contract, state, world):
     require(set().union(*groups) == set(alignment_for(version))
             and not any(groups[i] & groups[j] for i in range(len(groups)) for j in range(i + 1, len(groups))),
             'alignment_schema', '对齐字段表与约定 schema 不一致，须同时更新。')
+    # The scale gate's author decision is the tier itself; chapter length numbers are that
+    # tier's derived defaults. A later author amendment (recontract --patch) may raise or tune
+    # them inside [tier floor, policy ceiling] — the tier, volume count and chapter count stay
+    # verbatim, because those are what the author actually chose.
+    amendable = {'chapter_min', 'chapter_max', 'chapter_aim', 'word_range'}
+    tier = next((row for row in SCALE_TIERS if row['id'] == choices['scale']['tier']), None)
+    ceiling = policy_default('chapter_max_ceiling')
     for key, value in expected.items():
         require(key in contract, 'opening_alignment', '约定缺少本门已选字段：' + key,
                 {'key': key, 'recover': '按模板补齐该字段，并逐字保留作者选择。'})
+        if key in amendable and tier is not None:
+            continue
         require(contract.get(key) == value, 'opening_alignment', '最终约定改变了用户选择：' + key,
                 {'key': key, 'rule': '逐字相等；不是包含、缩写或改写', 'expect': value, 'got': contract.get(key)})
+    if tier is not None:
+        floor = tier['chapter_min']
+        require(all(type(contract.get(k)) is int and floor <= contract[k] <= ceiling
+                    for k in ('chapter_min', 'chapter_max', 'chapter_aim')), 'opening_alignment',
+                '章幅修订须落在档位下限与策略上限之间。',
+                {'tier': tier['id'], 'floor': floor, 'ceiling': ceiling,
+                 'chapter_min': contract.get('chapter_min'), 'chapter_max': contract.get('chapter_max'),
+                 'chapter_aim': contract.get('chapter_aim')})
+        require(contract['chapter_min'] <= contract['chapter_aim'] <= contract['chapter_max'], 'opening_alignment',
+                '章目标须在上下限之间。')
     require(len(contract['volumes']) == choices['scale']['volume_count'], 'opening_alignment', '分卷数量与用户选择不一致。',
             {'rule': '卷数须等于所选体量档位的 volume_count', 'expect': choices['scale']['volume_count'],
              'got': len(contract['volumes']), 'source': 'opening_choices.scale'})

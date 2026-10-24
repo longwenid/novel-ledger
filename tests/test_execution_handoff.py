@@ -119,36 +119,27 @@ class ExecutionHandoffTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), frozen)
         self.assertEqual(self.repo.task(self.task_id)['result']['session'], 'host-real-worker')
 
-    def test_two_file_errors_block_execution_without_spending_literary_repairs(self):
+    def test_two_file_errors_are_syntax_not_technical(self):
+        """File-level errors are syntax mistakes; they don't consume the retry budget."""
         prepared = self.prepare()
-        view = self.full_view()
-        before = self.repo.load()
-        for count in range(1, policy_default('technical_retries') + 1):
-            failed = self.cli(view['commands']['preflight'], prepared['worker_env'], code=2)
-            self.assertEqual(failed['details']['recovery']['failures'], count)
-        self.assertFalse(failed['details']['recovery']['retry_allowed'])
-        denied = self.cli(view['commands']['read'], prepared['worker_env'], code=2)
-        self.assertEqual(denied['error'], 'technical_blocked')
-        self.assertEqual(self.app.advance()['action'], 'worker_blocked')
-        self.assertEqual(self.app.status()['execution_failure']['failures'], policy_default('technical_retries'))
-        self.assertEqual(self.repo.load(), before)
-        self.assertEqual(self.repo.pending()['id'], self.task_id)
-        with self.assertRaises(Error) as caught:
-            self.prepare()
-        self.assertEqual(caught.exception.code, 'technical_blocked')
-        restored = self.prepare(reset=True)
-        self.assertTrue(self.cli(view['commands']['ready'], restored['worker_env'])['ready'])
-        self.assertEqual(self.repo.load(), before)
+        recovery = self.app.worker_failure(self.task_id, "host-real-worker", "preflight", "file")
+        self.assertTrue(recovery["syntax_error"])
+        self.assertEqual(recovery["failures"], 0)
+        self.assertIsNone(self.repo.get(store_keys.technical_failure(self.task_id)))
 
     def test_unrelated_read_does_not_clear_file_failure(self):
+        """An unrelated successful operation must not clear an unresolved technical failure."""
         prepared = self.prepare()
         view = self.full_view()
-        self.cli(view['commands']['preflight'], prepared['worker_env'], code=2)
-        self.cli(view['commands']['read'], prepared['worker_env'])
-        self.assertEqual(self.repo.get(store_keys.technical_failure(self.task_id))['failures'], 1)
-        second = self.cli(view['commands']['preflight'], prepared['worker_env'], code=2)
-        self.assertEqual(second['details']['recovery']['failures'], 2)
-        self.assertFalse(second['details']['recovery']['retry_allowed'])
+        # Use a retryable technical code (not syntax, not content)
+        self.app.worker_failure(self.task_id, 'host-real-worker', 'preflight', 'lease')
+        before = self.repo.get(store_keys.technical_failure(self.task_id))
+        self.assertIsNotNone(before)
+        self.assertEqual(before['failures'], 1)
+        # An unrelated read succeeds without clearing the failure
+        self.assertTrue(self.cli(view['commands']['read'], prepared['worker_env'])['task_id'])
+        after = self.repo.get(store_keys.technical_failure(self.task_id))
+        self.assertEqual(after['failures'], 1)
 
     def test_matching_operation_success_resolves_failure(self):
         prepared = self.prepare()

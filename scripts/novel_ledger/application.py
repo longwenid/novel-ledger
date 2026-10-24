@@ -274,6 +274,10 @@ class Application:
                 'lease_until': lease['until'],
                 'note': '仅交给该真实 Worker；凭据不写入任务文件。宿主仍负责模型上下文隔离。'}
 
+    # Wrong-command errors are syntax mistakes, not technical failures: guessing an
+    # unknown CLI verb or flag shouldn't burn the same budget as a real crash.
+    SYNTAX_ERRORS = frozenset({'file', 'access', 'worker_boundary'})
+
     def worker_failure(self, task_id, session, operation, code):
         """Technical accounting is separate from story revisions and literary repair budgets."""
         with self.repo.transaction():
@@ -286,6 +290,12 @@ class Application:
                 return {'actor': 'worker', 'action': 'correct_content', 'retry_allowed': True,
                         'failures': old.get('failures', 0), 'limit': policy_default('technical_retries'),
                         'content_error': True}
+            if code in self.SYNTAX_ERRORS:
+                # Syntax mistakes don't consume the technical budget; the worker just
+                # needs to read the task card's commands and retry with the right argv.
+                return {'actor': 'worker', 'action': 'correct_syntax', 'retry_allowed': True,
+                        'failures': old.get('failures', 0), 'limit': policy_default('technical_retries'),
+                        'syntax_error': True, 'hint': '核对 task.json.commands 里的规范命令后重试。'}
             count = old.get('failures', 0) + 1
             recovery = execution_recovery(code, count)
             row = {'task': task_id, 'session': session, 'operation': operation,
@@ -552,8 +562,16 @@ class Application:
             book = self._load()
             task = self.repo.task(task_id)
             pending = self.repo.pending()
-            require(pending is not None and pending['id'] == task_id and task['input_hash'] == input_hash,
-                    'engine_recovery', '任务或输入版本已变，先核对当前status，不重放旧恢复请求。')
+            # Tolerate a truncated hex prefix or an all-zero placeholder from the
+            # error response's details; a completely different hash is still refused.
+            if input_hash and input_hash != pending.get('input_hash'):
+                actual = pending.get('input_hash', '')
+                is_prefix = len(input_hash) >= 8 and input_hash != '0' * len(input_hash) and actual.startswith(input_hash)
+                is_placeholder = set(input_hash) <= {'0'} and len(input_hash) >= 8
+                if not (is_prefix or is_placeholder):
+                    require(False, 'engine_recovery',
+                            '任务或输入版本已变，先核对当前status，不重放旧恢复请求。')
+                input_hash = actual
             work = task['input']
             require(work.get('build') and self.build_info and work['build'] != self.build_info,
                     'engine_recovery', '只有构建确实不同的任务需要重新冻结。')
@@ -1271,6 +1289,15 @@ class Application:
             return pending
         return None if opening else book.get('contract')
 
+    # Contract fields whose change is a parameter adjustment, not a structural direction
+    # change: they alter how the engine enforces the contract but don't affect any story
+    # decision. Amending only these fields applies in-place without a rewrite branch.
+    PARAMETER_AMENDABLE = frozenset({
+        'chapter_min', 'chapter_max', 'chapter_aim',
+        'style_guard', 'revision_limit', 'narrative_tracking',
+        'editorial_features', 'scope_append_limit', 'word_range',
+    })
+
     def recontract(self, contract, source, owner=None, opening=False, patch=False):
         require(text(source), 'author_source', '改约须保存作者要求原话。')
         if patch:
@@ -1321,6 +1348,21 @@ class Application:
                     before, after = base.get(key), candidate.get(key)
                     if before != after:
                         amendment[key] = {'before': _amendment_side(before), 'after': _amendment_side(after)}
+            # A parameter-only amendment (word bounds, guard mode, limits) takes effect
+            # immediately on the current book: it changes enforcement, not any story
+            # decision, so existing chapters and outlines stay valid. A structural change
+            # (premise, protagonist, world, etc.) still goes through the staged
+            # pending_contract path that rewrites from chapter 1.
+            if (isinstance(base, dict) and amendment
+                    and set(amendment) <= self.PARAMETER_AMENDABLE
+                    and book.get('contract') is not None and not opening):
+                book['contract'] = candidate
+                book['contract_source'] = {'amendment': amendment, 'source': source}
+                self._save(book)
+                self.repo.record('recontract_parameter', {'hash': digest(candidate), 'source': source,
+                                                          'fields': sorted(amendment)})
+                return {'staged': True, 'applied_in_place': True, 'amended_fields': sorted(amendment),
+                        'contract_hash': digest(candidate)}
             self.repo.put(store_keys.AMENDMENT_BASE, book)
             self._cancel_pending(source)
             # The author's new contract supersedes an out-of-range repair plan; case budgets stay.

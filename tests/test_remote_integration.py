@@ -94,16 +94,17 @@ class RemoteIntegrationTests(unittest.TestCase):
         receipt = response(self.app, session='integration-writer')
         receipt['data']['drift_check'] = 'invalid'
         Path(disk['result_path']).write_text(json.dumps(receipt), encoding='utf-8')
-        self.app.worker_failure(view['task_id'], 'integration-writer', 'preflight', 'file')
+        recovery = self.app.worker_failure(view['task_id'], 'integration-writer', 'preflight', 'file')
+        self.assertTrue(recovery['syntax_error'])
         before = self.repo.load()
         for _ in range(3):
             result = self.cli(disk['commands']['preflight'], prepared)
             self.assertFalse(result['valid'])
             self.assertEqual(result['outcome'], 'repair_required')
             self.assertTrue(result['findings'])
-            failure = self.repo.get(store_keys.technical_failure(view['task_id']))
-            self.assertEqual(failure['failures'], 1)
-            self.assertFalse(failure['blocked'])
+            # Syntax errors don't consume the technical budget; the unresolved content
+            # failure is tracked by content_rounds/stalled, not by the failure counter.
+            self.assertIsNone(self.repo.get(store_keys.technical_failure(view['task_id'])))
         self.assertEqual(self.repo.load(), before)
         self.assertEqual(self.repo.headers('main'), [])
         self.assertEqual(result['content_rounds'], 3)
