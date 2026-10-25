@@ -231,9 +231,13 @@ class CurrentOpeningTests(unittest.TestCase):
         # The protagonist enters a world whose architecture is already decided.
         gates = creation.gate_ids(OPENING_VERSION)
         self.assertEqual(len(gates), 13)
-        self.assertEqual(gates[:4], ('genre', 'premise', 'voice', 'scale'))
+        self.assertEqual(gates[:4], ('genre', 'premise', 'scale', 'world'))
         self.assertEqual(creation.SYSTEM_GATES[OPENING_VERSION], ('scale',))
         self.assertEqual(gates.index('world') + 1, gates.index('ladder'))
+        # opening/7's reorder: the pov is decided only after the cosmology and the scale terminal,
+        # so a grander world no longer costs eleven gates to fix a mismatched viewpoint.
+        self.assertLess(gates.index('ladder'), gates.index('voice'))
+        self.assertLess(gates.index('opposition'), gates.index('relationships'))
 
     def test_premise_and_origin_briefs_request_the_counts_the_receiver_accepts(self):
         from novel_ledger import briefs

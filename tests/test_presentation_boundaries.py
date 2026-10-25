@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import bookpage, delivery, facts, workflow
+from novel_ledger import bookpage, contracts, delivery, facts, workflow
 from novel_ledger.contracts import Error, digest, han_count
 from novel_ledger.presentation import LocalPresentation
 from novel_ledger.publication import publication
@@ -63,7 +63,7 @@ class PresentationBoundaryTests(unittest.TestCase):
                      'story_capacity': '调查责任怎样沿经手关系传递。'}
             choices = [{'gate': 'genre', 'option': {'id': 'author:genre', 'title': '作者已有要求',
                                                    'value': {'genre': '都市生活'}}, 'source': '作者指定都市生活。'}]
-            self.repo.book.update(world=model, creation={'schema': 'novel-ledger.creation/6', 'selections': choices})
+            self.repo.book.update(world=model, creation={'schema': 'novel-ledger.creation/%d' % contracts.OPENING_VERSION, 'selections': choices})
             self.workspace.project.mkdir()
             external = self.root / 'external-world.txt'
             external.write_text('external world content', encoding='utf-8')

@@ -18,7 +18,7 @@ SCHEMA = 'novel-ledger/5'
 # The guided opening has its own protocol version, carried by the creation state itself. It is not the
 # database schema: a new gate set only changes a JSON document inside the book record, so raising the
 # storage version is independent; only the current guided-opening protocol is accepted.
-OPENING_VERSION = 6
+OPENING_VERSION = 7
 
 
 TASK = 'novel-ledger.task/1'

@@ -303,10 +303,11 @@ class DomainBoundaryTests(unittest.TestCase):
         for key in ('protagonist_origin', 'core_premise', 'world_tiers', 'world_resource',
                     'world_scale', 'world_ladder', 'promise_anchor'):
             self.assertIn(key, sources)
-        # The v5 order: the core idea right after the genre, the origin behind it, and the world
-        # structure before the scale ladder that steps on it.
+        # The opening/7 order: the core idea right after the genre, the size decision on the last
+        # legal slot before the world, and the world structure before the scale ladder that steps
+        # on it; voice waits behind world+ladder, and the opponent network precedes its relations.
         gates = [ident for ident, _title in creation.GATES]
-        self.assertEqual(gates[:4], ['genre', 'premise', 'voice', 'scale'])
+        self.assertEqual(gates[:4], ['genre', 'premise', 'scale', 'world'])
         self.assertEqual(gates.index('world') + 1, gates.index('ladder'))
         self.assertEqual(creation.value_fields('premise', OPENING_VERSION),
                          ('novelty', 'first_cause', 'stance', 'dark_side'))

@@ -16,6 +16,7 @@ from novel_ledger.bootstrap import local_application as Application, local_works
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.workflow import new_book
 from support import contract, drive
+from test_opening import rows_for
 
 
 class BookPageTests(unittest.TestCase):
@@ -169,12 +170,16 @@ class BookPageTests(unittest.TestCase):
                    'stance': '利用', 'dark_side': '制度'}
         state = creation.offer(state, offered('premise', premise, 'novelty'))
         state = creation.pick(state, 'A', state['board']['hash'], 'A')
+        board = state['board']                                     # the structural gate answered itself
+        state = creation.pick(state, board['options'][0]['id'], board['hash'], '选它。')
+        # opening/7: voice sits behind world and ladder, so both are answered before the pov.
+        for gate in ('world', 'ladder'):
+            state = creation.offer(state, {'gate': gate, 'options': rows_for(gate)})
+            state = creation.pick(state, state['board']['options'][0]['id'], state['board']['hash'], '选它。')
         voice = {'pov': '第三人称限知，只跟沈桐的所见与所知。', 'voice': '具体动作与有立场的对白。',
                  'style_traits': ['少重复解释。']}
         state = creation.offer(state, offered('voice', voice, 'voice'))
         state = creation.pick(state, 'A', state['board']['hash'], 'A')
-        board = state['board']                                     # the structural gate answered itself
-        state = creation.pick(state, board['options'][0]['id'], board['hash'], '选它。')
         book = workflow.preparing_book(guided=True)
         book['creation'] = state
         self.repo.save(book)

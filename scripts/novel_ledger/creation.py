@@ -5,16 +5,21 @@ import copy
 from . import catalog, contracts
 from .contracts import (DEFAULTS, OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_TIERS, SCALE_WINDOW, alignment_for, digest, policy_default, require, text)
 
-# The one gate set in force. Older protocols (opening/1../5) are refused rather than re-planned:
+# The one gate set in force. Older protocols (opening/1../6) are refused rather than re-planned:
 # a project that declares one is told to reopen under the current protocol, and nothing downstream
 # has to keep a second gate order, field table or alignment promise alive.
+# opening/7's reorder: voice moves behind world+ladder (a pov locked before the cosmology was known
+# could only be corrected by invalidating eleven gates), scale sits right before world (the size
+# decision reaches the last legal slot), and opposition swaps with relationships (the network of
+# allies and betrayal risks now has a concrete opponent network to attach to). No gate set or field
+# ownership changed — only the order the author meets them in.
 GATES = (
     ('genre', '题材与阅读承诺'), ('premise', '核心设想与世界命题'),
-    ('voice', '叙述视角与阅读质地'), ('scale', '体量与分卷'),
-    ('world', '世界架构：空间、历史与文明'), ('ladder', '格局路径与终局视野'),
+    ('scale', '体量与分卷'), ('world', '世界架构：空间、历史与文明'),
+    ('ladder', '格局路径与终局视野'), ('voice', '叙述视角与阅读质地'),
     ('origin', '主角来历与世界联系'), ('edge', '核心优势与成长线'),
-    ('protagonist', '主角处境与底线'), ('relationships', '人物关系与立场'),
-    ('opposition', '多方对抗与持续冲突'), ('payoff', '阶段兑现与终局回应'), ('title', '书名'),
+    ('protagonist', '主角处境与底线'), ('opposition', '多方对抗与持续冲突'),
+    ('relationships', '人物关系与立场'), ('payoff', '阶段兑现与终局回应'), ('title', '书名'),
 )
 # State-based lookups validate the current protocol before using this gate set.
 # Gates the engine answers itself from a table it has already proved satisfiable. A worker must not
@@ -158,71 +163,90 @@ def current(state):
 VALUE_RULES = {
     'genre': [
         'genre：非空文本',
-        'reader_promise：非空文本',
-        'tone：非空文本',
+        'reader_promise：非空文本；写清目标读者的阅读预期与主要落点平台（起点式长线订阅追读 / 番茄式快节奏免费 / 双平台），并说明这个承诺靠什么兑现——不写统一频率或桥段公式',
+        'tone：非空文本；题材基调，区别于 payoff 门的 theme 与 voice 门的 pov（三门三字段易串）。逐门路径必填；直接导入约定可省（契约层 optional），两条路径的必填性不同是既状',
     ],
     'premise': [
         'novelty：至少12字的非空文本',
         'first_cause：至少12字的非空文本',
-        'stance：枚举 → 顺从 | 利用 | 对抗',
-        'dark_side：枚举 → 外神 | 天灾 | 系统 | 上层剥削 | 制度 | 人心',
+        'stance：枚举原词 → 顺从 | 利用 | 对抗；写枚举原词不写同义词，方向细节写进 novelty/first_cause',
+        'dark_side：枚举原词 → 外神 | 天灾 | 系统 | 上层剥削 | 制度 | 人心；「人性」「天灾人祸」这类直觉写法会被拒；外部不可抗力取外神/天灾/系统，人心与制度取上层剥削/制度/人心',
+        '待补/暂定/同上/略 出现在任一键即拒；stance/dark_side 与世界模型共享词表、选后世界机制只能承接不能推翻——这是世界级承诺，按此慎重',
     ],
     'voice': [
         'pov：非空文本',
         'voice：非空文本',
-        'style_traits：非空文本数组',
+        'style_traits：非空文本数组，例 ["冷叙事","重器物细节","少用成语"]——写成单个字符串或逗号分隔一句会被拒',
+        '此时世界 cosmology 与格局终局已选：若舞台跨位面/星海，pov 策略要撑得住跨尺度移动——本门落约后逐字对齐不可漂移，章纲 pov 必须与契约一致',
+        '写作纪律（句长/口癖/文风档案）由 style_profile 参数承担、可随时 recontract --patch 切换；本门只定结构性叙述事实',
     ],
-    'scale': '按系统档位表填写（tier、word_range、chapter_min/max/aim、volume_count、chapters、chapter_window）。',
+    'scale': [
+        '本门由引擎按档位表即时给定，不接受方案回执',
+        '作者预填/intake 只写 {"tier":"tN"}，其余数字由引擎补齐',
+        '档位数字以当前档位板为准、不凭记忆写：六档 chapter_min=2000、chapter_max=10000 统一，chapter_aim 按档区分（t0=3500…t5=6000）；凭旧记忆写 max=3500 或 t0 aim=4000 必拒',
+        'tier/volume_count/chapters/chapter_window 只喂世界推导不进合同；word_range/chapter_min/max/aim 进合同且可参数化修订',
+    ],
     'world': [
         'world_premise：非空文本',
-        'mechanism：{mode: none|bounded, principle: 非空文本, cost: 非空文本, limits: 文本数组}',
-        'architecture：{space, history, civilizations, conflict, mystery}，五项均为非空文本',
-        'tiers：数组，每条 {name, condition, gain, cost, limit} 非空文本，name≥2字不重复，条数按档位下限',
-        'resource：{name, source, allocator}，各≥2字',
-        'red_lines：文本数组',
-        'allow_special_mechanism：布尔值，必须等于 (mode == "bounded")',
+        'mechanism：{mode: none|bounded, principle: 非空文本, cost: 非空文本, limits: 文本数组}；mode 写枚举原词',
+        'allow_special_mechanism：布尔值，恒等式 mode=bounded → true、mode=none → false',
+        'architecture：{space, history, civilizations, conflict, mystery}，五项均为非空文本；五键对照：space=世界全貌与边界、history=历史断层、civilizations=文明与秩序、conflict=贯穿矛盾、mystery=终极谜题；键集恰为五键，多/少一键即拒；space 写清格局 envelope：终局是否会触及一界/星海/诸天级舞台——后续格局门的 scope 以此为界，触及一界及以上时世界模型必填 cosmology 域',
+        'tiers：数组，每条 {name, condition, gain, cost, limit} 非空文本，name≥2字不重复——短名会让世界同名记录被偶然命中、绑定不再是证据；条数下限按档位 t0=2…t3+=4',
+        'resource：{name, source, allocator}，各≥2字——单字会被记录文本偶然命中，动机同上',
+        'red_lines：文本数组，可为空 [] 但必须是数组；进约定后逐条逐字保留、可增不可减',
     ],
     'ladder': [
-        'scale：{opening: ≥8字, terminal: 枚举→局部|势力|体系|文明, unchanged: ≥8字}',
+        'scale：{opening: ≥8字, unchanged: ≥8字}，terminal 为枚举（见下）',
+        '  枚举 terminal → 局部 | 势力 | 体系 | 文明；terminal=局部 只许 t0/t1 档',
         'ladder：数组，每条 {stage, scope, growth, new_rule, cost} 非空文本，stage≥2字不重复，条数按档位下限',
-        'scope：枚举 → 局部 | 一城 | 一域 | 一界 | 星海 | 诸天（只升不降）',
-        'growth：枚举 → 地盘 | 势力 | 规则 | 认知 | 文明（三级以上至少一级取规则/认知/文明）',
+        '  枚举 scope → 局部 | 一城 | 一域 | 一界 | 星海 | 诸天（只升不降；是层级条目里的键，不是本门 value 的顶层字段）',
+        '  枚举 growth → 地盘 | 势力 | 规则 | 认知 | 文明（三级以上至少一级取规则/认知/文明；是层级条目里的键）',
+        '「势力」在 terminal 与 growth、「局部」在 terminal 与 scope 同字不同表，勿互串',
         'terminal=势力时至少一级growth=势力；terminal=体系时至少一级growth=规则；terminal=文明时至少一级growth=文明',
+        'stage 不是抽象期名（如「觉醒期」），必须是能落世界四域 geography/cosmology/factions/powers 同名记录的名字',
+        'scope 终局到 一界/星海/诸天 时，核对世界门 space 已申报对应边界（cosmology 域将因此必填）',
     ],
     'origin': [
-        'family：枚举 → 魂穿 | 身穿 | 本土 | 其他',
-        'arrival：非空文本',
-        'cost：非空文本',
+        'family：枚举原词 → 魂穿 | 身穿 | 本土 | 其他；变体机制写进 arrival，四方向之外的说法归「其他」并在 arrival 说清机制',
+        'arrival：非空文本——怎么来、带来了什么',
+        'cost：非空文本——代价或麻烦',
     ],
     'edge': [
-        'advantage：非空文本',
-        'origin：非空文本',
-        'growth：非空文本',
-        'cost：非空文本',
-        'ceiling：非空文本',
+        'advantage：非空文本——介入世界矛盾的优势（承接世界门 architecture.conflict）',
+        'origin：非空文本——优势来源',
+        'growth：非空文本——成长条件',
+        'cost：非空文本——代价',
+        'ceiling：非空文本——上限',
+        '五键逐项结构化，不可留空或并成一段散文',
     ],
     'protagonist': [
-        'id：非空文本，不含 : 或 >',
-        'name：非空文本',
+        'id：非空文本，不含 : 或 >——「:」是世界 links「领域:id」分隔符',
+        'name：非空文本；name/desire/limit 将逐字进世界 characters 记录与约定 entities，写定前试读',
         'identity：非空文本',
         'desire：非空文本',
         'limit：非空文本',
-    ],
-    'relationships': [
-        'relationships：至少一条的非空文本数组',
+        '俗套姓名组合只警不拦（name_warnings 提示不拦选择、不自动改名）；硬禁某字用字面规则',
     ],
     'opposition': [
-        'opposition：非空文本',
-        'story_engine：非空文本',
+        'opposition：非空文本——眼前对手如何连到利益网络与根本矛盾；利益网络素材以世界门的 factions 域与贯穿矛盾为准',
+        'story_engine：非空文本——胜利如何改变局面、对抗如何持续供料',
+        '每候选自审「最像的三本+机制级差异」，化石组合默认命中',
+        '人物关系门在其后：本门先定对手网络，关系门的助力与背叛将依附于此',
+    ],
+    'relationships': [
+        'relationships：至少一条的非空文本数组，每条一句：人物+所属秩序+立场（合作/分歧/背叛风险的方向）——写单条字符串或对象数组会被拒',
+        '眼前对手已在 opposition 门选定：助力与背叛风险写明依附于哪股已选势力/对手网络，并写感情线的分量与处理',
     ],
     'payoff': [
         'plan：{ways: 非空文本数组, cadence: 非空文本, hooks: 非空文本}',
+        '  plan.ways 是数组、每条一种兑现方式（脱困/打脸/升级/资源/地位/基建/复仇/争霸等）——模板空字符串占位代表待填数组，不改成一句话',
+        '  plan.cadence 写兑现节奏的实际含义（多少章量级兑现一次、兑现什么级别），锚定题材门 reader_promise 落的平台读法——起点式长线与番茄式快钩的 cadence 不同，引擎不设统一密度',
         'ending：非空文本',
-        'theme：非空文本',
-        'anchor：{deliverable: ≥12字文本, deadline_chapter: 正整数（不超过档位上限）}',
+        'theme：非空文本——母题/主题，区别于题材门 tone（tone/theme/pov 三门三字段易串）',
+        'anchor：{deliverable: ≥12字文本, deadline_chapter: 纯数字章号}——例 28，写「第28章」会被拒；≤min(30, 档位 chapter_window 上界)；键集恰为 {deliverable, deadline_chapter} 两键',
     ],
     'title': [
-        'title：非空文本',
+        'title：非空文本——受默认禁词约束：含「账本/入账/回执」会被 literal_policy 拒；与已选 reader_promise/ending 相称',
     ],
 }
 

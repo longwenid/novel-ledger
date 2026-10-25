@@ -118,9 +118,9 @@ flowchart TD
 | execution | 纯值的主控接续指令与执行活动观察；不从租约推断进程存活 |
 | build_info | 安装包代码与执行规则指纹；不包含历史validation产物，新冻结任务绑定此构建 |
 | contracts | 协议标识、约定字段表与当前开书对齐字段、结构门档位表与档位管线形状表（PIPELINE_SHAPES）、共享数值默认（`DEFAULTS`：卷纲/章纲/文风策略、返修与重试额度、快速组章数、租约时长、watch 节奏、相邻章与核验宽读窗口、`world_ladder` 下限）、修复上限、作者停点与通道表、错误形状；约定形状与阶段权限的唯一权威 |
-| catalog | 开书内容目录：类型库、创意透镜、卷型转折、开书方向与门序、雷同戒律与档位板文案；纯数据无依赖，creation/briefs/delivery/bookpage 读取渲染选择板与简报 |
+| catalog | 开书内容目录：类型库、创意透镜、卷型转折、开书方向指引、雷同戒律与档位板文案；纯数据无依赖，creation/briefs/delivery/bookpage 读取渲染选择板与简报（门序唯一源是 creation.GATES） |
 | ports | 持久化、只读查询、冻结编译、交付与宿主用例的能力契约；只依赖 contracts，不持有具体资源 |
-| creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；只有当前门序（creation/6，13 门先定世界与格局），更早协议读取即拒；结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
+| creation | 零输入方案、逐门选择、换组回退、闭合选择与来源；只有当前门序（creation/7，13 门：体量贴着世界、世界与格局先于视角、对手先于关系），更早协议读取即拒；结构门的档位板由引擎按档位表即时给出；对齐字段由字段表派生 |
 | world | 世界记录（支持 12 个领域，按档位要求填写）、关联、选择一致性，以及已声明的位阶、资源、格局与世界架构逐字绑定；保持设计与事实分离 |
 | planning | 作者约定、卷纲与章纲的落库校验、`new_entities` 与场景形状 |
 | drift | 判据共享词汇：卷纲/章纲字段表、世界与投影助手、章纲增量提取、设计/执笔共用的状态归约 `_reduce` 与 `plan_rows`（把章纲冻结成执笔回执必须回答的条目）；briefs/result_templates 直接读它的字段表 |
@@ -166,7 +166,7 @@ flowchart TD
 
 - 约定形状只有一处定义：contracts.CONTRACT_FIELDS（字段、类型、占位、可选性、是否参与对齐）。交付模板（result_templates.template → contracts.contract_skeleton）、结构校验（planning.validate_contract → contracts.contract_errors）和对齐核验（creation.validate_contract）全部由它派生；新增约定字段只改这张表，对齐表与字段表不一致时报 alignment_schema。对齐字段由 contracts.CONTRACT_ALIGNMENT 派生，只使用当前门序与字段归属；自备约定可省略非必填的开书决定。
 - 逐门开书中，直接选择字段的唯一来源也声明在 CONTRACT_FIELDS.opening：`(门 ID, value 字段)`，主角整份选择通过字段的 shape 声明；`None` 表示该门的 value 整份投影到约定字段（来历门即 `opening: ('origin', None)` → `protagonist_origin`，shape 为 `family/arrival/cost`）。creation 从同一声明派生各门允许的输入字段和约定对齐值；世界与体量的推导输入单列在 creation.DERIVATION_INPUTS。方案提交、intake 和闭合选择的约定核验均拒绝跨门及未知字段，错误带 allowed_fields/unknown_fields。对齐值逐字段读取，禁止整份 value 合并覆盖其他门的决定。
-- 开书协议只有当前版本：creation 状态声明 `novel-ledger.creation/6`（`opening/6`，13 门先定世界与格局），更早的 creation/N 在读取时被明确拒绝（以当前协议重开），方案篇幅上界是无条件的唯一规则。存储 schema 为 novel-ledger/5，已删除任务首读列；v4 及更早库明确拒绝，不提供隐式迁移。
+- 开书协议只有当前版本：creation 状态声明 `novel-ledger.creation/7`（`opening/7`，13 门：体量贴着世界、世界与格局先于视角、对手先于关系），更早的 creation/N 在读取时被明确拒绝（以当前协议重开），方案篇幅上界是无条件的唯一规则。存储 schema 为 novel-ledger/5，已删除任务首读列；v4 及更早库明确拒绝，不提供隐式迁移。
 - 作者可见的方案板有两类来源：创意门的板子由主干自执（未内联时派新空历史 Worker）生成；结构门（体量与分卷）的档位板由引擎按 contracts.SCALE_TIERS 当次给出，不派工、不等待，Worker 回执按 opening_system 拒绝。引擎只给经证明写得完的档位，选择仍由作者做出，程序不替作者决定。
 - 体量窗口只决定展示哪些档位；相邻档位与最大档由完整 SCALE_TIERS 决定。同一档位在不同窗口的说明与数值一致，窗口最后一项不因此成为最大档。
 
@@ -255,7 +255,7 @@ verification 是程序能力边界，不是操作系统安全沙箱。所有正�
 
 | 工程目标 | 实现选择 |
 |---|---|
-| 开书与试章 | 零输入逐门选择（主干自执，13 门：脑洞门问"多了什么规则"，世界门交位阶与硬通货，格局门交升格阶梯），完成后按档位要求创建世界模型并做机械校验与位阶、资源、格局及已声明的世界架构逐字绑定；完整约定也可导入，首章定调保持 |
+| 开书与试章 | 零输入逐门选择（主干自执，13 门：脑洞门问"多了什么规则"，体量门贴着世界门，世界门交位阶与硬通货，格局门交升格阶梯，视角门落在世界与格局之后，对手门先于关系门），完成后按档位要求创建世界模型并做机械校验与位阶、资源、格局及已声明的世界架构逐字绑定；完整约定也可导入，首章定调保持 |
 | 分卷与逐章设计 | 世界与约定生效后派发各卷卷纲（每卷 2000–3000 汉字，目标 2500，默认一次交全部卷；v5 项目每卷 `stage` 逐字取格局阶梯一级且只升不降；含伏笔账 `hooks` 与文风走向 `style.trend`）；进入每卷前交该卷章纲（每章约 150 汉字 + 漂移字段 + enter/exit + 伏笔 `plant`/`payoff` + 文风 `style`） |
 | 事实连续性 | 章纲状态链在设计期逐章模拟资源前值与守恒、时钟、知情、位置、人物变化与伏笔埋收，卷末核对结构化终值和 clock.to（容差 0）且 required 伏笔全 paid；自然语言 exit_state 只作说明 |
 | 执笔核账 | `drift_check` 逐项自比（覆盖、前态、去向、偏差理由与引文），引擎仅在所有项符合固定章纲时按既有事实判据入账；偏差留作本章返修，不自动改纲；伏笔事件由 `drift_reconcile.reconcile` 产出 |

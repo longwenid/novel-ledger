@@ -74,7 +74,7 @@
 
 ## 世界架构绑定
 
-`opening/6` 的 `world.architecture` 原样保存为约定 `world_architecture`。模型必须在下面每个指定字段里，用至少一条记录逐字保留对应声明；其他字段展开细节，links 表达关系。仅在别的字段提到、改写成摘要或重新发明背景，都不算承接。
+`opening/7` 的 `world.architecture` 原样保存为约定 `world_architecture`。模型必须在下面每个指定字段里，用至少一条记录逐字保留对应声明；其他字段展开细节，links 表达关系。仅在别的字段提到、改写成摘要或重新发明背景，都不算承接。
 
 | architecture 键 | 意义 | 世界记录字段 |
 |---|---|---|

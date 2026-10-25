@@ -1,4 +1,4 @@
-"""Opening/6 preserves world architecture across choices, dispatches and world records."""
+"""Opening/7 preserves world architecture across choices, dispatches and world records."""
 import copy
 import tempfile
 import unittest
@@ -28,20 +28,22 @@ class WorldArchitectureTests(unittest.TestCase):
 
     def test_world_gate_requires_the_complete_frame(self):
         value = copy.deepcopy(VALUES['world'])
-        creation.validate_value('world', value, 6)
+        creation.validate_value('world', value, contracts.OPENING_VERSION)
         for key in FRAME:
             for replacement in (None, '', [], {'unexpected': 'value'}):
                 broken = copy.deepcopy(value)
                 broken['architecture'][key] = replacement
                 with self.subTest(key=key, replacement=replacement):
-                    self.assertCode('opening_option', creation.validate_value, 'world', broken, 6)
+                    self.assertCode('opening_option', creation.validate_value, 'world', broken,
+                                    contracts.OPENING_VERSION)
             missing = copy.deepcopy(value)
             del missing['architecture'][key]
-            self.assertCode('opening_option', creation.validate_value, 'world', missing, 6)
+            self.assertCode('opening_option', creation.validate_value, 'world', missing,
+                            contracts.OPENING_VERSION)
         value['architecture']['extra'] = '新增字段不能伪装成已选世界。'
-        self.assertCode('opening_option', creation.validate_value, 'world', value, 6)
+        self.assertCode('opening_option', creation.validate_value, 'world', value, contracts.OPENING_VERSION)
         del value['architecture']
-        self.assertCode('opening_option', creation.validate_value, 'world', value, 6)
+        self.assertCode('opening_option', creation.validate_value, 'world', value, contracts.OPENING_VERSION)
 
     def test_contract_preserves_every_architecture_decision(self):
         state = walk(creation.begin())
@@ -78,6 +80,8 @@ class WorldArchitectureTests(unittest.TestCase):
         restored = creation.back(complete, 'world', '世界重新构思。')
         self.assertNotIn('origin', creation.selected(restored))
         self.assertNotIn('ladder', creation.selected(restored))
+        # opening/7 moved voice behind world+ladder: a rebuilt world now invalidates the pov too.
+        self.assertNotIn('voice', creation.selected(restored))
         self.assertEqual(creation.current(restored)['id'], 'world')
 
     def test_later_gate_reads_full_frozen_choices_across_reopening(self):
@@ -108,4 +112,4 @@ class WorldArchitectureTests(unittest.TestCase):
                                ('ladder', '非数值成长')):
             self.assertEqual(creation.LENSES[creation.lens_index(gate, 0)], expected)
             self.assertNotEqual(creation.lens_index(gate, 0), creation.lens_index(gate, 1))
-        self.assertEqual(contracts.OPENING_VERSION, 6)
+        self.assertEqual(contracts.OPENING_VERSION, 7)

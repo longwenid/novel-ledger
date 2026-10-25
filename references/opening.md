@@ -54,21 +54,21 @@
 
 ## 门序与字段归属
 
-项目使用 `creation.GATES`（`opening/6`），共 **13 门**。世界与格局先于主角来历确定，避免整套世界围着一个局部身份生长。字段以当前任务卡与模板为准，详细约束见 [协议](protocol.md)。
+项目使用 `creation.GATES`（`opening/7`），共 **13 门**。体量在世界之前定档，世界与格局在视角之前定形，对手网络在人物关系之前落位，主角来历在世界定形后接入——避免整套世界围着一个局部身份生长，也避免视角先于宇宙观锁死。字段以当前任务卡与模板为准，详细约束见 [协议](protocol.md)。
 
 | # | 门 | 决定什么 |
 |---|---|---|
 | 1 | `genre` 题材与阅读承诺 | 类型、读者期待与基调；暂不锁死职业与局部事件 |
 | 2 | `premise` 核心设想与世界命题 | 核心命题、历史推动力、主角立场与矛盾来源；暂不锁定姓名职业 |
-| 3 | `voice` 叙述视角与阅读质地 | 人称、视角边界与语感；后续 scene 沿用所选人称 |
-| 4 | `scale` 体量与分卷 | 引擎即时给档位；决定本书展开多少，不决定世界有多大 |
-| 5 | `world` 世界架构 | 空间、历史、文明、贯穿矛盾、终极谜题，以及由此生长的机制、位阶与资源 |
-| 6 | `ladder` 格局路径与终局视野 | 从终局问题倒推阶段；行动能力、认知和责任如何变化，哪些旧人旧事持续有效 |
+| 3 | `scale` 体量与分卷 | 引擎即时给档位；决定本书展开多少，不决定世界有多大 |
+| 4 | `world` 世界架构 | 空间、历史、文明、贯穿矛盾、终极谜题，以及由此生长的机制、位阶与资源 |
+| 5 | `ladder` 格局路径与终局视野 | 从终局问题倒推阶段；行动能力、认知和责任如何变化，哪些旧人旧事持续有效 |
+| 6 | `voice` 叙述视角与阅读质地 | 人称、视角边界与语感；世界与格局门的画面不锁人称，本门之后的场景沿用所选人称 |
 | 7 | `origin` 主角来历与世界联系 | 魂穿、身穿、本土或其他；带来什么、谁会起疑、起初知道多少 |
 | 8 | `edge` 核心优势与成长线 | 介入世界矛盾的优势、来源、成长条件、代价与上限 |
 | 9 | `protagonist` 主角处境与底线 | 姓名、身份、私人欲望与会付出代价的底线 |
-| 10 | `relationships` 人物关系与立场 | 各自目标与所属秩序，合作和分歧的来源 |
-| 11 | `opposition` 多方对抗与持续冲突 | 眼前对手如何连到利益网络与根本矛盾，胜利如何改变局面 |
+| 10 | `opposition` 多方对抗与持续冲突 | 眼前对手如何连到利益网络与根本矛盾，胜利如何改变局面 |
+| 11 | `relationships` 人物关系与立场 | 各自目标与所属秩序，合作和分歧的来源；助力与背叛依附于已选的对手网络 |
 | 12 | `payoff` 阶段兑现与终局回应 | 早期兑现物与期限、阶段回报、终局行动及人的去向 |
 | 13 | `title` 书名 | 独特意象或清晰卖点；短名、长名均可 |
 
@@ -78,17 +78,17 @@
 
 后续每门必读完整的已选记录 `opening_choices`，从任务卡给出的来源入口读取。想改已选脑洞或世界须返回对应门，后续依赖重选。世界与约定阶段机械检查逐字承接，卷纲、章纲在原有任务内完成因果、揭示顺序及状态链核验，不新增独立校验子 agent。机械通过不代表脑洞原创或文学质量达标。
 
-**旧开书协议不再支持**：声明 `creation/1`～`creation/5` 的项目在读取时被明确拒绝（错误说明以当前协议重开），不迁移、不按新门重读旧选择。自备约定（`init --contract`）不经门序核验，可省略当前约定中非必填的结构化开书决定。
+**旧开书协议不再支持**：声明 `creation/1`～`creation/6` 的项目在读取时被明确拒绝（错误说明以当前协议重开），不迁移、不按新门重读旧选择。自备约定（`init --contract`）不经门序核验，可省略当前约定中非必填的结构化开书决定。
 
 无预填、换组或回退时，为 12 次创意方案生成、1 次引擎结构板与 13 次作者选择。已有要求跳过相应门；实际次数随操作变化。生成方法和换组原则见 [创意工具箱](hatch.md)。
 
-开书项目保存 `novel-ledger.creation/6`（唯一支持的协议）；数据库布局为 `novel-ledger/5`，两者独立。
+开书项目保存 `novel-ledger.creation/7`（唯一支持的协议）；数据库布局为 `novel-ledger/5`，两者独立。
 
 ## 结构门（体量与分卷）
 
 档位唯一权威是 `contracts.SCALE_TIERS`：六档阶梯（微型 / 短篇 / 精简 / 标准 / 长篇 / 超长），每档给出总字数区间、章幅上下限与目标、卷数、推荐总章数与该档可写完的章数区间。板子取阶梯上连续三档，默认窗口为“标准/长篇/超长”（男频连载常见体量，`SCALE_DEFAULT_WINDOW=3`）；短篇与微型换一组即可取到。**微型档的章窗从两三章的短篇一直到十七回的微型连载都算（`chapter_window [2, 19]`，推荐仍是 17 回）**：作者的"三章完本"这类要求必须有档位可以落地，否则契约层可以改到该体量，而完本审计仍会以"章数与档位不相容"拒绝这本已经写完的书。
 
-- 游标落到体量门时，主控直接把档位板写进展示状态并返回 await_choice：**没有任务、没有 Worker、没有等待**。
+- 游标落到体量门时，主控直接把档位板写进展示状态并返回 await_choice：**没有任务、没有 Worker、没有等待**。作者预填/intake 只写档位 ID（如 `{"tier":"t3"}`），其余数字由引擎按档位表补齐——档位数字以当前档位板为准、不凭记忆写，逐字与档位表核对。
 - 只向作者展示档位名、总字数区间、卷数、每章字数与章数，以及这一档比相邻档多买到什么、少买到什么。**不要求 pitch 与 scene**，也不要求 Worker 编造数字；方案回执的 pitch/scene/driver 硬要求只适用于创意门。
 - 换一组沿阶梯滑动窗口（例如“标准/长篇/超长”），并照常保存否决。作者直接给了目标体量或档位时用 `choose --tier t0～t5` 一次到位：窗口自动滑到该档再落选择，不必换组重问。
 - 窗口只筛选展示范围；每档的比较说明始终依据完整阶梯，同一档位换到其他窗口仍保持相同说明。只有完整阶梯的最后一档才称为最大档。
@@ -106,7 +106,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 
 程序对每份方案回执按去除首尾空白后的字符数执行 pitch≤40、scene 最多 3 条、每条 scene ≥12 字；这是唯一规则，没有旧任务的宽松解释。方案文本与 value 的内容都受项目字面约定约束（默认禁词：账本、入账、回执，清单与覆盖字段随任务材料 policy 块交付），命中会以 literal_policy 拒绝并给出 found 词条。
 
-**结构字段以当前门任务卡的 value 规则为准，不凭记忆猜格式**：stance/dark_side/family/ladder.terminal 等是枚举（合法值写在各门规则里），mechanism（mode/principle/cost/limits）、resource（name/source/allocator）、architecture（space/history/civilizations/conflict/mystery）、ladder.scale（opening/terminal/unchanged）、payoff.plan（ways/cadence/hooks）与 payoff.anchor（deliverable/deadline_chapter，纯数字章号）是结构体。生成方案前先读当前门 brief 的 value 规则一行，再落笔；`check` 的 findings 会逐字段指出违规与合法值，按它修正，不要连续盲试。
+**结构字段以当前门任务卡的 value 规则为准，不凭记忆猜格式**：stance/dark_side/family/ladder 的 terminal/scope/growth 等是枚举（写枚举原词，合法值写在各门规则里），mechanism（mode/principle/cost/limits）、resource（name/source/allocator）、architecture（space/history/civilizations/conflict/mystery）、ladder.scale（opening/terminal/unchanged）、payoff.plan（ways/cadence/hooks）与 payoff.anchor（deliverable/deadline_chapter，纯数字章号）是结构体。生成方案前先读当前门 brief 的 value 规则一行，再落笔；`check` 的 findings 会逐字段指出违规与合法值，按它修正，不要连续盲试。
 
 创意门执行者（默认主干，派工时为 Worker）先读 task.json、任务卡 `brief.md` 与 required 中的完整记录，含 opening_choices 与 opening_rejections。创意说明只读 [创意工具箱](hatch.md)；同一主干跨门已读且版本未变可复用。完整回执示例见 `assets/opening-options.example.json`；单一决定门按任务卡的字段边界交付。结构门由主干展示引擎档位板，不派 Worker 或提交方案回执。
 
@@ -134,7 +134,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 
 ## 操作与恢复
 
-已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"title":{"title":"作者已定书名"},"scale":{"tier":"t0"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t0`～`t5`，`t0` 为五万字级的微型档），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前 creation 协议；新项目的 `novel-ledger.creation/6` 使用上表十三门（`premise` 承担核心设想，`origin` 承担主角来历，`world` 承担世界架构、位阶与硬通货，`ladder` 承担格局尺度与阶梯，`payoff` 承担终局、母题与主题锚点，`edge` 承担核心优势）。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
+已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"title":{"title":"作者已定书名"},"scale":{"tier":"t0"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t0`～`t5`，`t0` 为五万字级的微型档；**预填只写 tier**，不凭记忆抄数字），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前 creation 协议；新项目的 `novel-ledger.creation/7` 使用上表十三门（`premise` 承担核心设想，`origin` 承担主角来历，`world` 承担世界架构、位阶与硬通货，`ladder` 承担格局尺度与阶梯，`payoff` 承担终局、母题与主题锚点，`edge` 承担核心优势）。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
 
 ```bash
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" init
