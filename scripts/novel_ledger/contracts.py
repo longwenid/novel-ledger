@@ -146,6 +146,16 @@ STYLE_CATALOG = {
         'anchor': {'han': 2000, 'sentences': 180, 'sentence_mean': 18.0, 'sentence_short_share': 0.25,
                    'paragraph_mean': 36.1, 'paragraph_max': 204.0, 'dialogue_share': 0.3652},
     },
+    '宗族史传': {
+        'file': 'styles/宗族史传.md',
+        'anchor': {'han': 2000, 'sentences': 180, 'sentence_mean': 18.0, 'sentence_short_share': 0.25,
+                   'paragraph_mean': 35.6, 'paragraph_max': 353.0, 'dialogue_share': 0.3088},
+    },
+    '科幻错位幽默': {
+        'file': 'styles/科幻错位幽默.md',
+        'anchor': {'han': 2000, 'sentences': 180, 'sentence_mean': 18.0, 'sentence_short_share': 0.25,
+                   'paragraph_mean': 49.2, 'paragraph_max': 392.0, 'dialogue_share': 0.33},
+    },
 }
 
 
