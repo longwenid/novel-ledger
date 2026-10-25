@@ -43,6 +43,8 @@ def opening_options(gate, version=OPENING_VERSION, *, creative_lens=None):
 WORLD_SELF_CHECK = (
     'selection_hash 与本任务冻结的选择逐字一致（不一致直接拒）。',
     '每个域的记录都有稳定 id 与 links=[领域:id]，引用的 id 都真实存在。',
+    '裸 id 在全部领域间不重复，geography 的地点名不重复——下游按裸 id 和地名引用'
+    '（资源 key、站位、位置移动），撞名即歧义，会被 world_id/world_identity 拒且点名撞名记录。',
     '本档位列出的领域每个至少一条实写记录；已选无特殊机制时 mechanisms 必须是空数组。',
     '三条逐字绑定：门里选的位阶表进 powers、硬通货进 economy（分配者写进分配方式）、'
     '格局阶梯每一级有一条同名记录；声明了却没落地会被 world_alignment 拒。',
@@ -109,7 +111,9 @@ WORLD_PIECE_NOTE = ('以下基础绑定与上列已声明的世界架构都由�
                     '③ 格局阶梯每一级（ladder 的 stage）在本世界有一条同名记录'
                     '（geography/cosmology/factions/powers 任一）。'
                     '另外这些设定是被后续卷纲/章纲消费的：位阶→人物与知情状态、硬通货→章纲资源增量（进漂移账）、'
-                    '地图与位面→章纲 places（进位置校验）。所以每条都要写成「能用」的具象设定'
+                    '地图与位面→章纲 places（进位置校验），引用走的是记录的裸 id 与 geography 的地名，'
+                    '两者都不与别的记录重复。'
+                    '每条都要写成「能用」的具象设定'
                     '（谁、在哪、要什么、付什么代价），不是百科条目；本档位用不上的领域留空数组。')
 
 
@@ -134,7 +138,7 @@ def world_model(previous=(), repair=False, scale=None, sections=None):
     """World plus contract in one dispatch: what the world owes, and what the contract must keep."""
     lines = ['# ' + BRIEFS['world_model'], '',
              '## 世界模型', '把已选方向扩展成能持续产生行动、冲突、代价与后果的环境。'
-             '完整记录须有稳定 id 与 links=[领域:id]；同时给 premise、story_capacity 与准确的 selection_hash。'
+             '完整记录须有稳定 id（裸 id 全领域不重复）与 links=[领域:id]；同时给 premise、story_capacity 与准确的 selection_hash。'
              '不要写"待补"，写进去的域都要能落到具体场景。', '']
     lines.extend(['## 世界要产出哪些网文可用件（按七层骨架，就用现有字段，不新增字段）',
                   *_world_piece_lines(sections),
@@ -162,9 +166,11 @@ def world_model(previous=(), repair=False, scale=None, sections=None):
     if repair:
         # A repair re-emits the whole candidate, so an unrequested rewrite of untouched records is
         # pure cost: it reopens questions already settled, and the next check spends a round on new
-        # material instead of the named defect.
-        lines.extend(['## 这是返修，不是重写', '上一版世界与逐条问题都在 previous_proposal 里。只改被点名的问题，'
-                      '其余记录保持与上一版逐字一致；不要借返修顺手改写没被点名的部分。'
+        # material instead of the named defect. What counts as named is decided by the refusal's
+        # own findings, which travel with the previous proposal.
+        lines.extend(['## 这是返修，不是重写', '上一版候选与逐条拒绝理由都在 previous_proposal 记录里，重新 read 本任务即可取回。'
+                      '只改被点名的问题，其余记录与上一版逐字一致；确实要牵动别处时，先只改点名处提交，'
+                      '下一轮拒收会点名下一处。'
                       '逐条改完再自查一遍，避免改一处带出另一处不一致（规则互相否定、数字前后对不上、'
                       '某条程序被另一条堵死）。程序会逐条比对：没被点名的记录一旦被改动或删除，回执当场被拒'
                       '（repair_scope）。', ''])
@@ -358,7 +364,8 @@ def stage(name, payload=None):
                  'knowledge 的 to 是档位，places 的 to 是地点 id；hook 用 {"action": "plant"|"payoff"}，'
                  '节点/线路/读者披露用 {"after": 状态}，clock 用 {"advance_days": n}。'
                  '遵守 word_budget 的本章范围（aim 是目标字数，min/max 是硬界——字数判断只看 word_budget；'
-                 'style_anchor 样本的字数只用于文风可比性，不是本章字数目标）；作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
+                 'style_anchor 样本的字数只用于文风可比性，不是本章字数目标）；字数不足靠增加事件补足——新的行动、阻力、转折或后果，'
+                 '不以描写、重复或对话注水；作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
                  'self_check 用具体表达说明实际视角、人物说话方式与节奏；'
                  'dialogue_ratio 未声明时不用补比例，已声明时如实核对，不按段落分配对白。'
                  '材料 style.profile 是生效文风档案档名（声线与口癖对照它的档案文件，guides 里带该文件）；'

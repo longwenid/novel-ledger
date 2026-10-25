@@ -837,6 +837,10 @@ def _opening_model(book):
         if key in frame:
             row = _generic_record(section, 99, tiers)
             row[field] = frame[key]
+            if section == 'geography':
+                # Geography names are unique now; the generic placeholder name ('仓库后院')
+                # would collide with the yard record the model already declares.
+                row['name'] = '世界全貌与通行边界'
             model[section].append(row)
     return model
 
@@ -893,7 +897,10 @@ _OPTION_ALT = {'genre': 'reader_promise', 'premise': 'novelty', 'origin': 'arriv
                'world': 'world_premise', 'ladder': 'scale.opening', 'edge': 'advantage',
                'protagonist': 'identity', 'relationships': 'relationships',
                'opposition': 'opposition', 'payoff': 'ending', 'title': 'title'}
-_LADDER_STAGE_NAMES = ('值班室', '货站', '分拨中心', '跨域承运网', '全国承运网', '界门',
+# The first rung must not reuse a place name the fixture world already declares (`值班室` is the
+# office): geography names are unique now, and the office record plus a same-named ladder rung is
+# exactly the ambiguity the check refuses.
+_LADDER_STAGE_NAMES = ('夜班作业区', '货站', '分拨中心', '跨域承运网', '全国承运网', '界门',
                        '界外走廊', '诸天渡口')
 
 

@@ -32,7 +32,8 @@ GOVERNANCE_CHECKPOINT = 'governance_checkpoint'
 BOOK_ROOT = 'book'
 
 PREFIXES = ('claim:', 'branch-book:', 'history_head:', 'technical_failure:', 'execution_reads:', 'task_outcome:',
-            'authorization:', 'continuity_review:', 'pending_review:', 'review_candidates:', 'content_rounds:')
+            'authorization:', 'continuity_review:', 'pending_review:', 'review_candidates:', 'content_rounds:',
+            'world_rejection:')
 
 # The journal row an actual read leaves behind. It is written by the application and summed by the
 # storage adapter's `usage`, so the shape is declared here instead of being an implicit agreement
@@ -69,6 +70,17 @@ def execution_reads(execution_id):
 
 def content_rounds(task_id):
     return 'content_rounds:' + task_id
+
+
+def world_rejection(task_id):
+    """The world candidate this task refused, staged with its findings for a narrow repair.
+
+    Owner and reader are both the application: it writes the refusal after the refused submit
+    rolled back, serves it as the task's `previous_proposal` record on read, compares the next
+    submission against it, and clears it the moment a candidate is accepted. No key means no
+    refusal to build on — the first dispatch and every fresh task start from a clean slate.
+    """
+    return 'world_rejection:' + task_id
 
 
 def task_outcome(task_id):

@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import briefs, contracts, creation, drift, drift_validation, world
+from novel_ledger import briefs, contracts, creation, drift, drift_validation, world, workflow
 from novel_ledger.contracts import Error, dump
 from support import contract, seeded_book, volume_rows
 
@@ -366,6 +366,95 @@ class PromiseAnchorTests(unittest.TestCase):
                 with self.assertRaises(Error) as caught:
                     creation.validate_value('payoff', self.payoff(**anchor), creation.OPENING_VERSION, choices)
                 self.assertEqual(caught.exception.code, 'opening_option')
+
+
+class UniquenessTests(unittest.TestCase):
+    """Bare ids and place names are the handles later dispatches address without a prefix.
+
+    A resource key, a placement and a move all name world records by the bare id, and chapter
+    outlines declare moves by place name before the engine normalizes them, so a collision inside
+    one section was already ambiguous — a collision across sections was simply unreadable. Both
+    refusals name the colliding records (and the links pointing at them), which is what keeps the
+    fix inside a narrow repair's scope.
+    """
+
+    def test_a_bare_id_belongs_to_one_domain_only(self):
+        choices = world_choices(tiers=False, ladder=False, resource=False)
+        model = base_model(choices)
+        model['rules'][0]['links'] = ['everyday:shen']
+        model['everyday'] = [record('everyday', 'shen')]     # same bare id as characters:shen
+        with self.assertRaises(Error) as caught:
+            check(model, choices)
+        self.assertEqual(caught.exception.code, 'world_id')
+        details = caught.exception.details
+        self.assertEqual(details['id'], 'shen')
+        self.assertEqual(set(details['sections']), {'characters', 'everyday'})
+        self.assertEqual(details['referenced_by'], ['rules:r1'])
+        self.assertIn('links', details['recover'])
+        # The recover channel: rename the colliding record and sync the links that pointed at it.
+        repaired = copy.deepcopy(model)
+        repaired['everyday'][0]['id'] = 'shen-shift'
+        repaired['rules'][0]['links'] = ['everyday:shen-shift']
+        check(repaired, choices)
+        # And that repair is exactly the scope the refusal named, so the narrow guard accepts it.
+        workflow.require_narrow_repair(model, repaired, workflow.rejection_findings(caught.exception))
+
+    def test_a_duplicate_id_inside_one_section_is_the_same_refusal(self):
+        choices = world_choices(tiers=False, ladder=False, resource=False)
+        model = base_model(choices)
+        model['rules'].append(record('rules', 'r1', principle='重复的第一条。'))
+        with self.assertRaises(Error) as caught:
+            check(model, choices)
+        self.assertEqual(caught.exception.code, 'world_id')
+        self.assertEqual(caught.exception.details['id'], 'r1')
+
+    def test_geography_place_names_cannot_collide(self):
+        choices = world_choices(tiers=False, resource=False)
+        model = base_model(choices)
+        dup = copy.deepcopy(model['geography'][0])
+        dup['id'] = 'another-yard'
+        model['geography'].append(dup)
+        with self.assertRaises(Error) as caught:
+            check(model, choices)
+        self.assertEqual(caught.exception.code, 'world_identity')
+        details = caught.exception.details
+        self.assertEqual(details['duplicate'], dup['name'])
+        self.assertEqual(set(details['records']),
+                         {'geography:' + model['geography'][0]['id'], 'geography:another-yard'})
+        self.assertIn('recover', details, '拒收要带返修指引')
+        repaired = copy.deepcopy(model)
+        repaired['geography'][-1]['name'] = '青云别院'
+        check(repaired, choices)
+        workflow.require_narrow_repair(model, repaired, workflow.rejection_findings(caught.exception))
+
+
+class BriefHonestyTests(unittest.TestCase):
+    """The world brief promises previous_proposal exactly when the engine supplies it."""
+
+    def test_the_repair_block_names_the_channel_and_only_exists_for_repairs(self):
+        plain = briefs.world_model()
+        self.assertNotIn('previous_proposal', plain, '首轮简报不得承诺上一版候选')
+        repair = briefs.world_model(repair=True)
+        self.assertIn('previous_proposal', repair)
+        self.assertIn('read', repair)
+        self.assertIn('repair_scope', repair)
+        # Coupled fixes ride the multi-round loop: fix the named spot, submit, and the next
+        # refusal names the next one — the guard must not fence a repair it cannot scope.
+        self.assertIn('下一轮拒收会点名下一处', repair)
+
+    def test_the_self_check_states_the_uniqueness_rules(self):
+        for text in (briefs.world_model(), briefs.world_model(repair=True)):
+            self.assertIn('裸 id 在全部领域间不重复', text)
+            self.assertIn('geography 的地点名不重复', text)
+
+    def test_world_rejections_carry_repair_guidance(self):
+        choices = world_choices(tiers=False, ladder=False, resource=False)
+        model = base_model(choices, premise='一座完全不同的前提。')
+        with self.assertRaises(Error) as caught:
+            check(model, choices)
+        self.assertEqual(caught.exception.code, 'world_alignment')
+        self.assertIn('recover', caught.exception.details, '拒收响应要带返修指引')
+        self.assertIn('逐字', caught.exception.details['recover'])
 
 
 if __name__ == '__main__':

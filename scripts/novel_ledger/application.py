@@ -432,6 +432,29 @@ class Application:
         rows.sort(key=lambda row: abs(row['n'] - chapter))
         return [(row['n'], self.repo.read_document(row['prose'])) for row in rows[:lint.DUPLICATE_WINDOW]]
 
+    def _world_refusal(self, task):
+        """The world refusal staged on this task, exactly when this submission repairs one."""
+        if task['input'].get('stage') != 'world_model':
+            return None
+        staged = self.repo.get(store_keys.world_rejection(task['id']))
+        return staged if isinstance(staged, dict) and isinstance(staged.get('proposal'), dict) else None
+
+    def _stage_world_refusal(self, task_id, candidate, error):
+        """Keep the refused world candidate with its findings on the task it belongs to.
+
+        The next `read` hands it back as the `previous_proposal` record, and the next submission
+        is compared against it record by record: a repair may only change what the refusal named.
+        """
+        staged = {'proposal': copy.deepcopy(candidate),
+                  'findings': workflow.rejection_findings(error),
+                  'refusal': {'code': error.code, 'message': error.message},
+                  'note': '上一版被拒候选与逐条问题。返修只改被点名处，其余记录与上一版逐字一致；'
+                          '重新 read 本任务即可取回这份记录。'}
+        with self.repo.transaction():
+            self.repo.put(store_keys.world_rejection(task_id), staged)
+            self.repo.record('world_refusal', {'task': task_id, 'code': error.code})
+        return staged
+
     def _baseline(self, book, task=None):
         """A read-only projection of what stands right now, so a dispatcher never hand-summarizes
         the ledger: resource balances, open hooks, the clock, and the live candidate."""
@@ -610,14 +633,29 @@ class Application:
             self._worker_actor(task, lease.get('session'))
         execution = lease.get('execution_id')
         delivered = self.repo.get(store_keys.execution_reads(execution), {}) if execution else None
-        names_read = ([name for name, value in delivered.items() if work['records'].get(name) == value]
+        staged = self._world_refusal(task)
+        served = {'previous_proposal': digest(staged)} if staged is not None else {}
+        names_read = ([name for name, value in delivered.items()
+                       if work['records'].get(name) == value or served.get(name) == value]
                       if delivered is not None else self.repo.read_names(task_id))
-        already = [] if (record or everything) else [n for n in names_read if n in work['records']]
+        already = [] if (record or everything) else [n for n in names_read
+                                                     if n in work['records'] or n in served]
         if not record and not everything:
             already = sorted(set(already) | set(self._writing.already_read(task)))
         names = [record] if record else [n for n in work['required'] if n not in already]
-        require(all(n in work['records'] for n in names), 'record', '资料不在当前冻结任务目录中。')
-        records = {n: {'hash': work['records'][n], 'value': self.repo.read_document(work['records'][n])} for n in names}
+        if staged is not None and not record and 'previous_proposal' not in already:
+            # The frozen dispatch predates the refusal it produced; the staged previous proposal
+            # is the one record `read` serves from outside the frozen input, and only while the
+            # repair loop is live — no refusal, no record.
+            names.append('previous_proposal')
+        available = {**work['records'], **served}
+        require(all(n in available for n in names), 'record', '资料不在当前冻结任务目录中。')
+        records = {}
+        for n in names:
+            if n in served and n not in work['records']:
+                records[n] = {'hash': served[n], 'value': copy.deepcopy(staged)}
+            else:
+                records[n] = {'hash': available[n], 'value': self.repo.read_document(available[n])}
         result = {'task_id': task_id, 'input_hash': task['input_hash'], 'complete_records': True,
                   'execution_id': execution,
                   'stage': work['stage'], 'chapter': work['chapter'],
@@ -627,7 +665,7 @@ class Application:
                   # skips the read entirely when the required material did not change, instead
                   # of re-pulling an identical record set per gate.
                   'records_hash': digest({name: work['records'].get(name) for name in work['required']}),
-                  'on_demand': {n: h for n, h in work['records'].items() if n not in names}}
+                  'on_demand': {n: h for n, h in available.items() if n not in names}}
         if not record:
             # A worker reads the envelope it already holds, so a second full read of the same task
             # used to re-deliver every required record: a real design run spent more characters
@@ -650,6 +688,11 @@ class Application:
                 delivered = self.repo.get(key, {})
                 delivered.update({name: task['input']['records'][name] for name in names
                                   if name in task['input']['records']})
+                staged = self._world_refusal(task)
+                if staged is not None and 'previous_proposal' in names:
+                    # The staged record is served from outside the frozen input; its digest joins
+                    # the delivery marks so a repeated read can skip it like any other record.
+                    delivered['previous_proposal'] = digest(staged)
                 self.repo.put(key, delivered)
             self._writing.record_read(task, names)
             self.repo.record('read', store_keys.read_record(
@@ -695,6 +738,18 @@ class Application:
 
     def submit(self, result, preview=False):
         require(isinstance(result, dict) and result.get('schema') == RESULT, 'schema', '回执协议无效。')
+        refusal = []
+        try:
+            return self._submit(result, preview, refusal)
+        except Error:
+            # A refused world candidate is staged only after the submit transaction has fully
+            # rolled back: writing it inside would be undone together with everything else.
+            if refusal:
+                self._stage_world_refusal(*refusal[0])
+            raise
+
+    def _submit(self, result, preview, refusal=None):
+        refusal = refusal if refusal is not None else []
         with self.repo.transaction(preview=preview):
             task = self.repo.task(result.get('task_id'))
             if task['input']['stage'] not in CONTROLLER_STAGES:
@@ -728,8 +783,16 @@ class Application:
             # whether the chapter commits; the producer sees the finding without spending a review
             # round, and preflight runs the same code.
             priors = self._priors(book, work['chapter']) if work['stage'] in ('write', 'repair', 'redesign') else None
-            outcome = workflow.apply(book, work, result.get('data'), result['session'],
-                                     self._sources(work), priors)
+            try:
+                outcome = workflow.apply(book, work, result.get('data'), result['session'],
+                                         self._sources(work), priors,
+                                         previous_world=self._world_refusal(task))
+            except Error as error:
+                # The refused candidate is the only honest base its repair can build on. Remember
+                # it here for `submit` to stage after the rollback; a preview never stages.
+                if work['stage'] == 'world_model' and not preview:
+                    refusal.append((task['id'], result.get('data'), error))
+                raise
             review = None
             if outcome.chapter and self._governance.policy()['continuity'] == 'required':
                 review = self._continuity.evaluation(task['id'], result)
@@ -764,6 +827,10 @@ class Application:
                 # idempotent, and a second submission from another session is refused.
                 self._writing.bind(task, result['session'])
             self.repo.finish_task(task['id'], result)
+            if work['stage'] == 'world_model':
+                # The accepted world supersedes the staged refusal; a later world task (a redesign
+                # after a re-contract) is a new task id and starts from a clean slate.
+                self.repo.put(store_keys.world_rejection(task['id']), None)
             revision = updated.get('revision_run')
             if revision and outcome.chapter and revision['last'] <= outcome.chapter['n'] and revision.get('carry'):
                 # A narrow revision carries its untouched suffix once its own end commits.

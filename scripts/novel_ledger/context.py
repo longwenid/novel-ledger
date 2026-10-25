@@ -46,6 +46,11 @@ PROJECTIONS = (
 # review decision, so every row here is the whole required set. `chapter_outline` is the hard
 # prerequisite of a draft: it carries the enter/exit state chain the writer must satisfy, and the
 # `drift_check` it submits is reconciled against exactly this row.
+#
+# `previous_proposal` (world_model) is the one name in the table the frozen dispatch never carries:
+# a refused world candidate is staged on its task after dispatch, and `read` serves it from the
+# staging while the repair loop is live. No refusal, no record — the declared set and what a worker
+# can actually read stay in step without freezing a rejection into a fresh task.
 STAGE_MATERIAL = {
     'opening_options': ('opening_choices', 'opening_rejections'),
     'world_model': ('author_feedback', 'opening_basis', 'opening_choices', 'previous_proposal'),

@@ -175,12 +175,18 @@ def _required_from(sections, choices):
 def validate(data, choices, selection_hash, sections=None):
     required = _required_from(sections, choices)
     require(isinstance(data, dict) and data.get('selection_hash') == selection_hash
-            and text(data.get('premise')) and text(data.get('story_capacity')), 'world', '世界需要准确选择版本、核心前提和长篇承载说明。')
+            and text(data.get('premise')) and text(data.get('story_capacity')), 'world', '世界需要准确选择版本、核心前提和长篇承载说明。',
+            {'fields': ['selection_hash', 'premise', 'story_capacity'],
+             'expect': 'selection_hash 与冻结选择一致；premise 与 story_capacity 为非空文本',
+             'got': ({'selection_hash': data.get('selection_hash'), 'premise': data.get('premise'),
+                      'story_capacity': data.get('story_capacity')} if isinstance(data, dict) else None)})
     require(data['premise'] == choices['world']['world_premise'], 'world_alignment', '世界前提须与所选方案逐字一致。',
             {'rule': '逐字相等；不是包含、缩写或改写', 'expect': choices['world']['world_premise'],
-             'got': data.get('premise'), 'source': 'opening_choices.world.world_premise'})
+             'got': data.get('premise'), 'source': 'opening_choices.world.world_premise',
+             'recover': '把 premise 改回所选原文（逐字）；要改前提先回开书门重选，不在世界任务里改写。'})
     model = copy.deepcopy(data)
     all_ids = set()
+    owners = {}
     for section, fields in SECTIONS.items():
         rows = model.get(section)
         require(isinstance(rows, list), 'world_section', '世界缺少结构领域：' + section)
@@ -188,16 +194,37 @@ def validate(data, choices, selection_hash, sections=None):
                 '本档位/本次选择要求填写的世界领域必须有实际内容：' + section,
                 {'required_sections': list(required), 'recover': '按档位与门里选定的设定只填这条主线走得到的领域，其余留空数组。'})
         for row in rows:
-            require(isinstance(row, dict) and text(row.get('id')) and all(text(row.get(k)) for k in fields), 'world_record', '世界记录缺少具体内容：' + section)
+            require(isinstance(row, dict) and text(row.get('id')) and all(text(row.get(k)) for k in fields), 'world_record', '世界记录缺少具体内容：' + section,
+                    {'section': section, 'id': row.get('id') if isinstance(row, dict) else None,
+                     'expect': 'id 与该域全部字段写成非空文本；空字符串或占位词等于没写却占了位。'})
             key = section + ':' + row['id']
-            require(key not in all_ids, 'world_id', '世界记录 ID 重复。')
             all_ids.add(key)
-            require(isinstance(row.get('links'), list) and all(text(ref) for ref in row['links']), 'world_links', '世界记录须声明关联引用，独立记录可用空数组。')
+            owners.setdefault(row['id'], []).append(section)
+            require(isinstance(row.get('links'), list) and all(text(ref) for ref in row['links']), 'world_links', '世界记录须声明关联引用，独立记录可用空数组。',
+                    {'record': key, 'expect': 'links 是由 领域:id 组成的数组，独立记录用空数组',
+                     'got': row.get('links')})
             for field in OPTIONAL_FIELDS.get(section, ()):
                 if field in row:
                     require(text(row[field]), 'world_optional', '世界记录的可选深字段要么不写，写了就必须是非空文本。',
                             {'record': key, 'field': field, 'got': str(row[field])[:120],
                              'recover': '补成具体文字，或删掉这个键；空字符串等于没写却占了位。'})
+    # The bare id is the handle later dispatches use without the section prefix (a resource key,
+    # a place, an entity), so two domains sharing one id make that handle ambiguous even though
+    # the section-qualified links still resolve. The refusal names the colliding records and every
+    # record whose links point at them, so renaming one id and syncing those links stays inside
+    # exactly the records a narrow repair is allowed to touch.
+    for ident, sections in owners.items():
+        if len(sections) < 2:
+            continue
+        keys = {section + ':' + ident for section in sections}
+        referenced_by = sorted(section + ':' + row['id']
+                               for section in SECTIONS for row in model[section]
+                               for ref in row.get('links', []) if ref in keys)
+        require(False, 'world_id', '世界记录的裸 id 在全部领域间必须唯一。',
+                {'id': ident, 'sections': list(sections),
+                 'expect': '一个裸 id 只属于一个领域', 'got': ident + ' 同时出现在 ' + '、'.join(sections),
+                 'referenced_by': referenced_by,
+                 'recover': '只改撞名记录：给其中一个换 id，并同步更新 referenced_by 里这些记录的 links；其余记录保持逐字不变。'})
     for section in SECTIONS:
         for row in model[section]:
             missing = [ref for ref in row['links'] if ref not in all_ids]
@@ -205,7 +232,25 @@ def validate(data, choices, selection_hash, sections=None):
                     {'record': section + ':' + row['id'], 'missing': missing,
                      'expect': 'links 只能引用本世界里已存在的 领域:id 记录；独立记录用空数组'})
     names = [c['name'] for c in model['characters']]
-    require(len(names) == len(set(names)), 'world_identity', '世界人物称呼不能歧义。')
+    duplicated = next((name for name in names if names.count(name) > 1), None)
+    require(duplicated is None, 'world_identity', '世界人物称呼不能歧义。',
+            ({'duplicate': duplicated,
+              'records': ['characters:' + row['id'] for row in model['characters'] if row['name'] == duplicated],
+              'expect': 'characters 的 name 互不相同',
+              'recover': '只改撞名记录：给其中一条换个称呼并同步它处的引用；其余记录保持逐字不变。'}
+             if duplicated is not None else
+             {'expect': 'characters 的 name 互不相同'}))
+    # Geography is the other section later work addresses by name: chapter outlines declare moves
+    # as place names before the engine normalizes them to ids, so two same-named places make the
+    # target ambiguous. The refusal names both records, so a narrow repair renames exactly one.
+    seen_places = {}
+    for row in model['geography']:
+        seen_places.setdefault(row['name'], []).append('geography:' + row['id'])
+    for name, records in seen_places.items():
+        require(len(records) == 1, 'world_identity', '世界地点名称不能歧义。',
+                {'duplicate': name, 'records': records,
+                 'expect': 'geography 的 name 互不相同', 'got': name + ' 有 ' + str(len(records)) + ' 条',
+                 'recover': '只改撞名记录：给其中一条换个 name（或合并为一条并同步它的 links）；其余记录保持逐字不变。'})
     protagonist = choices['protagonist']
     require(any(c['id'] == protagonist['id'] and c['name'] == protagonist['name'] and c['desire'] == protagonist['desire']
                 and c['limit'] == protagonist['limit'] for c in model['characters']), 'world_alignment', '世界模型须保留所选主角的身份、欲望和底线。',
@@ -216,7 +261,11 @@ def validate(data, choices, selection_hash, sections=None):
     require((mode == 'none' and not model['mechanisms']) or (mode == 'bounded' and bool(model['mechanisms'])), 'world_alignment', '世界机制必须遵守已选的无机制或有限机制方向。',
             {'selected_mode': mode,
              'rule': '所选 mode=none 时 mechanisms 必须为空数组；mode=bounded 时至少一条',
+             'records': ['mechanisms:' + row['id'] for row in model['mechanisms']],
              'source': 'opening_choices.world.mechanism.mode'})
     _bindings(model, choices)
-    require(set(data) <= {'selection_hash', 'premise', 'story_capacity', *SECTIONS}, 'world_fields', '世界模型不得夹带正文事件或事实结算。')
+    require(set(data) <= {'selection_hash', 'premise', 'story_capacity', *SECTIONS}, 'world_fields', '世界模型不得夹带正文事件或事实结算。',
+            {'got': sorted(set(data) - {'selection_hash', 'premise', 'story_capacity', *SECTIONS}),
+             'expect': '顶层键只能是 selection_hash/premise/story_capacity 与十二个领域数组',
+             'recover': '删掉夹带的键，把事件与事实留给章纲的增量声明。'})
     return model

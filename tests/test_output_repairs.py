@@ -8,13 +8,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 import quality_eval
-from novel_ledger import bookpage, delivery, workflow
+from novel_ledger import bookpage, delivery, store_keys, workflow
 from novel_ledger.bootstrap import local_application as Application, local_workspace
 from novel_ledger.contracts import Error, digest, dump
 from novel_ledger.sqlite_store import SQLiteRepository
-from support import contract, drive, link_or_skip, response
+from support import contract, drive, link_or_skip, opening_gate_values, response
 
 
 class OutputRepairTests(unittest.TestCase):
@@ -155,6 +156,113 @@ class EvaluationRepairTests(unittest.TestCase):
         self.assertEqual(work['chapters'][0]['prose'], '他交出九十九文钱')
         private = json.loads((self.base / 'evaluation' / 'private.json').read_text(encoding='utf-8'))
         self.assertEqual([(row['start'], row['end']) for row in private['cases'][0]['locations']], [(3, 6), (8, 8)])
+
+
+class WorldRefusalChainTests(unittest.TestCase):
+    """A refused world candidate is staged, supplied as previous_proposal, and repaired narrowly.
+
+    The v2 pipeline tore out the v1 candidate loop's refusal staging without replacing it: a
+    worker repaired a refused world by re-drafting all of it, and records the refusal had already
+    settled came back changed (the results.md #6/#7 lesson, replayed on the world path). This
+    pins the restored loop end to end — staging, supply, the narrow guard, its safe downgrade,
+    and the cleanup an accepted candidate owes.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.base = Path(self.temp.name).resolve()
+        self.project = self.base / 'book'
+        self.repo = SQLiteRepository.initialize(self.project, workflow.preparing_book(guided=True))
+        self.app = Application(self.repo)
+        # The structural gate first, so the fixture values the remaining gates generate are
+        # already sized to the tier those gates validate against.
+        self.app.intake({'scale': {'tier': 't3'}}, '工程夹具：作者先定体量。')
+        values = opening_gate_values(self.repo.load())
+        self.app.intake(values, '工程夹具：作者一次给全部门的选择。')
+        self.task = self.app.advance()['task']
+        self.task_id = self.task['task_id']
+        self.assertEqual(self.task['stage'], 'world_model')
+
+    def tearDown(self):
+        self.repo.close()
+        self.temp.cleanup()
+
+    def refused(self, defect):
+        """Submit the fixture world receipt with one deterministic defect the engine refuses."""
+        broken = copy.deepcopy(response(self.app))
+        defect(broken['data'])
+        with self.assertRaises(Error) as caught:
+            self.app.submit(broken)
+        # The refusal kept the frozen task: the worker resubmits against the same input.
+        self.assertEqual(self.repo.pending()['id'], self.task_id)
+        return broken, caught.exception
+
+    def test_a_duplicate_place_name_refusal_stages_and_narrows_the_repair(self):
+        def defect(data):
+            row = copy.deepcopy(data['geography'][0])
+            row['id'] = 'colliding-yard'
+            data['geography'].append(row)
+
+        rejected, error = self.refused(defect)
+        self.assertEqual(error.code, 'world_identity')
+        self.assertIn('recover', error.details, '拒绝响应要带返修指引')
+        # The staged refusal keeps the whole candidate plus findings that name the colliding records.
+        staged = self.repo.get(store_keys.world_rejection(self.task_id))
+        self.assertEqual(staged['proposal']['geography'][-1]['id'], 'colliding-yard')
+        self.assertTrue(staged['findings'])
+        # read serves the previous proposal from the staging; the frozen input predates the refusal.
+        read = self.app.read(self.task_id)
+        self.assertIn('previous_proposal', read['records'])
+        self.assertEqual(read['records']['previous_proposal']['value']['proposal'],
+                         staged['proposal'])
+        # A resubmission whose world half is valid, but which also rewrote an unnamed record,
+        # is refused before anything moves.
+        def renamed(receipt):
+            fixed = copy.deepcopy(receipt)
+            for row in fixed['data']['geography']:
+                if row['id'] == 'colliding-yard':
+                    row['name'] = '不再撞名的后院'
+            return fixed
+
+        drifted = renamed(rejected)
+        drifted['data']['everyday'][0]['story_use'] = '顺手改掉的日常。'
+        with self.assertRaises(Error) as caught:
+            self.app.submit(drifted)
+        self.assertEqual(caught.exception.code, 'repair_scope')
+        self.assertTrue(caught.exception.details['changed_but_not_named'])
+        # Only the named fix passes, and acceptance clears the staging.
+        outcome = self.app.submit(renamed(rejected))
+        self.assertTrue(outcome['accepted'])
+        self.assertIsNone(self.repo.get(store_keys.world_rejection(self.task_id)))
+
+    def test_an_unidentifiable_refusal_does_not_fence_the_next_candidate(self):
+        society = copy.deepcopy(response(self.app)['data']['society'])
+
+        def defect(data):
+            data['society'] = []
+
+        rejected, error = self.refused(defect)
+        self.assertEqual(error.code, 'world_section')
+        staged = self.repo.get(store_keys.world_rejection(self.task_id))
+        # The findings here name no record of the candidate, so the guard does not guess a scope:
+        # the next submission may touch records the refusal never mentioned.
+        self.assertEqual(workflow.named_items(staged['proposal'], staged['findings']), set())
+        healed = copy.deepcopy(rejected)
+        healed['data']['society'] = society
+        healed['data']['everyday'][0]['story_use'] = '不在点名范围里的修改。'
+        outcome = self.app.submit(healed)
+        self.assertTrue(outcome['accepted'])
+        self.assertIsNone(self.repo.get(store_keys.world_rejection(self.task_id)))
+
+    def test_a_first_dispatch_has_no_staged_previous(self):
+        self.assertIsNone(self.repo.get(store_keys.world_rejection(self.task_id)))
+        read = self.app.read(self.task_id)
+        self.assertNotIn('previous_proposal', read['records'])
+        # The declared material table still owns the name; the frozen dispatch just never
+        # required it, because there was no refusal to build on.
+        self.assertNotIn('previous_proposal', self.repo.pending()['input']['required'])
+        from novel_ledger import context
+        self.assertIn('previous_proposal', context.STAGE_MATERIAL['world_model'])
 
 
 if __name__ == '__main__':

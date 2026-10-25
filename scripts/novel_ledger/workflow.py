@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 from .contracts import (DEFAULTS, OPENING_VERSION, PIPELINE_SHAPES, REDESIGNS,
                         REPAIRS, Job, Outcome,
-                        capabilities_for, digest, han_count, require, text, tier_of)
+                        capabilities_for, digest, dump, han_count, require, text, tier_of)
 from . import craft, creation, drift, drift_reconcile, drift_simulation, editorial, facts, ledger, lint, narrative, planning, style, understanding, world
 from .evidence import evidence
 
@@ -397,6 +397,32 @@ def named_items(previous, findings):
     return named
 
 
+def rejection_findings(error):
+    """A refused candidate's error, rendered as findings `named_items` can match records by.
+
+    The guard names a record when its key or one of its field values appears in the finding's
+    text, so the complaint's rule and its expect/got values have to survive this rendering —
+    paraphrasing them away would leave the guard nothing to match and quietly turn every repair
+    into a refusal for drifting records it was allowed to touch.
+    """
+    details = error.details or {}
+    complaints = details.get('got') if isinstance(details.get('got'), list) else []
+    findings = []
+    for complaint in complaints:
+        if isinstance(complaint, dict):
+            parts = [str(complaint.get('rule') or ''),
+                     'expect=' + dump(complaint.get('expect'))[:160],
+                     'got=' + dump(complaint.get('got'))[:160]]
+            findings.append({'criterion': error.code, 'severity': 'content', 'repair_scope': 'local',
+                             'reason': '；'.join(part for part in parts if part)})
+    if not findings:
+        # A single-complaint refusal (or a shape error) keeps its details in the text: the values
+        # and record keys inside them are exactly what lets the guard scope the next repair.
+        findings.append({'criterion': error.code, 'severity': 'content', 'repair_scope': 'local',
+                         'reason': '；'.join(part for part in (error.message, dump(details)[:320]) if part)})
+    return findings
+
+
 EXHAUSTION_OPTIONS = (
     {'label': '再返修一轮（只按这几条改）',
      'impact': '给本章加一轮返修额度：只改被点名的记录，改完引擎重新核账。'
@@ -482,7 +508,7 @@ def resolve_draft_exhaustion(book, option, subject=None):
     return book
 
 
-def apply(book, task, data, actor, sources, priors=None, external_findings=None):
+def apply(book, task, data, actor, sources, priors=None, external_findings=None, previous_world=None):
     require(isinstance(data, dict), 'result', 'data 须为对象。')
     data = copy.deepcopy(data)
     book = copy.deepcopy(book)
@@ -510,6 +536,14 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None)
         choices = creation.selected(opening)
         model = world.validate(draft, choices, opening['selection_hash'],
                                sections=world.required_sections(tier_id(opening), choices))
+        if previous_world:
+            # A refused world candidate is repaired by re-emitting the whole receipt, so without a
+            # guard the repair re-drafts everything and settled ground comes back changed — the
+            # loop d546094 pinned for outlines, restored here for the world the v2 pipeline had
+            # left bare. The staged refusal supplies both sides: the previous proposal and the
+            # findings that name what may move.
+            require_narrow_repair(previous_world.get('proposal'), draft,
+                                  previous_world.get('findings') or [])
         book['world'] = model
         if 'opening_contract' in also:
             planning.enforce(planning.active_policy(book.get('lexical_policy')), 'opening_contract', data.get('contract'))
@@ -680,8 +714,11 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None)
         band = narrative.budget_for(book, chapter) if tracking else {'minimum': book['contract']['chapter_min'],
                                                                     'maximum': book['contract']['chapter_max']}
         if not band['minimum'] <= count <= band['maximum']:
+            short = count < band['minimum']
             findings.append({'criterion': 'substance', 'severity': 'quality', 'target_chapter': chapter,
-                             'repair_scope': 'chapter', 'reason': '汉字篇幅不在本章可完成全书的区间。',
+                             'repair_scope': 'chapter',
+                             'reason': ('汉字篇幅低于本章下限：用增加事件补足——新的行动、阻力、转折或后果，不以描写或重复注水。'
+                                        if short else '汉字篇幅不在本章可完成全书的区间。'),
                              'actual_han': count, 'allowed': [band['minimum'], band['maximum']]})
         # Mechanical prose defects are judged here, at submission, against the nearest committed
         # chapters: the same code preflight runs, so the producer sees the finding for free.

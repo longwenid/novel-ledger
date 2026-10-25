@@ -1,5 +1,6 @@
 """Domain boundary checks run against plain values, with no project or SQLite setup."""
 import ast
+import copy
 import sys
 import unittest
 from pathlib import Path
@@ -190,6 +191,32 @@ class DomainBoundaryTests(unittest.TestCase):
         # Nothing identifiable in the findings: the guard does not guess a scope.
         workflow.require_narrow_repair(previous, changed, [dict(findings[0], reason='整体不够好。',
                                                                evidence=[])])
+        # A rendered refusal is findings like any other: the complaint's own values and record
+        # keys ride the reason text, because that text is what `named_items` matches records by —
+        # a paraphrased refusal would fence the repair out of the very records it names.
+        collision = Error('world_id', '世界记录的裸 id 在全部领域间必须唯一。',
+                          {'id': 'shen', 'sections': ['characters', 'everyday'],
+                           'referenced_by': ['rules:r1']})
+        rendered = workflow.rejection_findings(collision)
+        self.assertTrue(rendered)
+        self.assertTrue(all(row['repair_scope'] == 'local' for row in rendered))
+        world_previous = {'rules': [{'id': 'r1', 'principle': '第一条', 'links': ['everyday:shen']}],
+                          'characters': [{'id': 'shen', 'name': '沈桐'}],
+                          'everyday': [{'id': 'shen', 'practice': '夜班交接'}],
+                          'history': [{'id': 'h1', 'event': '旧制度崩过一次。'}]}
+        world_fixed = copy.deepcopy(world_previous)
+        world_fixed['everyday'][0]['id'] = 'shen-shift'
+        world_fixed['rules'][0]['links'] = ['everyday:shen-shift']
+        workflow.require_narrow_repair(world_previous, world_fixed, rendered)
+        world_tampered = copy.deepcopy(world_fixed)
+        world_tampered['history'][0]['event'] = '顺手改写的历史。'
+        with self.assertRaises(Error) as caught:
+            workflow.require_narrow_repair(world_previous, world_tampered, rendered)
+        self.assertEqual(caught.exception.code, 'repair_scope')
+        # A refusal that names nothing degrades safely: the guard does not fence a scope nobody
+        # established, so an unidentifiable complaint never blocks the next submission.
+        workflow.require_narrow_repair(previous, changed, workflow.rejection_findings(
+            Error('world_section', '本档位要求填写的世界领域必须有实际内容：society')))
 
 
 
