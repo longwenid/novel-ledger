@@ -402,6 +402,24 @@ class CurrentOpeningTests(unittest.TestCase):
         self.assertCode('opening_option', creation.validate_value, 'payoff', empty,
                         OPENING_VERSION, {})
 
+    def test_the_anchor_deadline_accepts_a_number_or_a_numeric_string(self):
+        """The rule line says 正整数; a JSON number is the same intent, not a rejection round."""
+        from novel_ledger.contracts import DEFAULTS
+        floors = DEFAULTS['world_ladder']
+        base = {'deliverable': '公开退件来源并把责任按证据落回原位。'}
+        for raw in (3, '3'):
+            creation._validate_promise_anchor({'anchor': {**base, 'deadline_chapter': raw}}, None, floors)
+        self.assertCode('opening_option', creation._validate_promise_anchor,
+                        {'anchor': {**base, 'deadline_chapter': '第3章'}}, None, floors)
+
+    def test_world_value_rules_render_as_lines_not_as_characters(self):
+        """A list-plus-string bug once appended '- a', '- r', '- c' debris to every world brief."""
+        rules = creation.value_rules(OPENING_VERSION, 'world')
+        self.assertIn('architecture：{space, history, civilizations, conflict, mystery}', rules)
+        for line in rules.splitlines():
+            self.assertFalse(line.startswith('- ') and len(line.strip()) <= 3,
+                             '逐字符碎片：%r' % line)
+
     def test_an_older_declared_protocol_is_refused_with_the_fix_named(self):
         """Old gate sets are not re-planned: a state that declares one is refused, and a fresh init
         starts on the current protocol."""

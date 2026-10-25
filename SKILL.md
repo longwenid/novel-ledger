@@ -28,6 +28,12 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 
 本技能允许委派子 agent，沿用当前模型设置。宿主须能创建真实独立模型会话并提供身份；`host-check` 不能证明宿主具备派工能力。能力缺失时保留任务并报告，不编造 session 或用普通脚本冒充 Worker。
 
+派工能力属于**会话层**，不是项目属性：许多宿主里子 agent 会话无法再创建子 agent。技能主干必须运行在宿主具备真实派工能力的会话（通常是顶层会话）；把整条技能链交给一个不能再派工的子 agent，会在第一次世界派工时无界挂死。三条纪律：
+
+1. **先探针后派工**：首次派工前先创建一个最小探针子 agent（任务只有"回复：收到"）核实本会话真能派出执行者；探针创建工具不存在、或 5 分钟未返回，即按宿主能力缺失报告并停止，不执行 prepare-worker、不无界等待。
+2. **等待一律有界**：对 Worker 的等待永远发生在引擎侧——`run` 认领之前用 `watch --task 任务ID`（无 owner 的单任务等待，静默超限返回 idle），认领之后用 `watch --owner ID`。不要在宿主侧无限期阻塞等待子 agent 句柄；watch 返回 idle 按"子 agent 空转"重派处理。
+3. **唤醒重交**：已结束的执笔 Worker 需要重交候选（如 review_complete 后）时，由宿主按其原会话标识唤醒，凭据过期先重新 prepare-worker。
+
 1. 主干执行 `advance --compact`，已有 owner 时携带。`opening_options` 按开书指南自执；世界及后续阶段派真实 Worker。先核实原执行者与 claim，租约过期或未认领不证明原执行者已停止。
 2. 新 Worker 停在自举边界；主干取得真实会话 ID 后执行 `prepare-worker`（正文 write/repair 阶段一律带 `--seconds 1200`——整章生成期间无心跳，默认 300 秒会在过半章节上撞线；世界/卷纲/章纲等单交付阶段不传，引擎默认 3600），仅向该 Worker 注入返回的 worker_env，并交付 `dispatch.md` 路径、角色、task_path 和一句背景。环境自举、命令与模板由引擎生成，不手写一套协议。
 3. Worker 完成当前冻结任务并提交；格式不确定用 `check`，资料不足用 `read`/`recall`。`await_review` 保留原 Worker 与候选，`finished` 才结束任务；快速组仅在 `worker_boundary=continue` 时沿 `commands.worker_next` 接续。新组用空历史 Worker，同组只复用实际已读且名称/hash 未变的材料；上下文丢失按 `--fresh-context` 重交材料。
@@ -44,7 +50,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 - **固定章纲与有限返修**：先核验章纲状态链，再执笔与核账。偏差附原因、正文引文与范围，不能自动改纲迁就正文；核账说明留在回执，正文呈现人物实际经历。预检、恢复或换 Worker 不重置额度，耗尽或超范围交作者决定。
 - **独立连续性核验**：新 CLI 项目默认逐章核验，旧项目保持原模式。`review_required` 实际派独立读者；`review_in_progress` 用 watch 等待；`review_author_required` 交作者裁决；`review_complete` 由原执笔者重交准确候选。主干与执笔者不代签，具体见 [核验交接](references/quality.md#主控与执笔交接)。
 - **结果判定**：submit/preflight 看 outcome 与总 findings，正式章节看 committed_chapter，不用 accepted 或口头完成推断正文通过。不自动填 kept/clean/pass。身份与技术错误按 recovery 返回处理，完整性失败保留现场。
-- **作者与文风**：只推进已有授权，已有准确选择和首章认可直接登记。写作纪律唯一源是 [文风](references/style.md)：无档案按其默认文风，项目内存有作者确认的文风档案（`PROJECT/style-profile.md`）时风格项以档案覆盖默认文风；数值形状默认只观察，不增加逐章“去 AI 味”评分或整章润色任务。机械通过不证明文学质量。
+- **作者与文风**：只推进已有授权，已有准确选择和首章认可直接登记。写作纪律唯一源是 [文风](references/style.md)：生效档案按「项目根 style-profile.md（作者确认的自定义提取）＞ 契约 style_profile（内置文风目录，`recontract --patch` 随时换档）＞ 默认档」确定，写作派工的 guides 自动带生效档案文件；数值形状默认只观察，不增加逐章“去 AI 味”评分或整章润色任务。机械通过不证明文学质量。
 
 ## 按需操作与开发
 
@@ -55,7 +61,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 | 作者要求改约、暂停或修改字面规则 | [暂停与修改](references/runtime.md#暂停与修改)；保留原话、范围和版本。 |
 | 作者要求改写历史正文、分析影响或采纳候选 | [修订影响分析](references/runtime.md#修订影响分析)；原稿保留，超范围方案等待准确授权。 |
 | 作品理解、原文样本或场景身份需要维护 | [叙事工作台](references/workbench.md)；解释与已成立事实分开。 |
-| 执笔默认文风；作者提供对标小说，或要求提取、使用文风档案 | [文风](references/style.md)；默认文风为无档案时的缺省文风，档案经作者确认后登记入项目并覆盖默认文风，执笔与自比对照声线、口癖与 MUST/AVOID。 |
+| 执笔文风：默认档、内置文风库选定或对标提取 | [文风](references/style.md)；生效档案＝项目根 style-profile.md ＞ 契约 style_profile（内置文风目录，开书选定后 `recontract --patch` 登记）＞ 默认档，guides 自动带生效档案文件；对标小说经 style-distill 提取、作者确认后放入项目根生效，执笔与自比对照声线、口癖与 MUST/AVOID。 |
 | 当前任务涉及人物/空间字段、版本补丁 | [编辑能力](references/editorial.md) 对应小节。 |
 | 接入可信执行宿主 | [质量与宿主](references/quality.md#受控宿主的部署契约)。 |
 | 修改引擎、核对能力或排查消耗 | [架构](references/architecture.md)、[返工与成本](references/rework.md)、[验证](references/validation.md)；按变更范围运行检查。 |

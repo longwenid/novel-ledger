@@ -148,6 +148,10 @@ class LocalRuntime:
         return unattended.watch(self.app, owner, steps=steps, poll=poll, idle_limit=idle_limit,
                                 on_dispatch=on_dispatch)
 
+    def watch_task(self, task_id, poll=20.0, idle_limit=1800.0):
+        """The pre-owner wait: watch a single task without a controller lease."""
+        return unattended.watch_task(self.app, task_id, poll=poll, idle_limit=idle_limit)
+
     def close(self):
         self.repo.close()
 

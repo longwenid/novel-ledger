@@ -205,6 +205,8 @@ def parser():
             if command == 'host-loop':
                 sub.add_argument('--limit', type=int, default=100)
         if command == 'watch':
+            sub.add_argument('--task', default=None,
+                             help='无 owner 的单任务等待（run 之前的阶段）：等该任务提交/阻塞/静默，不做治理动作。')
             sub.add_argument('--steps', type=int, default=1,
                              help='监督并等待多少轮派工（默认 1：等当前任务完成后取下一派工）；0 表示一直运行到作者边界、暂停或目标终点。')
             sub.add_argument('--poll', type=float, default=None)
@@ -503,7 +505,10 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'host-loop':
             return runtime.host_loop(load(args.command_json), owner, args.limit, args.timeout)
         if command == 'watch':
-            require(args.owner, 'watch', 'watch 需要 --owner（run 命令返回的主控身份）。')
+            if args.task:
+                require(not args.owner, 'watch', 'watch --task 是无 owner 的单任务等待，不要同时携带 --owner。')
+                return runtime.watch_task(args.task, args.poll, args.idle_limit)
+            require(args.owner, 'watch', 'watch 需要 --owner（run 命令返回的主控身份）；约定激活前没有 owner，用 watch --task 任务ID 做有界等待。')
             return runtime.watch(args.owner, args.steps, args.poll, args.idle_limit)
         require(False, 'access', '未实现命令。')
     except (Error, OSError, ValueError) as exc:

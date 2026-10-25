@@ -225,9 +225,6 @@ VALUE_RULES = {
         'title：非空文本',
     ],
 }
-VALUE_RULES['world'] += (' architecture={'
-                         + ','.join(key for key, _note, _section, _field in contracts.WORLD_ARCHITECTURE)
-                         + '}，五项均为非空文本。')
 
 
 def value_rules(version, gate_id):
@@ -536,13 +533,15 @@ def _validate_promise_anchor(value, tier, floors):
     tighter. `deadline_chapter` is digits so the check is arithmetic, not interpretation.
     """
     anchor = value.get('anchor')
+    deadline_raw = anchor.get('deadline_chapter') if isinstance(anchor, dict) else None
     require(isinstance(anchor, dict) and set(anchor) == {'deliverable', 'deadline_chapter'}
-            and all(text(anchor.get(key)) for key in ('deliverable', 'deadline_chapter')),
+            and text(anchor.get('deliverable'))
+            and isinstance(deadline_raw, (str, int)) and not isinstance(deadline_raw, bool),
             'opening_option', '爽点门需要 anchor={deliverable 第 N 章前兑现什么, deadline_chapter 最迟章号}。',
             {'got': anchor})
     require(len(anchor['deliverable'].strip()) >= 12, 'opening_option',
             'anchor.deliverable 至少 12 字：写清世界再大也必须先兑现的那件事。', {'got': anchor['deliverable']})
-    deadline = anchor['deadline_chapter'].strip()
+    deadline = str(deadline_raw).strip()
     require(deadline.isdigit() and int(deadline) > 0, 'opening_option',
             'anchor.deadline_chapter 用纯数字写最迟章号（例：28），不写「第28章」这类文字。',
             {'got': anchor['deadline_chapter']})

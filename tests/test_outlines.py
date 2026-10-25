@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import creation, drift, drift_simulation, drift_validation, planning, workflow
+from novel_ledger import briefs, creation, drift, drift_simulation, drift_validation, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import DEFAULTS, Error
 from novel_ledger.sqlite_store import SQLiteRepository
@@ -304,6 +304,15 @@ class ChapterOutlineTests(unittest.TestCase):
         broken = copy.deepcopy(self.rows)
         broken[0]['world_refs'] = ['geography:missing']
         self.assertRejected('chapter_world', broken)
+
+    def test_a_world_ref_rejection_names_the_offending_id(self):
+        # A live worker got chapter number plus the whole list and could not tell which ref was
+        # wrong; the finding now carries the offending ids itself.
+        broken = copy.deepcopy(self.rows)
+        broken[0]['world_refs'] = list(broken[0]['world_refs']) + ['geography:missing']
+        error = self.assertRejected('chapter_world', broken)
+        text = str(error.details['findings'])
+        self.assertIn('geography:missing', text)
 
     def test_a_delta_array_may_be_empty_and_an_absent_one_reads_as_empty(self):
         empty = chapter_rows(self.book, self.volume, self.state, resources=False)
@@ -629,6 +638,47 @@ class HookClosureTests(unittest.TestCase):
         self.assertEqual(after_v2['hooks']['hook-v1-carry']['status'], 'paid')
         self.assertEqual(after_v2['hooks']['hook-v2-required']['status'], 'paid')
         self.assertEqual({row['status'] for row in after_v2['hooks'].values()}, {'paid'})
+
+
+class OutlineBriefTests(unittest.TestCase):
+    """The brief must state the receipt the engine will actually judge.
+
+    A merged volume dispatch (small tiers fold chapter outlines into the volume task) was
+    rejected three rounds in a live run because the brief said the exact opposite: "do not
+    deliver chapters". The world brief likewise omitted the derived-contract shapes a worker
+    had to read engine source to learn.
+    """
+
+    def test_a_merged_volume_dispatch_demands_chapters(self):
+        text = briefs.stage('volume_outline',
+                            {'also': ('chapter_outline',), 'volume_ids': ['v1']})
+        self.assertIn('合并派工', text)
+        self.assertIn('chapters', text)
+        self.assertIn('逐章自检', text)
+        self.assertNotIn('不交 chapters', text)
+
+    def test_a_plain_volume_dispatch_still_defers_chapters(self):
+        text = briefs.stage('volume_outline', {'volume_ids': ['v1']})
+        self.assertIn('不交 chapters', text)
+        self.assertNotIn('合并派工', text)
+
+    def test_the_world_brief_states_the_derived_contract_shapes(self):
+        text = briefs.world_model(previous=())
+        self.assertIn('world_rules', text)
+        self.assertIn('initial_resources', text)
+        self.assertIn('字段全等', text)
+        self.assertIn('id/name/kind', text)
+
+    def test_the_world_brief_names_the_verbatim_quantity_and_placement_shapes(self):
+        text = briefs.world_model(previous=())
+        self.assertIn('world_premise 逐字相等', text)
+        self.assertIn('十进制字符串', text)
+        self.assertIn('placements', text)
+
+    def test_the_stage_brief_discloses_the_literal_policy(self):
+        text = briefs.stage('write', {})
+        self.assertIn('literal_policy', text)
+        self.assertIn('账本', text)
 
 
 if __name__ == '__main__':

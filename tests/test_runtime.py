@@ -454,6 +454,21 @@ class RuntimeTests(unittest.TestCase):
         fields = {row['field'] for row in caught.exception.details['violations']['forbidden_terms']}
         self.assertIn('options.premise', fields)
 
+    def test_a_forbidden_term_cannot_hide_inside_an_option_value(self):
+        """The chosen value rides into the world model verbatim, so its text is in scope too."""
+        options = [{'id': 'A', 'title': '夜班退件', 'premise': '他把记录摊在桌上。', 'driver': '核对封条。',
+                    'pitch': '一箱退件，一张签错的封条。',
+                    'scene': ['夜班仓库里，他把退件箱推到灯下核对封条。', '凌晨的登记台前，他逐页翻自己经手的那栏。'],
+                    'tradeoff': '相比另两案，选它要放弃更快的升级节奏。', 'fit_reason': '承接夜班题材，落在具体物件上。',
+                    'value': {'genre': '都市生活', 'reader_promise': '查清责任。', 'tone': '冷硬的夜班底色。',
+                              'source_note': '新城账本利息照旧。'}}]
+        with self.assertRaises(Error) as caught:
+            planning.enforce(planning.resolve_policy({}), 'opening_options', {'gate': 'genre', 'options': options})
+        fields = {row['field'] for row in caught.exception.details['violations']['forbidden_terms']}
+        # A live gate let the same word through `options[].value.resource.source` while refusing it
+        # in `options[].premise`: leaf-only matching exempted the text that becomes canon.
+        self.assertTrue(any('value' in field for field in fields), fields)
+
     def test_export_cannot_overwrite_the_database_or_the_book_view(self):
         self.assertCode('output', delivery.export_book, self.repo, self.project / 'novel.sqlite3',
                         workspace=local_workspace(self.repo))

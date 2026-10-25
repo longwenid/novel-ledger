@@ -79,6 +79,8 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" host-check
 
 此只读命令报告native_worker_creation=false、worker_creation=external_host_required、watch能力及是否存在可信身份验证器；不把“可运行命令”当成“可创建独立模型”。主控必须另外核对当前宿主实际的会话创建工具或已安装模型适配器；没有时保留任务并报告能力缺失，不伪造session或启动普通脚本冒充Worker。watch不创建模型，只监督已由宿主派出的执行者。
 
+派工能力属于会话层，host-check 看不见它：**首次派工前用一次最小探针子 agent（任务只有"回复：收到"）核实本会话真能创建执行者**；探针失败或超时按能力缺失报告，不进入 prepare-worker。`run` 认领之前没有 owner，主控对在途任务的等待用 `watch --task 任务ID`（无 owner 的单任务有界等待：提交/技术阻塞/静默超限即返回，不做治理动作），认领之后用 `watch --owner`；两条路径都不在宿主侧无限期等待子 agent 句柄。
+
 prepare-worker.ready只表示协议身份登记成功，响应的worker_presence、status.worker_presence及派工卡execution.worker_presence另列身份登记、租约有效期、实际读取/心跳活动和身份是否经宿主证明。activity_observed不证明当前仍存活，worker_running=null须由宿主核实；phase=await_worker_start表示尚未观察到该身份活动，lease_expired表示租约过期。组active=true也不证明后台正在写。准备身份后立即向真实Worker交付任务，不结束主控回复留下空挂租约。
 
 ## 诊断与主控上下文交接
@@ -121,7 +123,7 @@ prepare-worker.ready只表示协议身份登记成功，响应的worker_presence
 | 取当前状态 | advance --compact，已有 owner 时继续携带。 | 当前 action，不预猜阶段或自行拼任务。 |
 | task_ready | **开书门任务（opening_options）由主干自执**：读 task_path 的 task.json 与同目录 brief.md，`read --task` 取必读（同会话连门且 records_hash 未变可豁免），从 result.template.json 起稿一次成稿后 check/submit（session 填主干身份，门任务不绑定会话）。其余阶段按任务交接规则派工；快速组内只由原 Worker 接续。 | 原执行者状态与 claim；普通新任务和快速新组用空历史会话，沿用当前模型设置。门任务对主控放行 read/recall（contracts.CONTROLLER_STAGES），正文阶段不在此列。 |
 | Worker 结束 | 接收身份和状态摘要，正文与完整回执留在项目。**子 agent 空转结束**（无提交、无报告，或宿主显示其模型调用连续空响应重试）不是流程事件：用 `advance --compact` 重派同一 pending 任务（引擎重渲染视图，`redispatch_count` 递增，上次未提交的回执草稿被隔离为 `result.stale.json`；未提交不计任何返修额度），普通模式换一个新子 agent；快速模式先按上节确认原执行者停止，pause --cancel/resume 后重开组，不把已绑定组转给新会话。连续两次仍空转则保留现场报告作者，不要靠反复重派碰运气。 | task_id、真实 session、accepted/checked、worker_boundary 或错误码及原因。 |
-| 核实提交 | 无人值守用 `watch --owner ID`（默认一步：等当前任务提交后直接取下一派工）；需要显式核实时 advance --compact --after 该任务ID。 | wait_for_submit 表示未提交，resync 表示重取状态；不能仅凭 accepted_chapters 判断卷纲或章纲是否已采纳。watch 的等待发生在引擎进程里，主干会话不为等待付费。 |
+| 核实提交 | 无人值守用 `watch --owner ID`（默认一步：等当前任务提交后直接取下一派工）；尚未 `run` 认领的阶段（世界/约定激活前）用 `watch --task 任务ID` 做同样的引擎侧有界等待；需要显式核实时 advance --compact --after 该任务ID。 | wait_for_submit 表示未提交，resync 表示重取状态；不能仅凭 accepted_chapters 判断卷纲或章纲是否已采纳。watch 的等待发生在引擎进程里，主干会话不为等待付费。 |
 | 接续 | 按下面的动作表继续。 | 章节、卷纲、Worker 和卷末均非授权目标停点，修订采纳、完本与交付也在循环内；controller.must_continue=true时继续执行返回动作，不以进展通报结束本轮。 |
 
 ### 动作分支
@@ -143,7 +145,7 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 | review_in_progress | 原读者已绑定并在首读或比较，执行watch等待并续主控租约；不另派读者，不用模型轮询等待 |
 | review_author_required | 核验报告存在未决歧义，保留候选与报告，交作者用review-resolve准确裁决；不继续派读者 |
 | review_complete | 联系原执笔Worker，保留其上下文并续有效凭据，以准确候选重做submit；仍以outcome和committed_chapter核实结果 |
-| wait_for_submit | 等待或联系当前子 agent 完成提交；它已结束时核实错误并沿允许会话恢复当前任务，不派下一个任务 |
+| wait_for_submit | 等待或联系当前子 agent 完成提交；已有 owner 用 watch --owner，没有 owner（run 之前）用 watch --task 该任务ID，引擎侧有界等待、静默超限返回 idle 后按空转重派。它已结束时核实错误并沿允许会话恢复当前任务，不派下一个任务 |
 | resync | 放下过期的 after 回调，重新调用不带 --after 的 advance --compact，以当前任务为准 |
 | revision_ready | 修订属于当前授权目标时执行 promote，再回到 advance --compact；作者明确要求先看候选再决定时，交付候选并等待该决定 |
 | revision_blocked | 交付 proposal.plan_path 中的完整修复方案，说明请求范围、实际影响、动作数量；保持原稿，等待作者对准确 plan_hash 的明确决定，不自动放宽范围 |
@@ -229,6 +231,7 @@ await_author 给准确 prose_hash；已获得该版本认可时由主干 `approv
 | 作者明确要求的未写窗口重排 | replan --from-chapter N --reason 原因 | 已有草稿或正式稿的章纲不能直接删除；重排后的章纲重新过卷内状态链。 |
 | 字面规则修改 | lexical --file 规则.json --source 原话 | 逐版记录，执行及恢复见 [字面规则](#字面规则)。 |
 | 回收不可达文档 | compact | 只删除任何活动记录都到不了的内容寻址文档并回收空间；不改故事与账本状态，重复执行无副作用。 |
+| 参数级约定修改 | recontract --file 补丁.json --patch --source 原话 | 文件只列要改的字段，其余沿用生效约定；改动全部落在参数集合（chapter_min/max/aim、word_range、style_guard、**style_profile**、revision_limit、narrative_tracking、editorial_features、scope_append_limit）时**直接生效于当前约定**，不建 pending_contract、不触发重写。文风换档例：`{"style_profile":"账房掌门"}`，见 [文风](style.md)。含结构字段时走下一行完整路径。 |
 | 完整约定修改 | recontract --file 完整候选.json --source 原话 | 取消旧任务留档，新约定经机械校验激活后重新规划与执笔；已有正文时在继承父稿的新分支**自第 1 章重写全书**（父分支保留，可 discard 恢复），代价随已写章数线性增长——先向作者说明再执行；开书导入的状态条件见 [入口选择](opening.md#入口选择)。 |
 | 答复作者裁决 | answer --decision-id ID --option 选项 --source 原话 | 只回答 status 的 author_decision 里已展示的选项，记录问题、选择与原话后清除 author_block；选项之外的新决定走 recontract（代价见上行）或重新提案。 |
 

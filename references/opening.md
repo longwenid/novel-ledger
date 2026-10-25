@@ -35,7 +35,7 @@
 
 1. `advance --compact` 取任务与 `task_path`；
 2. 读任务目录的 `brief.md`（任务定位卡，含当前门、字段与来源入口；`input.json` 是同一内容的 JSON 原文，不必重复读）；需要必读记录时直接 `read --task 任务ID`（该阶段对主控放行 read/recall，正文与审读阶段不在此列）。同一会话连跑多门时可豁免：上一门的 `read` 返回 `records_hash` 与本门相同、且任务卡未新增必读记录，跳过本次 read；
-3. 从 `result.template.json` 复制起稿 `result.json`，只填 data（信封三字段不手写，`input_version` 报错会带 expected）；`check` 试算后 `submit`（回执 `session` 填主干自己的会话身份即可，门任务不绑定会话）；
+3. 从 `result.template.json` 复制起稿 `result.json`，只填 data（信封三字段 schema/task_id/input_hash 不手写，`input_hash` 报错会带 expected）；`check` 试算后 `submit`（回执 `session` 填主干自己的会话身份即可，门任务不绑定会话）；
 4. 展示板面等作者选择（板面与提问的转发纪律见上）；「换一组」就 `regroup` 后重复——同一会话连续换组即是复用，作者在环防止锚定。
 
 全部开书选择完成、进入 `world_model` 后，按冻结任务派工：世界、卷纲、章纲和正文是实际工作量所在，主干只保留目标、任务身份与治理动作。宿主确实无法内联时才退回逐门派工，并如实说明。
@@ -104,7 +104,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 - **当期参照**：候选的机制、节奏与审美锚定开书上下文带来的最新市场快照（当期在跑什么、什么已饱和），不引用执行者记忆里的旧热点；没有快照可用时如实按"无当期证据"构思并在取舍里注明，不伪装已核对当期。紧跟主流指的是当期周期的机制与审美，不是供给已饱和的旧热点换皮。
 - **俗套命中自审**：premise / protagonist / opposition 门的每个候选，构思时先自审——最像的三本现有作品是什么、本书有什么它们没有的；差异是机制级的（怎么涨、怎么限、怎么兑现、读者在哪里动感情）才可入选，只是外衣（换朝代、换器物、换地名）就重出该候选。化石组合默认命中：遗孤血统＋残缺信物＋器物认主、无代价的圣人式主角底线、逐层升高的四层敌人梯。
 
-程序对每份方案回执按去除首尾空白后的字符数执行 pitch≤40、scene 最多 3 条、每条 scene ≥12 字；这是唯一规则，没有旧任务的宽松解释。
+程序对每份方案回执按去除首尾空白后的字符数执行 pitch≤40、scene 最多 3 条、每条 scene ≥12 字；这是唯一规则，没有旧任务的宽松解释。方案文本与 value 的内容都受项目字面约定约束（默认禁词：账本、入账、回执，清单与覆盖字段随任务材料 policy 块交付），命中会以 literal_policy 拒绝并给出 found 词条。
 
 **结构字段以当前门任务卡的 value 规则为准，不凭记忆猜格式**：stance/dark_side/family/ladder.terminal 等是枚举（合法值写在各门规则里），mechanism（mode/principle/cost/limits）、resource（name/source/allocator）、architecture（space/history/civilizations/conflict/mystery）、ladder.scale（opening/terminal/unchanged）、payoff.plan（ways/cadence/hooks）与 payoff.anchor（deliverable/deadline_chapter，纯数字章号）是结构体。生成方案前先读当前门 brief 的 value 规则一行，再落笔；`check` 的 findings 会逐字段指出违规与合法值，按它修正，不要连续盲试。
 
@@ -122,15 +122,15 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 | 创意门 | **默认主干自执**（同一会话读 task.json、brief.md 与 required，生成方案并 submit，不派子 agent）；宿主无法内联时才派新空历史 Worker。 | 主干自执无交接等待；派工路径由主干等待结束再 --after 核实提交，委派只给任务路径和当前角色。 |
 | 结构门 | 引擎即时返回档位板，主干展示。 | await_choice，无任务或 Worker；方案回执按 opening_system 拒绝。 |
 | 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 系统不代选；换组和返回保留记录。 |
-| 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务同时包含 world_model 与 opening_contract（payload.also），回执为世界字段加 contract；以任务 stages、payload.also 和模板为准。 |
-| 机械校验与激活 | 世界与约定**不再有独立核验阶段**：提交时由引擎校验字段、links 引用、选择一致性与约定对齐（含与所选世界的 world_rules 逐字一致），以及门里声明的位阶/硬通货/格局阶梯在世界模型里的**逐字绑定**（v6 加上世界架构）（见 [世界模型](world.md#三条逐字绑定)）；通过即在同一事务激活约定；失败保持当前任务，按具体错误修正后重交。 | 校验只证明字段、引用和声明一致，不证明世界承载或因果成立；判断留给卷纲与章纲的状态链，以及作者抽读。 |
+| 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务在同一次交付里同时覆盖 world_model 与 opening_contract（任务 `stages` 列表声明，双阶段共用一份模板与回执）；以任务 stages 和模板为准。 |
+| 机械校验与激活 | 世界与约定**不再有独立核验阶段**：提交时由引擎校验字段、links 引用、选择一致性与约定对齐（含与所选世界的 world_rules 逐字一致），以及门里声明的位阶/硬通货/格局阶梯在世界模型里的**逐字绑定**（v6 加上世界架构）（见 [世界模型](world.md#三条逐字绑定)）；校验通过先持久化候选，**约定在下一次 advance 的同一事务内激活**（此时才可 `run` 认领 owner）；失败保持当前任务，按具体错误修正后重交。 | 校验只证明字段、引用和声明一致，不证明世界承载或因果成立；判断留给卷纲与章纲的状态链，以及作者抽读。 |
 | 卷纲 | 约定生效后按 `advance` 派 `volume_outline`：默认 `scope=all`，一次交全部卷、每卷 2000–3000 汉字（目标 2500）；`scope=rolling` 时进入该卷前交该卷。v5 及之后的项目每卷还要给 `stage`：**逐字取已选格局阶梯里的一级，且按卷序只升不降**（字段与校验见 [协议](protocol.md) 与 [世界模型](world.md#三条逐字绑定)）。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工。 | 形状、校验与覆盖见 [叙事推进](narrative.md#卷纲)。 |
 | 章纲 | 每卷进入前派一次 `chapter_outline`：该卷每章极简章纲（资源/位置/知情/时钟/人物/情节增量与 enter/exit），提交时按卷内状态链逐章模拟。 | 漂移字段与核算见 [叙事推进](narrative.md#章纲)。 |
 | 交付 | outline_ready 按实际卷纲覆盖交付；卷纲与章纲为必选阶段。 | world_view.html_path 指向统一 book.html，另交 world.json 的绝对路径；视图失败可 advance 重建。 |
 
 已有明确正文授权时，开书交付后按原话调用 run；没有授权时在 outline_ready/world_ready 停止，不把选完设定等同于写完整本。
 
-后续世界、约定和卷纲任务同样等待子 agent 结束，再用 --after 核实提交；会话恢复及完整动作分支见 [运行](runtime.md)。
+后续世界、约定和卷纲任务同样用引擎侧有界等待（`run` 之前 `watch --task 任务ID`，认领后 `watch --owner`），不在宿主侧无限期等待子 agent；任务提交后用 --after 核实。会话恢复及完整动作分支见 [运行](runtime.md)。
 
 ## 操作与恢复
 
@@ -156,3 +156,5 @@ board 哈希由主控从展示响应恢复，用户不需知道。选择绑定�
 默认 opening_contract 随 world_model 起草，读取闭合选择和同轮候选世界；候选世界与候选约定由引擎按同一套机械校验在提交时判定（字段、links 引用、与各门选择逐字一致），通过即原子激活，**没有独立核验阶段**。单独下发的 opening_contract 读取其冻结的已核验世界。逐门 value 的字段保留（主角门存为 protagonist_setup，关系门映射到 relationships，机制允许范围由世界门给出）。选定承诺、基调、核心设想、主角来历、视角、体量、世界架构、位阶与硬通货、格局尺度与升格阶梯、主角、关系、推进、终局、主题锚点、母题、书名和文风不得改变；卷职责、名称和初始化细节由系统推导，并在卷纲提交时与 `contract.volumes` 一一比对。对齐字段从同一字段声明派生，不通过合并整份 value 覆盖其他门。
 
 约定还须保留所选禁区（red_lines 是逐门所选禁区的超集），并在 entities 中保留所选主角，kind 为 person，id 与 name 与 protagonist_setup 一致，否则核验报 opening_alignment。result.template.json 由约定字段表派生，含全部对齐字段（含 title 与空 entities 骨架）；结构校验拒绝未知字段，因此模板不接受的字段不要提交。`tone`/`theme`/`pov` 分属题材门（genre）、兑现门（payoff）与视角门（voice）选定：模板里有这三个字段，逐门开书必须逐字保留；自备约定（`init --contract`）可以不带它们，不追溯要求补选。书名由作者在最后一门选定，约定工人不再代拟。
+
+内置文风档案（`style_profile`，见 [文风](style.md)）不设门：约定激活时按引擎默认档落契约，作者在开书中口头选定后由主控 `recontract --patch {"style_profile":"档名"} --source 原话` 登记——参数级变更，直接生效；自备约定直接带该字段。它与逐字对齐的 voice/tone/pov/style_traits 分开：后者来自门选择不得漂移，前者是作者可随时切换的参数。

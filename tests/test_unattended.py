@@ -97,6 +97,44 @@ class WatchUnitTests(unittest.TestCase):
     def test_watch_requires_the_controller_identity(self):
         self.assertRaises(Error, unattended.watch, FakeWatchApp([]), '  ')
 
+
+class WatchTaskUnitTests(unittest.TestCase):
+    """The pre-owner wait: a task can be awaited before any run claim exists.
+
+    A contract activates only after the world dispatch submits, while `watch` needs an owner
+    from `run` — between the two, the only documented wait was "wait for the sub agent to end",
+    which wedged a live mainline for 85 minutes on a worker that never started.
+    """
+
+    def test_a_pending_task_returns_submitted_without_any_controller_call(self):
+        app = FakeWatchApp([], pending_reads=2)
+        result = unattended.watch_task(app, 'world-1', poll=1, idle_limit=1000,
+                                       sleep=app.sleeper, now=app.clock)
+        self.assertEqual(result['action'], 'submitted')
+        self.assertEqual(result['task_id'], 'world-1')
+        self.assertEqual(app.advance_owners, [])
+        self.assertEqual(app.renews, 0)
+
+    def test_a_silent_worker_returns_idle_instead_of_waiting_forever(self):
+        app = FakeWatchApp([], pending_reads=10 ** 9)
+        result = unattended.watch_task(app, 'world-1', poll=1, idle_limit=100,
+                                       sleep=app.sleeper, now=app.clock)
+        self.assertEqual(result['action'], 'idle')
+        self.assertEqual(result['task_id'], 'world-1')
+        self.assertTrue(app.slept)
+
+    def test_execution_blocked_is_reported_for_repair_not_ignored(self):
+        app = FakeWatchApp([], pending_reads=10 ** 9)
+        app.task_status = lambda task_id: {'id': task_id, 'status': 'pending',
+                                           'execution_blocked': True,
+                                           'recovery': {'actor': 'controller'}}
+        result = unattended.watch_task(app, 'world-1', poll=1, idle_limit=100,
+                                       sleep=app.sleeper, now=app.clock)
+        self.assertEqual(result['action'], 'worker_blocked')
+
+    def test_the_task_identity_is_required(self):
+        self.assertRaises(Error, unattended.watch_task, FakeWatchApp([]), '  ')
+
     def test_active_observer_is_waited_for_and_controller_renewed(self):
         for initial in (ready('a'), {'action': 'review_in_progress', 'task_id': 'a'}):
             with self.subTest(initial=initial['action']):

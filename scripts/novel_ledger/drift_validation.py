@@ -225,8 +225,10 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
             key = row.get('key') if isinstance(row, dict) else None
             if not isinstance(row, dict) or not text(key) or _number(row.get('from')) is None \
                     or _number(row.get('to')) is None or not text(row.get('reason')):
-                findings.append(_finding(chapter_no, 'resources', key, '{key,from,to,reason}', _safe(row),
-                                         '卷纲资源需要 key、from/to 数值与原因。', 'volume_reference', 'blocker', 'volume'))
+                findings.append(_finding(chapter_no, 'resources', key,
+                                         '{key,from,to,reason}；from/to 数值', _safe(row),
+                                         '卷纲资源需要 key、from/to 数值与原因。资源坐标须先在约定 initial_resources '
+                                         '或既有状态里登记，卷纲/章纲不能凭空确立新资源。', 'volume_reference', 'blocker', 'volume'))
                 continue
             if not _resource_known(state, world, key) and key not in world_ids:
                 findings.append(_finding(chapter_no, 'resources', key, '世界模型或既有状态', None,
@@ -240,7 +242,9 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
                 continue
             if entity not in entities:
                 findings.append(_finding(chapter_no, 'places', entity, '已登记实体', None,
-                                         '卷纲站位引用了世界模型与既有状态都没有的实体。',
+                                         '卷纲站位引用了世界模型与既有状态都没有的实体。'
+                                         '要写位置变化的实体，先在约定 entities 登记；其实体初始站位在约定 placements 声明'
+                                         '——没有初始站位的实体不能建立位置坐标，只能不写它的位置变化。',
                                          'volume_reference', 'blocker', 'volume'))
         for row in volume.get('knowledge') or []:
             who = row.get('who') if isinstance(row, dict) else None
@@ -374,10 +378,15 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
                                          length, '章纲篇幅不在每章目标汉字数区间内。',
                                          'chapter_length', 'blocker', 'outline'))
         refs = row.get('world_refs')
-        if not isinstance(refs, list) or not all(text(ref) and ref in world_ids for ref in refs) \
-                or len(refs) != len(set(refs)):
-            findings.append(_finding(chapter_no, 'world_refs', 'world_refs', '世界模型已有记录 ID', _safe(refs),
-                                     'world_refs 须引用存在的 领域:id，且不重复。',
+        unknown = [ref for ref in (refs if isinstance(refs, list) else [])
+                   if not text(ref) or ref not in world_ids]
+        duplicated = len(refs) != len(set(refs)) if isinstance(refs, list) and all(text(r) for r in refs) else False
+        if not isinstance(refs, list) or unknown or duplicated:
+            sample = '、'.join(sorted(world_ids)[:8]) + ('…' if len(world_ids) > 8 else '')
+            findings.append(_finding(chapter_no, 'world_refs', unknown[0] if unknown else 'world_refs',
+                                     '世界模型已有记录 ID（例：%s）' % sample, _safe(unknown or refs),
+                                     'world_refs 引用了不存在的记录 ID：%s。合法 ID 形如 领域:id，且不重复。'
+                                     % ('、'.join(map(str, unknown)) if unknown else '存在重复项'),
                                      'chapter_world', 'blocker', 'outline'))
         plot = row.get('plot')
         chapter_style = row.get('style')

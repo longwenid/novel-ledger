@@ -67,5 +67,24 @@ class TierFloorDocTests(unittest.TestCase):
         self.assertEqual(floors['t3'], world.BASE_SECTIONS)
 
 
+class StyleCatalogDocTests(unittest.TestCase):
+    def test_style_hub_table_matches_the_registered_catalog(self):
+        """style.md's 内置文风目录 table restates the registry's (name, file) pairs.
+
+        A profile is one archive file plus one registry entry; the hub table is how a reader finds
+        the same set the engine dispatches, so renaming or adding an archive in one place without
+        the other fails here, naming both files.
+        """
+        source = read('references/style.md')
+        section = re.search(r'## 内置文风目录\n(.*?)\n## ', source, re.S)
+        self.assertIsNotNone(section, 'style.md 不再含「内置文风目录」表；请更新本测试的解析位置')
+        rows = re.findall(r'\[([^\]]+)\]\((styles/[^)]+)\)', section.group(1))
+        self.assertTrue(rows, '内置文风目录表没有档案链接')
+        found = {name.replace('（默认）', ''): path for name, path in rows}
+        self.assertEqual(found, {name: row['file'] for name, row in contracts.STYLE_CATALOG.items()},
+                         'style.md 目录表与 contracts.STYLE_CATALOG 不一致')
+        self.assertIn('（默认）', section.group(1), '目录表未标注默认档')
+
+
 if __name__ == '__main__':
     unittest.main()

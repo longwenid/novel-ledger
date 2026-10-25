@@ -27,6 +27,8 @@ def opening_options(gate, version=OPENING_VERSION, *, creative_lens=None):
              '来源：用 task.json.commands.read 读取完整 required；已选决定见 opening_choices，'
              '本门否决记录见 opening_rejections。',
              '按 result.template.json 填写；检查与提交使用 task.json.commands.check/submit。',
+             '字面约定：方案文本与 value 的内容都受默认禁词（账本/入账/回执）约束，'
+             '命中会以 literal_policy 拒绝并给出 found 词条（含 options[].value 深层文本）；改写避开，作者可用 lexical 调整规则。',
              '创意说明只在 task.json.guides 指向的 hatch.md，按当前门定位。']
     if creative_lens:
         lines.append('本轮方法标签（按需选用）：' + creative_lens)
@@ -170,6 +172,27 @@ def world_model(previous=(), repair=False, scale=None, sections=None):
         lines.append('## 已选方向（不得改动）')
         lines.extend('- %s：%s' % (name, text) for name, text in previous)
         lines.append('')
+    lines.extend(['## 约定派生字段的准确形状（照此落笔，不要按占位猜类型）',
+                  '- contract.world_rules：逐条逐字等于世界 rules 各条记录的 principle，顺序一致（数组）。',
+                  '- 顶层 premise 与已选 world_premise 逐字相等（不是扩写或缩写）。',
+                  '- 世界架构五项是字段全等绑定：门里声明的 space/history/civilizations/conflict/mystery '
+                  '必须逐字写进对应世界记录的指定字段（environment/present_effect/conflicts/consequences/truth），'
+                  '是整段相等，不是提及或包含。',
+                  '- 世界 characters 里须有一条记录的 id/name/desire/limit 与所选主角逐字相同。',
+                  '- contract.entities：每条 {id,name,kind}（kind 用 person/item/place 等）；'
+                  '其中必须有一条 id/name/kind=person 与所选主角逐字相同，可另加 desire/limit。',
+                  '- contract.volumes：每卷 {id, end}（卷末章号严格递增；卷数=所选档位的 volume_count），'
+                  'first 与 word_range 由引擎推导，不手写。',
+                  '- initial_resources 每条 {holder,asset,unit,quantity}：holder 必须是 entities 里已登记的实体，'
+                  'quantity 是十进制字符串（写 "1200" 不写 1200）。'
+                  '后续卷纲/章纲的资源增量只能作用于这里（或既有状态）登记过的坐标——'
+                  '本书若要写资源变化（钱、材料、配额），现在就登记起点，不要留空。',
+                  '- contract.placements（实体id→地点id）声明开局站位：要写位置移动的实体，'
+                  '先在这里登记初始站位且地点存在于世界 geography——否则设计链不能建立位置坐标，'
+                  '章纲只能不写该实体的位置变化。',
+                  '- 模板里的空字符串占位（如 payoff_plan.ways）代表「待填的数组/结构」：'
+                  '按门内已选值原样落入，保持数组是数组，不改成一句话。',
+                  ''])
     lines.extend(['## 同一份提交里还要给约定',
                   '按 task.stages 与 payload.also 指定的阶段填写 result.template.json；'
                   '约定逐字保留已选字段，填入 data.contract，不提交选案 options。', ''])
@@ -241,7 +264,8 @@ CHAPTER_CHECK_HINTS = (
 )
 
 NATURAL_PROSE_GUIDE = (
-    '读材料里 style_anchor 的样本（或默认档案）和本卷 style.trend，按那个声线写，不要另外发明规则。'
+    '读材料里 style_anchor 的样本（或生效文风档案——guides 里带档案文件，材料 style.profile 注明档名）'
+    '和本卷 style.trend，按那个声线写，不要另外发明规则。'
     '写你知道的事：人物眼前的利益、他在意什么、他不愿明说的事，让细节从使用和忽略中自然出现。'
     '对白让人说话——直说、绕开、言不由衷或沉默都可以，动机不必说透。'
     '用动作和具体物件承载情绪，少用形容词解释感受。'
@@ -333,10 +357,12 @@ def stage(name, payload=None):
                  'resources 的 to 是数值字符串（如 "2"），characters 的 to 是 {desire,stance,relationship_focus}（不得用 after 键），'
                  'knowledge 的 to 是档位，places 的 to 是地点 id；hook 用 {"action": "plant"|"payoff"}，'
                  '节点/线路/读者披露用 {"after": 状态}，clock 用 {"advance_days": n}。'
-                 '遵守 word_budget 的本章范围；作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
+                 '遵守 word_budget 的本章范围（aim 是目标字数，min/max 是硬界——字数判断只看 word_budget；'
+                 'style_anchor 样本的字数只用于文风可比性，不是本章字数目标）；作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
                  'self_check 用具体表达说明实际视角、人物说话方式与节奏；'
                  'dialogue_ratio 未声明时不用补比例，已声明时如实核对，不按段落分配对白。'
-                 '材料 style.anchor 是首章的实测指标、style.window 是本卷生效的容差：'
+                 '材料 style.profile 是生效文风档案档名（声线与口癖对照它的档案文件，guides 里带该文件）；'
+                 'style.anchor 是首章的实测指标、style.window 是本卷生效的容差：'
                  '默认 style_guard=observe 时首章形状差异仅供观察；作者选 strict 才按容差核验句段与锚点对白比例。'
                  '章纲明确的对白目标与高重复检查仍生效；代词统计只是视角核对线索，不能代替阅读。'
                  '伏笔上 plant 的承诺与 payoff 的兑现都要在正文里落地，drift_check 的 hook 行照实填。'
@@ -350,9 +376,18 @@ def stage(name, payload=None):
     }
     stages.require_stage(name)
     rule = stages.require_rule(name, rules.get(name))
+    merged_dispatch = name == 'volume_outline' and 'chapter_outline' in (payload.get('also') or ())
     if name == 'volume_outline':
-        rule += (' 本批次要交的卷与各自章号区间见 payload.volume_outline：volumes 逐卷给全字段，'
-                 '不交 chapters（逐章说明由后续 chapter_outline 完成）。')
+        if merged_dispatch:
+            # The engine rejects a merged receipt without per-chapter outlines; the brief used to
+            # say the opposite ("don't deliver chapters"), which cost a live worker three rounds.
+            rule += (' 本批次为合并派工（小体量档把 chapter_outline 并入本任务，不再单独派工）：'
+                     'volumes 逐卷给全字段之外，必须在同一回执交付 chapters——'
+                     '按 result.template.json 的 chapters 骨架逐章填齐本批次全部卷的章纲，'
+                     '每章字段、enter/exit 状态链、hooks 与逐项自检规则与章纲阶段完全相同（见下方逐章自检清单）。')
+        else:
+            rule += (' 本批次要交的卷与各自章号区间见 payload.volume_outline：volumes 逐卷给全字段，'
+                     '不交 chapters（逐章说明由后续 chapter_outline 完成）。')
         if payload.get('repair'):
             rule += (' 这是返修不是重写：只改被点名的问题与偏差行（payload.drift），'
                      '其余卷保持与上一版逐字一致；节点/线路 id 与已批准集合保持一致。')
@@ -402,13 +437,19 @@ def stage(name, payload=None):
     self_check = self_check_block() if name in ('write', 'repair', 'redesign') else []
     checks = ''
     if name == 'volume_outline':
-        checks = '\n'.join(_check_block('提交前自检（这些是机械校验会直接判的）',
-                                        '没有独立核验者了；下面每一条提交时都会机械判定：', VOLUME_CHECK_HINTS))
+        blocks = _check_block('提交前自检（这些是机械校验会直接判的）',
+                              '没有独立核验者了；下面每一条提交时都会机械判定：', VOLUME_CHECK_HINTS)
+        if merged_dispatch:
+            blocks += _check_block('逐章自检（合并派工的 chapters 同样机械判定，状态链逐章重放 enter/exit）',
+                                   'chapters 缺章、章号不连续或 enter/exit 对不上都会整份被拒：', CHAPTER_CHECK_HINTS)
+        checks = '\n'.join(blocks)
     elif name == 'chapter_outline':
         checks = '\n'.join(_check_block('提交前自检（这些是机械校验会直接判的）',
                                         '没有独立核验者了；下面每一条提交时都会机械判定，'
                                         '状态链还会从卷起始真实状态逐章重放你的 enter/exit：', CHAPTER_CHECK_HINTS))
     body = [rule + time_rule + enhanced + memory] + self_check + ([checks] if checks else [])
     tail = ('字段形状按 result.template.json；格式不确定用 check 自检。完整协议和创作指导在 guides，'
-            '来源不足时按冻结哈希补读，不读源码猜格式。')
+            '来源不足时按冻结哈希补读，不读源码猜格式。'
+            '字面约定随材料交付（task 材料的 policy 块，默认禁词为 账本/入账/回执）：'
+            '本阶段 scope 覆盖的字段含这些词会被 literal_policy 拒绝，落笔前先避开或请作者用 lexical 改规则。')
     return '\n'.join(body) + ('' if body[-1] == '' else ' ') + tail

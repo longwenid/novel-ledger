@@ -90,8 +90,8 @@
   "knowledge": [{"who":"hero","topic":"…","from":null,"to":"hinted|suspected|misled|confirmed|retracted","reason":"…"}],
   "characters": [{"entity":"hero","from":null,"to":{"desire":"…","stance":"…","relationship_focus":"…"},"choice":"…","cost":"…"}],
   "clock": {"advance_days": 1},
-  "enter": [{"kind":"resources|places|knowledge|clock|character|node","key":"…","expected":0}],
-  "exit":  [{"kind":"resources|places|knowledge|clock|character|node","key":"…","expected":3}],
+  "enter": [{"kind":"resources|places|knowledge|clock|character|node|thread","key":"…","expected":0}],
+  "exit":  [{"kind":"resources|places|knowledge|clock|character|node|thread","key":"…","expected":3}],
   "disclosures": [{"topic":"…","after":"hinted"}],
   "world_refs": ["geography:luoxia"],
   "new_entities": [{"id":"…","kind":"character|place|item","name":"…","role":"…","desire":"…","limit":"…","knowledge_boundary":"…"}],
@@ -106,6 +106,17 @@
 - `scenes`/`pacing` 是当前章纲的可选字段；`hook_refs`/`reader_refs`/`history_refs` 指出本章要承接的旧承诺、旧认知与历史断言。
 - `new_entities` 取代原人物档案派工：新人物/地点/物品首次出现时，在本章内联给出档案字段；落地后按 id 引用，不再单独派一次档案任务。
 - 每章 synopsis 交代实际发生的事、人物处境与本章阅读作用；行动与后果可跨章承接，不强求每章齐备一套节拍。引用真实世界记录与卷纲已登记的节点/线路/伏笔。
+
+**状态链坐标速查**（enter/exit 的 `key` 写法，增量行的字段与其一致）：
+
+| kind | key 形态 | 说明 |
+|---|---|---|
+| `resources` | 资源名（asset，如 `灵砂`）或完整坐标 | 引擎按 `holder/asset/unit` 三段存储坐标；key 写资源名时可唯一解析即通过，同一资产多持有方时须写完整坐标。只能作用于约定 `initial_resources` 或既有状态已登记的坐标——设计链不能凭空确立新资源（要写资源变化，先在世界任务的约定里登记起点）。 |
+| `places` | 实体 id；`expected`/`from`/`to` 用地点 id 或世界模型里的同名地名（引擎归一为 geography id） | 新地点先经本章 `new_entities`（kind=place）登记，之后的章才能引用；移动的实体须已有初始站位（约定 `placements`），没有初始站位的实体建立不了位置坐标。 |
+| `knowledge` | `who:topic`（冒号连接实体 id 与话题） | 档位 hinted/suspected/misled/confirmed/retracted；`suspected` 与 `hinted` 同档参与倒退校验。世界模型里的人物不会自动进入 state.entities：写知情/人物增量前，该人物须已由约定 entities 或 `new_entities` 登记。 |
+| `character` | 实体 id | `to` 为 `{desire,stance,relationship_focus}` 结构；增量行另需 `choice`/`cost`。 |
+| `node`/`thread` | 节点/线路 id | 本章增量涉及或进入条件用到的 node/thread，**enter 与 exit 都要列**；thread 的 exit 同样参与 `exit==enter⊕增量` 核对。 |
+| `clock` | `clock` | `expected` 为累计天数绝对值，增量行用 `advance_days`。 |
 
 ### 卷内状态链与校验
 
@@ -195,7 +206,7 @@
 
 `metrics` 保留原稿顺序计算重复率，识别中文、直角及英文直引号，嵌套对白不重复计数；闭引号和连续省略号不产生零汉字句。短文本门槛沿 contracts.DEFAULTS：正文不足 40 汉字整章不判，锚点不足 40 汉字不作为基线，四字窗口不足 20 不判重复度。句段只在锚点与本章字量同数量级（3 倍内）且本章至少三句时比较。
 
-锚点缺失时回落到 `contracts.DEFAULTS['style_default_anchor']` 的默认文风档案（`origin=default`）：形状指标照常比较——observe 档记为观察、strict 档产生 findings——报告标注基线为默认而非作者认可，首章认可后由实锚替换。显式对白目标与重复度检查不变；明确声明对白目标 0 时，非零对白仍产生偏差；未声明时，独处章没有对白可以是正常阅读需要。
+锚点缺失时回落到契约 `style_profile` 所选内置档案的注册锚点（`contracts.profile_anchor`；未知或缺失档名按引擎默认档，项目根 style-profile.md 自定义档案未注册形状时机械锚同样按默认档回落）：形状指标照常比较——observe 档记为观察、strict 档产生 findings——报告标注基线为声明锚（含档名）而非作者认可，首章认可后由实锚替换。显式对白目标与重复度检查不变；明确声明对白目标 0 时，非零对白仍产生偏差；未声明时，独处章没有对白可以是正常阅读需要。
 
 **人称观察的边界**：第一人称叙述可写“我进门，他抬头”，第三人称限知也可贴近人物的内心话；中文还会省略主语。`first/third/mixed/unknown` 只是代词分布标签，不能证明越界、全知或人称切换。实际视角仍须按作者约定结合所知范围、心理归属与切换标记自比。
 

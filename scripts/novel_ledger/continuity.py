@@ -1,37 +1,50 @@
 """Pure evidence and explicit scene-time constraints; no natural-language truth oracle."""
 from __future__ import annotations
 
-from .contracts import digest, require, text
+from .contracts import Error, digest, require, text
 
 
 def citation(row, sources):
-    require(isinstance(row, dict) and text(row.get('source')) and row['source'] in sources,
-            'continuity_evidence', '引文不属于冻结来源。')
+    # Three distinct refusals, not one: a live reader hit "引文不属于冻结来源" five times while the
+    # actual defect was a missing source key — the message blamed a quote that was verbatim correct.
+    require(isinstance(row, dict), 'continuity_evidence', 'evidence 须为对象。')
+    if not text(row.get('source')):
+        raise Error('continuity_evidence',
+                    'evidence 缺 source：用 "candidate"（当前候选）或已读冻结章号的字符串。')
+    require(row['source'] in sources, 'continuity_evidence',
+            'evidence.source=%r 不属于本次冻结来源（candidate 或已读章号）。' % row['source'])
     source = sources[row['source']]
     start, quote = row.get('start'), row.get('quote')
     require(type(start) is int and start >= 0 and text(quote)
-            and source['prose'][start:start + len(quote)] == quote
-            and row.get('prose_hash') == source['prose_hash'],
-            'continuity_evidence', '引文偏移、原文或版本不匹配。')
+            and source['prose'][start:start + len(quote)] == quote,
+            'continuity_evidence',
+            '引文偏移或原文不匹配：start 是 quote 首字符在正文中的字符偏移，quote 须逐字取自该来源。')
+    require(row.get('prose_hash') == source['prose_hash'], 'continuity_evidence',
+            'evidence.prose_hash 与该来源不符：用本次 read 返回的 sources 里的原值，不要自行重算哈希。')
     return dict(row)
 
 
 def observations(rows, sources):
     require(isinstance(rows, list), 'continuity_observation', '独立观察必须是列表。')
     result = []
-    for row in rows:
-        require(isinstance(row, dict) and all(text(row.get(k)) for k in ('entity', 'predicate'))
-                and 'value' in row and row.get('certainty') in ('explicit', 'apparent', 'reported', 'uncertain'),
-                'continuity_observation', '观察须有实体、谓词、值和明确/表象/传闻/不确定层级。')
-        require(row.get('time_frame', 'present') in ('present', 'flashback', 'parallel', 'uncertain'),
-                'continuity_observation', 'time_frame须区分当前叙事、补叙、并行或时序未决。')
-        require(row['predicate'] != 'life_state' or row['value'] in ('alive', 'dead', 'unknown'),
-                'continuity_observation', 'life_state使用alive/dead/unknown；昏迷等情况另记谓词。')
-        value = {**row, 'evidence': citation(row.get('evidence'), sources)}
-        if row.get('transition') is not None:
-            require(isinstance(row['transition'], dict) and row['transition'].get('kind') == 'revival',
-                    'continuity_observation', '生命周期例外须明确复苏机制。')
-            value['transition'] = {'kind': 'revival', 'evidence': citation(row['transition'].get('evidence'), sources)}
+    for index, row in enumerate(rows):
+        try:
+            require(isinstance(row, dict) and all(text(row.get(k)) for k in ('entity', 'predicate'))
+                    and 'value' in row and row.get('certainty') in ('explicit', 'apparent', 'reported', 'uncertain'),
+                    'continuity_observation', '观察须有实体、谓词、值和明确/表象/传闻/不确定层级。')
+            require(row.get('time_frame', 'present') in ('present', 'flashback', 'parallel', 'uncertain'),
+                    'continuity_observation', 'time_frame须区分当前叙事、补叙、并行或时序未决。')
+            require(row['predicate'] != 'life_state' or row['value'] in ('alive', 'dead', 'unknown'),
+                    'continuity_observation', 'life_state使用alive/dead/unknown；昏迷等情况另记谓词。')
+            value = {**row, 'evidence': citation(row.get('evidence'), sources)}
+            if row.get('transition') is not None:
+                require(isinstance(row['transition'], dict) and row['transition'].get('kind') == 'revival',
+                        'continuity_observation', '生命周期例外须明确复苏机制。')
+                value['transition'] = {'kind': 'revival',
+                                       'evidence': citation(row['transition'].get('evidence'), sources)}
+        except Error as exc:
+            # Rejections that do not name the failing row force a reader to bisect the payload by hand.
+            raise Error(exc.code, '第 %d 条观察：%s' % (index + 1, exc.message)) from exc
         result.append(value)
     return result
 
@@ -64,13 +77,16 @@ Apparent death, hearsay and an independently cited revival remain distinct.
 def findings(rows, sources):
     require(isinstance(rows, list), 'continuity_report', 'findings必须是列表。')
     result = []
-    for row in rows:
-        require(isinstance(row, dict) and row.get('kind') in ('contradiction', 'uncertain', 'editorial')
-                and text(row.get('reason')), 'continuity_report', '问题须区分矛盾、歧义、编辑判断并说明原因。')
-        evidence = row.get('evidence')
-        require(isinstance(evidence, list) and len(evidence) >= (2 if row['kind'] == 'contradiction' else 1),
-                'continuity_evidence', '明确矛盾须给出成对原文证据，其他判断至少一条。')
-        result.append({**row, 'evidence': [citation(item, sources) for item in evidence]})
+    for index, row in enumerate(rows):
+        try:
+            require(isinstance(row, dict) and row.get('kind') in ('contradiction', 'uncertain', 'editorial')
+                    and text(row.get('reason')), 'continuity_report', '问题须区分矛盾、歧义、编辑判断并说明原因。')
+            evidence = row.get('evidence')
+            require(isinstance(evidence, list) and len(evidence) >= (2 if row['kind'] == 'contradiction' else 1),
+                    'continuity_evidence', '明确矛盾须给出成对原文证据，其他判断至少一条。')
+            result.append({**row, 'evidence': [citation(item, sources) for item in evidence]})
+        except Error as exc:
+            raise Error(exc.code, 'findings 第 %d 条：%s' % (index + 1, exc.message)) from exc
     return result
 
 

@@ -121,6 +121,13 @@ class ContinuityService:
             result = {'schema': SCHEMA, 'request_id': ident, 'candidate_hash': row['candidate_hash'],
                     'comparison': candidate['comparison'],
                     'observations': self.repo.read_document(row['observations']),
+                    'report_example': {'kind': 'uncertain', 'reason': '一句话说明哪两处表达存在歧义',
+                                       'evidence': [{'source': 'candidate',
+                                                     'prose_hash': '本次返回 sources 里的原值',
+                                                     'quote': '逐字引句一', 'start': 0},
+                                                    {'source': 'candidate',
+                                                     'prose_hash': '本次返回 sources 里的原值',
+                                                     'quote': '逐字引句二', 'start': 120}]},
                     'report_template': {'schema': SCHEMA, 'request_id': ident, 'candidate_hash': row['candidate_hash'],
                                         'observations_hash': row['observations'], 'findings': [], 'assessment': ''}}
             self.repo.record('continuity_read', {**store_keys.read_record(row['task_id'], ['comparison'], len(dump(result))),
@@ -151,11 +158,17 @@ class ContinuityService:
                                          'read_sources': seen, 'observations': [], 'limitations': []},
                 'observation_example': {'entity': '主角名', 'predicate': 'location', 'value': '正文里的具体地点',
                                         'certainty': 'explicit', 'time_frame': 'present',
-                                        'evidence': {'chapter': 1, 'quote': '从所读正文逐字摘出的原句', 'start': 0}},
+                                        'evidence': {'source': 'candidate',
+                                                     'prose_hash': '从本次返回 sources.candidate.prose_hash 原样复制',
+                                                     'chapter': 1, 'quote': '从所读正文逐字摘出的原句', 'start': 0}},
                 'instructions': '先通读正文，记录生死、行动、时间期限、地点/证物、知情与表达；未证实的旧账目只作线索。'
                                 '每条观察须含 entity/predicate/value/certainty（explicit|apparent|reported|uncertain）'
-                                '与 time_frame（present|flashback|parallel|uncertain，缺省 present）；evidence 引文逐字'
-                                '取自所读正文并给起始偏移；life_state 只用 alive/dead/unknown。'}
+                                '与 time_frame（present|flashback|parallel|uncertain，缺省 present）；'
+                                'evidence 必含四个键：source（"candidate" 或已读冻结章号的字符串）、'
+                                'prose_hash（本次 read 返回 sources 里该来源的原值，不要自行重算）、'
+                                'quote（逐字取自该来源正文）与 start（quote 首字符的字符偏移）；'
+                                '计算 start 可把本次响应重定向到文件后程序化定位，不必重复调用 read。'
+                                'life_state 只用 alive/dead/unknown。'}
         self.repo.record('continuity_read', {**store_keys.read_record(row['task_id'], sources, len(dump(result))),
                                             'request': ident, 'phase': 'blind'})
         return result

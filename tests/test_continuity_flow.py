@@ -89,6 +89,9 @@ class ContinuityFlowTests(unittest.TestCase):
         self.assertEqual(self.app.advance()['action'], 'review_in_progress')
         compared = self.app.read_review(ident, *actor, compare=True)
         self.assertEqual(compared['comparison']['self_check'], self.receipt['data']['self_check'])
+        # The findings shape is shown once here, not guessed from the observation evidence shape.
+        self.assertIn('report_example', compared)
+        self.assertEqual(compared['report_example']['evidence'][0]['source'], 'candidate')
         changed = {'schema': SCHEMA, 'request_id': ident, 'candidate_hash': ident, 'read_sources': ['candidate'],
                    'observations': [], 'limitations': ['看了自评后重写首读判断']}
         with self.assertRaises(Error):
@@ -445,8 +448,14 @@ class ContinuityReadBoundsTests(unittest.TestCase):
         for field in ('entity', 'predicate', 'value', 'certainty', 'time_frame', 'evidence'):
             self.assertIn(field, example)
         self.assertIn(example['certainty'], ('explicit', 'apparent', 'reported', 'uncertain'))
+        # A live reader copied the example verbatim and was rejected five times: the example's
+        # evidence lacked the two keys the validator actually requires.
+        for key in ('source', 'prose_hash', 'quote', 'start'):
+            self.assertIn(key, example['evidence'])
+        self.assertEqual(example['evidence']['source'], 'candidate')
         self.assertIn('entity/predicate/value/certainty', read['instructions'])
         self.assertIn('life_state', read['instructions'])
+        self.assertIn('不要自行重算', read['instructions'])
         self.assertEqual(read['observation_template']['observations'], [])
 
     def test_regular_chapter_keeps_the_complete_two_chapter_window(self):

@@ -8,7 +8,8 @@ import sys
 import time
 from pathlib import Path
 from .catalog import GENRE_CATALOG
-from .contracts import FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, EXECUTION, CONTROLLER_STAGES, execution_recovery, digest, require, text
+from .contracts import (FORM_ARTIFACTS, IDENTITY, RESULT, VERSION, EXECUTION, CONTROLLER_STAGES,
+                        STYLE_CATALOG, execution_recovery, digest, require, resolve_style_profile, text)
 from .result_templates import template
 from .execution import presence
 from .ports import PublicationReader
@@ -203,8 +204,11 @@ def render_dispatch_card(envelope, identity):
         state = '已过期' if claim.get('expired') else '生效中（session=%s）' % claim.get('session')
         claim_lines = ['- 本任务已有租约（%s）：未过期沿用原会话；过期由主干重新认领，Worker 不执行 claim。' % state]
     commands = envelope.get('commands') or {}
-    steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。',
-             '2. 执行一次无参数 read（命令见下）把必读记录拿齐；可加 --save 集中落盘并通读两包，不截断前章；确需某份再 read --record 名称。',
+    steps = ['1. 读 `task.json` 与 `brief.md`；`guides` 列出本任务对应参考文档，按需再读。'
+             '凭据（worker_env）到达前不要执行任何 worker 命令：无凭据调用按身份错误计技术失败（额度有限，耗尽交回主控）。',
+             '2. 原样执行一次 commands.read（命令见下，不需要额外参数）把必读记录拿齐；可加 --save 集中落盘'
+             '并通读两包（read_pack.md 与 read_ref.md 都是材料正文：前者是章纲/前章/状态/文风锚/字数预算/伏笔/反馈等写作材料，'
+             '后者是世界/约定/选择等参考材料；两包都要读，不要只读其一）。',
              '3. 用文件编辑工具从 `result.template.json` 起稿，先保存 UTF-8 `result.json`，只改 data；'
              '正文也可先存独立 UTF-8 文件，再用 JSON 序列化读入 data.prose。'
              '避免把长正文嵌入 python -c 或 shell 引号；后续按文件路径读取、局部编辑，不反复重贴整章。'
@@ -416,8 +420,19 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         names.extend(n for n in ('protocol.md', 'craft.md') if n not in names)
     for extra_stage in also:
         names.extend(name for name in guides.get(extra_stage, ()) if name not in names)
-    if names:
-        envelope['guides'] = [str(reference_dir / name) for name in names]
+    style_paths = []
+    if work['stage'] in ('write', 'repair', 'redesign'):
+        # The style hub plus the archive this project actually writes in. Voice discipline is the
+        # one guide that changes per book, so it is resolved per dispatch from the frozen contract:
+        # an author-confirmed PROJECT/style-profile.md overrides the built-in catalog choice.
+        contract_hash = (task['input'].get('records') or {}).get('contract')
+        contract = repo.read_document(contract_hash) if contract_hash else {}
+        profile = resolve_style_profile((contract or {}).get('style_profile'))
+        custom = Path(workspace.project) / 'style-profile.md'
+        style_paths = [str(reference_dir / 'style.md'),
+                       str(custom) if custom.exists() else str(reference_dir / STYLE_CATALOG[profile]['file'])]
+    if names or style_paths:
+        envelope['guides'] = [str(reference_dir / name) for name in names] + style_paths
     envelope['stages'] = [work['stage'], *also]
     # Who this dispatch is belongs in the dispatch, not only in the host's environment: the worker
     # and the controller can then cross-check identity against the task instead of guessing. It

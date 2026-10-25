@@ -87,6 +87,39 @@ def _watch(app, owner, steps=1, poll=None, idle_limit=None, sleep=time.sleep, no
         rounds += 1
 
 
+def _await_task(app, task_id, poll, idle_limit, sleep, now):
+    """Owner-less single-task wait: sleep in the engine until this task settles or goes silent.
+
+    The controller lease and `run` are coupled by design, but a contract activates only after the
+    world dispatch submits — and `watch` needs an owner. Between the first dispatch and that
+    activation there was no engine-side wait at all, so a host that blocked on its worker handle
+    waited forever (a live wedge observed at 85 minutes). This loop is that gap's bounded answer:
+    it owns no lease, advances nothing, and returns exactly when the caller must act.
+    """
+    idle_at = now() + idle_limit
+    while True:
+        current = app.task_status(task_id)
+        if current.get('execution_blocked'):
+            return {'action': 'worker_blocked', 'task_id': task_id,
+                    'recovery': current.get('recovery'),
+                    'boundary': '技术执行已停止，由主控修复交接原因后 prepare-worker --reset-failures。'}
+        if current['status'] != 'pending' and not current.get('batch_active'):
+            return {'action': 'submitted', 'task_id': task_id, 'status': current['status'],
+                    'boundary': '任务已提交；用 advance --after 核实并取下一步。'}
+        if now() >= idle_at:
+            return {'action': 'idle', 'task_id': task_id, 'idle_after': idle_limit,
+                    'boundary': 'Worker 长时间未提交：确认执行者仍在，或按当前状态重新派工。'}
+        sleep(poll)
+
+
+def watch_task(app, task_id, poll=None, idle_limit=None, sleep=time.sleep, now=time.monotonic):
+    poll = policy_default('watch_poll_seconds') if poll is None else poll
+    idle_limit = policy_default('watch_idle_limit_seconds') if idle_limit is None else idle_limit
+    require(text(task_id), 'watch', '单任务等待需要 --task（run 之前的阶段没有 owner）。')
+    require(poll > 0 and idle_limit > 0, 'watch', 'poll 与 idle-limit 须为正数秒。')
+    return controller_handoff(_await_task(app, task_id, poll, idle_limit, sleep, now))
+
+
 def watch(app, owner, steps=1, poll=None, idle_limit=None, sleep=time.sleep, now=time.monotonic,
           on_dispatch=None):
     return controller_handoff(_watch(app, owner, steps, poll, idle_limit, sleep, now, on_dispatch))

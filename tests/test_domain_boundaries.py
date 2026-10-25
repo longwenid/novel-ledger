@@ -64,6 +64,21 @@ class DomainBoundaryTests(unittest.TestCase):
         self.assertEqual(planning.validate_contract(raw)['initial_resources'][0]['holder'], 'missing')
         self.assertCode('resource', workflow.new_book, raw)
 
+    def test_chapter_ceiling_is_a_policy_not_a_tier_artifact(self):
+        """Tier tables open lower; a live contract may patch up to the declared ceiling."""
+        from novel_ledger.contracts import policy_default
+        ceiling = policy_default('chapter_max_ceiling')
+        raw = contract()
+        raw['chapter_max'] = ceiling
+        raw['chapter_aim'] = ceiling
+        raw['word_range'] = [raw['volumes'][-1]['end'] * raw['chapter_min'], raw['volumes'][-1]['end'] * ceiling]
+        self.assertEqual(planning.validate_contract(raw)['chapter_max'], ceiling)
+        raw['chapter_max'] = ceiling + 1
+        with self.assertRaises(Error) as caught:
+            planning.validate_contract(raw)
+        self.assertEqual(caught.exception.code, 'contract')
+        self.assertIn('策略上限', caught.exception.message)
+
     def test_task_result_shapes_are_built_outside_any_judgment(self):
         blank = result_templates.template('write', 3, payload={'chapter_outline': {}})
         self.assertEqual([item['kind'] for item in blank['drift_check']['items']], ['clock'])

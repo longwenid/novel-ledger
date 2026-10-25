@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (DEFAULTS, SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, policy_default, require, tier_of)
+from .contracts import (DEFAULTS, SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, policy_default,
+                        profile_anchor, require, resolve_style_profile, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY,
                         SCENE_IDENTITY_CAPABILITY,
                         SCENE_MEMORY_CAPABILITY, UNDERSTANDING_CAPABILITY, VOLUME_OUTLINE_CAPABILITY)
@@ -531,12 +532,14 @@ def style_material(book, volume, chapter_row=None):
     chapter_style = (chapter_row or {}).get('style') if isinstance((chapter_row or {}).get('style'), dict) else {}
     return {'voice': contract.get('voice', ''), 'tone': contract.get('tone', ''),
             'pov': contract.get('pov', ''), 'style_traits': list(contract.get('style_traits') or []),
+            'profile': resolve_style_profile(contract.get('style_profile')),
             'guard': contract.get('style_guard', DEFAULTS['style_guard']),
             'anchor': style.baseline(book),
             'window': style.merged_window(contract, volume_style),
             'volume': dict(volume_style), 'chapter': dict(chapter_style),
-            'source': '文风规格：契约 voice/tone/pov/style_traits 是底线，anchor 是作者认可首章的实测指标（无认可锚点时为 origin=default 的默认文风档案），'
-                      'volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。'
+            'source': '文风规格：契约 voice/tone/pov/style_traits 是底线，profile 是生效的内置文风档案（guides 里带它的档案文件；'
+                      '项目根 style-profile.md 存在时以那份作者确认档案为生效档案），anchor 是作者认可首章的实测指标'
+                      '（无认可锚点时为该档案的注册锚点），volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。'
                       'guard=observe 默认只观察首章形状变化，strict 才执行锚点容差；'
                       '显式对白目标和高重复检查仍生效，实际视角须结合正文自比。'}
 
@@ -650,9 +653,10 @@ def build(repo: ContextStore, book, job):
             add('style_anchor', voice_anchor)
         elif stage in ('write', 'repair', 'redesign'):
             # No approved pilot yet: the prose writer still gets a declared voice floor instead
-            # of free-styling chapter 1; the default profile is labeled for what it is. Design
-            # stages (outlines) do not carry prose and keep their material surface unchanged.
-            add('style_anchor', policy_default('style_default_anchor'))
+            # of free-styling chapter 1 — the anchor registered for the contract's style_profile,
+            # labeled for what it is. Design stages (outlines) do not carry prose and keep their
+            # material surface unchanged.
+            add('style_anchor', profile_anchor(contract.get('style_profile')))
     design_stages = ('volume_outline', 'chapter_outline')
     writing_stages = ('write', 'repair', 'redesign')
     if stage in design_stages or stage in writing_stages:

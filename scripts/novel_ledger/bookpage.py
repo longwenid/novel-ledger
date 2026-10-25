@@ -37,7 +37,7 @@ FIELD_LABELS = {'title': '书名', 'reader_promise': '读者承诺', 'ending': '
                 'revision_limit': '修订窗口', 'initial_facts': '初始事实', 'places': '初始地点',
                 'placements': '初始站位', 'arcs': '人物弧', 'editorial_features': '编辑能力',
                 'scope_append_limit': '单轮补写章数上限', 'volume_outline': '卷纲要求',
-                'chapter_outline': '章纲要求', 'style_window': '文风容差',
+                'chapter_outline': '章纲要求', 'style_window': '文风容差', 'style_profile': '内置文风档案',
                 # opening/5: the brainstorm gate's four questions, the ladder's scale, the tier
                 # ladder, the hard currency, and the promise anchor.
                 'world_architecture': '世界架构', 'architecture': '世界架构', 'core_premise': '核心设想', 'world_scale': '格局尺度', 'world_ladder': '升格阶梯',

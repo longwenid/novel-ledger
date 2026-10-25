@@ -197,8 +197,8 @@ class BaselineTests(unittest.TestCase):
 
     def test_a_missing_or_short_anchor_falls_back_to_the_default_profile(self):
         """A project never runs voiceless: no anchor means the declared default floor."""
-        from novel_ledger.contracts import policy_default
-        default = policy_default('style_default_anchor')
+        from novel_ledger.contracts import profile_anchor
+        default = profile_anchor()
         for book in ({'style_anchor': {'sample': '他走了。'}}, {}, {'style_anchor': None},
                      {'style_anchor': {'sample': ''}}):
             baseline = style.baseline(book)
@@ -441,14 +441,14 @@ class StyleIntegrationTests(unittest.TestCase):
 
         The default anchor is compared (origin=default) but the observe guard keeps shape drift
         non-blocking, so chapter one still commits — the floor records, it does not refuse."""
-        from novel_ledger.contracts import policy_default
+        from novel_ledger.contracts import profile_anchor
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary) / 'no-anchor'
             repo = SQLiteRepository.initialize(project, seeded_book(contract(2)))
             try:
                 app = Application(repo)
                 owner = app.run(through=2, source='工程夹具：无锚点。')['owner']
-                self.assertEqual(style.baseline(repo.load()), policy_default('style_default_anchor'))
+                self.assertEqual(style.baseline(repo.load()), profile_anchor())
                 drive(app, owner, until='write')
                 candidate = response(app)
                 candidate['data']['prose'] = candidate['data']['prose'][:14] + sentences(4, 8, start=0x7000)

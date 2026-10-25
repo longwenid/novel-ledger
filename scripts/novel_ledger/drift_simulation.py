@@ -52,7 +52,10 @@ def _apply(state, coord, chapter_no, model, nodes, hooks, findings):
     coordinate = _resource_coordinate(state, key, detail.get('asset')) if kind == 'resources' else None
     if kind == 'resources' and (coordinate is None or after is None or after < 0):
         findings.append(_finding(chapter_no, kind, key, '已登记资源坐标与非负终值', after,
-                                 '资源坐标无法解析或消耗超过账面。', 'drift_resource', 'blocker', 'volume'))
+                                 '资源坐标 %s 在状态中尚无登记：设计链不能凭空确立资源。'
+                                 '先在约定 initial_resources 声明该坐标（holder/asset/unit/quantity），'
+                                 '或本卷不写它的增量、改由 exit_state 说明。' % _safe(key),
+                                 'drift_resource', 'blocker', 'volume'))
         return findings
     definition = (nodes.get(key) or {}) if kind == 'node' else (hooks.get(key) or {}) if kind == 'hook' else {}
     window = definition.get('window') if kind == 'node' else definition.get(coord.get('to')) if kind == 'hook' else None

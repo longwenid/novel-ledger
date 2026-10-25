@@ -72,11 +72,12 @@ def enforce(policy, stage, data):
     for path, value in _walk(data):
         segments = path.split('.') if path else []
         field = segments[-1] if segments else ''
-        # A declared field matches either the leaf itself (`characters.name`) or any segment of the
-        # path: a chapter's inline `new_entities` rows carry their names one level down, and a
-        # top-level comparison there would have let an author's name ban be bypassed by moving the
-        # character into the chapter that introduces it.
-        if field in terms_scope or segments[:1] and segments[0] in terms_scope:
+        # A declared field matches any segment of the path, not just the leaf: a chapter's inline
+        # `new_entities` rows carry their names one level down, and an opening option carries its
+        # chosen `value` deep inside the options array — a leaf-only comparison let a forbidden
+        # term ride into the world model through `options[].value.resource.source` while the very
+        # same word in `options[].premise` was refused.
+        if field in terms_scope or any(part in terms_scope for part in segments):
             found = [w for w in resolved['forbidden_terms'] if w in value]
             if found:
                 hits.setdefault('forbidden_terms', []).append({'field': path, 'found': found})
@@ -181,6 +182,8 @@ def validate_contract(raw):
                 for k in ('chapter_min', 'chapter_max', 'chapter_aim', 'revision_limit')),
             'contract', '章幅与修订窗口须为正整数。')
     require(contract['chapter_min'] <= contract['chapter_aim'] <= contract['chapter_max'], 'contract', '章目标须在上下限之间。')
+    require(contract['chapter_max'] <= contracts.policy_default('chapter_max_ceiling'), 'contract',
+            '章字数上限不得高于策略上限 %d。' % contracts.policy_default('chapter_max_ceiling'))
     require(type(contract['narrative_tracking']) is bool, 'contract', 'narrative_tracking 须为布尔值。')
     require(type(contract['editorial_features']) is bool and (not contract['editorial_features'] or contract['narrative_tracking']),
             'contract', 'editorial_features 需要 narrative_tracking；基础模式可明确设 false。')

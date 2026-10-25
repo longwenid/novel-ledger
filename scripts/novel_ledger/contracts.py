@@ -63,16 +63,10 @@ DEFAULTS = {
     # that repeats one clause measures 0.79~0.99.
     'style_window': {'sentence': 0.35, 'paragraph': 0.35, 'dialogue': 0.40, 'repetition': 0.12, 'person': 1},
     'style_guard': 'observe',
-    # The voice floor every project gets before its first chapter is approved: with no
-    # author-approved anchor, shape metrics compare against this declared default instead of
-    # silently not judging. A mainstream chapter profile (~180 sentences, ~18-char sentence mean,
-    # ~0.25 short-sentence share, ~0.30 dialogue; paragraph units are characters).
-    # han mirrors chapter_min so the anchor never implies a word count floor.. Observe guard records the drift
-    # as observations; strict makes it actionable. approve replaces this with the real anchor.
-    'style_default_anchor': {
-        'han': 2000, 'sentences': 180, 'sentence_mean': 18.0, 'sentence_short_share': 0.25,
-        'paragraph_mean': 50.0, 'paragraph_max': 160.0, 'dialogue_share': 0.30, 'origin': 'default',
-    },
+    # Which built-in style profile a project writes in when the author has not distilled one of
+    # their own. The name must exist in STYLE_CATALOG below; before the first chapter is approved,
+    # the shape proxies compare against that profile's registered anchor (style.baseline).
+    'style_profile_default': '市井修仙',
     # Where a style metric is worth measuring at all: below these floors the sample says nothing and
     # comparing it would only produce noise findings on chapters the word budget already governs.
     'style_floor_han': 40,
@@ -125,6 +119,54 @@ def policy_default(key):
     """A policy's default, copied: callers must not be able to mutate the one declaration."""
     value = DEFAULTS[key]
     return copy.deepcopy(value) if isinstance(value, (dict, list)) else value
+
+
+# The built-in style library: one entry per references/styles/<名>.md archive. The engine's channel
+# to a profile is this registry, not the prose — a writing dispatch's guides name the registered
+# file, and `anchor` is the declared shape the proxies compare against before the author approves a
+# first chapter (style.baseline). `han` mirrors chapter_min for every profile: it gates shape
+# comparability and is not that profile's word count. Where a profile's corpus facts do not declare
+# a metric (the sentence-level ones), the mainstream value stands; paragraph units are characters
+# and dialogue shares are character-caliber, per each archive's 语料事实 table. Adding a profile is
+# one file in references/styles/ plus one entry here — see style.md「内置文风目录」.
+STYLE_CATALOG = {
+    # The declared default profile: the calibrated mainstream shape the single-profile era ran on.
+    '市井修仙': {
+        'file': 'styles/市井修仙.md',
+        'anchor': {'han': 2000, 'sentences': 180, 'sentence_mean': 18.0, 'sentence_short_share': 0.25,
+                   'paragraph_mean': 50.0, 'paragraph_max': 160.0, 'dialogue_share': 0.30},
+    },
+    '账房掌门': {
+        'file': 'styles/账房掌门.md',
+        'anchor': {'han': 2000, 'sentences': 180, 'sentence_mean': 18.0, 'sentence_short_share': 0.25,
+                   'paragraph_mean': 47.6, 'paragraph_max': 450.0, 'dialogue_share': 0.2643},
+    },
+    '神秘学双声部': {
+        'file': 'styles/神秘学双声部.md',
+        'anchor': {'han': 2000, 'sentences': 180, 'sentence_mean': 18.0, 'sentence_short_share': 0.25,
+                   'paragraph_mean': 36.1, 'paragraph_max': 204.0, 'dialogue_share': 0.3652},
+    },
+}
+
+
+def resolve_style_profile(profile=None):
+    """The catalog name a contract's style_profile means; unknown or absent means the default."""
+    return profile if profile in STYLE_CATALOG else DEFAULTS['style_profile_default']
+
+
+def profile_anchor(profile=None):
+    """The declared anchor of a built-in style profile, labeled for what it is.
+
+    An unknown or missing name falls back to the default profile — a project predating
+    `style_profile`, or one running on a custom PROJECT/style-profile.md whose shape the engine
+    never registered, still gets a declared floor instead of running voiceless. `origin='default`
+    keeps its meaning ("not author-approved"); `profile` names which archive the numbers came
+    from so reports can say it. `approve` replaces the whole anchor with the measured sample.
+    """
+    name = resolve_style_profile(profile)
+    anchor = copy.deepcopy(STYLE_CATALOG[name]['anchor'])
+    anchor.update({'origin': 'default', 'profile': name})
+    return anchor
 
 
 # --------------------------------------------------------------------------------------------------
@@ -456,6 +498,13 @@ CONTRACT_FIELDS = (
      'alignment': False, 'optional': True},
     {'key': 'style_guard', 'kind': 'text', 'default': DEFAULTS['style_guard'],
      'choices': ('observe', 'strict'), 'alignment': False, 'optional': True},
+    # Which built-in style archive the project writes in (references/styles/<名>.md). A parameter,
+    # not an opening decision: the author may switch it any time via recontract --patch without
+    # rewriting anything, and a custom author-confirmed PROJECT/style-profile.md overrides it for
+    # the writers without touching this field. The registered anchor is what style.baseline falls
+    # back to before the first chapter is approved.
+    {'key': 'style_profile', 'kind': 'text', 'default': DEFAULTS['style_profile_default'],
+     'choices': tuple(STYLE_CATALOG), 'alignment': False, 'optional': True},
     {'key': 'anchors', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'links', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'initial_facts', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},

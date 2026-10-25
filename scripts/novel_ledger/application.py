@@ -1294,7 +1294,7 @@ class Application:
     # decision. Amending only these fields applies in-place without a rewrite branch.
     PARAMETER_AMENDABLE = frozenset({
         'chapter_min', 'chapter_max', 'chapter_aim',
-        'style_guard', 'revision_limit', 'narrative_tracking',
+        'style_guard', 'style_profile', 'revision_limit', 'narrative_tracking',
         'editorial_features', 'scope_append_limit', 'word_range',
     })
 
