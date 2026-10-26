@@ -487,6 +487,47 @@ class HookDeclarationTests(unittest.TestCase):
         self.assertIn('volume_hook', criteria, str(caught.exception.details['findings'])[:400])
 
 
+class RelationDeltaDeclarationTests(unittest.TestCase):
+    """The fifth increment and the optional volume terminals are one declaration, like the hooks.
+
+    The relation coordinate, the blank forms and the writer's self-check lines all read the same
+    tables in `drift`, so a comparison the brief asks for is a comparison the engine performs.
+    """
+
+    def test_the_relation_and_terminal_fields_are_declared_in_every_table(self):
+        from novel_ledger import drift
+        for table, field in ((drift.VOLUME_FIELDS, 'relations'),
+                             (drift.VOLUME_FIELDS, 'reader_knowledge'),
+                             (drift.CHAPTER_FIELDS, 'relations'),
+                             (drift.DELTA_KINDS, 'relations'),
+                             (drift.ITEM_KINDS, 'relations'),
+                             (drift.ENTER_KINDS, 'relations')):
+            with self.subTest(table=table, field=field):
+                self.assertIn(field, table)
+        self.assertEqual(drift.FIELDS['relations'], 'relations')
+        self.assertEqual(drift.KIND_ALIASES['relation'], 'relations')
+        self.assertEqual(drift.KIND_ALIASES['relations'], 'relations')
+
+    def test_the_blank_forms_prefill_and_brief_read_the_same_tables(self):
+        from novel_ledger import briefs, result_templates
+        volume = result_templates.volume_row('v1')
+        chapter = result_templates.chapter_row(1)
+        # Optional by shape: the blank volume form carries both terminal arrays empty, the chapter
+        # form carries the fifth increment array empty — leaving them empty is a legal declaration.
+        self.assertEqual(volume['relations'], [])
+        self.assertEqual(volume['reader_knowledge'], [])
+        self.assertEqual(chapter['relations'], [])
+        row = {'chapter': 1, 'clock': {'advance_days': 0},
+               'relations': [{'source': 'shen', 'target': 'guan', 'key': 'alliance',
+                              'from': None, 'to': '戒备', 'reason': '第一次交锋。'}]}
+        prefiled = [item for item in result_templates.drift_items(row)
+                    if item['kind'] == 'relations']
+        self.assertEqual([item['key'] for item in prefiled], ['shen>guan:alliance'])
+        self.assertEqual(prefiled[0]['planned'], {'from': None, 'to': '戒备'})
+        self.assertIn('relations', briefs.stage('write'))
+        self.assertIn('reader_knowledge', briefs.stage('volume_outline'))
+
+
 class WebnovelSettingMethodTests(unittest.TestCase):
     """Dispatch labels must resolve to methods in the one creative guide."""
 

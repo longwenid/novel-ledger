@@ -71,6 +71,12 @@ def drift_items(row):
         if isinstance(entry, dict) and text(entry.get('entity')):
             items.append(_drift_item('characters', entry['entity'],
                                      {'from': entry.get('from'), 'to': entry.get('to')}, chapter))
+    for entry in row.get('relations') or []:
+        if isinstance(entry, dict) and text(entry.get('source')) and text(entry.get('target')) \
+                and text(entry.get('key')):
+            items.append(_drift_item('relations',
+                                     entry['source'] + '>' + entry['target'] + ':' + entry['key'],
+                                     {'from': entry.get('from'), 'to': entry.get('to')}, chapter))
     clock = row.get('clock') if isinstance(row.get('clock'), dict) else {}
     items.append(_drift_item('clock', 'clock', {'advance_days': clock.get('advance_days') or 0}, chapter))
     for entry in row.get('disclosures') or []:
@@ -84,11 +90,13 @@ def volume_row(ident):
 
     `hooks` can declare that this volume opens no promise. Style trend and the absolute clock
     terminal must be filled before submission. `stage` is the chosen rung of the opening's ladder; an opening
-    that declared no ladder leaves it empty, which is the pre-opening/5 shape.
+    that declared no ladder leaves it empty, which is the pre-opening/5 shape. `relations` and
+    `reader_knowledge` are the optional terminals: leave them empty to declare no closure check.
     """
     return {'id': ident, 'purpose': '', 'stage': '', 'arc': '', 'turns': [{'at': '', 'turn': ''}], 'climax': '',
             'nodes': [], 'threads': [], 'hooks': [],
             'resources': [], 'places': [], 'characters': [],
+            'relations': [], 'reader_knowledge': [],
             'knowledge': [], 'clock': {'advance_days': 0, 'to': None}, 'exit_state': '',
             'style': {'trend': '', 'window': {}}}
 
@@ -97,12 +105,14 @@ def chapter_row(number, volume=None):
     """One blank chapter outline row: the required fields plus the declared delta arrays.
 
     The template lists every array so a writer checks each kind of change. The validator interprets
-    absent or null factual delta arrays just like empty arrays. Hooks remain an explicit required
+    absent or null factual delta arrays just like empty arrays — `relations` included, so a chapter
+    with no relation change simply leaves the empty array. Hooks remain an explicit required
     declaration: an empty hooks array says this chapter plants and pays off nothing.
     """
     row = {'chapter': number, 'synopsis': '', 'story_events': [], 'reader_effect': None, 'timeline': None,
            'plot': {'beat': '', 'nodes': [], 'threads': []},
            'resources': [], 'places': [], 'knowledge': [], 'characters': [],
+           'relations': [],
            'clock': {'advance_days': 0},
            'enter': [], 'exit': [],
            'disclosures': [], 'world_refs': [], 'new_entities': [],

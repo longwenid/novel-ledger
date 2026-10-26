@@ -62,6 +62,14 @@ def _planned(row):
                             'planned': {'from': entry.get('from'), 'to': entry.get('to')},
                             'detail': {'choice': entry.get('choice'), 'cost': entry.get('cost'),
                                        'change': entry.get('change'), 'reason': entry.get('reason')}})
+    for entry in row.get('relations') or []:
+        if isinstance(entry, dict) and text(entry.get('source')) and text(entry.get('target')) \
+                and text(entry.get('key')):
+            planned.append({'kind': 'relations',
+                            'key': entry['source'] + '>' + entry['target'] + ':' + entry['key'],
+                            'planned': {'from': entry.get('from'), 'to': entry.get('to')},
+                            'detail': {'source': entry.get('source'), 'target': entry.get('target'),
+                                       'key': entry.get('key'), 'reason': entry.get('reason')}})
     clock = row.get('clock') if isinstance(row.get('clock'), dict) else {}
     planned.append({'kind': 'clock', 'key': 'clock',
                     'planned': {'advance_days': clock.get('advance_days') or 0}, 'detail': {}})
@@ -158,7 +166,8 @@ def reconcile(drift_check, row, state, world):
             continue
         kind = _kind_of(item.get('kind'))
         key = item.get('key')
-        if kind not in ('node', 'thread', 'hook', 'resources', 'places', 'knowledge', 'characters', 'clock', 'disclosure'):
+        if kind not in ('node', 'thread', 'hook', 'resources', 'places', 'knowledge', 'characters',
+                        'relations', 'clock', 'disclosure'):
             findings.append(_finding(chapter, 'item', key, '|'.join(ITEM_KINDS), kind,
                                      '未知的自比种类。', 'drift_coverage', 'blocker'))
             continue

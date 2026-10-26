@@ -271,6 +271,33 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
             if entity not in entities:
                 findings.append(_finding(chapter_no, 'characters', entity, '已登记实体', None,
                                          '卷纲人物引用了未登记的实体。', 'volume_reference', 'blocker', 'volume'))
+        # The optional terminals: both arrays are legal when absent or empty (declared-then-checked),
+        # and a declared row is held to the same registered-entity discipline as the four above.
+        for row in volume.get('relations') or []:
+            source = row.get('source') if isinstance(row, dict) else None
+            target = row.get('target') if isinstance(row, dict) else None
+            relation = row.get('key') if isinstance(row, dict) else None
+            if not isinstance(row, dict) or not text(source) or not text(target) or source == target \
+                    or not text(relation) or any(c in relation for c in ':>') \
+                    or not text(row.get('to')) or not text(row.get('reason')):
+                findings.append(_finding(chapter_no, 'relations', relation,
+                                         '{source,target,key,to,reason}；source≠target，key 不含 : 与 >',
+                                         _safe(row),
+                                         '卷纲关系终值需要 source/target 两端实体、关系名、to 稳定短词与原因。',
+                                         'volume_reference', 'blocker', 'volume'))
+                continue
+            if source not in entities or target not in entities:
+                findings.append(_finding(chapter_no, 'relations', source, '已登记实体', None,
+                                         '卷纲关系引用了世界模型与既有状态都没有的实体。',
+                                         'volume_reference', 'blocker', 'volume'))
+        for row in volume.get('reader_knowledge') or []:
+            topic = row.get('topic') if isinstance(row, dict) else None
+            if not isinstance(row, dict) or not text(topic) or row.get('to') not in REVEALS \
+                    or not text(row.get('reason')):
+                findings.append(_finding(chapter_no, 'reader_knowledge', topic,
+                                         '{topic,to:' + '|'.join(REVEALS) + ',reason}', _safe(row),
+                                         '卷纲读者认知终值需要 topic、to 披露档位与原因；不声明则闭合免检。',
+                                         'volume_reference', 'blocker', 'volume'))
         normalized = {key: copy.deepcopy(volume.get(key, [])) for key in VOLUME_FIELDS}
         normalized['id'] = ident
         normalized['purpose'] = purpose
@@ -566,7 +593,7 @@ def _normalize_chapter(chapter, state, world, registry=None, hooks=None):
         nodes.append(row)
     normalized['plot'] = {'beat': plot.get('beat'), 'nodes': nodes,
                           'threads': copy.deepcopy(plot.get('threads') or [])}
-    for field in ('resources', 'knowledge', 'characters'):
+    for field in ('resources', 'knowledge', 'characters', 'relations'):
         normalized[field] = copy.deepcopy(chapter.get(field) or [])
     normalized['places'] = []
     for row in chapter.get('places') or []:

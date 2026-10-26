@@ -14,18 +14,25 @@ from . import facts, narrative, spatial, world
 
 
 # --------------------------------------------------------------- declarations
+# `relations`/`reader_knowledge` are the optional pair: a volume that declares no relation
+# terminal or no reader-knowledge terminal is checked for neither (declared-then-checked), and a
+# chapter that omits `relations` declares "no relation change this chapter" — the same reading an
+# absent increment array already has.
 VOLUME_FIELDS = ('id', 'purpose', 'stage', 'arc', 'turns', 'climax', 'nodes', 'threads', 'hooks',
-                 'resources', 'places', 'knowledge', 'characters', 'clock', 'exit_state', 'style')
+                 'resources', 'places', 'knowledge', 'characters', 'relations', 'reader_knowledge',
+                 'clock', 'exit_state', 'style')
 
 
 CHAPTER_FIELDS = ('chapter', 'synopsis', 'plot', 'resources', 'places', 'knowledge', 'characters',
-                  'clock', 'enter', 'exit', 'disclosures', 'world_refs', 'new_entities',
+                  'relations', 'clock', 'enter', 'exit', 'disclosures', 'world_refs', 'new_entities',
                   'hook_refs', 'hooks', 'reader_refs', 'history_refs', 'scenes', 'pacing', 'style',
                   'story_events', 'reader_effect', 'timeline')
 
 
-# The four increment arrays plus the clock: what a chapter declares it changes.
-DELTA_KINDS = ('resources', 'places', 'knowledge', 'characters', 'clock')
+# The five increment arrays plus the clock: what a chapter declares it changes. `relations` is the
+# fifth array — its coordinate is `source>target:key`, the exact key `facts.apply_event` stores in
+# `state.relations`, so design simulation, reconciliation and settlement share one identity.
+DELTA_KINDS = ('resources', 'places', 'knowledge', 'characters', 'relations', 'clock')
 
 
 # The promise account: a volume declares the promises it opens and closes, a chapter acts on them.
@@ -50,11 +57,12 @@ PROTOCOL_FIELDS = ('scene_schema', 'reading_schema', 'reading_coverage', 'depend
 
 # What an `enter`/`exit` row may name. A delta array is plural (`characters`), a coordinate is the
 # projection field it reads (`character`), so both spellings are accepted and normalized.
-ENTER_KINDS = ('resources', 'places', 'knowledge', 'character', 'characters', 'clock', 'node', 'thread')
+ENTER_KINDS = ('resources', 'places', 'knowledge', 'character', 'characters', 'relations',
+               'clock', 'node', 'thread')
 
 
-ITEM_KINDS = ('node', 'thread', 'hook', 'resources', 'places', 'knowledge', 'characters', 'clock',
-              'disclosure', 'reader_knowledge', 'reader')
+ITEM_KINDS = ('node', 'thread', 'hook', 'resources', 'places', 'knowledge', 'characters',
+              'relations', 'clock', 'disclosure', 'reader_knowledge', 'reader')
 
 
 ITEM_STATUSES = ('kept', 'deviated', 'skipped')
@@ -90,14 +98,15 @@ REVEAL_RANK = {'hinted': 1, 'suspected': 2, 'misled': 2, 'confirmed': 3, 'retrac
 
 KIND_ALIASES = {'resource': 'resources', 'place': 'places', 'places': 'places',
                 'characters': 'characters', 'character': 'characters', 'knowledge': 'knowledge',
-                'clock': 'clock', 'node': 'node', 'thread': 'thread',
+                'relations': 'relations', 'relation': 'relations', 'clock': 'clock',
+                'node': 'node', 'thread': 'thread',
                 'disclosure': 'disclosure', 'reader_knowledge': 'disclosure', 'reader': 'disclosure'}
 
 
 # The projection field a coordinate kind reads.
 FIELDS = {'resources': 'resources', 'places': 'placements', 'knowledge': 'knowledge',
-          'characters': 'character_current', 'clock': 'clock', 'node': 'story_nodes',
-          'thread': 'thread_progress', 'disclosure': 'reader_knowledge'}
+          'characters': 'character_current', 'relations': 'relations', 'clock': 'clock',
+          'node': 'story_nodes', 'thread': 'thread_progress', 'disclosure': 'reader_knowledge'}
 
 
 WORLD_GEOGRAPHY = 'geography'
@@ -330,6 +339,10 @@ def _project(state, kind, key):
         return _reveal_of(((state or {}).get('knowledge') or {}).get(key))
     if kind == 'characters':
         return _item((state or {}).get('character_current'), key).get('value')
+    if kind == 'relations':
+        # `facts.apply_event` stores the relation's `after` directly, not an entry dict, so the
+        # projection is the stored value itself (None = the coordinate was never established).
+        return ((state or {}).get('relations') or {}).get(key)
     if kind == 'clock':
         return (state or {}).get('clock')
     if kind == 'node':
@@ -456,6 +469,32 @@ def _deltas(chapter, findings):
                        'reason': row.get('reason') or '',
                        'detail': {'choice': row.get('choice'), 'cost': row.get('cost'),
                                   'change': row.get('change')}})
+    # The fifth increment: one relation coordinate per row, keyed exactly the way the factual
+    # reducer keys it (`source>target:key`), so the chain, the coverage check and the event builder
+    # all speak one identity. The literal continuity the design leans on — chapter N's `to` is
+    # chapter N+1's `from` — is the same `drift_chain` check every other increment runs.
+    for row in _rows_of(chapter, 'relations', findings):
+        source, target, relation = row.get('source'), row.get('target'), row.get('key')
+        if not text(source) or not text(target) or source == target or not text(relation) \
+                or any(c in relation for c in ':>') or not text(row.get('to')):
+            findings.append(_finding(chapter_no, 'relations', relation,
+                                     '{source,target,key,from,to,reason}；source≠target，key 不含 : 与 >',
+                                     _safe(row),
+                                     '关系增量需要 source/target 两端实体、关系名 key 与 to 稳定短词。',
+                                     'drift_shape', 'blocker', 'outline'))
+            continue
+        if row.get('from') is not None and not text(row.get('from')):
+            findings.append(_finding(chapter_no, 'relations', source + '>' + target + ':' + relation,
+                                     'from:null|既有关系值', _safe(row.get('from')),
+                                     '关系的 from 只能是 null（首次确立）或前章留下的关系值。',
+                                     'drift_shape', 'blocker', 'outline'))
+        if not text(row.get('reason')):
+            findings.append(_finding(chapter_no, 'relations', source + '>' + target + ':' + relation,
+                                     'reason', None, '关系变化须写明原因。', 'drift_shape', 'blocker', 'outline'))
+        coords.append({'kind': 'relations', 'key': source + '>' + target + ':' + relation,
+                       'from': row.get('from'), 'to': row.get('to'),
+                       'reason': row.get('reason') or '',
+                       'detail': {'source': source, 'target': target, 'key': relation}})
     # The settlement side applies the same test when the chapter's prose arrives (reconcile step
     # five); a row that cannot pass it here would deadlock the write stage against a frozen
     # outline it is not allowed to fix.
@@ -562,6 +601,7 @@ def _reduce(state, event, chapter, kind, key, findings, scope='chapter'):
     except Error as exc:
         criterion = {'resources': 'drift_resource', 'places': 'drift_place',
                      'knowledge': 'drift_knowledge', 'characters': 'drift_character',
+                     'relations': 'drift_relation',
                      'clock': 'drift_clock', 'node': 'drift_node', 'thread': 'drift_thread',
                      'hook': 'chapter_hook', 'disclosure': 'drift_disclosure'}.get(kind, 'design_drift')
         findings.append(_finding(chapter, kind, key, '可按正式规则结算', exc.code,
@@ -597,7 +637,7 @@ def plan_rows(chapters):
 
     This is the row the engine reconciles a `drift_check` against and the one the writer's material
     is built from, so it carries both vocabularies: the outline's own declarations (`enter`/`exit`,
-    the four increment arrays, `clock.advance_days`) and the plan-shaped keys the surrounding code
+    the five increment arrays, `clock.advance_days`) and the plan-shaped keys the surrounding code
     already reads (`node_ids`/`node_actions`/`node_contracts`/`preconditions`/`participants`/
     `scenes`/`pacing`/`world_refs`).
     """
@@ -613,7 +653,9 @@ def plan_rows(chapters):
         for entry in [row.get('entity') for row in characters] + \
                 [row.get('id') for row in chapter.get('new_entities') or [] if isinstance(row, dict)] + \
                 [row.get('who') for row in chapter.get('knowledge') or [] if isinstance(row, dict)] + \
-                [row.get('entity') for row in chapter.get('places') or [] if isinstance(row, dict)]:
+                [row.get('entity') for row in chapter.get('places') or [] if isinstance(row, dict)] + \
+                [end for row in chapter.get('relations') or [] if isinstance(row, dict)
+                 for end in (row.get('source'), row.get('target'))]:
             if text(entry) and entry not in participants:
                 participants.append(entry)
         for scene in chapter.get('scenes') or []:

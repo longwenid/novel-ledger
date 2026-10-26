@@ -4,7 +4,7 @@
 
 ## 适用范围与能力要求
 
-本文维护卷纲、章纲、卷内状态链、伏笔账、文风规格、漂移核算与历史补读的接口规则，字段形状以当前任务模板和引擎校验为准。narrative_tracking 默认 true；显式关闭时章纲的 `plot.nodes`/`plot.threads` 可以为空，但资源/位置/知情/时钟/人物变化仍按同一规则核算；四类增量数组缺省或为 null 时按空数组处理。
+本文维护卷纲、章纲、卷内状态链、伏笔账、文风规格、漂移核算与历史补读的接口规则，字段形状以当前任务模板和引擎校验为准。narrative_tracking 默认 true；显式关闭时章纲的 `plot.nodes`/`plot.threads` 可以为空，但资源/位置/知情/时钟/人物变化仍按同一规则核算；五类增量数组（resources/places/knowledge/characters/relations）缺省或为 null 时按空数组处理——`relations` 留空就是「本章无关系变化」的合法声明。
 
 | 当前任务 | 读取位置 |
 |---|---|
@@ -47,6 +47,8 @@
   "places": [{"entity":"hero","from":"…","to":"…","reason":"…"}],
   "characters": [{"entity":"hero","from":null,"to":{"desire":"救出同伴","stance":"承担代价","relationship_focus":"与同伴互信"},"reason":"本卷成长终态"}],
   "knowledge": [{"who":"hero","topic":"…","from":null,"to":"suspected","reason":"…"}],
+  "relations": [{"source":"hero","target":"foil","key":"alliance","from":null,"to":"同盟","reason":"本卷关系终值"}],
+  "reader_knowledge": [{"topic":"…","to":"hinted","reason":"卷末读者认知终值"}],
   "clock": {"advance_days": 30, "to": 30},
   "exit_state": "卷末必须达到的状态：资源/位置/人物/知情/线路各一句"
 }]}
@@ -57,13 +59,14 @@
 - `nodes`/`threads` **按卷登记**，id 全书唯一、不覆盖已批准 id；跨卷线路用 `continues: true` 标记。
 - `hooks` **必填数组，可为空**：本卷伏笔账，规则见 [伏笔账](#伏笔账卷纲声明章纲执行)。
 - `style.trend` **必填**（具体文字，说明本卷文风怎么走、相对首章定调有何变化）；`style.window` 可选，逐项覆盖契约 `style_window`。见 [文风](#文风)。
-- `resources`/`places`/`characters`/`knowledge` 是本卷大势，key/entity 必须存在于世界模型或既有状态；`window` 落在本卷章号区间。
+- `resources`/`places`/`characters`/`knowledge`/`relations`/`reader_knowledge` 引用的 key/entity 必须存在于世界模型或既有状态；`window` 落在本卷章号区间。
+- `relations`/`reader_knowledge` 是**可选终值，声明才核对**：留空数组就是不声明本卷这项终值，卷末闭合免检。`relations` 每条 `{source,target,key,to,reason}`，source/target 须已登记且不相等，key 不含 `:` 与 `>`，`to` 用稳定短词（章纲增量的 to 与它逐字同源）；`reader_knowledge` 每条 `{topic,to,reason}`，`to` 取披露档位，核对对象是本卷章纲 `disclosures` 声明的最后档位（本卷不再推进的 topic 取已结算投影）。
 - `clock.advance_days` 是本卷推进天数，`clock.to` 是卷末主线时钟绝对值；均为非负整数。人物 `to` 使用与章纲相同的三字段对象，卷末逐项核对。
-- `exit_state` 必须非空，保存卷末局面的文字说明；它的自然语言含义不作机械验收。闭合判据来自资源、位置、知情、结构化人物终值和 `clock.to`。
+- `exit_state` 必须非空，保存卷末局面的文字说明；它的自然语言含义不作机械验收。闭合判据来自资源、位置、知情、结构化人物终值、关系与读者认知的声明终值和 `clock.to`。
 
 ### 校验与失败
 
-提交时引擎机械校验：卷 id 与 `contract.volumes` 一一对应且顺序一致；每卷汉字数落在 `words±tolerance`；node/thread/hook id 全书唯一且不覆盖已批准 id；`resources/places/knowledge/characters` 引用的 key/entity 存在；`window` 落在本卷章号区间；`exit_state` 非空；`hooks` 的窗口与跨卷标记自洽（见 [伏笔账](#伏笔账卷纲声明章纲执行)）；`style.trend` 非空。任一项失败时提交被拒（`design_drift`），保持原任务并按具体错误重交，不消耗正文返修额度。
+提交时引擎机械校验：卷 id 与 `contract.volumes` 一一对应且顺序一致；每卷汉字数落在 `words±tolerance`；node/thread/hook id 全书唯一且不覆盖已批准 id；`resources/places/knowledge/characters/relations/reader_knowledge` 引用的 key/entity/两端实体存在（relations 的 source≠target，key 不含 `:` 与 `>`；reader_knowledge 的 `to` 取披露档位）；`window` 落在本卷章号区间；`exit_state` 非空；`hooks` 的窗口与跨卷标记自洽（见 [伏笔账](#伏笔账卷纲声明章纲执行)）；`style.trend` 非空。任一项失败时提交被拒（`design_drift`），保持原任务并按具体错误重交，不消耗正文返修额度。
 
 ## 章纲
 
@@ -89,9 +92,10 @@
   "places": [{"entity":"hero","from":"青云城","to":"落霞谷","reason":"…"}],
   "knowledge": [{"who":"hero","topic":"…","from":null,"to":"hinted|suspected|misled|confirmed|retracted","reason":"…"}],
   "characters": [{"entity":"hero","from":null,"to":{"desire":"…","stance":"…","relationship_focus":"…"},"choice":"…","cost":"…"}],
+  "relations": [{"source":"hero","target":"foil","key":"alliance","from":null,"to":"戒备","reason":"…"}],
   "clock": {"advance_days": 1},
-  "enter": [{"kind":"resources|places|knowledge|clock|character|node|thread","key":"…","expected":0}],
-  "exit":  [{"kind":"resources|places|knowledge|clock|character|node|thread","key":"…","expected":3}],
+  "enter": [{"kind":"resources|places|knowledge|relations|clock|character|node|thread","key":"…","expected":0}],
+  "exit":  [{"kind":"resources|places|knowledge|relations|clock|character|node|thread","key":"…","expected":3}],
   "disclosures": [{"topic":"…","after":"hinted"}],
   "world_refs": ["geography:luoxia"],
   "new_entities": [{"id":"…","kind":"character|place|item","name":"…","role":"…","desire":"…","limit":"…","knowledge_boundary":"…"}],
@@ -100,7 +104,7 @@
 }]}
 ```
 
-- **必需**：`chapter` `synopsis` `plot.beat` `enter` `exit` `world_refs`。模板显式列出四个增量数组（`resources` `places` `knowledge` `characters`），便于逐类核对；空数组、缺字段和 null 均表示本章没有这类变化。写入的变化仍须通过完整形状与状态校验。
+- **必需**：`chapter` `synopsis` `plot.beat` `enter` `exit` `world_refs`。模板显式列出五个增量数组（`resources` `places` `knowledge` `characters` `relations`），便于逐类核对；空数组、缺字段和 null 均表示本章没有这类变化——`relations` 与前四类同义，不写就是「本章无关系变化」。写入的变化仍须通过完整形状与状态校验。
 - `hooks` **必填数组，可为空**：本卷伏笔的执行，`action` 只有 `plant` 与 `payoff` 两个值；中途“再提一次”用 `hook_refs`，不新增动作。见 [伏笔账](#伏笔账卷纲声明章纲执行)。
 - `style`：`pov` 与 `rhythm` 必填，`dialogue_ratio`（0~1）与 `notes` 可选。见 [文风](#文风)。
 - `scenes`/`pacing` 是当前章纲的可选字段；`hook_refs`/`reader_refs`/`history_refs` 指出本章要承接的旧承诺、旧认知与历史断言。
@@ -115,6 +119,7 @@
 | `places` | 实体 id；`expected`/`from`/`to` 用地点 id 或世界模型里的同名地名（引擎归一为 geography id） | 新地点先经本章 `new_entities`（kind=place）登记，之后的章才能引用；移动的实体须已有初始站位（约定 `placements`），没有初始站位的实体建立不了位置坐标。 |
 | `knowledge` | `who:topic`（冒号连接实体 id 与话题） | 档位 hinted/suspected/misled/confirmed/retracted；`suspected` 与 `hinted` 同档参与倒退校验。世界模型里的人物不会自动进入 state.entities：写知情/人物增量前，该人物须已由约定 entities 或 `new_entities` 登记。 |
 | `character` | 实体 id | `to` 为 `{desire,stance,relationship_focus}` 结构；增量行另需 `choice`/`cost`。 |
+| `relations` | `source>target:key`（增量行的 source/target/key 拼成同一坐标） | 第五类增量数组 `relations=[{source,target,key,from,to,reason}]`：两端用已登记实体且不相等，key 是关系名（不含 `:` 与 `>`），`to` 用稳定短词；章 N 的 `to` 就是章 N+1 的 `from`，逐字承接，首次确立才允许 `from:null`。结算复用既有 relation 事件写入 `state.relations`，供后章材料与派工 baseline 读取。 |
 | `node`/`thread` | 节点/线路 id | 本章增量涉及或进入条件用到的 node/thread，**enter 与 exit 都要列**；thread 的 exit 同样参与 `exit==enter⊕增量` 核对。 |
 | `clock` | `clock` | `expected` 为累计天数绝对值，增量行用 `advance_days`。 |
 
@@ -122,10 +127,10 @@
 
 1. 章号连续，恰好覆盖本卷 `[volume.first, volume.end]`（`scope=all` 时覆盖整卷）。
 2. `synopsis` 汉字数落在 `words±tolerance`。
-3. 每行增量形状合法：`from`/`to` 类型一致，`reason` 非空；resource 有 key 且存在于世界或既有状态；place 存在于世界 geography；node/thread/hook 属于本卷卷纲已登记集合（hook 另见跨卷带入规则）。
+3. 每行增量形状合法：`from`/`to` 类型一致，`reason` 非空；resource 有 key 且存在于世界或既有状态；place 存在于世界 geography；relations 的两端实体已登记、source≠target、key 不含 `:` 与 `>`；node/thread/hook 属于本卷卷纲已登记集合（hook 另见跨卷带入规则）。
 4. **enter/exit 冗余一致性**：`exit` 必须等于 `enter ⊕ 本章增量`（引擎自己算一遍比对）。任一侧缺项即漂移，拒绝。
-5. **卷内状态链模拟**：从卷起始真实状态出发逐章应用增量，要求第 i 章 `enter` 恰好等于模拟到第 i 章开始的状态。模拟中拒绝：资源为负、`clock` 倒退、位置跳变到未登记地点、知情倒退（`retracted` 除外）、人物变化缺 `choice`/`cost`、同一 node 重复 `advanced` 或 resolved 后再推进、thread resolved 后重用，以及伏笔的重复埋设/重复兑现/越窗/未埋先承接（见 [伏笔账](#伏笔账卷纲声明章纲执行)）。
-6. **卷末闭合**：最后一章模拟结果必须等于卷纲声明的 `resources/places/knowledge/characters` 结构化终值与 `clock.to`（容差 0）；整卷模拟还核对 `clock.advance_days`。本卷 `required: true` 的伏笔须全部 `paid`。`exit_state` 只作文字说明。
+5. **卷内状态链模拟**：从卷起始真实状态出发逐章应用增量，要求第 i 章 `enter` 恰好等于模拟到第 i 章开始的状态。模拟中拒绝：资源为负、`clock` 倒退、位置跳变到未登记地点、知情倒退（`retracted` 除外）、人物变化缺 `choice`/`cost`、关系坐标引用未登记实体或章间 `from`/`to` 措辞不逐字承接、同一 node 重复 `advanced` 或 resolved 后再推进、thread resolved 后重用，以及伏笔的重复埋设/重复兑现/越窗/未埋先承接（见 [伏笔账](#伏笔账卷纲声明章纲执行)）。
+6. **卷末闭合**：最后一章模拟结果必须等于卷纲声明的 `resources/places/knowledge/characters` 结构化终值、声明了的 `relations` 与 `reader_knowledge` 终值（未声明免检）与 `clock.to`（容差 0）；整卷模拟还核对 `clock.advance_days`。本卷 `required: true` 的伏笔须全部 `paid`。`exit_state` 只作文字说明。
 
 任一项失败时保持原 `chapter_outline` 任务并返回 `design_drift`，不消耗正文返修额度；按错误修正后重新提交。
 
@@ -225,7 +230,7 @@
   "title": "…", "prose": "…", "summary": "…",
   "drift_check": {
     "items": [{
-      "kind": "resources|places|knowledge|characters|clock|node|thread|hook|disclosure",
+      "kind": "resources|places|knowledge|characters|relations|clock|node|thread|hook|disclosure",
       "key": "spirit-stone",
       "planned": {"from": 0, "to": 3},
       "actual":   {"from": 0, "to": 3},
@@ -241,6 +246,8 @@
 ```
 
 `kind='hook'` 的行用动作而不是前后值：`planned={'action':'plant'|'payoff'}`、`actual={'action':…}`，`evidence` 仍是正文引文。
+
+`kind='relations'` 的行 key 是 `source>target:key` 坐标：`planned/actual` 的 `to` 用稳定短词，`kept` 时必须与章纲逐字相同；`actual.from` 由引擎投影，派工 baseline 的 `relations` 表就是两章之间的真实关系现状。
 
 上例同时列出失败诊断字段。可入库稿须所有项为 `kept`、`unplanned=[]` 且 `verdict=clean`；发现偏差先按原章纲修正文，再按最终正文重新填写，不能只改回执结论。`disclosure` 用 `planned/actual={'after':披露档位}`。
 
@@ -259,7 +266,7 @@
 
 跟踪项目允许长章短章共同满足总区间；chapter_max 可以高于全书平均上限。每章 word_budget 给出 minimum/maximum/aim，根据剩余章数和真实累计篇幅计算可完成范围；窄范围修订同时预留原样携带后缀的固定篇幅。字数不足或超范围的实际稿仍留档并消耗既有修复额度。无法达到目标时明确 `word_budget` 拒绝，修订前文或由作者改约，不降低目标。
 
-执笔读取冻结的 `chapter_outline` 和本章相关 `volume_outline`，完整卷纲可通过 `complete_volume_outline` 补读；前置结果见投影状态。当前状态供参与人、当前动机、近期成长和相关承诺使用，承诺按到期、显式 `hook_refs`、相关人物/物品及话题选择，完整状态保留 `complete_state`。世界采用直接关联；world_records 为可见材料，幕后真相保留可选 world_author_records，disclosure_boundary 明确本章允许披露与读者前态。执笔的必读/载荷带契约文风（`voice`/`style_traits`/`tone`/`pov`）、`style_anchor` 样本、本卷 `style.trend` 与本章 `style`。
+执笔读取冻结的 `chapter_outline` 和本章相关 `volume_outline`，完整卷纲可通过 `complete_volume_outline` 补读；前置结果见投影状态。当前状态供参与人、当前动机、近期成长和相关承诺使用，承诺按到期、显式 `hook_refs`、相关人物/物品及话题选择，完整状态保留 `complete_state`；关系现状随状态视图与派工 baseline 的 `relations` 表携带（键为 `source>target:key`）。世界采用直接关联；world_records 为可见材料，幕后真相保留可选 world_author_records，disclosure_boundary 明确本章允许披露与读者前态。执笔的必读/载荷带契约文风（`voice`/`style_traits`/`tone`/`pov`）、`style_anchor` 样本、本卷 `style.trend` 与本章 `style`。
 
 ## 场景依赖与任务材料
 

@@ -228,6 +228,7 @@ await_author 给准确 prose_hash；已获得该版本认可时由主干 `approv
 | 恢复 | resume | 不增加额度；耗尽时保留材料并报告，不重开任务清零。内容与篇幅共享两次返修、一次重设计，字段拒绝与预检回滚不计次。正文候选返修额度用尽或停滞时，保留候选与已花额度，交由作者选择再返修一轮或保留候选并暂停调整约定；机械失败不提供“接受并继续”。旧卡接受选项会拒绝并保留原状态，选项之外的新决定仍走改约，代价照写进 impact |
 | 候选稿反馈 | feedback --text 原话 | 对当前候选安排修复；已验收正文改用 revise。 |
 | 历史正文修改 | revise --from-chapter N --reason 原话 | 必须声明作用范围四选一：`--through M` / `--changes-file` / `--proposal-hash` / `--to-end`；不给范围时命令直接拒绝，并提示先跑 revision-impact 查看影响终点。影响分析、后缀处理和完整范围验收见 [修订影响分析](#修订影响分析)。 |
+| 弃置或缓修挂起的超界方案 | discard --source 原话 | 记录 revision_deferral 决定（plan_hash、范围、原话）并恢复 running；旧方案失效，再修须重新分析。见 [自动回改边界](#自动回改边界)。 |
 | 作者明确要求的未写窗口重排 | replan --from-chapter N --reason 原因 | 已有草稿或正式稿的章纲不能直接删除；重排后的章纲重新过卷内状态链。 |
 | 字面规则修改 | lexical --file 规则.json --source 原话 | 逐版记录，执行及恢复见 [字面规则](#字面规则)。 |
 | 回收不可达文档 | compact | 只删除任何活动记录都到不了的内容寻址文档并回收空间；不改故事与账本状态，重复执行无副作用。 |
@@ -313,6 +314,8 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" --owner "$OWNER" revise \
 ```
 
 HASH 取 advance 的 proposal.plan_hash 或 status 的 revision_proposal.plan_hash；起章、实际终点及变更内容必须匹配该方案。省略 --through 时采用方案实际终点，省略 --changes-file 时采用已保存变更；显式提供时须分别匹配 required_through 和完整方案中的 changes。程序重新核对章节来源、创作上下文及运行版本，字面规则变更等更新也会使旧方案失效；授权不增加章节修复额度。没有这项明确授权时只交付方案，不自动启动超范围修订。
+
+**作者也可以选择缓修或放弃该方案**：`discard --source '作者原话'` 处置挂起的超界方案——引擎把 revision_deferral 决定（含 plan_hash、范围与原话）记入作者决定留档，清除 revision_directive 与相应暂停原因并恢复 running；原方案自此失效，之后再修同一处须重新 `revise` 分析（来源已变化，旧 plan_hash 不再接受）。没有这一处置（或执行方案）之前，`resume` 以 revision_bounds 拒绝，不静默扩大授权。`discard` 在存在候选修订分支时保持原语义（撤销候选修订、恢复父版本），仅在无候选分支且存在挂起方案时进入缓修处置。
 
 若 revision_proposal 错误明确提示来源已变化，先核对当前状态、已保存的方案和原始请求，不继续重试旧 HASH。仍有同一批跨章缺陷时，用原 first、requested_through 和 changes 再调用 revise，不带 --proposal-hash 或 --source，让程序在原边界内重新评估；仍超界则保存新方案，再用 advance --compact 生成文件，重新交付准确哈希供作者决定。若已落入允许范围，则进入候选修订。revision-impact 只读分析，不替换已保存的阻断方案；不得把旧授权自动套到新哈希。
 

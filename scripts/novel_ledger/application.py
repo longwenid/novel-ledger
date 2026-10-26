@@ -460,6 +460,10 @@ class Application:
         the ledger: resource balances, open hooks, the clock, and the live candidate."""
         state = (self.repo.read_document(task['input']['records']['state']) if task else book['state'])
         return {'clock': state['clock'], 'resources': dict(sorted(state['resources'].items())),
+                # The relation coordinates stand now, keyed `source>target:key` exactly the way the
+                # chapter outlines and the reconciliation key them: a writer filing a relation
+                # self-comparison reads the current word here instead of guessing a before-value.
+                'relations': dict(sorted((state.get('relations') or {}).items())),
                 'open_hooks': [{'id': ident, 'due': hook['due'], 'text': hook.get('text', '')}
                                for ident, hook in sorted(state['hooks'].items()) if hook['status'] == 'open'],
                 'candidate': {'chapter': book['draft']['chapter'], 'stage': book['draft']['stage']} if book['draft'] else None}
@@ -1325,10 +1329,27 @@ class Application:
             self.repo.record('promote', {'branch': book['branch']})
         return self.status()
 
-    def discard(self, owner=None):
+    def discard(self, owner=None, source=''):
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self._load()
+            if book['revision_run'] is None and (book.get('revision_directive') or {}).get('blocked'):
+                # An over-window proposal waits for the author's own decision; deferring it is one.
+                # Dismissal never widens anything: the plan hash and the author's words go on record,
+                # the directive is dropped, and a later fix must re-analyze under the current source.
+                require(text(source), 'author_source', '弃置或缓修超界修复方案须提供作者原话（--source）。')
+                directive = book['revision_directive']
+                decision = {'kind': 'revision_deferral', 'plan_hash': directive.get('plan_hash'),
+                            'first': directive.get('first'), 'last': (directive.get('impact') or {}).get('last'),
+                            'source': source}
+                book.setdefault('decisions', []).append(decision)
+                self.repo.record('revision_deferral', {k: decision[k] for k in ('plan_hash', 'first', 'last')})
+                book.pop('revision_directive', None)
+                book.pop('pause_reason', None)
+                book['status'] = 'running'
+                self._save(book)
+                self.repo.record('discard', {'kind': 'revision_deferral'})
+                return self.status()
             require(book['revision_run'] is not None, 'revision', '当前没有候选修订。')
             parent = book['revision_run']['parent']
             restored = self.repo.get(store_keys.branch_book(parent))

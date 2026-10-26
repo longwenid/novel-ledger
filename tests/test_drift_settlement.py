@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from novel_ledger import drift, drift_reconcile, drift_simulation, drift_validation, facts, spatial
 from novel_ledger.contracts import Error
 from novel_ledger.result_templates import drift_items
-from support import chapter_rows, contract, seeded_book, volume_rows
+from support import chapter_rows, contract, relation_book, seeded_book, volume_rows
 
 
 CURRENT = {'desire': '查清退件来源。', 'stance': '先核对再行动。',
@@ -236,6 +236,62 @@ class UnplannedSettlementTests(unittest.TestCase):
                 self.assertEqual(len(settled['deviations']), 1)
                 state, _ = facts.settle(self.state, settled['events'], QUOTE, 1)
                 self.assertEqual(state, self.state)
+
+
+class RelationSettlementTests(unittest.TestCase):
+    """The fifth increment settles through the relation event `facts` has always owned.
+
+    `op='relation'` predates the outline field: the reconciliation now feeds it from a declared
+    chapter row, with both ends and the relation name taken from the row and the before-value read
+    off the projection — the writer never self-reports one.
+    """
+
+    def setUp(self):
+        self.book = relation_book(4)
+        self.state = self.book['state']
+
+    def relation_row(self, chapter=1, previous=None):
+        return {'chapter': chapter, 'plot': {'nodes': [], 'threads': []}, 'hooks': [],
+                'resources': [], 'places': [], 'knowledge': [], 'characters': [],
+                'relations': [{'source': 'shen', 'target': 'guan', 'key': 'alliance',
+                               'from': previous, 'to': '戒备', 'reason': '第一次交锋定下相处方式。'}],
+                'clock': {'advance_days': 0}}
+
+    def check_for(self, row):
+        items = []
+        for item in drift_items(row):
+            planned = copy.deepcopy(item['planned'])
+            actual = ({'advance_days': planned.get('advance_days')} if item['kind'] == 'clock'
+                      else {'from': drift.project(self.state, item['kind'], item['key']),
+                            'to': planned.get('to')})
+            items.append({'kind': item['kind'], 'key': item['key'], 'planned': planned,
+                          'actual': actual, 'status': 'kept',
+                          'reason': '正文中该变化有明确动作与后果。',
+                          'evidence': {'chapter': row['chapter'], 'quote': QUOTE}})
+        return {'items': items, 'unplanned': [], 'verdict': 'clean'}
+
+    def test_a_kept_relation_row_settles_into_state_relations(self):
+        row = self.relation_row()
+        settled = drift_reconcile.reconcile(self.check_for(row), row, self.state, self.book['world'])
+        self.assertEqual(settled['findings'], [])
+        self.assertEqual(settled['events'][0]['op'], 'relation')
+        state, _ = facts.settle(self.state, settled['events'], QUOTE, 1)
+        self.assertEqual(state['relations']['shen>guan:alliance'], '戒备')
+
+    def test_a_kept_relation_row_must_quote_the_declared_word_verbatim(self):
+        row = self.relation_row()
+        check = self.check_for(row)
+        check['items'][0]['actual']['to'] = '同盟'
+        settled = drift_reconcile.reconcile(check, row, self.state, self.book['world'])
+        self.assertIn('drift_kept', {f['criterion'] for f in settled['findings']})
+
+    def test_a_self_reported_before_word_is_checked_against_the_projection(self):
+        self.state['relations']['shen>guan:alliance'] = '戒备'
+        row = self.relation_row(previous='戒备')
+        check = self.check_for(row)
+        check['items'][0]['actual'] = {'from': '密友', 'to': '戒备'}
+        settled = drift_reconcile.reconcile(check, row, self.state, self.book['world'])
+        self.assertIn('drift_before', {f['criterion'] for f in settled['findings']})
 
 
 class ComputableTerminalTests(unittest.TestCase):

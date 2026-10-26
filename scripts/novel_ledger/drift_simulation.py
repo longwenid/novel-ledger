@@ -81,8 +81,17 @@ def _apply(state, coord, chapter_no, model, nodes, hooks, findings):
     return findings
 
 
-def _closure(state, volume_outline, chapter_no, model, findings, clock_start=None):
-    """The volume's declared terminals, at tolerance zero, against the simulated last chapter."""
+def _closure(state, volume_outline, chapter_no, model, findings, clock_start=None,
+             declared_readers=None):
+    """The volume's declared terminals, at tolerance zero, against the simulated last chapter.
+
+    `declared_readers` carries the reader-facing ladder this volume's chapter outlines declare
+    (topic → last declared stage): the design chain never settles a disclosure — settlement needs
+    prose evidence — so a declared `reader_knowledge` terminal is compared against that declared
+    ladder first, and against the projection only where this volume declares no further step (a
+    topic a prior volume already settled in prose).
+    """
+    declared_readers = declared_readers or {}
     for row in (volume_outline or {}).get('hooks') or []:
         if not isinstance(row, dict) or not text(row.get('id')) or not row.get('required'):
             continue
@@ -125,6 +134,26 @@ def _closure(state, volume_outline, chapter_no, model, findings, clock_start=Non
             findings.append(_finding(chapter_no, 'characters', row['entity'],
                                      expect if isinstance(expect, dict) else '卷末当前状态', got,
                                      '卷末人物当前状态与卷纲的可计算终值不符。',
+                                     'drift_closure', 'blocker', 'volume'))
+    for row in (volume_outline or {}).get('relations') or []:
+        if not isinstance(row, dict) or not text(row.get('source')) or not text(row.get('target')) \
+                or not text(row.get('key')):
+            continue                      # shape defects are already reported by the volume validator
+        key = row['source'] + '>' + row['target'] + ':' + row['key']
+        got = _project(state, 'relations', key)
+        if not _same('relations', row.get('to'), got):
+            findings.append(_finding(chapter_no, 'relations', key, row.get('to'), got,
+                                     '卷末关系终值与卷纲声明不符。', 'drift_closure', 'blocker', 'volume'))
+    # Declared-then-checked: a volume that declares no `reader_knowledge` terminal is checked for
+    # none, so an existing book's outline keeps closing exactly the way it always did.
+    for row in (volume_outline or {}).get('reader_knowledge') or []:
+        if not isinstance(row, dict) or not text(row.get('topic')):
+            continue
+        got = declared_readers.get(row['topic'], _project(state, 'disclosure', row['topic']))
+        if not _same('disclosure', row.get('to'), got):
+            findings.append(_finding(chapter_no, 'reader_knowledge', row['topic'],
+                                     row.get('to'), got,
+                                     '卷末读者认知档位与卷纲声明不符；未声明的 topic 不在本项核对内。',
                                      'drift_closure', 'blocker', 'volume'))
     clock = (volume_outline or {}).get('clock') or {}
     # `to` is an absolute terminal so a remaining-tail replan can check it too. Its absence is
@@ -229,12 +258,19 @@ def simulate(chapters, state0, world, volume_row=None, volume_outline=None):
         except Error as exc:
             findings.append(_finding(chapter_no, 'deadline', 'chapter', '到期事项已处理', exc.code,
                                      str(exc), 'drift_deadline', 'blocker', 'volume'))
+    # The reader-facing ladder the walked rows declare, in order: the last declared stage per topic
+    # is what a declared `reader_knowledge` terminal is compared against at the volume's close.
+    declared_readers = {}
+    for chapter in rows:
+        for row in chapter.get('disclosures') or []:
+            if isinstance(row, dict) and text(row.get('topic')) and row.get('after') in REVEALS:
+                declared_readers[row['topic']] = row['after']
     last = rows[-1].get('chapter') if rows else None
     reach = volume_row.get('end') if isinstance(volume_row, dict) else None
     if volume_outline is not None and (reach is None or last == reach):
         clock_start = ((state0 or {}).get('clock') if rows and isinstance(volume_row, dict)
                        and rows[0].get('chapter') == volume_row.get('first') else None)
-        _closure(state, volume_outline, last, world, findings, clock_start)
+        _closure(state, volume_outline, last, world, findings, clock_start, declared_readers)
     return state, findings
 
 
@@ -365,6 +401,25 @@ def _event_for(kind, key, item, planned, actual_to, actual_from, state, chapter,
             return None
         return {'op': 'character_current', 'entity': key, 'before': actual_from, 'after': after,
                 'choice': choice, 'cost': cost, 'change': change, 'evidence': evidence}
+    if kind == 'relations':
+        # The fifth increment settles through the relation event `facts.apply_event` has always
+        # owned: both ends and the relation name come from the declared row (or are re-read off the
+        # coordinate itself), the before-value is the projection the caller passed in, and the
+        # after-value is the stable short word the outline declared.
+        source, target, relation = detail.get('source'), detail.get('target'), detail.get('key')
+        if not (text(source) and text(target) and text(relation)) and text(key):
+            head, _, tail = key.partition('>')
+            relation = relation or tail.partition(':')[2] or None
+            source = source or (head or None)
+            target = target or (tail.partition(':')[0] or None)
+        if not text(source) or not text(target) or not text(relation) or not text(actual_to):
+            findings.append(_finding(chapter, kind, key, 'source/target/key 与 to 稳定短词',
+                                     _safe(item.get('actual')),
+                                     '关系事件需要可还原的两端实体、关系名与终值。',
+                                     'drift_relation', 'blocker'))
+            return None
+        return {'op': 'relation', 'from': source, 'to': target, 'key': relation,
+                'before': actual_from, 'after': actual_to, 'evidence': evidence}
     if kind == 'clock':
         if type(actual_to) is not int or actual_to < 0:
             findings.append(_finding(chapter, kind, key, '非负整数天数', _safe(item.get('actual')),

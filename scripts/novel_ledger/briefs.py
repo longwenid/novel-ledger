@@ -207,8 +207,8 @@ def world_model(previous=(), repair=False, scale=None, sections=None):
     return '\n'.join(lines)
 
 
-# The delta groups a chapter outline declares, as the writer must answer them one by one. Four of
-# the five state groups come from drift.DELTA_KINDS; `node`/`thread` are the plot group's two item
+# The delta groups a chapter outline declares, as the writer must answer them one by one. Five of
+# the six state groups come from drift.DELTA_KINDS; `node`/`thread` are the plot group's two item
 # kinds, which the same reconciliation checks. Both sets are read from drift.py at render time, so a
 # self-check line can never describe a comparison the engine does not perform.
 DELTA_HINTS = {
@@ -219,6 +219,9 @@ DELTA_HINTS = {
                  '越界知情须从本章正文修掉，不能凭依据或 deviated 改变固定章纲；除 retracted 外不得无由倒退。',
     'characters': '人物变化有 choice（他选了什么）与 cost（付了什么）两个落点；'
                   '章纲声明的变化须在正文落实，漏写就返修；章纲未声明变化时保留原状态。',
+    'relations': '章纲 relations 声明的关系变化逐条对上（key 形如 甲>乙:关系名）：to 用稳定短词，'
+                 '上一章的 to 就是本章的 from，逐字承接；kept 申报的 to 必须与章纲逐字相同，'
+                 '两端的实体须已登记。本章没有关系变化就不申报。',
     'clock': '本章推进天数与章纲一致，不倒退；章号不等于天数，同日续接不必为验收补造过夜。',
     'node': 'plot.nodes 写 seeded/advanced/resolved 的节点，正文里必须真发生：该埋的埋、该收的收；'
             '同一节点不得重复推进或已 resolved 后再推；改做或漏做须诊断并返修本章正文。',
@@ -256,14 +259,19 @@ VOLUME_CHECK_HINTS = (
     'node/thread/hook 的 id 全书唯一，不覆盖已批准的 id；node/thread window 落在本卷章号区间内。',
     'hooks 每条 plant 必须落在本卷章号区间；payoff[0] >= plant[1]；越过卷末的必须 continues=true 且 required=false。',
     'resources/places/knowledge/characters 引用的 key/entity 必须已存在于世界模型或既有状态。',
+    'relations/reader_knowledge 可选：留空就是「本卷不声明这项终值」，声明了卷末才核对——'
+    'relations 的 source/target 须已登记且 to 用稳定短词，reader_knowledge 的 to 取披露档位。',
     '不写逐章 synopsis（那是 chapter_outline 的产物），也不写 brainstorm/selection_reason。',
 )
 CHAPTER_CHECK_HINTS = (
     'chapters 章号连续，恰好覆盖本卷冻结范围 [first,last]，不多一章不少一章。',
     '每章 synopsis 汉字数落在 words±tolerance；plot.beat、world_refs、style.pov、style.rhythm 不得为空。',
     'resources/places/knowledge/characters/hooks 数组不得省略：没有变化就给空数组。',
+    'relations 可选：缺省、null 与空数组同义（本章无关系变化）；声明了就按 {source,target,key,from,to,reason} '
+    '逐字承接——上一章的 to 就是本章的 from，首次确立才允许 from=null，to 用稳定短词。',
     'enter 是本章开始时的状态，exit 必须等于 enter 施加本章全部增量后的结果，引擎会自己算一遍比对。',
-    '四类增量的 from 承接前序同坐标状态，首次确立才允许 null；to 是变化后的完整值对象。',
+    '五类增量的 from 承接前序同坐标状态，首次确立才允许 null；to 是变化后的完整值对象'
+    '（relations 的 to 是稳定短词）。',
     'node/thread 只能引用本卷卷纲已登记的集合；knowledge 的 to 取 hinted|suspected|misled|confirmed|retracted。',
     'hooks 只有 plant/payoff 两个动作：同一 id 各一次、payoff 不早于 plant、各自落在卷纲窗口内；'
     'hook_refs 承接的 id 必须已经 plant 过。',
@@ -301,6 +309,11 @@ def stage(name, payload=None):
                           'places 给 {entity,from,to,reason} 的本卷起止；characters 给同样四键，'
                           'to 必须是 {desire,stance,relationship_focus} 的结构化卷末人物状态；'
                           'knowledge 给 {who,topic,from,to,reason}；'
+                          'relations 可选（留空=本卷不声明关系终值）：每条 '
+                          '{source,target,key,to,reason}，source/target 须已登记且不相等，key 不含 : 与 >，'
+                          'to 用稳定短词（章纲增量的 to 与它逐字同源）；'
+                          'reader_knowledge 可选（留空=本卷不声明读者认知终值）：每条 {topic,to,reason}，'
+                          'to 取披露档位 hinted|suspected|misled|confirmed|retracted；'
                           'hooks 是必填数组（本卷没有伏笔就给空数组，缺字段会被拒）：每条 '
                           '{id,text,plant:[最早章,最迟章],payoff:[最早章,最迟章],required:true|false,continues:true|false}——'
                           'id 全书唯一（与 node/thread 同一命名空间，跨卷续用必须 continues=true 且 required=false）；'
@@ -327,10 +340,13 @@ def stage(name, payload=None):
                            'plot.beat 一句话说清本章情节变化，plot.nodes=[{node,after:seeded|advanced|resolved,outcome}]、'
                            'plot.threads=[{thread,after:active|dormant|resolved,reason}] 只引用本卷卷纲已登记的 id；'
                            'resources=[{key,from,to,reason}]、places=[{entity,from,to,reason}]、'
-                           'knowledge=[{who,topic,from,to,reason}]、characters=[{entity,from,to,choice,cost}] 四类数组按模板逐项核对，缺省或 null 与空数组同义——'
+                           'knowledge=[{who,topic,from,to,reason}]、characters=[{entity,from,to,choice,cost}] 上述四类数组按模板逐项核对，缺省或 null 与空数组同义——'
                            '空数组就是「本章无此类变化」的声明；knowledge 的 to 取 hinted|suspected|misled|confirmed|retracted，'
                            'character 的 to 是 {desire,stance,relationship_focus} 且 choice/cost 缺一不可；'
-                           '四类数组的 from/to 填准确前后值对象，不用状态描述字符串代替。'
+                           'relations=[{source,target,key,from,to,reason}] 是第五类可选数组（缺省/null/空数组=本章无关系变化）：'
+                           'source/target 用已登记实体且不相等，key 是关系名（不含 : 与 >），'
+                           'to 用稳定短词，from 首次确立为 null、之后逐字承接上一章的 to；'
+                           '五类数组的 from/to 填准确前后值对象，不用状态描述字符串代替。'
                            'clock.advance_days 是本章经过的天数，不倒退；'
                            'enter/exit 是状态链的全部依据：enter 列本章开始时每个受动坐标的期望值（承接上一章 exit），'
                            'kind 取 resources|places|knowledge|character|node|thread|clock，key 用该坐标的键'

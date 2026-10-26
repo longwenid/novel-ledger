@@ -81,6 +81,8 @@ def parser():
             sub.add_argument('--source', required=True)
         if command == 'resume':
             sub.add_argument('--source', default='')
+        if command == 'discard':
+            sub.add_argument('--source', default='')
         if command in OBSERVER | {'prepare-observer', 'review-resolve'}:
             sub.add_argument('--request', required=True)
         if command == 'prepare-observer':
@@ -487,7 +489,7 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'promote':
             return app.promote(owner)
         if command == 'discard':
-            return app.discard(owner)
+            return app.discard(owner, source=getattr(args, 'source', '') or '')
         if command in ('recontract', 'opening'):
             return app.recontract(load(args.file), args.source, owner, opening=command == 'opening',
                                   patch=getattr(args, 'patch', False))

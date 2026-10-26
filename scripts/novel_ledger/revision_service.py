@@ -13,6 +13,32 @@ from .verification import VerificationService
 from . import editorial, facts, narrative, revision_impact, store_keys, story_memory, understanding, workflow
 
 
+
+def _projection_differences(expected, got, prefix='', limit=20, out=None):
+    """Bounded coordinate-level diff between two fact projections (pure diagnostic)."""
+    out = [] if out is None else out
+    if len(out) >= limit:
+        return out
+    if type(expected) is not type(got) or not isinstance(expected, (dict, list)):
+        if expected != got:
+            out.append({'path': prefix or '<root>', 'expected': expected, 'got': got})
+        return out
+    if isinstance(expected, dict):
+        for key in sorted(set(expected) | set(got)):
+            if len(out) >= limit:
+                out.append({'path': prefix, 'note': 'truncated'})
+                break
+            _projection_differences(expected.get(key), got.get(key), '%s/%s' % (prefix, key), limit, out)
+    else:
+        for i in range(max(len(expected), len(got))):
+            if len(out) >= limit:
+                out.append({'path': prefix, 'note': 'truncated'})
+                break
+            e = expected[i] if i < len(expected) else None
+            g = got[i] if i < len(got) else None
+            _projection_differences(e, g, '%s[%d]' % (prefix, i), limit, out)
+    return out
+
 class RevisionService:
     def __init__(self, repo: Repository, *, cancel_pending):
         self.repo = repo
@@ -33,7 +59,10 @@ class RevisionService:
         head = headers[-1]['n']
         original_state = self.replay(revision['parent'], book['contract'], head)
         if revision.get('impact', {}).get('mode') in ('expression', 'reading'):
-            require(state == original_state, 'revision_carry', '表达或阅读修订改变了事实投影，须按语义变更重新分析范围。')
+            require(state == original_state, 'revision_carry', '表达或阅读修订改变了事实投影，须按语义变更重新分析范围。',
+                    {'differences': _projection_differences(original_state, state, limit=20),
+                     'recover': 'differences 即被改变的事实投影坐标（expected=父线重放，got=候选分支）；'
+                                '确属表达层改动时先核对补丁是否触及时间表达等结算输入，否则按语义变更重新分析范围。'})
         previous = headers[-1]['chain']
         contract_hash = digest(book['contract'])
         accepted_plans = {str(r['n']): self.repo.read_document(r['plan']) for r in headers}

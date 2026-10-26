@@ -186,14 +186,55 @@ def _place(ident, name, **extra):
 def seeded_book(raw=None):
     """A book ready for step three: the contract is installed and the world it reads is seeded.
 
-    Without a guided opening the engine never dispatches `world_model`, so a test that starts from a
-    hand-written contract has to put a world on the book itself — otherwise the chapter-outline
+    Without a guided opening the engine never dispatches `world_model`, so a test that starts from
+    a hand-written contract has to put a world on the book itself — otherwise the chapter-outline
     validator has no world to ground `world_refs` against. This is the one line every flow test would
     otherwise repeat (spec §3/§4 read the world, not the contract).
     """
     book = workflow.new_book(raw if raw is not None else contract())
     book['world'] = world_fixture(book['contract'])
     return book
+
+
+# The fixture's relation ladder: one stable short word per rung, so a chapter chain that walks it
+# exercises the literal continuity (chapter N's `to` is chapter N+1's `from`) without free prose.
+RELATION_WORDS = ('戒备', '试探', '同盟')
+
+
+def relation_book(chapters=4, volumes=1):
+    """A tracked book whose contract and world both carry a second registered entity.
+
+    A relation coordinate needs two registered ends (`facts.apply_event` refuses a relation whose
+    source or target is not an entity), and the default contract only registers the protagonist —
+    so every relation-delta fixture starts here instead of patching `entities` by hand.
+    """
+    raw = contract(chapters=chapters, volumes=volumes)
+    raw['narrative_tracking'] = True
+    raw['entities'] = list(raw['entities']) + [{'id': 'guan', 'name': '管衡', 'kind': 'person'}]
+    book = seeded_book(raw)
+    book['world']['characters'].append({'id': 'guan', 'name': '管衡', 'role': '主管',
+                                        'desire': '考核达标。', 'limit': '不替人担责。',
+                                        'knowledge_boundary': '只看考核数字。', 'links': ['rules:r1']})
+    return book
+
+
+def _relation_step(current):
+    """The next rung of the relation ladder, or None once the top rung is reached."""
+    if current is None:
+        return RELATION_WORDS[0]
+    position = RELATION_WORDS.index(current) if current in RELATION_WORDS else len(RELATION_WORDS)
+    return RELATION_WORDS[position + 1] if position + 1 < len(RELATION_WORDS) else None
+
+
+def _relation_terminal(start, count):
+    """The rung a chain starting at `start` reaches after `count` declared chapters."""
+    at = start
+    for _ in range(count):
+        step = _relation_step(at)
+        if step is None:
+            break
+        at = step
+    return at
 
 
 def node(ident, dependencies=()):
@@ -281,13 +322,14 @@ def volume_hooks(book, volume):
     return rows
 
 
-def volume_outline_fixture(app, work, hooks=None):
+def volume_outline_fixture(app, work, hooks=None, relations=False):
     """The receipt for `volume_outline`: one row per volume this dispatch answers.
 
     Declares the nodes and threads the following `chapter_outline` dispatch has to advance, the
     promises the volume opens and closes (`hooks`), and an `exit_state` the volume's simulated close
     has to land on. `arc` absorbs whatever length is left after the structured fields so the row's
-    total 汉字 count is exactly the policy's `words`.
+    total 汉字 count is exactly the policy's `words`. `relations=True` also declares each volume's
+    relation terminal, computed from the same ladder the chapter rows walk.
 
     On a tier that merges the two artifacts (`merge_chapter_outline`), the same receipt also carries
     `chapters`, grouped by volume id — the engine validates each group with the chapter-outline
@@ -302,9 +344,12 @@ def volume_outline_fixture(app, work, hooks=None):
     wanted = payload.get('volume_ids') or [row['id'] for row in contract['volumes']]
     enabled = _hooks_on(hooks)
     rows = []
+    walked = None
     for ident in wanted:
         volume = next(row for row in contract['volumes'] if row['id'] == ident)
-        rows.append(_volume_row(book, volume, words, tracking, hooks=enabled))
+        terminal = _relation_terminal(walked, volume['end'] - volume['first'] + 1) if relations else None
+        walked = terminal if relations else walked
+        rows.append(_volume_row(book, volume, words, tracking, hooks=enabled, relation_to=terminal))
     data = {'volumes': rows}
     if 'chapter_outline' in tuple(payload.get('also') or ()):
         # One receipt, several volumes: the engine validates them in book order and carries the
@@ -314,13 +359,13 @@ def volume_outline_fixture(app, work, hooks=None):
         state = book['state']
         for ident, outline in zip(wanted, rows):
             volume = next(row for row in contract['volumes'] if row['id'] == ident)
-            chapters = chapter_rows(book, volume, state, hooks=enabled)
+            chapters = chapter_rows(book, volume, state, hooks=enabled, relations=relations)
             data['chapters'][ident] = chapters
             state = drift_simulation.simulate(chapters, state, book.get('world'), volume, outline)[0]
     return data
 
 
-def volume_rows(book, volume_ids=None, words=None, hooks=None, stage=None):
+def volume_rows(book, volume_ids=None, words=None, hooks=None, stage=None, relations=False):
     """The volume outline rows for `volume_ids`, sized to the policy's per-volume 汉字 target.
 
     Public so a drift-unit test can build the same rows the dispatch fixture builds without an
@@ -328,6 +373,8 @@ def volume_rows(book, volume_ids=None, words=None, hooks=None, stage=None):
     `hooks=False` switches every promise off at once, which is how a test isolates the non-hook
     checks from the hook chain. `stage` may be a list of rungs to assign by volume order (a test
     building a book without an opening needs the ladder explicitly), or a single stage for all.
+    `relations=True` declares each volume's relation terminal, walking the fixture ladder by volume
+    order the same way the chapter rows do.
     """
     contract = book['contract']
     policy = contract.get('volume_outline') or {}
@@ -337,6 +384,7 @@ def volume_rows(book, volume_ids=None, words=None, hooks=None, stage=None):
     volumes = contract['volumes']
     wanted = list(volume_ids or [row['id'] for row in volumes])
     rows = []
+    walked = None
     for ident in wanted:
         volume = next(row for row in volumes if row['id'] == ident)
         chosen = None
@@ -345,7 +393,10 @@ def volume_rows(book, volume_ids=None, words=None, hooks=None, stage=None):
             chosen = stage[min(position, len(stage) - 1)] if stage else ''
         elif stage is not None:
             chosen = stage
-        rows.append(_volume_row(book, volume, target, tracking, hooks=enabled, stage=chosen))
+        terminal = _relation_terminal(walked, volume['end'] - volume['first'] + 1) if relations else None
+        walked = terminal if relations else walked
+        rows.append(_volume_row(book, volume, target, tracking, hooks=enabled, stage=chosen,
+                                relation_to=terminal))
     return rows
 
 
@@ -367,7 +418,7 @@ def volume_stage(book, volume):
     return levels[min(index, len(levels) - 1)].get('stage', '')
 
 
-def _volume_row(book, volume, words, tracking, hooks=False, stage=None):
+def _volume_row(book, volume, words, tracking, hooks=False, stage=None, relation_to=None):
     first, last = volume['first'], volume['end']
     count = last - first + 1
     nodes = [{'id': 'n' + str(chapter), 'kind': 'main',
@@ -391,6 +442,11 @@ def _volume_row(book, volume, words, tracking, hooks=False, stage=None):
            # A required array in v2.1: an empty one is the declaration "this volume promises nothing
            # new", which is a claim the chain can read, while a missing field is nothing at all.
            'hooks': volume_hooks(book, volume) if hooks else []}
+    if relation_to is not None:
+        # The optional terminal: declared, so the volume's simulated close must land on it.
+        protagonist = (book['contract'].get('protagonist_setup') or {}).get('id') or 'shen'
+        row['relations'] = [{'source': protagonist, 'target': 'guan', 'key': 'alliance',
+                             'to': relation_to, 'reason': '卷末两人关系到达这一档。'}]
     others = _han({key: value for key, value in row.items() if key != 'arc'})
     row['arc'] = _fit_text(ARC_SENTENCE, max(0, words - others))
     return row
@@ -422,7 +478,7 @@ def anchor_state(app, book, payload, volume):
 
 
 def chapter_outline_fixture(app, work, resources=True, places=True, knowledge=True,
-                            characters=None, nodes=None, clock_days=1, hooks=None):
+                            characters=None, nodes=None, clock_days=1, hooks=None, relations=False):
     """The receipt for `chapter_outline`: the volume's chapters, each declaring its deltas.
 
     Every chapter declares a clock advance, a resource spend, a position move and a step up the
@@ -431,7 +487,8 @@ def chapter_outline_fixture(app, work, resources=True, places=True, knowledge=Tr
     redundancy the engine recomputes. Nodes are only advanced on tracked contracts (spec §2:
     `narrative_tracking=false` may leave `plot.nodes/threads` empty). `hooks` schedules the volume's
     declared promises: planted in its first chapter, paid in its last, with the previous volume's
-    continuing hook paid on entry (spec §1.2).
+    continuing hook paid on entry (spec §1.2). `relations=True` also walks one rung of the relation
+    ladder per chapter until its top, keying the coordinate the way the engine does.
     """
     book = app.repo.load()
     contract = book['contract']
@@ -445,20 +502,23 @@ def chapter_outline_fixture(app, work, resources=True, places=True, knowledge=Tr
     rows = chapter_rows(book, volume, anchor_state(app, book, payload, volume),
                         first=first, words=words,
                         resources=resources, places=places, knowledge=knowledge,
-                        characters=characters, nodes=nodes, clock_days=clock_days, hooks=hooks)
+                        characters=characters, nodes=nodes, clock_days=clock_days, hooks=hooks,
+                        relations=relations)
     return {'volume': volume['id'],
             **({'through_chapter': last} if payload.get('allow_retained_suffix') else {}),
             'chapters': [row for row in rows if row['chapter'] <= last]}
 
 
 def chapter_rows(book, volume, state, first=None, words=None, resources=True, places=True,
-                 knowledge=True, characters=None, nodes=None, clock_days=1, hooks=None):
+                 knowledge=True, characters=None, nodes=None, clock_days=1, hooks=None,
+                 relations=False):
     """The chapter rows for `volume`, each declaring its deltas and its enter/exit handshake.
 
     `state` is the projected state the chain starts from, and is copied: the caller's state is
     never advanced. Public so a drift-unit test can hand `drift_validation.validate_chapter_outline` rows
     without paying for an application dispatch. `hooks=False` switches the promise schedule off,
-    which is how a test isolates a non-hook check from the chain.
+    which is how a test isolates a non-hook check from the chain. `relations=True` walks the
+    relation ladder until its top rung, then stops declaring (the coordinate simply holds).
     """
     contract = book['contract']
     policy = contract.get('chapter_outline') or {}
@@ -472,7 +532,7 @@ def chapter_rows(book, volume, state, first=None, words=None, resources=True, pl
     return [_chapter_row(scratch, book, volume, number, target,
                          resources=resources, places=places, knowledge=knowledge,
                          characters=characters, tracking=tracking, clock_days=clock_days,
-                         hooks=enabled)
+                         hooks=enabled, relations=relations)
             for number in range(start, volume['end'] + 1)]
 
 
@@ -504,13 +564,14 @@ def chapter_hooks(book, volume, number):
 
 
 def _chapter_row(state, book, volume, number, words, resources=True, places=True,
-                 knowledge=True, characters=None, tracking=False, clock_days=1, hooks=False):
+                 knowledge=True, characters=None, tracking=False, clock_days=1, hooks=False,
+                 relations=False):
     """Build one chapter row and advance `state` by its deltas (the simulation the engine repeats)."""
     contract = book['contract']
     protagonist = (contract.get('protagonist_setup') or {}).get('id') or 'shen'
     row = {'chapter': number, 'synopsis': _fit_text(SYNOPSIS_SENTENCE, words),
            'plot': {'beat': '沈桐核对封条与签字，逼出下一处矛盾。', 'nodes': [], 'threads': []},
-           'resources': [], 'places': [], 'knowledge': [], 'characters': [],
+           'resources': [], 'places': [], 'knowledge': [], 'characters': [], 'relations': [],
            'clock': {'advance_days': clock_days}, 'enter': [], 'exit': [],
            'disclosures': [], 'world_refs': _world_refs(book), 'new_entities': [],
            'hook_refs': [], 'reader_refs': [], 'history_refs': [], 'scenes': [], 'pacing': {},
@@ -563,6 +624,19 @@ def _chapter_row(state, book, volume, number, words, resources=True, places=True
                                   'choice': '先核对凭据再开箱。', 'cost': '承担违规开箱的责任。'})
         deltas.append(('characters', protagonist, before, after))
         state.setdefault('character_current', {})[protagonist] = {'value': after}
+    # Relations: one rung up the ladder per chapter until the top, then the coordinate holds.
+    # `from` is the rung the scratch state stands on, so chapter N's `to` is chapter N+1's `from`
+    # verbatim — the literal continuity the engine's drift_chain check enforces.
+    if relations:
+        coordinate = protagonist + '>guan:alliance'
+        current = (state.get('relations') or {}).get(coordinate)
+        after = _relation_step(current)
+        if after is not None:
+            row['relations'].append({'source': protagonist, 'target': 'guan', 'key': 'alliance',
+                                     'from': current, 'to': after,
+                                     'reason': '核对退件让两人的相处方式变了。'})
+            deltas.append(('relations', coordinate, current, after))
+            state.setdefault('relations', {})[coordinate] = after
     # Nodes: one per chapter in the volume row, advanced here only on tracked contracts.
     if tracking:
         ident = 'n' + str(number)

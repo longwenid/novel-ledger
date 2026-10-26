@@ -85,6 +85,31 @@ class FixedOutlineTests(unittest.TestCase):
                 result = drift_reconcile.reconcile(changed, row, book['state'], book.get('world'))
                 self.assertIn(criterion, {f['criterion'] for f in result['findings']})
 
+    def test_a_declared_relation_row_is_as_fixed_as_every_other_item(self):
+        """The fifth increment joined the frozen contract: a departure is diagnosed, never accepted."""
+        row = {'chapter': 1, 'clock': {'advance_days': 0},
+               'relations': [{'source': 'shen', 'target': 'guan', 'key': 'alliance',
+                              'from': None, 'to': '戒备', 'reason': '第一次交锋。'}]}
+        quote = '沈桐与管衡第一次交手，各自保留。'
+        items = drift_items(row)
+        for item in items:
+            item.update(status='kept', reason='正文按章纲落实。',
+                        actual=copy.deepcopy(item['planned']), evidence={'chapter': 1, 'quote': quote})
+        check = {'items': items, 'unplanned': [], 'verdict': 'clean'}
+        book = self.repo.load()
+        facts.entity(book['state'], {'id': 'guan', 'name': '管衡', 'kind': 'person'})
+        valid = drift_reconcile.reconcile(check, row, book['state'], book.get('world'))
+        self.assertEqual(valid['findings'], [])
+        self.assertEqual(valid['events'][0]['op'], 'relation')
+        for status, criterion in (('deviated', 'outline_alignment'), ('skipped', 'outline_alignment')):
+            with self.subTest(status=status):
+                drifted = copy.deepcopy(check)
+                drifted['items'][0].update(status=status, reason='写作时想改掉这项安排。',
+                                           actual=None if status == 'skipped' else {'to': '同盟'})
+                drifted['verdict'] = 'deviated'
+                result = drift_reconcile.reconcile(drifted, row, book['state'], book.get('world'))
+                self.assertIn(criterion, {f['criterion'] for f in result['findings']})
+
     def test_incompatible_entry_state_stops_without_replanning(self):
         self.app.submit(response(self.app))
         step = self.app.advance(owner=self.owner)

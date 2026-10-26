@@ -33,7 +33,7 @@
 | style_guard | `observe`（默认）/`strict`：前者只观察相对首章的句段和未声明对白比例变化，后者按窗口执行数值约束。显式对白目标、高重复在两档都核，代词只观察；作者选择经正常约定或改约留档 |
 | style_profile | 枚举＝`contracts.STYLE_CATALOG` 档名（默认 `DEFAULTS['style_profile_default']`＝市井修仙；档目以注册表与 [内置文风目录](style.md) 为准，不在本表复述）：生效的内置文风档案，写作派工 guides 自动带档案文件，无认可锚点时代理指标回落该档注册锚点。参数字段：`recontract --patch` 直接换档不触发重写；项目根 style-profile.md 自定义档案存在时覆盖它（见 [文风](style.md)） |
 | style_window | `{sentence:0.35, paragraph:0.35, dialogue:0.40, repetition:0.12, person:1}`（optional、不参与对齐）：文风代理指标容差；句段与对白使用相对变化，repetition 是本章绝对重复度上限，person 保留为代词观察参数，不能据此断言叙事视角；卷纲 `style.window` 与契约**逐项合并**（先用契约补默认，再按合法键与合法数值逐个覆盖），作者可改约调整。见 [文风](narrative.md#文风) |
-| narrative_tracking | true；关闭时章纲的 `plot.nodes`/`plot.threads` 可空，但事实增量仍按同一规则核算，四类数组缺省或 null 按空数组处理 |
+| narrative_tracking | true；关闭时章纲的 `plot.nodes`/`plot.threads` 可空，但事实增量仍按同一规则核算，五类增量数组（含可选的 relations）缺省或 null 按空数组处理 |
 | editorial_features | true；编辑能力要求叙事跟踪，关闭跟踪时也须关闭编辑能力；人物、场景与补丁字段见 [编辑能力](editorial.md) |
 | revision_limit | 正整数，默认 `DEFAULTS['revision_limit']`（3）；自动回改最近多少章，越界仍须作者对准确方案授权 |
 
