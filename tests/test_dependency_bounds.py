@@ -43,6 +43,9 @@ class DependencyBoundTests(unittest.TestCase):
         self.assertLess(len(dump(work['payload']).encode('utf-8')), 20000)
         app.submit(response(app))
         handoff = app.advance()
+        self.assertEqual(handoff['action'], 'await_volume_confirm')   # the staged design waits
+        app.confirm_volume(handoff['volumes_hash'], '工程夹具认可当前卷纲。')
+        handoff = app.advance()
         self.assertEqual(handoff['task']['stage'], 'chapter_outline')
         work = repo.pending()['input']
         # One dispatch answers the whole volume: the material is the volume row and the contract,

@@ -18,6 +18,19 @@ class ContractActivation:
         self.repo.put(store_keys.branch_book(old['branch']), self.repo.get(store_keys.AMENDMENT_BASE, old))
         book = workflow.new_book(proposal['data'], proposal['source'])
         book['lexical_policy'] = copy.deepcopy(old['lexical_policy'])
+        # The volume gate across a re-contract: the author's structural direction and the audit of
+        # what was confirmed travel with the book (the lexical-policy treatment); the staged design
+        # does not — the volume division may have changed, so it is dropped and journalled, and the
+        # round/refusal counters reset with it.
+        if old.get('structure_blueprint'):
+            book['structure_blueprint'] = copy.deepcopy(old['structure_blueprint'])
+        confirmed = (old.get('volume_gate') or {}).get('confirmed')
+        if confirmed:
+            book['volume_gate']['confirmed'] = copy.deepcopy(confirmed)
+        if old.get('pending_design'):
+            self.repo.record('volume_gate_reset', {
+                'dropped_volumes': list(old['pending_design'].get('volume_ids') or []),
+                'reason': '改约重建：卷划分可能已变，暂存卷纲不随行，需重新设计并过认可门。'})
         if old.get('creation'):
             # An answered opening stays answered: the closed choices are what the new contract is
             # an amendment of, so they travel with it whatever phase they were in.

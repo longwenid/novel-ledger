@@ -6,7 +6,7 @@ description: >-
 
 # novel-ledger
 
-主链：**十三门开书 → 世界模型与作者约定 → 卷纲 → 当前卷章纲 → 首章认可 → 无人值守写作 → 完本交付**。小体量可合并卷纲与章纲派工，按冻结任务执行；已有设定直接沿用，只补真实缺口。讨论小说或技能本身不表示启动创作。
+主链：**十三门开书 → 世界模型与作者约定 → 卷纲（作者认可门）→ 当前卷章纲 → 首章认可 → 无人值守写作 → 完本交付**。卷纲回执过机械校验后暂存待作者 `confirm-volume` 认可（可 `revise-volume` 轻调叙述面、`regroup-volume` 带理由重出，看板物化在 work/volume-board.md）；小体量可合并卷纲与章纲派工，按冻结任务执行；已有设定直接沿用，只补真实缺口。讨论小说或技能本身不表示启动创作。
 
 ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `python3 ROOT/scripts/novel.py --project PROJECT 命令`（Windows 用 `python`），运行仅依赖 Python 3.9+ 标准库，正文项目不放技能目录。
 
@@ -59,6 +59,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 | 触发情况 | 入口 |
 |---|---|
 | 作者要求改约、暂停或修改字面规则 | [暂停与修改](references/runtime.md#暂停与修改)；保留原话、范围和版本。 |
+| 作者要认可卷纲、轻调叙述面或带理由重出；选定/更换结构蓝图 | [动作分支](references/runtime.md#动作分支) 的 await_volume_confirm 行与 [叙事推进](references/narrative.md#校验与失败)；蓝图档名见 [创意工具箱](references/hatch.md#结构蓝图目录)，`blueprint --regenerate` 只删无正文各卷的设计。 |
 | 作者要求改写历史正文、分析影响或采纳候选 | [修订影响分析](references/runtime.md#修订影响分析)；原稿保留，超范围方案等待准确授权。 |
 | 作品理解、原文样本或场景身份需要维护 | [叙事工作台](references/workbench.md)；解释与已成立事实分开。 |
 | 执笔文风：默认档、内置文风库选定或对标提取 | [文风](references/style.md)；生效档案＝项目根 style-profile.md ＞ 契约 style_profile（内置文风目录，开书选定后 `recontract --patch` 登记）＞ 默认档，guides 自动带生效档案文件；对标小说经 style-distill 提取、作者确认后放入项目根生效，执笔与自比对照声线、口癖与 MUST/AVOID。 |

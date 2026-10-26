@@ -1327,6 +1327,9 @@ def drive(app, owner=None, until=None, limit=300):
         if action == 'await_author':
             app.approve(handoff['prose_hash'], '工程夹具作者明确认可当前版本。', owner)
             continue
+        if action == 'await_volume_confirm':
+            app.confirm_volume(handoff['volumes_hash'], '工程夹具作者认可当前卷纲。', owner)
+            continue
         if action != 'task_ready':
             return handoff
         if until and handoff['task']['stage'] == until:

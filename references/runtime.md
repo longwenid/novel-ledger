@@ -132,7 +132,7 @@ prepare-worker.ready只表示协议身份登记成功，响应的worker_presence
 
 Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端显示会乱；需要人读的长内容一律走引擎物化的文件（brief.md、board.md、question.json、dispatch.md、task.json、html），机器可读的短 JSON 才看控制台，或先 `$env:PYTHONUTF8=1`。自行重定向 JSON 时注意 PowerShell 5 的 `Out-File -Encoding utf8` 带 BOM，Python 读回要用 utf-8-sig。
 
-无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。返回task_ready是下一次派工，不是停止；十章组完成不需要作者再说“继续”。advance/watch附controller.must_continue与下一动作，正式submit附continuation，区分Worker组内接续与主控跨组接续。遇到 await_author、await_choice、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用；无人值守期间不要用 advance 代替 watch 等待，实际输入、缓存与输出费用从宿主观测核对。
+无人值守连写时，把"派 Worker → 等它提交 → 取下一派工"整段交给 `watch --owner ID --steps 1`：它派完当前任务后在引擎进程内等待提交（期间自动续租），任务完成即取下一 task_ready 并连同 task 一起返回；快速模式会等整组结束再返回；主干每次醒来只做一件事——按返回的 task 派 Worker，再运行一次 watch。返回task_ready是下一次派工，不是停止；十章组完成不需要作者再说“继续”。advance/watch附controller.must_continue与下一动作，正式submit附continuation，区分Worker组内接续与主控跨组接续。遇到 await_author、await_choice、await_volume_confirm（卷纲待认可，带回 volume-board.md）、paused（含返修停摆与额度用尽）、revision_blocked、目标终点或 Worker 长时间未提交（idle）时 watch 停下并带回该动作，按上表处理。`--steps 0` 用于外部派工器长跑：每个被监督的派工会追加一行到 work/watch.jsonl。等待期间不产生任何主干推理，这是它替代"sleep + status 轮询"的全部意义。普通模式的无人值守同样适用；无人值守期间不要用 advance 代替 watch 等待，实际输入、缓存与输出费用从宿主观测核对。
 
 **改变授权目标（扩大或调整终点）的固定序列**：活跃连写组会挡住改约（`writing_batch`：连写期间不能改变授权终点）。正确顺序是 `pause --cancel` 结束当前组（已提交章节与返修额度保留）→ 带当前 owner 与新目标 `run`（组不活跃才接受新终点）→ `advance` 取新组首任务。**不要在 cancel 后 `resume`**：resume 恢复的是被取消的旧组连同旧目标，然后 advance 又按旧目标重开组——扩目标的场景里 resume 是回头路。连写期间确需暂停不改目标时才用 pause + resume。
 
@@ -154,6 +154,7 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 | target_reached | 刷新 html，按约定导出并交付实际完成的章节范围；不冒充全书完本 |
 | world_ready / outline_ready | 交付返回的世界及实际卷纲覆盖；已有正文授权但尚未保存时，用 run 保存同一授权后继续，否则到本次开书目标结束 |
 | await_choice | 返回携带 `board_card`（work/board.md，引擎渲染的作者卡片）与 `question_card`（work/question.json，可直接投给宿主提问组件的选项结构，封顶 4 项）。先在回复正文贴出 board.md 内容（或链接），再用 question.json 的选项原样发起提问，不自拟摘要替换引擎文案；宿主选项数更低时截到“换一组”为止，不删板面方案腾位，自定义走宿主 Other/自由填答。不在控制台直接读长 JSON（GBK 控制台会乱码）也不手工重排版。--compact 时返回只带门名/哈希/option_ids，完整板面在 board.md 与 work/last-advance.json。已有该板的明确选择则按卡内 id 与 hash 执行 choose 后继续，否则等待作者选择。第一门未定向时另有任务目录的 `catalog.md`（compact 的 catalog_path）：目录铺陈用正文贴出，不用提问选项装十二个类目 |
+| await_volume_confirm | 卷纲已过机械校验、进入待认可暂存：返回携带 `board_card`（work/volume-board.md，逐卷职责/弧线/转折/高潮/卷末状态、结构化条目计数、字数带、伏笔窗口与只警不拦的结构提示）与 `question_card`（work/volume-question.json）。先贴 volume-board.md 再按 question 发问；--compact 时 board 只带 round/hash/volume_ids，全页在文件与 last-advance.json。已有明确认可则执行 `confirm-volume --hash 返回的 volumes_hash --source 原话` 后继续（哈希不符会拒，防串版）；作者要轻调叙述面（purpose/arc/turns/climax/exit_state/style.trend）时把调整写成 JSON 文件执行 `revise-volume --file --hash --source`，结构字段改动走 `regroup-volume --hash --reason 原话 [--blueprint 档名]` 带理由重出（理由喂给下一版）。暂存期间不派任何设计任务，也不能 complete；rolling 书每个新卷的卷纲都会在此停门（要少停可改约 scope=all 一次过门，或按卷逐次确认） |
 | await_author | 已有对应 prose_hash 的明确认可则 approve 后继续，否则提供该版本首章并等待认可 |
 | paused / repair_exhausted | 保留候选和失败记录，报告具体阻碍；不自动 resume 或重派任务来重置预算。正文返修额度用尽（`REPAIRS=2`/`REDESIGNS=1`），或同一条漂移/机械项连续两轮未解决（`repair-stalled`）时，`resume` 不重置额度，而是保留候选并交由作者决定：再返修一轮（只改被点名的项）／保留候选并暂停，另行调整约定。用 `answer` 记录原话；只有明确追加一轮才授予该轮机会，不能接受机械失败稿直接入库。旧 `accepted_findings` 留档可见，旧卡的接受选项会拒绝且不丢候选 |
 | preparing | 按初始化入口导入已有完整约定或完成开书准备；只对真实缺口等待作者，不空转调用 advance |
@@ -162,7 +163,7 @@ Windows 控制台乱码时的通用规则：引擎输出是 UTF-8，GBK 终端�
 
 outline_state 表示真实前态与固定章纲不符，保留现场交作者决定修订范围，不自动改纲。projection、chain、state_integrity、source_integrity 与 schema 是数据或版本问题：保留候选和失败信息，停止状态推进；已冻结的 read/recall 仍可用于定位来源。写作任务不调用底层存储保存投影，不改写 schema，不修改或复制临时引擎来取消判据。程序在派工/提交前和事务保存前检查聚合状态；未通过时该次状态变化回滚。
 
-submit以outcome和总findings表达业务结果：repair_required是待返修，continuity_review_required是候选已保存并等待独立连读，chapter_committed才是正式章节。valid/accepted与transaction.persisted不代替committed_chapter。预检永不耗文学轮次；相同或仅空白变化的已知失败稿返回no_progress，不吞新轮次。无人值守目标不自动提供首章认可、追加返修或改约授权；required宿主模式还须真实人类通道证明，不能自写source冒充。
+submit以outcome和总findings表达业务结果：repair_required是待返修，continuity_review_required是候选已保存并等待独立连读，volume_confirmation_required是卷纲已暂存待作者认可，chapter_committed才是正式章节。valid/accepted与transaction.persisted不代替committed_chapter。预检永不耗文学轮次；相同或仅空白变化的已知失败稿返回no_progress，不吞新轮次。无人值守目标不自动提供首章认可、卷纲认可、追加返修或改约授权；卷纲认可绑定提交回执里暂存版本的 volumes_hash，run 的授权对象不含它，与首章认可同例不可机械预覆盖；required宿主模式还须真实人类通道证明，不能自写source冒充。
 
 返修裁决的 id 绑定候选正文、约定、章节、项目版本、问题及已消耗额度；使用当前 status.author_decision.id 原样回答，不拼接固定停止点名称。改约保留候选、额度与未回答问题；作者追加额度时按问题绑定的章节处理，旧答复不能套用到另一个候选版本。
 

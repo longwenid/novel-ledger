@@ -287,6 +287,26 @@ NATURAL_PROSE_GUIDE = (
 )
 
 
+# Directional structure discipline for volume outlines: five requirements that name what a volume
+# must *decide*, not numbers a validator counts. The expressiveness already exists in the schema
+# (threads.continues, hooks windows, chapter dormant/active); what was missing was the ask, so this
+# guide is appended to the volume rule instead of growing the receipt with fields nobody checks.
+# No thresholds, no formulas, no platform arithmetic — the mechanically checked half stays in
+# VOLUME_CHECK_HINTS, and mixing the two would misstate what the engine actually judges.
+VOLUME_STRUCTURE_GUIDE = (
+    '结构纪律（方向性要求，提交时无机械判据，落点由作者认可门核看）：'
+    '①推进维度——每卷写明本卷落在哪些维度上推进：利益格局/关系/对规则的理解/代价累积，'
+    '只换地图、只换对手不算推进；'
+    '②每卷结构角色不同——与已交各卷比较本卷的结构职责，自审“最像哪一卷、差异是否机制级”；'
+    '若仍是“新地图＋新对手＋旧账全清”的同构形状，换一种结构角色再交（警而不拦：作者点名的形状以作者为准）；'
+    '③情节交错——本卷有线多卷时用 threads.continues 与章纲 dormant/active 表达并行与搁置，'
+    '写清该线与主线如何相互影响；不强制每卷多线；'
+    '④有波澜——turns 要改变后半卷的对抗走向：挫折、反转或代价在 arc/turns 可见，不以同义推进凑数；'
+    '⑤卷间不清账——arc 开局承接前一卷的后果，跨卷承诺用 hooks.continues 带入带出，不把上一卷代价清零重来。'
+    '卷级转折方法按 guides 的 hatch.md「卷级转折方法」选用。'
+)
+
+
 def stage(name, payload=None):
     """Cold workers receive the rules of their stage without inheriting controller history."""
     payload = payload or {}
@@ -414,6 +434,26 @@ def stage(name, payload=None):
         if payload.get('repair'):
             rule += (' 这是返修不是重写：只改被点名的问题与偏差行（payload.drift），'
                      '其余卷保持与上一版逐字一致；节点/线路 id 与已批准集合保持一致。')
+        # Directional structure discipline rides with every volume dispatch; the author's blueprint
+        # and the previous round's reasoned refusal are named only when they exist, so a plain
+        # first round reads no phantom requirements.
+        rule += ' ' + VOLUME_STRUCTURE_GUIDE
+        blueprint = payload.get('structure_blueprint')
+        if isinstance(blueprint, dict) and blueprint.get('name'):
+            rule += ('\n\n## 结构蓝图（作者选定：%s）\n'
+                     '- 骨架：%s\n- 推进维度：%s\n- 卷间纠缠：%s\n'
+                     '- 边界：蓝图只约束结构角色与推进方式，不定事件桥段、非情节模板、无平台公式。'
+                     % (blueprint.get('name'), blueprint.get('skeleton'),
+                        blueprint.get('drivers'), blueprint.get('echo')))
+        rejections = payload.get('volume_rejections')
+        if rejections:
+            lines = ['- 第 %d 轮（涉及卷：%s）：%s'
+                     % (row.get('round', 0),
+                        '、'.join(v.get('id', '') for v in row.get('volumes') or []),
+                        row.get('reason', ''))
+                     for row in rejections if isinstance(row, dict)]
+            rule += ('\n\n## 上一版卷纲被作者退回（带理由，本版必须回应，不得原样重出）\n'
+                     + '\n'.join(lines))
     if name == 'chapter_outline':
         rule += (' 本批次范围见 payload.chapter_outline（volume/first/last/words/tolerance）。')
         if payload.get('repair'):

@@ -46,6 +46,22 @@ class MemoryPresentation:
         self.effects.append(('board', board.get('hash')))
         return {'delivery_id': 'memory:board/' + str(board.get('hash'))}
 
+    def question(self, board):
+        self.effects.append(('question', board.get('hash')))
+        return {'delivery_id': 'memory:question/' + str(board.get('hash'))}
+
+    def volume_board(self, board):
+        self.effects.append(('volume_board', board.get('hash')))
+        return {'delivery_id': 'memory:volume-board/' + str(board.get('hash'))}
+
+    def volume_question(self, board):
+        self.effects.append(('volume_question', board.get('hash')))
+        return {'delivery_id': 'memory:volume-question/' + str(board.get('hash'))}
+
+    def snapshot(self, boundary):
+        self.effects.append(('snapshot', boundary.get('action')))
+        return {'delivery_id': 'memory:snapshot'}
+
     def retire(self, task_id):
         self.effects.append(('retire', task_id))
 
@@ -114,6 +130,9 @@ class ApplicationPortsTests(unittest.TestCase):
             app.recontract(contract(3), '作者导入完整开书约定。', opening=True)
             self.assertEqual(app.advance()['task']['stage'], 'volume_outline')
             app.submit(response(app))
+            staged = app.advance()
+            self.assertEqual(staged['action'], 'await_volume_confirm')
+            app.confirm_volume(staged['volumes_hash'], '作者认可这一版卷纲。')
             self.assertEqual(app.advance()['task']['stage'], 'chapter_outline')
             app.submit(response(app))
             owner = app.run(finish=True, source='作者明确授权写完。')['owner']

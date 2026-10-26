@@ -78,6 +78,9 @@ class DispatchMaterialTests(unittest.TestCase):
             if handoff['action'] == 'await_author':
                 self.app.approve(handoff['prose_hash'], '工程夹具认可当前版本。')
                 continue
+            if handoff['action'] == 'await_volume_confirm':
+                self.app.confirm_volume(handoff['volumes_hash'], '工程夹具认可当前卷纲。')
+                continue
             if handoff['action'] != 'task_ready':
                 break
             work = self.pending()

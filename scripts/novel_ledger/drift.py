@@ -7,6 +7,7 @@ import copy
 from decimal import Decimal, InvalidOperation
 
 from .contracts import Error
+from .contracts import han_count
 from .contracts import require
 from .contracts import text
 
@@ -38,6 +39,22 @@ DELTA_KINDS = ('resources', 'places', 'knowledge', 'characters', 'relations', 'c
 # The promise account: a volume declares the promises it opens and closes, a chapter acts on them.
 # There are exactly two actions — mid-course reminders are the existing `hook_refs` hand-off.
 HOOK_ACTIONS = ('plant', 'payoff')
+
+
+def deep_han(value):
+    """Every 汉字 in a nested JSON-shaped value, the way the outline length check counts.
+
+    The validator's per-volume band is measured over the volume's whole nested row, so any other
+    surface that quotes a volume's length (the confirmation board the author reads before
+    confirming) must count the same way or the two numbers quietly disagree.
+    """
+    if isinstance(value, str):
+        return han_count(value)
+    if isinstance(value, dict):
+        return sum(deep_han(item) for item in value.values())
+    if isinstance(value, list):
+        return sum(deep_han(item) for item in value)
+    return 0
 
 
 # The status an action leaves in the projection; the outline speaks in actions, the state in statuses.

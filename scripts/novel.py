@@ -11,6 +11,7 @@ from novel_ledger.contracts import CONTENT_ERRORS, CONTROLLER_STAGES, Error, VER
 from novel_ledger.bootstrap import open_local_runtime, pin_local_runtime, preview_local
 
 PUBLIC = {'diagnose', 'pin-engine', 'recover-engine', 'host-check', 'init', 'assurance', 'prepare-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
+          'confirm-volume', 'revise-volume', 'regroup-volume', 'blueprint',
           'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next', 'worker', 'worker-ready', 'worker-error', 'prepare-worker'}
 OBSERVER = {'review-read', 'review-observe', 'review-report'}
 SEALED = {'read', 'recall', 'patch', 'audit', 'export', 'html', 'deliver', 'preview'} | OBSERVER
@@ -95,12 +96,13 @@ def parser():
         if command == 'review-resolve':
             sub.add_argument('--disposition', choices=('accept_uncertainty', 'repair'), required=True)
             sub.add_argument('--source', required=True)
-        if command in ('submit', 'preflight', 'recontract', 'opening', 'lexical', 'intake'):
+        if command in ('submit', 'preflight', 'recontract', 'opening', 'lexical', 'intake', 'revise-volume'):
             sub.add_argument('--file', required=True)
         if command == 'check':
             sub.add_argument('--file')
             sub.add_argument('--task')
-        if command in ('approve', 'recontract', 'opening', 'choose', 'lexical', 'intake'):
+        if command in ('approve', 'recontract', 'opening', 'choose', 'lexical', 'intake',
+                       'confirm-volume', 'revise-volume', 'blueprint'):
             sub.add_argument('--source', required=True)
         if command == 'recontract':
             sub.add_argument('--patch', action='store_true',
@@ -120,6 +122,18 @@ def parser():
             sub.add_argument('--reason', default='返回重选')
         if command == 'approve':
             sub.add_argument('--prose-hash', required=True)
+        if command == 'confirm-volume':
+            sub.add_argument('--hash', required=True, help='await_volume_confirm 返回的 volumes_hash，绑准确版本。')
+        if command == 'revise-volume':
+            sub.add_argument('--hash', required=True, help='当前暂存卷纲的 volumes_hash。')
+        if command == 'regroup-volume':
+            sub.add_argument('--hash', required=True, help='当前暂存卷纲的 volumes_hash。')
+            sub.add_argument('--reason', required=True, help='作者退回理由原话，喂给下一次卷纲派工。')
+            sub.add_argument('--blueprint', help='同时改选结构蓝图档名，与重出一版一体生效。')
+        if command == 'blueprint':
+            sub.add_argument('--name', required=True, help='结构蓝图档名（见 hatch.md 结构蓝图目录）。')
+            sub.add_argument('--regenerate', action='store_true',
+                             help='删除尚无正文各卷的卷纲/章纲/结算行并按新蓝图重派；有正文或草稿的卷保留其纲。')
         if command == 'advance':
             sub.add_argument('--after')
             sub.add_argument('--compact', action='store_true', help='只返回主干派工信息，完整任务保留在 task_path。')
@@ -448,6 +462,14 @@ def dispatch(args, open_runtime=open_local_runtime):
             return app.renew(owner, args.seconds)
         if command == 'approve':
             return app.approve(args.prose_hash, args.source, owner)
+        if command == 'confirm-volume':
+            return app.confirm_volume(args.hash, args.source, owner)
+        if command == 'revise-volume':
+            return app.revise_volume(load(args.file), args.hash, args.source, owner)
+        if command == 'regroup-volume':
+            return app.regroup_volume(args.hash, args.reason, args.blueprint, owner)
+        if command == 'blueprint':
+            return app.blueprint(args.name, args.source, args.regenerate, owner)
         if command == 'choose':
             if args.tier:
                 return app.opening_tier(args.tier, args.source, owner)

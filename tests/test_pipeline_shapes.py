@@ -57,6 +57,11 @@ def record_stages(app, owner=None, until=None):
         if handoff['action'] == 'await_author':
             app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', owner)
             continue
+        if handoff['action'] == 'await_volume_confirm':
+            # The author gate between a staged volume outline and any further dispatch: a driver
+            # that skipped this would stall on the boundary, not silently pass.
+            app.confirm_volume(handoff['volumes_hash'], '工程夹具认可当前卷纲。', owner)
+            continue
         if handoff['action'] != 'task_ready':
             return handoff, Counter(stages)
         work = app.repo.pending()['input']
@@ -89,6 +94,9 @@ def drive_ordered(app, owner=None, limit=200):
         handoff = app.advance(owner=owner)
         if handoff['action'] == 'await_author':
             app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', owner)
+            continue
+        if handoff['action'] == 'await_volume_confirm':
+            app.confirm_volume(handoff['volumes_hash'], '工程夹具认可当前卷纲。', owner)
             continue
         if handoff['action'] != 'task_ready':
             return handoff, stages
@@ -172,6 +180,12 @@ class PipelineShapeTests(unittest.TestCase):
             stages = []
             for _ in range(20):
                 handoff = app.advance(owner=owner)
+                if handoff['action'] == 'await_author':
+                    app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', owner)
+                    continue
+                if handoff['action'] == 'await_volume_confirm':
+                    app.confirm_volume(handoff['volumes_hash'], '工程夹具认可当前卷纲。', owner)
+                    continue
                 if handoff['action'] != 'task_ready':
                     break
                 stages.append(handoff['task']['stage'])
@@ -261,6 +275,9 @@ class PipelineShapeTests(unittest.TestCase):
                 handoff = app.advance(owner=owner)
                 if handoff['action'] == 'await_author':
                     app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', owner)
+                    continue
+                if handoff['action'] == 'await_volume_confirm':
+                    app.confirm_volume(handoff['volumes_hash'], '工程夹具认可当前卷纲。', owner)
                     continue
                 if handoff['action'] != 'task_ready':
                     break

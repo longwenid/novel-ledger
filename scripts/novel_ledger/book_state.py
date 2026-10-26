@@ -2,17 +2,23 @@
 from __future__ import annotations
 
 import copy
-from .contracts import require
+from .contracts import BLUEPRINT_CATALOG, require
 
 BOOK_SCHEMA = 'novel-ledger.book/1'
 # v2 removed the design-review and plan stages, so their containers are gone with them: the volume
 # outlines, the chapter outlines and the rows materialized from them are the whole design record,
 # and `design_drift` is the ledger of departures the writer declared and the engine registered.
+# The volume-outline confirmation gate adds three book-level fields: `pending_design` (the staged,
+# validated-but-not-installed batch, merged chapter half included), `volume_gate` (its round,
+# reasoned refusals and confirmations) and `structure_blueprint` (the author's optional book-level
+# structural choice). All three are absent-by-default legal, so an in-flight project predating the
+# gate needs no migration.
 PART_FIELDS = {
     'settings': ('contract', 'contract_source', 'lexical_policy'),
     'canon': ('state', 'written_han'),
     'intent': ('creation', 'world', 'volumes_outline', 'chapter_outlines', 'plans',
-               'style_anchor', 'scope_ends', 'understanding'),
+               'style_anchor', 'scope_ends', 'understanding',
+               'pending_design', 'volume_gate', 'structure_blueprint'),
     'execution': ('branch', 'revision', 'status', 'target', 'finish', 'pilot', 'draft',
                   'rework', 'revision_run', 'feedback', 'decisions', 'last_task', 'pause_reason',
                   'pending_contract', 'controller_owner', 'opening_world_only', 'run_authorized',
@@ -85,4 +91,32 @@ def check_state(book):
         require(isinstance(rows, list)
                 and all(isinstance(row, dict) and type(row.get('chapter')) is int for row in rows),
                 'book_state', '章纲登记须按卷保存章行数组。', {'volume': volume_id})
+    # The staged half of the confirmation gate. Its shape invariant is what makes "not installed
+    # yet" a structural fact rather than a flag: the volumes are whole validated rows, the merged
+    # chapter half is either absent or whole per-volume rows, and the id list names exactly the
+    # volumes the author is being asked about.
+    pending = book.get('pending_design')
+    if pending is not None:
+        require(isinstance(pending, dict) and isinstance(pending.get('volumes'), dict)
+                and pending['volumes'] and isinstance(pending.get('volume_ids'), list)
+                and pending['volume_ids'] and isinstance(pending.get('plans'), dict)
+                and (pending.get('chapters') is None or isinstance(pending.get('chapters'), dict))
+                and isinstance(pending.get('scope'), str) and pending['scope']
+                and isinstance(pending.get('volumes_hash'), str) and pending['volumes_hash']
+                and type(pending.get('round')) is int and pending['round'] >= 0,
+                'book_state', '暂存卷纲须携带完整形状：卷行、卷清单、策略、哈希、轮次与合并半体。',
+                {'pending': sorted(pending) if isinstance(pending, dict) else None})
+        require(set(pending['volumes']) == set(pending['volume_ids']),
+                'book_state', '暂存卷纲的卷清单须与卷行一致。')
+    gate = book.get('volume_gate')
+    require(gate is None or (isinstance(gate, dict) and type(gate.get('round')) is int
+                             and isinstance(gate.get('rejections'), list)
+                             and isinstance(gate.get('confirmed'), dict)),
+            'book_state', '卷纲门记录须为 {round, rejections, confirmed} 形状。')
+    blueprint = book.get('structure_blueprint')
+    require(blueprint is None or (isinstance(blueprint, dict) and set(blueprint) <= {'name', 'source'}
+                                  and isinstance(blueprint.get('name'), str)
+                                  and blueprint['name'] in BLUEPRINT_CATALOG
+                                  and isinstance(blueprint.get('source'), str) and blueprint['source']),
+            'book_state', '结构蓝图须为 {name, source}，name 取自内置蓝图目录。')
     return book

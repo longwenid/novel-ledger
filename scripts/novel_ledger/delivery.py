@@ -156,6 +156,99 @@ def write_question_card(workspace: LocalWorkspace, board):
     return str(path)
 
 
+def render_volume_board(board):
+    """The author-facing card for a staged volume outline awaiting confirmation.
+
+    Same treatment as the opening board card: the controller pastes this file instead of
+    re-rendering the JSON return, and the mechanically countable advisories render as advice —
+    never as a rejection reason (the author who insists on the flagged shape wins).
+    """
+    rows = board.get('volumes') or []
+    lines = ['# 卷纲待认可（第 %s 轮 · %s）' % (board.get('round', '?'), board.get('scope', '')),
+             '',
+             'volumes_hash `%s`（confirm-volume / revise-volume / regroup-volume 时原样使用）'
+             % board.get('hash', ''),
+             '待认可卷：' + '、'.join(row.get('id', '') for row in rows),
+             '认可前不安装：章纲与执笔都在这道门后。', '']
+    for row in rows:
+        lines.append('## 卷 %s（第 %s～%s 章）' % (row.get('id', ''), row.get('first', '?'), row.get('last', '?')))
+        lines.append('- **卷职责**：%s' % row.get('purpose', ''))
+        if row.get('stage'):
+            lines.append('- **格局层级**：%s' % row['stage'])
+        lines.append('- **卷内弧线**：%s' % row.get('arc', ''))
+        for turn in row.get('turns') or []:
+            lines.append('- **转折（%s）**：%s' % (turn.get('at', ''), turn.get('turn', '')))
+        lines.append('- **卷末高潮**：%s' % row.get('climax', ''))
+        lines.append('- **卷末状态**：%s' % row.get('exit_state', ''))
+        lines.append('- **文风走向**：%s' % row.get('style_trend', ''))
+        band = row.get('band')
+        lines.append('- **篇幅**：%s 汉字（目标区间 %s）' % (row.get('han', 0), '%s～%s' % tuple(band) if band else '—'))
+        counts = row.get('counts') or {}
+        lines.append('- **结构化条目**：节点 %s · 线路 %s · 伏笔 %s · 资源 %s · 位置 %s · 知情 %s · 人物 %s · 关系 %s · 读者认知 %s'
+                     % tuple(counts.get(key, 0) for key in ('nodes', 'threads', 'hooks', 'resources',
+                                                            'places', 'knowledge', 'characters',
+                                                            'relations', 'reader_knowledge')))
+        for hook in row.get('hooks') or []:
+            marks = []
+            if hook.get('plant'):
+                marks.append('埋设 %s' % hook['plant'])
+            if hook.get('payoff'):
+                marks.append('兑现 %s' % hook['payoff'])
+            if hook.get('required'):
+                marks.append('卷末必须兑现')
+            if hook.get('continues'):
+                marks.append('跨卷延续')
+            lines.append('- **伏笔 `%s`**：%s（%s）' % (hook.get('id', ''), hook.get('text', ''), '，'.join(marks) or '—'))
+        for relation in row.get('relations') or []:
+            lines.append('- **关系终值**：%s > %s · %s → %s（%s）'
+                         % (relation.get('source', ''), relation.get('target', ''), relation.get('key', ''),
+                            relation.get('to', ''), relation.get('reason', '')))
+        for known in row.get('reader_knowledge') or []:
+            lines.append('- **读者认知终值**：%s → %s（%s）'
+                         % (known.get('topic', ''), known.get('to', ''), known.get('reason', '')))
+        lines.append('')
+    warnings = [row for row in board.get('warnings') or [] if isinstance(row, dict)]
+    if warnings:
+        lines.append('## 结构提示（advisory，只警不拦，作者坚持以作者为准）')
+        lines.extend('- %s' % row.get('message', '') for row in warnings)
+        lines.append('')
+    lines.append('---')
+    lines.append('回复 **认可这一版**（confirm-volume --hash 上面的 volumes_hash --source 原话）；'
+                 '**轻调叙述面**（purpose/arc/turns/climax/exit_state/style.trend，另存 JSON 后 revise-volume）；'
+                 '**带理由重出**（regroup-volume --hash --reason 原话，可加 --blueprint 换结构蓝图）。')
+    return chr(10).join(lines) + chr(10)
+
+
+def write_volume_board_card(workspace: LocalWorkspace, board):
+    """Materialize the staged design's confirmation card as work/volume-board.md."""
+    path = workspace.artifact_path(workspace.project / 'work' / 'volume-board.md')
+    atomic_write(path, render_volume_board(board))
+    return str(path)
+
+
+def render_volume_question(board):
+    """The confirm ask as a paste-ready payload, mirroring the opening question card.
+
+    Capped at four options like every ask payload: the full page stays in volume-board.md for the
+    chat text, and the host's Other/free-text field is where a custom instruction lands.
+    """
+    rows = board.get('volumes') or []
+    warnings = [row for row in board.get('warnings') or [] if isinstance(row, dict)]
+    summary = '第 %s 轮 · %s 卷（%s）%s' % (
+        board.get('round', '?'), len(rows), '、'.join(row.get('id', '') for row in rows),
+        '；有结构提示' if warnings else '')
+    return {'questions': [{'header': '卷纲待认可',
+                           'question': '这一版卷纲（%s）认可吗？认可后才开始章纲与执笔。' % summary,
+                           'multiSelect': False, 'options': [
+                               {'label': '认可这一版', 'description': '按当前 volumes_hash 安装卷纲'
+                                  '（合并档连同章纲与结算行），进入下一步设计。'},
+                               {'label': '轻调叙述面', 'description': '只改卷职责/弧线/转折/高潮/卷末状态/文风走向'
+                                  '（revise-volume，结构字段会被拒）；改完仍需认可。'},
+                               {'label': '带理由重出', 'description': '退回这一版并附理由（regroup-volume），'
+                                  '理由会交给下一版卷纲回应；可同时换结构蓝图。'},
+                           ]}]}
+
+
 def write_advance_snapshot(workspace: LocalWorkspace, boundary):
     """Persist the full boundary view as work/last-advance.json before any compact trimming.
 
@@ -164,6 +257,13 @@ def write_advance_snapshot(workspace: LocalWorkspace, boundary):
     """
     path = workspace.artifact_path(workspace.project / 'work' / 'last-advance.json')
     json_write(path, boundary)
+    return str(path)
+
+
+def write_volume_question_card(workspace: LocalWorkspace, board):
+    """Materialize the confirm ask payload as work/volume-question.json beside its board card."""
+    path = workspace.artifact_path(workspace.project / 'work' / 'volume-question.json')
+    json_write(path, render_volume_question(board))
     return str(path)
 
 

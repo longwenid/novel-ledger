@@ -14,6 +14,7 @@ from .evidence import evidence
 # chapter budget, an out-of-scope revision, and a spent remedy budget.
 STOP_POINTS = {
     'author_block': 'answer',                       # an open question is answered; nothing moves first.
+    'volume-unconfirmed:volume_outline': 'volume_confirm',
     'repair-exhausted:chapter_repair': 'author_decision',
     'repair-stalled:chapter_repair': 'author_decision',
     'revision-blocked': 'plan_authorization',       # revise --proposal-hash with the author's own words
@@ -22,6 +23,8 @@ STOP_POINTS = {
 # What each channel means, for readers of the table and for the test that keeps it honest.
 AUTHOR_CHANNELS = {
     'answer': '问题已在等作者回答，answer 记录选择后流程才继续。',
+    'volume_confirm': '卷纲已通过机械校验但尚未安装：confirm-volume 绑定准确 volumes_hash 认可后才落库；'
+                      '轻调叙述面用 revise-volume，带理由重出用 regroup-volume。',
     'author_decision': '额度或未决导致停下：engine 提供再返修一轮或保留候选暂停，answer 落库；机械条件不可豁免。',
     'plan_authorization': '方案超出自动回改范围：作者用 revise --proposal-hash 绑定准确 plan_hash 授权。',
     'recontract': '改案额度已尽：改的是前提，走 recontract 并重新核验。',
@@ -62,7 +65,10 @@ def new_book(contract, source=''):
             'lexical_policy': [{'version': 1, 'policy': planning.resolve_policy({}), 'source': '内置默认'}],
             'pilot': None, 'volumes_outline': {}, 'chapter_outlines': {}, 'plans': {}, 'design_drift': [],
             'understanding': understanding.empty(), 'draft': None, 'rework': {}, 'revision_run': None,
-            'feedback': [], 'decisions': []}
+            'feedback': [], 'decisions': [],
+            # The volume-outline confirmation gate's own ledger: which round the staged design is on,
+            # the author's reasoned refusals so far, and what was confirmed under which policy scope.
+            'volume_gate': {'round': 0, 'rejections': [], 'confirmed': {}}}
     planning.check_contract_names(contract, planning.active_policy(book.get('lexical_policy')))
     return book
 
@@ -113,6 +119,180 @@ def outline_receipt(book, volumes):
              'last': max([r['chapter'] for r in chapter_rows(book, v['id'])] or [v['first']])} for v in volumes]
 
 
+# The narrative fields a staged volume's author may nudge without re-running the design round:
+# exactly the fields the author reads as prose and no mechanical check depends on. Everything
+# structural (nodes/threads/hooks/resources/places/knowledge/characters/relations/reader_knowledge/
+# clock/stage/style.window) stays out — a nudge there would invalidate the merged chapter half and
+# the validations that already ran, so it must go back through a reasoned re-run instead.
+REVISE_VOLUME_FIELDS = ('purpose', 'arc', 'turns', 'climax', 'exit_state', 'style')
+
+
+def _pending_design(book):
+    pending = book.get('pending_design')
+    require(isinstance(pending, dict) and isinstance(pending.get('volumes'), dict) and pending['volumes'],
+            'volume_confirm', '当前没有待认可的卷纲。')
+    return pending
+
+
+def activate_design(book):
+    """Install the staged design in one piece: volume outlines, merged chapter half, settlement rows.
+
+    Called only from the author's confirmation, bound to the staged `volumes_hash`; the record of
+    what was confirmed goes on the gate's own ledger under the policy scope it was staged with.
+    """
+    pending = _pending_design(book)
+    installed = book.setdefault('volumes_outline', {})
+    for ident, outline in pending['volumes'].items():
+        installed[ident] = outline
+    if pending.get('chapters'):
+        chapters = book.setdefault('chapter_outlines', {})
+        for ident, rows in pending['chapters'].items():
+            chapters[ident] = rows
+    plans = book.setdefault('plans', {})
+    for number, item in (pending.get('plans') or {}).items():
+        plans[number] = item
+    gate = book.setdefault('volume_gate', {'round': 0, 'rejections': [], 'confirmed': {}})
+    gate.setdefault('confirmed', {})[pending['scope']] = {
+        'round': pending['round'], 'volumes_hash': pending['volumes_hash'],
+        'volumes': list(pending['volume_ids']), 'producer': pending.get('producer')}
+    book.pop('pending_design', None)
+    return book
+
+
+def revise_design(book, adjustments):
+    """Apply the author's whitelist-narrow edits to the staged volumes, then re-validate the batch.
+
+    The re-run is whole-batch (`validate_volume_outline` over every staged volume): the word band,
+    id uniqueness and every reference check see the edited design exactly as a fresh submission
+    would, and the rebound `volumes_hash` keeps the author's confirmation bound to one version.
+    """
+    pending = _pending_design(book)
+    require(isinstance(adjustments, list) and adjustments, 'volume_revise',
+            '调整清单须为非空数组，每行 {volume, 要改的字段}。')
+    volumes = pending['volumes']
+    for row in adjustments:
+        require(isinstance(row, dict), 'volume_revise', '每条调整须为对象。')
+        ident = row.get('volume')
+        require(text(ident) and ident in volumes, 'volume_revise', '调整须指向本次待认可的卷。',
+                {'volumes': list(volumes), 'got': ident})
+        unknown = sorted(set(row) - {'volume', *REVISE_VOLUME_FIELDS})
+        require(not unknown, 'volume_revise',
+                '这些字段不能轻调：结构化内容（节点/线路/伏笔/六类终值/站位/知情/时钟/格局层级/容差）'
+                '与已跑校验及合并章纲相互绑定。',
+                {'unknown_fields': unknown,
+                 'recover': '要改结构请 regroup-volume 带理由重出一版；要改每卷字数带请先改约调整 words。'})
+        if 'style' in row:
+            require(isinstance(row['style'], dict) and set(row['style']) <= {'trend'}
+                    and text(row['style'].get('trend')), 'volume_revise',
+                    '轻调只接受 style.trend；改本卷容差 window 走重出或改约。')
+        target = volumes[ident]
+        for field in REVISE_VOLUME_FIELDS:
+            if field in row:
+                target[field] = copy.deepcopy(row[field])
+    contract = editorial.effective_contract(book)
+    ordered = [volumes[v['id']] for v in contract['volumes'] if v['id'] in volumes]
+    revalidated = planning.validate_volume_outline(
+        {'volumes': copy.deepcopy(ordered)}, contract, book.get('world'), selections(book),
+        book.get('volumes_outline') or {}, list(pending['volume_ids']))
+    pending['volumes'] = revalidated
+    pending['volumes_hash'] = digest(revalidated)
+    return book
+
+
+def regroup_design(book, reason):
+    """Drop the staged design and record the author's reasoned refusal for the next round.
+
+    The refusal is input, not just audit: the next volume-outline dispatch freezes it in the
+    `volume_rejections` record and the brief names it, so the re-run answers the reason instead of
+    re-offering the same shape. Round advances the way the opening's regroup does; world and
+    contract are untouched.
+    """
+    pending = _pending_design(book)
+    gate = book.setdefault('volume_gate', {'round': 0, 'rejections': [], 'confirmed': {}})
+    gate.setdefault('rejections', []).append({
+        'round': pending['round'], 'reason': reason,
+        'volumes': [{'id': ident, 'purpose': (pending['volumes'][ident] or {}).get('purpose', ''),
+                     'arc': ((pending['volumes'][ident] or {}).get('arc') or '')[:60]}
+                    for ident in pending['volume_ids'] if ident in pending['volumes']]})
+    gate['round'] = gate.get('round', 0) + 1
+    book.pop('pending_design', None)
+    return book
+
+
+def _volume_board_row(volume, outline, policy):
+    """One volume of the confirmation board: the prose the author reads, and the counts behind it."""
+    words, tolerance = policy.get('words'), policy.get('tolerance')
+    band = [words - tolerance, words + tolerance] if type(words) is int and type(tolerance) is int else None
+    hooks = [row for row in outline.get('hooks') or [] if isinstance(row, dict)]
+    threads = [row for row in outline.get('threads') or [] if isinstance(row, dict)]
+    return {'id': volume['id'], 'first': volume['first'], 'last': volume['end'],
+            'purpose': outline.get('purpose', ''), 'stage': outline.get('stage', ''),
+            'arc': outline.get('arc', ''), 'climax': outline.get('climax', ''),
+            'exit_state': outline.get('exit_state', ''),
+            'turns': [{'at': turn.get('at', ''), 'turn': turn.get('turn', '')}
+                      for turn in outline.get('turns') or [] if isinstance(turn, dict)],
+            'han': drift.deep_han({key: outline.get(key) for key in drift.VOLUME_FIELDS}),
+            'band': band,
+            'counts': {key: len(outline.get(key) or [])
+                       for key in ('nodes', 'threads', 'hooks', 'resources', 'places',
+                                   'knowledge', 'characters', 'relations', 'reader_knowledge')},
+            'hooks': [{'id': hook.get('id'), 'text': hook.get('text', ''), 'plant': hook.get('plant'),
+                       'payoff': hook.get('payoff'), 'required': hook.get('required'),
+                       'continues': hook.get('continues')} for hook in hooks],
+            'threads_continues': [row.get('id') for row in threads if row.get('continues')],
+            'hooks_continues': [hook.get('id') for hook in hooks if hook.get('continues')],
+            'relations': copy.deepcopy(outline.get('relations') or []),
+            'reader_knowledge': copy.deepcopy(outline.get('reader_knowledge') or []),
+            'style_trend': (outline.get('style') or {}).get('trend', '')}
+
+
+def structure_warnings(pending):
+    """Two advisory notes the board carries, each mechanically countable and neither a threshold.
+
+    Advisory only, everywhere: the author who insists on the flagged shape wins (the same
+    semantics as the opening boards' name/setting warnings). There is deliberately no switch that
+    promotes either of these to a refusal — a numeric gate on story shape is the failure this
+    design refuses to re-introduce.
+    """
+    warnings = []
+    volumes = list((pending.get('volumes') or {}).values())
+    if len(pending.get('volume_ids') or []) >= 2:
+        entangled = any(row.get('continues') for volume in volumes
+                        for row in list(volume.get('threads') or []) + list(volume.get('hooks') or []))
+        if not entangled:
+            warnings.append({'code': 'volume_entanglement_missing',
+                             'message': '各卷的线路与伏笔都没有跨卷延续（continues）：卷与卷之间只剩换幕，'
+                                        '没有留下纠缠。只警不拦，作者坚持以作者为准。'})
+    if volumes:
+        templated = all(
+            len(volume.get('turns') or []) == 2
+            and all(isinstance(turn, dict) and turn.get('at') in ('卷中', '卷尾')
+                    for turn in volume.get('turns') or [])
+            for volume in volumes)
+        if templated:
+            warnings.append({'code': 'volume_turn_template',
+                             'message': '每一卷的转折都恰是两条、位置都标在卷中/卷尾：各卷节奏呈同一模板。'
+                                        '只警不拦，作者坚持以作者为准。'})
+    return warnings
+
+
+def volume_board(book):
+    """The author-facing confirmation board for the staged design: every volume on one page.
+
+    The renderer is delivery; this is the data. `hash` is the version the author's words will be
+    bound to (confirm-volume --hash), and `volume_ids` names what stays locked until then.
+    """
+    pending = _pending_design(book)
+    contract = editorial.effective_contract(book)
+    policy = volume_policy(book)
+    rows = [_volume_board_row(volume, pending['volumes'][volume['id']], policy)
+            for volume in contract['volumes'] if volume['id'] in pending['volumes']]
+    return {'schema': 'novel-ledger.volume-board/1', 'hash': pending['volumes_hash'],
+            'round': pending['round'], 'scope': pending['scope'],
+            'volume_ids': list(pending['volume_ids']), 'volumes': rows,
+            'warnings': structure_warnings(pending)}
+
+
 def next_volume_outline(book, contract, needed=None):
     """Which volume outline to draft next, honouring the policy's scope.
 
@@ -125,7 +305,11 @@ def next_volume_outline(book, contract, needed=None):
     both contracts, which is how a three-chapter book avoids a second design round-trip.
     """
     outlined = book.get('volumes_outline') or {}
-    missing = [v for v in contract['volumes'] if v['id'] not in outlined]
+    # A staged-but-unconfirmed design is not missing: re-dispatching it while the author holds the
+    # confirmation board would burn a cold session on a volume that is already on the table.
+    staged = set((book.get('pending_design') or {}).get('volume_ids') or [])
+    missing = [v for v in contract['volumes']
+               if v['id'] not in outlined and v['id'] not in staged]
     if not missing:
         return None
     merged = ('chapter_outline',) if merges_chapter_outline(book) else ()
@@ -233,6 +417,15 @@ def choose(book, headers):
                         and not book.get('run_authorized'))
     head = headers[-1]['n'] if headers else 0
     writing_volume = planning.volume_for(contract, head + 1 if head + 1 <= volumes[-1]['end'] else volumes[-1]['end'])
+    # Step three's author gate: a volume outline that passed every mechanical check is *staged*, not
+    # installed. Between staging and confirmation nothing else moves — no chapter outlines, no prose,
+    # no completion — because the author said designs start work only after approval. The board is
+    # the same data the confirm command binds the author's words to.
+    pending = book.get('pending_design')
+    if pending:
+        return {'action': 'await_volume_confirm', 'volumes_hash': pending['volumes_hash'],
+                'round': pending['round'], 'volumes': list(pending['volume_ids']),
+                'board': volume_board(book)}
     # Step three: the volume outlines. Drafted for every volume at once, or one volume at a time,
     # by the contract's own policy — and in `rolling` mode the volume drafted is the one the book
     # is about to enter, not simply the next one in order.
@@ -566,7 +759,10 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None,
                                     'source': '用户逐门选择；完整选择版本 ' + opening['selection_hash']}
     elif stage == 'volume_outline':
         # Step three: one outline per volume, sized by the contract. Validated against the world and the
-        # contract, then installed — there is no candidate waiting for a verdict.
+        # contract — every mechanical check runs here — but the result is *staged* on the book, not
+        # installed: the author confirms the exact version (confirm-volume) before any of it becomes
+        # the design the rest of the pipeline reads. There is no reviewer verdict to wait for; the
+        # verdict is the author's own words, bound to the staged version's hash.
         planning.enforce(planning.active_policy(book.get('lexical_policy')), stage, data)
         contract = editorial.effective_contract(book)
         wanted = list((task.get('payload') or {}).get('volume_ids') or [])
@@ -579,21 +775,21 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None,
         old = book.get('volumes_outline') or {}
         if (task.get('payload') or {}).get('repair'):
             require_narrow_repair(old, outlines, (task.get('payload') or {}).get('drift') or [])
-        for volume_id, outline in outlines.items():
-            old[volume_id] = outline
-        book['volumes_outline'] = old
         ledger.check(data.get('ledger'))
+        chapters_half, plans_half = None, {}
         if 'chapter_outline' in ((task.get('payload') or {}).get('also') or ()):
             # The merged half. Volumes are validated in book order and the chain is carried forward:
             # volume two's opening chapter may pay off a promise volume one declared in this very
             # receipt, so validating each volume against the book's frozen state would reject a
             # receipt that is internally consistent — and a two-volume small tier is the default
-            # shape, not an edge case.
+            # shape, not an edge case. Validation runs in full here; installation waits for the
+            # confirmation like the volume rows above it, so both halves land in one transaction.
             half = data.get('chapters')
             require(isinstance(half, dict), 'volume_outline',
                     '合并派工须在 chapters 里按卷交出逐章章纲。',
                     {'expect': {'chapters': {'<volume_id>': ['章纲行']}}})
             simulated = book['state']
+            chapters_half = {}
             for volume in contract['volumes']:
                 if volume['id'] not in outlines:
                     continue
@@ -603,14 +799,20 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None,
                 validated = planning.validate_chapter_outline(
                     {'volume': volume_id, 'chapters': half[volume_id]}, chapter_policy(book),
                     volume, outlines[volume_id], book.get('world'), simulated, book.get('plans'))
-                book.setdefault('chapter_outlines', {})[volume_id] = validated
+                chapters_half[volume_id] = validated
                 for item in drift.plan_rows(validated):
-                    book.setdefault('plans', {})[str(item['chapter'])] = item
+                    plans_half[str(item['chapter'])] = item
                 simulated, chain_findings = drift_simulation.simulate(validated, simulated, book.get('world'),
                                                            volume, outlines[volume_id])
                 require(not chain_findings, 'design_drift', '合并回执的卷内状态链核账未通过。',
                         {'volume': volume_id, 'findings': chain_findings,
                          'findings_count': len(chain_findings)})
+        gate = book.setdefault('volume_gate', {'round': 0, 'rejections': [], 'confirmed': {}})
+        book['pending_design'] = {'scope': volume_policy(book).get('scope'),
+                                  'volume_ids': wanted, 'volumes': outlines,
+                                  'chapters': chapters_half, 'plans': plans_half,
+                                  'volumes_hash': digest(outlines), 'round': gate.get('round', 0),
+                                  'producer': actor}
     elif stage == 'chapter_outline':
         # Step four: the volume's chapter outlines, each declaring what it changes and what state
         # it enters and leaves. The engine simulates the whole chain here, before a word is written.

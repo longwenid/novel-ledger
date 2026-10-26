@@ -278,6 +278,17 @@ def _overview(book, contract, rows, state, open_hooks, report, written):
                       + _esc(block.get('question', '')) + '</p><ul class="tight">'
                       + ''.join('<li>' + _esc(o.get('label', '')) + '：' + _esc(o.get('impact', '')) + '</li>'
                                 for o in block.get('options') or []) + '</ul></div>')
+    pending = book.get('pending_design')
+    if pending:
+        # The confirmation gate's own card, in the author_block card's shape: what is staged, which
+        # exact version it is, and the fact that nothing downstream moves until it is confirmed.
+        pieces.append('<div class="card" style="border-color:var(--bad)"><b>卷纲待认可</b>'
+                      '<p class="note">第 ' + _esc(pending.get('round')) + ' 轮 · 卷 '
+                      + _esc('、'.join(pending.get('volume_ids') or [])) + ' · 版本 '
+                      + _esc((pending.get('volumes_hash') or '')[:12]) + '…</p>'
+                      '<p class="note">卷纲已通过机械校验但尚未安装：认可（confirm-volume --hash … --source 原话）'
+                      '后章纲与执笔才开始；轻调叙述面用 revise-volume，带理由重出用 regroup-volume。'
+                      '完整看板见 work/volume-board.md。</p></div>')
     if report['problems']:
         pieces.append('<div class="card" style="border-color:var(--bad)"><b>核验发现的问题</b><ul class="tight">'
                       + ''.join('<li>' + _esc(p) + '</li>' for p in report['problems']) + '</ul></div>')
@@ -476,11 +487,16 @@ def _outlines(book):
     for vid, row in volumes.items():
         pieces.append('<h3>卷纲 · ' + _esc(vid) + '</h3><div class="card"><table class="t">'
                       '<tr><th>卷职责</th><td>' + _esc(row.get('purpose', '')) + '</td></tr>'
+                      '<tr><th>格局层级</th><td>' + _esc(row.get('stage') or '（未声明）') + '</td></tr>'
                       '<tr><th>卷内弧线</th><td style="white-space:pre-wrap">' + _esc(row.get('arc', '')) + '</td></tr>'
                       '<tr><th>卷末高潮</th><td>' + _esc(row.get('climax', '')) + '</td></tr>'
                       '<tr><th>卷末必须达到的状态</th><td style="white-space:pre-wrap">' + _esc(row.get('exit_state', '')) + '</td></tr>'
                       '<tr><th>时钟</th><td>本卷推进 ' + _esc((row.get('clock') or {}).get('advance_days', '—')) + ' 天</td></tr>'
                       '</table></div>')
+        # The optional terminals render even when absent: an empty block is the volume's own
+        # declaration that it states no terminal here, not a field the page dropped.
+        pieces.append(_delta_block('关系终值（relations）', row.get('relations'), '本卷不声明关系终值。'))
+        pieces.append(_delta_block('读者认知终值（reader_knowledge）', row.get('reader_knowledge'), '本卷不声明读者认知终值。'))
         if row.get('turns'):
             pieces.append(_timeline('卷内转折', [(str(turn.get('at', '')), turn.get('turn', ''), '', '')
                                                 for turn in row['turns']]))

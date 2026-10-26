@@ -223,7 +223,12 @@ class WatchIntegrationTests(unittest.TestCase):
         run = app.run(through=1, source='工程夹具授权。')
         owner = run['owner']
         app.advance(owner=owner)
-        app.submit(response(app))          # the chapter outline is done before watch starts
+        app.submit(response(app))          # the volume outline stages on submission…
+        boundary = app.advance(owner=owner)
+        self.assertEqual(boundary['action'], 'await_volume_confirm')
+        app.confirm_volume(boundary['volumes_hash'], '工程夹具认可卷纲。', owner)
+        # …and is confirmed before watch starts: this test is about the idle wait on the next
+        # dispatched task, and watch by design stops at author boundaries instead.
         repo.close()
         runtime = open_local_runtime(str(self.project))
         try:

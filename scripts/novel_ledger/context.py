@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (DEFAULTS, SCALE_TIERS, TASK, WORLD_ARCHITECTURE, Job, policy_default,
+from .contracts import (BLUEPRINT_BOUNDARY, BLUEPRINT_CATALOG, DEFAULTS, SCALE_TIERS, TASK,
+                        WORLD_ARCHITECTURE, Job, policy_default,
                         profile_anchor, require, resolve_style_profile, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY,
                         SCENE_IDENTITY_CAPABILITY,
@@ -55,9 +56,9 @@ STAGE_MATERIAL = {
     'opening_options': ('opening_choices', 'opening_rejections'),
     'world_model': ('author_feedback', 'opening_basis', 'opening_choices', 'previous_proposal'),
     'opening_contract': ('author_feedback', 'opening_basis', 'opening_choices', 'world_model'),
-    'volume_outline': ('author_feedback', 'contract', 'effective_layout', 'hooks', 'opening_basis',
+    'volume_outline': ('author_feedback', 'blueprint', 'contract', 'effective_layout', 'hooks', 'opening_basis',
                        'opening_choices', 'revision_impact', 'revision_instruction', 'state',
-                       'style', 'world_model'),
+                       'structure_blueprint', 'style', 'volume_rejections', 'world_model'),
     'chapter_outline': ('author_feedback', 'contract', 'design_drift', 'effective_layout', 'hooks',
                         'previous_chapters', 'previous_chapter:', 'revision_impact', 'revision_instruction', 'state',
                         'style', 'volume_outline', 'world_model'),
@@ -810,6 +811,22 @@ def build(repo: ContextStore, book, job):
                                      'volume_ids': [v['id'] for v in chosen],
                                      'volumes': [{'id': v['id'], 'purpose': v.get('purpose', ''),
                                                   'first': v['first'], 'end': v['end']} for v in chosen]}
+        # The author's structural choice, when one is bound: the payload names it for the brief and
+        # the template, the record carries it with the author's own source line. Absent by default
+        # — the engine does not pick a structure for the author.
+        bound = book.get('structure_blueprint') or {}
+        if bound.get('name') in BLUEPRINT_CATALOG:
+            entry = BLUEPRINT_CATALOG[bound['name']]
+            payload['structure_blueprint'] = {key: entry[key] for key in ('name', 'skeleton', 'drivers', 'echo')}
+            add('blueprint', {**payload['structure_blueprint'], 'source': bound.get('source', ''),
+                              'boundary': BLUEPRINT_BOUNDARY})
+        # The author's reasoned refusals from earlier rounds at the gate: frozen input for the
+        # re-run (the brief names them), never just audit. Same shape as the opening's
+        # `opening_rejections` — present only while there is something to answer.
+        rejections = (book.get('volume_gate') or {}).get('rejections') or []
+        if rejections:
+            payload['volume_rejections'] = copy.deepcopy(rejections)
+            add('volume_rejections', payload['volume_rejections'])
         if merged_outline:
             # The merged half reads the same chapter-outline policy, per volume: the outer key names
             # the volumes this receipt must also outline chapter by chapter.

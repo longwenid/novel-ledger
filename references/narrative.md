@@ -68,6 +68,12 @@
 
 提交时引擎机械校验：卷 id 与 `contract.volumes` 一一对应且顺序一致；每卷汉字数落在 `words±tolerance`；node/thread/hook id 全书唯一且不覆盖已批准 id；`resources/places/knowledge/characters/relations/reader_knowledge` 引用的 key/entity/两端实体存在（relations 的 source≠target，key 不含 `:` 与 `>`；reader_knowledge 的 `to` 取披露档位）；`window` 落在本卷章号区间；`exit_state` 非空；`hooks` 的窗口与跨卷标记自洽（见 [伏笔账](#伏笔账卷纲声明章纲执行)）；`style.trend` 非空。任一项失败时提交被拒（`design_drift`），保持原任务并按具体错误重交，不消耗正文返修额度。
 
+通过全部机械校验的回执**落库前先进入待认可暂存**：卷纲（合并档连同其章纲与结算行）保存在 `pending_design`，引擎返回 `await_volume_confirm` 并物化 `work/volume-board.md` 与 `work/volume-question.json`；作者用 `confirm-volume --hash volumes_hash --source 原话` 绑定准确版本认可后，两半才在同一事务安装，章纲与执笔随之继续。轻调叙述面用 `revise-volume --file 调整.json --hash --source`（白名单 purpose/arc/turns/climax/exit_state/style.trend，结构化字段拒绝并指向重出）；带理由退回用 `regroup-volume --hash --reason 原话 [--blueprint 档名]`，理由进入下一次卷纲派工的冻结输入（`volume_rejections` 记录）。看板附两条只警不拦的 advisory：各卷 threads/hooks 全无 continues 的「卷间纠缠缺位」，与各卷 turns 恰两条且位置全为卷中/卷尾的「节奏模板同构」；作者坚持以作者为准，二者没有也不可有升级为阻断的开关。
+
+### 结构纪律
+
+卷纲简报随每次派工携带五条**方向性**结构纪律（无机械判据，不设数值公式、不套平台公式）：①推进维度——每卷写明落在利益格局/关系/规则理解/代价累积哪些维度，只换地图换对手不算推进；②每卷结构角色不同——与已交各卷比结构职责并自审差异是否机制级，命中「新地图＋新对手＋旧账全清」化石形状须换结构角色再交（警而不拦）；③情节交错——有线多卷时用 `threads.continues` 与章纲 dormant/active 表达并行与搁置，写清与主线如何相互影响，不强制每卷多线；④有波澜——turns 要改变后半卷对抗走向，不以同义推进凑数；⑤卷间不清账——arc 开局承接前卷后果，跨卷承诺用 `hooks.continues` 带入带出。卷级转折方法见 [创意工具箱](hatch.md#卷级转折方法)；作者选定结构蓝图时（[结构蓝图目录](hatch.md#结构蓝图目录)），骨架与推进维度随派工携带，边界同上：不定事件桥段、非情节模板、无平台公式。
+
 ## 章纲
 
 ### 参数与范围

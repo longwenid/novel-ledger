@@ -441,6 +441,9 @@ class HookCompletionTests(unittest.TestCase):
         app.submit({**response(app),
                     'data': {'volumes': rows}})
         handoff = app.advance(owner=owner)
+        self.assertEqual(handoff['action'], 'await_volume_confirm')
+        app.confirm_volume(handoff['volumes_hash'], '工程夹具认可跨卷伏笔卷纲。', owner)
+        handoff = app.advance(owner=owner)
         self.assertEqual(handoff['task']['stage'], 'chapter_outline')
         book = repo.load()
         chapters = chapter_rows(book, book['contract']['volumes'][0], book['state'], hooks=True)
@@ -465,6 +468,9 @@ class HookCompletionTests(unittest.TestCase):
             handoff = app.advance(owner=owner)
             if handoff['action'] == 'await_author':
                 app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', owner)
+                continue
+            if handoff['action'] == 'await_volume_confirm':
+                app.confirm_volume(handoff['volumes_hash'], '工程夹具认可当前卷纲。', owner)
                 continue
             if handoff['action'] != 'task_ready':
                 break

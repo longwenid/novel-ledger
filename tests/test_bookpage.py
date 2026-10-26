@@ -46,7 +46,10 @@ class BookPageTests(unittest.TestCase):
         page = self.written()
         for marker in ('<!DOCTYPE html>', '看设定', '读正文', '概览', '创作约定', '夜班退件', '世界与选择',
                        '卷纲与章纲', '章纲结算行', '事实账本', '漂移挂账', '账本核验',
-                       '作品账本', 'ch-index', 'view-read', 'view-settings'):
+                       '作品账本', 'ch-index', 'view-read', 'view-settings',
+                       # The volume card's own rows: the ladder rung and the two optional terminals
+                       # render even when a volume declares none of them.
+                       '格局层级', '关系终值', '读者认知终值'):
             self.assertIn(marker, page, marker)
         # the committed prose must be readable, and single quotes in JS must not escape the script
         book = self.repo.load()

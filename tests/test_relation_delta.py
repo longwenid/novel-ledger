@@ -282,7 +282,12 @@ class MergedCrossVolumeRelationTests(unittest.TestCase):
             self.assertEqual(terminals, {'v1': '试探', 'v2': '同盟'})
             # The literal hand-off: volume two's first chapter reads volume one's close verbatim.
             self.assertEqual(submitted['data']['chapters']['v2'][0]['relations'][0]['from'], '试探')
-            self.assertEqual(app.submit(submitted)['outcome'], 'design_accepted')
+            # The merged receipt passes every mechanical check and stages: the author's
+            # confirmation is what installs both halves.
+            self.assertEqual(app.submit(submitted)['outcome'], 'volume_confirmation_required')
+            staged = app.advance(owner=owner)
+            self.assertEqual(staged['action'], 'await_volume_confirm')
+            app.confirm_volume(staged['volumes_hash'], '工程夹具认可两卷合并卷纲。', owner)
             book = repo.load()
             self.assertEqual(sorted(book['chapter_outlines']), ['v1', 'v2'])
             for chapter in range(1, 5):

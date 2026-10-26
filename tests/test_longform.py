@@ -47,8 +47,12 @@ class RollingOutlineTests(unittest.TestCase):
 
     def next_stage(self):
         handoff = self.app.advance(owner=self.owner)
-        while handoff['action'] == 'await_author':
-            self.app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', self.owner)
+        while handoff['action'] in ('await_author', 'await_volume_confirm'):
+            if handoff['action'] == 'await_author':
+                self.app.approve(handoff['prose_hash'], '工程夹具认可当前版本。', self.owner)
+            else:
+                # The rolling policy meets the confirmation gate at every volume boundary.
+                self.app.confirm_volume(handoff['volumes_hash'], '工程夹具认可当前卷纲。', self.owner)
             handoff = self.app.advance(owner=self.owner)
         return handoff
 

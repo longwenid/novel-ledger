@@ -69,6 +69,9 @@ class RuntimeTests(unittest.TestCase):
         volume_receipt['data']['volumes'][0]['clock'] = {'advance_days': 1, 'to': 1}
         self.app.submit(volume_receipt)
         handoff = self.app.advance(owner=owner)
+        self.assertEqual(handoff['action'], 'await_volume_confirm')
+        self.app.confirm_volume(handoff['volumes_hash'], '工程夹具认可当前卷纲。', owner)
+        handoff = self.app.advance(owner=owner)
         self.assertEqual(handoff['task']['stage'], 'chapter_outline')
         prose = [
             '沈桐把箱子推到主管面前，指着封条上的签字，要求核对退件来源，主管却按住了箱盖。',
@@ -227,6 +230,9 @@ class RuntimeTests(unittest.TestCase):
         task = self.app.advance()['task']
         self.assertEqual(self.app.advance(after=task['task_id'], compact=True)['action'], 'wait_for_submit')
         self.app.submit(response(self.app))
+        staged = self.app.advance(after=task['task_id'], compact=True)
+        self.assertEqual(staged['action'], 'await_volume_confirm')   # staged, not yet installed
+        self.app.confirm_volume(staged['volumes_hash'], '工程夹具认可当前卷纲。')
         following = self.app.advance(after=task['task_id'], compact=True)['task']
         self.app.submit(response(self.app))
         self.assertEqual(self.app.advance(after=task['task_id'], compact=True)['action'], 'resync')

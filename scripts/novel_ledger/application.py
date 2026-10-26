@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (CONTENT_ERRORS, SINGLE_DELIVERY_STAGES, policy_default, CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION, Job,
+from .contracts import (BLUEPRINT_CATALOG, CONTENT_ERRORS, SINGLE_DELIVERY_STAGES, policy_default, CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION, Job,
                         execution_recovery,
                         digest, dump, require, text)
 from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint
@@ -102,6 +102,16 @@ class Application:
                 'candidate_chapter': book['draft']['chapter'] if book['draft'] else None,
                 'target': book['target'], 'written_han': book['written_han'], 'finish': book['finish'],
                 'writing_mode': book.get('writing_mode', 'standard'), 'worker_batch': self._writing.describe(),
+                # The confirmation gate's own state: which round the staged design is on, how many
+                # reasoned refusals fed it, and — when a design is staged — the exact hash the
+                # author's confirmation must bind to.
+                'volume_gate': {'round': (book.get('volume_gate') or {}).get('round', 0),
+                                'rejections': len((book.get('volume_gate') or {}).get('rejections') or []),
+                                'confirmed': sorted((book.get('volume_gate') or {}).get('confirmed') or {}),
+                                'pending': book.get('pending_design') is not None,
+                                'pending_volumes': list((book.get('pending_design') or {}).get('volume_ids') or []),
+                                'pending_hash': (book.get('pending_design') or {}).get('volumes_hash')},
+                'structure_blueprint': (book.get('structure_blueprint') or {}).get('name'),
                 'pending_task': task['id'] if task else None, 'stage': task['input']['stage'] if task else None,
                 'worker_presence': self.worker_presence(task['id']) if task else None,
                 'engine': {'current': self.build_info, 'frozen': task['input'].get('build') if task else None,
@@ -537,7 +547,7 @@ class Application:
                         self._save(book)
                     if choice['action'] not in ('world_ready', 'outline_ready'):
                         boundary = {**choice, 'status': self.status()}
-                        if choice['action'] != 'await_choice':
+                        if choice['action'] not in ('await_choice', 'await_volume_confirm'):
                             return boundary
                         # A board on display falls through: the author-facing card is
                         # materialized below, outside the transaction.
@@ -553,16 +563,22 @@ class Application:
                 view['world_view'] = self.presentation.world()
             except OSError as exc:
                 view['world_view_error'] = str(exc)
-        if boundary and boundary.get('action') == 'await_choice' and boundary.get('board') is not None:
-            # The controller hands work/board.md to the author instead of re-rendering the JSON
-            # return; GBK consoles garble long UTF-8 stdout, and a live run hand-wrote this card
-            # for every gate before the engine owned it.
+        if boundary and boundary.get('action') in ('await_choice', 'await_volume_confirm') \
+                and boundary.get('board') is not None:
+            volume_board = boundary['action'] == 'await_volume_confirm'
+            # The controller hands work/board.md (or work/volume-board.md) to the author instead of
+            # re-rendering the JSON return: GBK consoles garble long UTF-8 stdout, and a live run
+            # hand-wrote this card for every gate before the engine owned it. The confirmation
+            # board gets the same treatment — a ten-volume staged design is exactly the kind of
+            # page a console echo would mangle.
             try:
-                boundary['board_card'] = self.presentation.board(boundary['board'])
+                boundary['board_card'] = (self.presentation.volume_board(boundary['board'])
+                                          if volume_board else self.presentation.board(boundary['board']))
             except OSError as exc:
                 boundary['board_card_error'] = str(exc)
             try:
-                boundary['question_card'] = self.presentation.question(boundary['board'])
+                boundary['question_card'] = (self.presentation.volume_question(boundary['board'])
+                                             if volume_board else self.presentation.question(boundary['board']))
             except OSError as exc:
                 boundary['question_card_error'] = str(exc)
             try:
@@ -572,11 +588,15 @@ class Application:
             if compact and boundary.get('board_card'):
                 # The full board lives on disk (board card + last-advance.json), so the compact
                 # return names the options instead of echoing them a second time: a live run paid
-                # a file-redirect dance per gate to keep the echo out of its context.
+                # a file-redirect dance per gate to keep the echo out of its context. The volume
+                # board's compact form names the round, the version hash and the staged volumes —
+                # the three facts a confirm command needs — and leaves the page to the file.
                 board = boundary['board']
-                boundary['board'] = {'gate': board.get('gate'), 'round': board.get('round'),
-                                     'hash': board.get('hash'), 'system': board.get('system'),
-                                     'option_ids': [row.get('id') for row in board.get('options') or []]}
+                boundary['board'] = ({'round': board.get('round'), 'hash': board.get('hash'),
+                                      'volume_ids': board.get('volume_ids')} if volume_board else
+                                     {'gate': board.get('gate'), 'round': board.get('round'),
+                                      'hash': board.get('hash'), 'system': board.get('system'),
+                                      'option_ids': [row.get('id') for row in board.get('options') or []]})
         if boundary:
             return {**boundary, **view}
         return {'action': 'task_ready', 'task': self.presentation.task(task, self._baseline(book, task), compact=compact), 'status': self.status(), **view}
@@ -853,14 +873,20 @@ class Application:
                         'next_stage': updated['draft']['stage'] if updated['draft'] else None,
                         'rework': (updated.get('rework') or {}).get(str(work['chapter'])), 'status': updated['status']}
             finding_rows = copy.deepcopy(outcome.findings or [])
-            needs_author = bool(updated.get('author_block') or updated['status'] == 'paused')
-            business = ('author_decision_required' if needs_author else
+            # A staged volume outline is an author boundary exactly like an open question: the
+            # design passed every mechanical check and now waits for the author's own words, so
+            # nothing continues automatically — not a repair round, not the next dispatch.
+            volume_pending = bool(updated.get('pending_design'))
+            needs_author = bool(updated.get('author_block') or volume_pending or updated['status'] == 'paused')
+            business = ('volume_confirmation_required' if volume_pending else
+                        'author_decision_required' if needs_author else
                         'repair_required' if finding_rows else
                         ('candidate_ready' if preview else 'chapter_committed') if outcome.chapter else 'design_accepted')
             response.update(outcome=business, findings=finding_rows,
                             transaction={'persisted': not preview, 'preview': preview},
                             next_action={'actor': 'author' if needs_author else 'worker' if finding_rows else 'controller',
-                                         'action': 'answer' if needs_author else 'revise_candidate' if finding_rows else 'continue'},
+                                         'action': ('confirm_volume' if volume_pending else 'answer' if needs_author
+                                                    else 'revise_candidate' if finding_rows else 'continue')},
                             effects_if_submitted={'chapter_commit': bool(outcome.chapter),
                                                   'repair_consumption': int(work['stage'] == 'repair')})
             if not preview:
@@ -985,6 +1011,160 @@ class Application:
             self._save(book)
             self.repo.record('approve', book['pilot'])
         return {'approved': True, 'prose_hash': prose_hash}
+
+    def confirm_volume(self, volumes_hash, source, owner=None):
+        """The author approves the staged volume outline, bound to its exact version.
+
+        The same shape as the first-chapter approval: the author's words are recorded against the
+        staged `volumes_hash`, a stale hash is refused instead of approving whatever happens to be
+        staged now, and the installation of the volume outlines with their merged chapter half and
+        settlement rows is one transaction — the lock is "not installed yet", so confirmation is
+        the only event that installs anything.
+        """
+        require(text(source), 'author_source', '认可卷纲须保存作者原话。')
+        with self.repo.transaction():
+            self.controller_guard(owner)
+            book = self._load()
+            pending = book.get('pending_design')
+            require(isinstance(pending, dict), 'volume_confirm', '当前没有待认可的卷纲。')
+            require(pending['volumes_hash'] == volumes_hash, 'volume_confirm',
+                    '认可版本与当前暂存卷纲不一致，不能串版认可。',
+                    {'expected': pending['volumes_hash'], 'got': volumes_hash,
+                     'recover': '以 status.volume_gate.pending_hash 或 await_volume_confirm 返回的 '
+                                'volumes_hash 重新执行。'})
+            subject = {'volumes_hash': volumes_hash, 'round': pending['round'],
+                       'volumes': list(pending['volume_ids'])}
+            self._governance.authorize('volume_confirm', subject, source)
+            workflow.activate_design(book)
+            book['decisions'].append({'kind': 'volume_confirm', 'round': subject['round'],
+                                      'volumes_hash': volumes_hash, 'source': source})
+            book['revision'] += 1
+            self._save(book)
+            self.repo.record('volume_confirm', {**subject, 'source': source})
+        return {'confirmed': True, 'volumes_hash': volumes_hash,
+                'volumes': subject['volumes'], 'round': subject['round']}
+
+    def revise_volume(self, adjustments, volumes_hash, source, owner=None):
+        """The author's light edits to the staged design's narrative fields, re-validated in place.
+
+        The whitelist is the author-facing prose only (purpose/arc/turns/climax/exit_state and
+        style.trend); structural fields are refused with the re-run command, because a nudge there
+        would invalidate the merged chapter half and the checks that already passed. The whole
+        staged batch is re-validated after the edit and the hash is rebound, so the next
+        confirmation still binds to exactly one version.
+        """
+        require(text(source), 'author_source', '轻调卷纲须保存作者原话。')
+        with self.repo.transaction():
+            self.controller_guard(owner)
+            book = self._load()
+            pending = book.get('pending_design')
+            require(isinstance(pending, dict), 'volume_confirm', '当前没有待认可的卷纲。')
+            require(pending['volumes_hash'] == volumes_hash, 'volume_confirm',
+                    '调整版本与当前暂存卷纲不一致，先核对当前哈希。',
+                    {'expected': pending['volumes_hash'], 'got': volumes_hash})
+            self._governance.authorize('volume_revise',
+                                       {'volumes_hash': volumes_hash, 'round': pending['round']}, source)
+            workflow.revise_design(book, adjustments)
+            book['decisions'].append({'kind': 'volume_revise',
+                                      'volumes_hash': book['pending_design']['volumes_hash'], 'source': source})
+            book['revision'] += 1
+            self._save(book)
+            self.repo.record('volume_revise', {'volumes_hash': book['pending_design']['volumes_hash'],
+                                               'source': source})
+        return {'revised': True, 'volumes_hash': book['pending_design']['volumes_hash'],
+                'round': book['pending_design']['round']}
+
+    def regroup_volume(self, volumes_hash, reason, blueprint=None, owner=None):
+        """Drop the staged design with the author's reason; the reason feeds the next design round.
+
+        The opening regroup's semantics at the volume gate: the refusal is recorded on the gate's
+        own ledger (round, reason, what was refused), the round advances, the staging is cleared,
+        and the world and contract stay. The next volume-outline dispatch freezes the refusal as
+        input, so the re-run answers it instead of re-offering the same shape. `blueprint` switches
+        the book's structural blueprint in the same breath — the re-run is the moment a new
+        structure takes effect.
+        """
+        require(text(reason), 'author_source', '保存作者退回理由；可以是用户只说的"换一版"。')
+        with self.repo.transaction():
+            self.controller_guard(owner)
+            book = self._load()
+            pending = book.get('pending_design')
+            require(isinstance(pending, dict), 'volume_confirm', '当前没有待认可的卷纲。')
+            require(pending['volumes_hash'] == volumes_hash, 'volume_confirm',
+                    '退回版本与当前暂存卷纲不一致，先核对当前哈希。',
+                    {'expected': pending['volumes_hash'], 'got': volumes_hash})
+            subject = {'volumes_hash': volumes_hash, 'round': pending['round'],
+                       'volumes': list(pending['volume_ids'])}
+            self._governance.authorize('volume_regroup', subject, reason)
+            if blueprint is not None:
+                require(blueprint in BLUEPRINT_CATALOG, 'blueprint', '未知蓝图档名。',
+                        {'valid': sorted(BLUEPRINT_CATALOG)})
+                self._governance.authorize('blueprint', {'name': blueprint}, reason)
+                book['structure_blueprint'] = {'name': blueprint, 'source': reason}
+            workflow.regroup_design(book, reason)
+            book['decisions'].append({'kind': 'volume_regroup', 'round': subject['round'],
+                                      'blueprint': blueprint, 'source': reason})
+            book['revision'] += 1
+            self._save(book)
+            self.repo.record('volume_regroup', {**subject, 'reason': reason,
+                                                'blueprint': blueprint, 'source': reason})
+        return {'regrouped': True, 'round': (book.get('volume_gate') or {}).get('round', 0),
+                'blueprint': blueprint}
+
+    def blueprint(self, name, source, regenerate=False, owner=None):
+        """Bind (or re-bind) the book's structural blueprint; optionally retire unwritten designs.
+
+        A blueprint is a book-level author setting, absent by default — the engine never chooses a
+        structure for the author. With `regenerate`, the volumes that have no committed prose (and
+        no live draft) lose their outlines and settlement rows and are re-dispatched under the new
+        blueprint; volumes with prose keep their outlines as history, so a late switch mixes
+        skeletons by the author's own decision. Switching inside the gate goes through
+        regroup-volume --blueprint instead, so the staged design and the structure change together.
+        """
+        require(text(source), 'author_source', '选择结构蓝图须保存作者原话。')
+        require(name in BLUEPRINT_CATALOG, 'blueprint', '未知蓝图档名。', {'valid': sorted(BLUEPRINT_CATALOG)})
+        with self.repo.transaction():
+            self.controller_guard(owner)
+            book = self._load()
+            self._governance.authorize('blueprint', {'name': name, 'regenerate': regenerate}, source)
+            removed = []
+            if regenerate:
+                require(book.get('pending_design') is None, 'volume_confirm',
+                        '门内换蓝图与重出一版一体执行，不在 blueprint --regenerate 里清暂存。',
+                        {'recover': '用 regroup-volume --hash 当前哈希 --reason 原话 --blueprint 档名。'})
+                headers = self.repo.headers(book['branch'])
+                written = {row['n'] for row in headers}
+                draft = book.get('draft') or {}
+                volumes = editorial.effective_contract(book)['volumes']
+                busy = {volume['id'] for volume in volumes
+                        if any(volume['first'] <= n <= volume['end'] for n in written)
+                        or (draft and volume['first'] <= draft.get('chapter', 0) <= volume['end'])}
+                removed = [volume['id'] for volume in volumes if volume['id'] not in busy]
+                require(removed, 'blueprint',
+                        '全部卷都已有正文或草稿，蓝图重生成无纲可删；改结构走 revise 或 recontract。',
+                        {'written_volumes': sorted(busy)})
+                retired = {n for volume in volumes if volume['id'] in removed
+                           for n in range(volume['first'], volume['end'] + 1)}
+                outlines = book.get('volumes_outline') or {}
+                chapter_outlines = book.get('chapter_outlines') or {}
+                plans = book.get('plans') or {}
+                for ident in removed:
+                    outlines.pop(ident, None)
+                    chapter_outlines.pop(ident, None)
+                for n in retired:
+                    plans.pop(str(n), None)
+                book['volumes_outline'] = outlines
+                book['chapter_outlines'] = chapter_outlines
+                book['plans'] = plans
+            book['structure_blueprint'] = {'name': name, 'source': source}
+            book['decisions'].append({'kind': 'blueprint', 'name': name,
+                                      'regenerate': regenerate, 'source': source})
+            book['revision'] += 1
+            self._cancel_pending('结构蓝图变更：在途设计任务按新蓝图重派。')
+            self._save(book)
+            self.repo.record('blueprint', {'name': name, 'regenerate': regenerate,
+                                           'removed_volumes': removed, 'source': source})
+        return {'blueprint': name, 'regenerated': bool(regenerate), 'removed_volumes': removed}
 
     def opening_choice(self, option, board_hash, source, owner=None):
         with self.repo.transaction():

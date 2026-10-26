@@ -86,5 +86,32 @@ class StyleCatalogDocTests(unittest.TestCase):
         self.assertIn('（默认）', section.group(1), '目录表未标注默认档')
 
 
+class BlueprintCatalogDocTests(unittest.TestCase):
+    def test_hatch_blueprint_table_matches_the_registered_catalog(self):
+        """hatch.md's 结构蓝图目录 table names exactly the registry's blueprints.
+
+        A blueprint is one registry entry plus one table row; the doc table is how an author (and
+        the `blueprint --name` argument) finds the same set the engine carries, so a rename or an
+        addition in one place without the other fails here, naming both files.
+        """
+        source = read('references/hatch.md')
+        section = re.search(r'## 结构蓝图目录\n(.*?)\n## ', source, re.S)
+        self.assertIsNotNone(section, 'hatch.md 不再含「结构蓝图目录」表；请更新本测试的解析位置')
+        rows = re.findall(r'^\|\s*`([^`]+)`\s*\|', section.group(1), re.M)
+        self.assertTrue(rows, '结构蓝图目录表没有档名行')
+        self.assertEqual(rows, list(contracts.BLUEPRINT_CATALOG),
+                         'hatch.md 蓝图表与 contracts.BLUEPRINT_CATALOG 不一致')
+
+    def test_every_blueprint_declares_the_same_boundary_line(self):
+        """The catalog cannot drift into a plot library one entry at a time."""
+        self.assertTrue(contracts.BLUEPRINT_BOUNDARY)
+        for name, entry in contracts.BLUEPRINT_CATALOG.items():
+            with self.subTest(blueprint=name):
+                self.assertEqual(set(entry), {'name', 'skeleton', 'drivers', 'echo'})
+                self.assertEqual(entry['name'], name)
+                for key in ('skeleton', 'drivers', 'echo'):
+                    self.assertTrue(entry[key].strip(), '蓝图 %s 的 %s 为空' % (name, key))
+
+
 if __name__ == '__main__':
     unittest.main()

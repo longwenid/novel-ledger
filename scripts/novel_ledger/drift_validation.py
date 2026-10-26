@@ -11,18 +11,14 @@ from .entities import register as register_entity
 
 from .drift import CHAPTER_FIELDS, HOOK_ACTIONS, PROTOCOL_FIELDS, REVEALS, VOLUME_FIELDS, _coord_key, _declared, _deltas, _enter_rows, _entity_ids, _finding, _kind_of, _number, _place_id, _project, _reject, _resource_known, _safe, _same, _window, _world_ids, _world_index
 from .drift_simulation import _hook_registry, _node_registry, _thread_registry, simulate
-from . import entities, world
+from . import drift, entities, world
 
 
 # ------------------------------------------------------- outline validation
 def _deep_han(value):
-    if isinstance(value, str):
-        return han_count(value)
-    if isinstance(value, dict):
-        return sum(_deep_han(item) for item in value.values())
-    if isinstance(value, list):
-        return sum(_deep_han(item) for item in value)
-    return 0
+    # One implementation, in drift beside the field tables it counts over: the confirmation board
+    # quotes volume lengths through the same walk, so the author's number is the validator's number.
+    return drift.deep_han(value)
 
 
 def _length_policy(policy):

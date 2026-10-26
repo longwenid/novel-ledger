@@ -27,6 +27,8 @@ WORK_PAYLOAD_FIELDS = (
     'volume', 'from_chapter', 'drift', 'reason',                # chapter_outline batch and its re-plan input
     'allow_retained_suffix',                                    # partial replan, validated with retained rows
     'anchor',                                                   # design-ahead chain vs the live state
+    'structure_blueprint',                                      # the author's chosen structural blueprint (volume design)
+    'volume_rejections',                                        # the author's reasoned refusals a re-run must answer
     'volume_outline', 'chapter_outline',                        # the volume row / the chapter row handed to a writer
     'design_drift',                                             # drift rows a re-plan must absorb
     # The promise ledger and the style specification normally travel as the `hooks` / `style`
