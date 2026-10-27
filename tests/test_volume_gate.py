@@ -13,6 +13,9 @@ tests pin, in the order the design states them:
 - the unattended boundary: `must_continue` is false and the advisories warn without blocking.
 """
 import sys
+import copy
+import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,7 +23,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger.contracts import SCALE_TIERS, Error
+from novel_ledger.contracts import SCALE_TIERS, Error, digest
+from novel_ledger import workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import contract, drive, response, seeded_book, volume_outline_fixture
@@ -90,10 +94,72 @@ class VolumeGateTests(unittest.TestCase):
                         and Path(boundary['board_card']).is_file())
         card = Path(boundary['board_card']).read_text(encoding='utf-8')
         self.assertIn('卷纲待认可', card)
-        self.assertIn(boundary['volumes_hash'], card)
+        self.assertNotIn(boundary['volumes_hash'], card)
+        self.assertIn('完整待认可内容', card)
+        self.assertIn('volume-design.md', card)
         self.assertTrue(Path(boundary['question_card']).name == 'volume-question.json'
                         and Path(boundary['question_card']).is_file())
         self.assertIn('认可这一版', Path(boundary['question_card']).read_text(encoding='utf-8'))
+
+    def test_confirmation_card_and_hash_cover_merged_design(self):
+        _outcome, boundary = self.stage(tier_contract('t1', chapters=4, volumes=2))
+        pending = self.repo.load()['pending_design']
+        self.assertNotIn('design', boundary['board'])
+        self.assertEqual(boundary['volumes_hash'], workflow.design_hash(pending))
+        card = Path(boundary['board_card']).read_text(encoding='utf-8')
+        detail = Path(boundary['board_card']).with_name('volume-design.md')
+        self.assertIn(str(detail), card)
+        self.assertNotIn('```json', card)
+        content = detail.read_text(encoding='utf-8')
+        found = {}
+        for label, ident, value in re.findall(r'### (卷纲|合并章纲|结算行) ([^\n]+)\n\n```json\n(.*?)\n```', content, re.S):
+            found.setdefault({'卷纲': 'volumes', '合并章纲': 'chapters', '结算行': 'plans'}[label], {})[ident] = json.loads(value)
+        self.assertEqual(found, {key: pending[key] for key in ('volumes', 'chapters', 'plans')})
+        changed = dict(pending)
+        changed['plans'] = {**pending['plans'], 'extra': {'chapter': 100}}
+        self.assertNotEqual(workflow.design_hash(changed), boundary['volumes_hash'])
+        self.assertFalse(workflow.verify_design_hash(changed))
+        with self.repo.transaction():
+            book = self.repo.load()
+            book['pending_design']['plans'] = changed['plans']
+            self.repo.save(book)
+        with self.assertRaises(Error) as caught:
+            self.app.confirm_volume(boundary['volumes_hash'], '认可已展示版本。', self.owner)
+        self.assertEqual(caught.exception.code, 'volume_confirm')
+        with self.assertRaises(Error) as caught:
+            self.app.revise_volume([{'volume': 'v1', 'purpose': '调整叙述。'}],
+                                   boundary['volumes_hash'], '调整叙述。', self.owner)
+        self.assertEqual(caught.exception.code, 'volume_confirm')
+        self.assertEqual(self.repo.load()['volumes_outline'], {})
+
+    def test_legacy_volume_only_pending_still_confirms_with_clear_scope(self):
+        _outcome, boundary = self.stage(tier_contract('t1', chapters=4, volumes=2))
+        with self.repo.transaction():
+            book = self.repo.load()
+            pending = book['pending_design']
+            pending['volumes_hash'] = digest(pending['volumes'])
+            self.repo.save(book)
+        boundary = self.app.advance(owner=self.owner)
+        self.assertEqual(boundary['board']['hash_scope'], 'legacy_volumes')
+        self.assertIn('确认版本仅绑定卷纲', Path(boundary['board_card']).read_text(encoding='utf-8'))
+        self.assertTrue(self.app.confirm_volume(boundary['volumes_hash'], '认可旧版完整内容。', self.owner)['confirmed'])
+
+    def test_rolling_advisories_compare_the_preceding_approved_volume(self):
+        raw = contract(chapters=4, volumes=2)
+        raw['volume_outline'] = {'scope': 'rolling', 'words': 2500, 'tolerance': 500}
+        _outcome, boundary = self.stage(raw, hooks=False)
+        self.assertNotIn('volume_turn_template', {w['code'] for w in boundary['board']['warnings']})
+        self.app.confirm_volume(boundary['volumes_hash'], '认可第一卷。', self.owner)
+        book = self.repo.load()
+        prior = book['volumes_outline']['v1']
+        current = copy.deepcopy(prior)
+        current['id'] = 'v2'
+        book['pending_design'] = {'scope': 'rolling', 'volume_ids': ['v2'], 'volumes': {'v2': current},
+                                  'chapters': {}, 'plans': {}, 'round': 0}
+        book['pending_design']['volumes_hash'] = workflow.design_hash(book['pending_design'])
+        codes = {w['code'] for w in workflow.volume_board(book)['warnings']}
+        self.assertIn('volume_turn_template', codes)
+        self.assertIn('volume_entanglement_missing', codes)
 
     def test_confirmation_is_version_bound_and_installs_both_halves(self):
         _outcome, boundary = self.stage(tier_contract('t1', chapters=4, volumes=2))

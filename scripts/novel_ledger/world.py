@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 from .contracts import require, text
 from . import contracts
+from .entities import validate_character
 
 SECTIONS = {
     'geography': ('name', 'environment', 'resources', 'access', 'story_pressure'),
@@ -21,7 +22,7 @@ SECTIONS = {
     'economy': ('resource', 'production', 'distribution', 'scarcity', 'conflict'),
     'society': ('institution', 'norm', 'enforcement', 'pressure'),
     'everyday': ('practice', 'constraint', 'story_use'),
-    'characters': ('name', 'role', 'desire', 'limit', 'knowledge_boundary'),
+    'characters': contracts.CHARACTERS,
     'mysteries': ('truth', 'disclosure', 'causal_role'),
     'mechanisms': ('principle', 'cost', 'limits', 'failure_condition'),
     # opening/5. `powers` mirrors the world gate's rank ladder field by field; `cosmology` is a space
@@ -197,6 +198,8 @@ def validate(data, choices, selection_hash, sections=None):
             require(isinstance(row, dict) and text(row.get('id')) and all(text(row.get(k)) for k in fields), 'world_record', '世界记录缺少具体内容：' + section,
                     {'section': section, 'id': row.get('id') if isinstance(row, dict) else None,
                      'expect': 'id 与该域全部字段写成非空文本；空字符串或占位词等于没写却占了位。'})
+            if section == 'characters':
+                validate_character(row)
             key = section + ':' + row['id']
             all_ids.add(key)
             owners.setdefault(row['id'], []).append(section)
@@ -231,15 +234,16 @@ def validate(data, choices, selection_hash, sections=None):
             require(not missing, 'world_reference', '世界关联引用不存在。',
                     {'record': section + ':' + row['id'], 'missing': missing,
                      'expect': 'links 只能引用本世界里已存在的 领域:id 记录；独立记录用空数组'})
-    names = [c['name'] for c in model['characters']]
+    names = [name for c in model['characters'] for name in [c['name'], *c.get('aliases', [])]]
     duplicated = next((name for name in names if names.count(name) > 1), None)
     require(duplicated is None, 'world_identity', '世界人物称呼不能歧义。',
             ({'duplicate': duplicated,
-              'records': ['characters:' + row['id'] for row in model['characters'] if row['name'] == duplicated],
-              'expect': 'characters 的 name 互不相同',
+              'records': ['characters:' + row['id'] for row in model['characters']
+                          if duplicated in [row['name'], *row.get('aliases', [])]],
+              'expect': 'characters 的 name 与 aliases 不跨人物重复',
               'recover': '只改撞名记录：给其中一条换个称呼并同步它处的引用；其余记录保持逐字不变。'}
              if duplicated is not None else
-             {'expect': 'characters 的 name 互不相同'}))
+             {'expect': 'characters 的 name 与 aliases 不跨人物重复'}))
     # Geography is the other section later work addresses by name: chapter outlines declare moves
     # as place names before the engine normalizes them to ids, so two same-named places make the
     # target ambiguous. The refusal names both records, so a narrow repair renames exactly one.

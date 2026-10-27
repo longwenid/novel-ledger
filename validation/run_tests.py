@@ -25,7 +25,7 @@ FAST = (
     'test_architecture', 'test_domain_boundaries', 'test_application_ports',
     'test_cli_boundary', 'test_dependency_bounds', 'test_outlines',
     'test_pipeline_shapes.PipelineShapeTests', 'test_review_material', 'test_storage_growth',
-    'test_context_growth', 'test_plot_precision',
+    'test_context_growth', 'test_plot_precision', 'test_diagnostics',
     'test_snapshot_integrity', 'test_snapshot_probe', 'test_verification', 'test_outline_lock',
     'test_prose_lint.LintUnitTests',
     'test_prose_lint.LintFlowTests.test_preview_answers_every_defect_in_one_call',
@@ -34,6 +34,7 @@ FAST = (
     # Selected remote improvements and retained local provenance/evidence boundaries.
     'test_error_taxonomy', 'test_remote_integration',
     'test_host_authority',
+    'test_character_profiles',
     # The fast gate pins automatic revision bounds with one end-to-end case; the full gate
     # additionally covers proposal authorization, changed sources and rollback.
     'test_revision_bounds.RevisionBoundsTests.test_a_revision_inside_the_window_opens_its_exact_range',

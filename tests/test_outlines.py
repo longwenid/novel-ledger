@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import briefs, creation, drift, drift_simulation, drift_validation, planning, workflow
+from novel_ledger import briefs, creation, drift, drift_reconcile, drift_simulation, drift_validation, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.contracts import DEFAULTS, Error, digest
 from novel_ledger.sqlite_store import SQLiteRepository
@@ -53,6 +53,7 @@ def ladder_book(ladder=True):
                                            'value': ladder_value()},
                                 'source': '作者选它。'}]
         book['creation'] = state
+        book['contract']['world_ladder'] = copy.deepcopy(ladder_value()['ladder'])
     return book
 
 
@@ -188,6 +189,39 @@ class VolumeStageTests(unittest.TestCase):
         self.assertEqual(floors['stage_min'],
                          {'t0': 2, 't1': 2, 't2': 3, 't3': 4, 't4': 4, 't5': 4})
         self.assertEqual(floors['anchor_max_chapter'], 30)
+
+    def test_imported_contract_ladder_is_checked_without_opening_choices(self):
+        book = seeded_book(contract(chapters=4, volumes=2))
+        book['contract']['world_ladder'] = ladder_value()['ladder']
+        rows = volume_rows(book, ['v1', 'v2'])
+        def validate(candidate):
+            return drift_validation.validate_volume_outline(
+                {'volumes': candidate}, book['contract'], book['world'],
+                {}, {}, ['v1', 'v2'], book['state'])
+        self.assertEqual(validate(rows)['v2']['stage'], '青云界')
+        invented, descending = copy.deepcopy(rows), copy.deepcopy(rows)
+        invented[1]['stage'] = '未声明的自造层级'
+        descending[0]['stage'], descending[1]['stage'] = '青云界', '青云城'
+        for broken in (invented, descending):
+            with self.assertRaises(Error) as caught:
+                validate(broken)
+            self.assertIn('volume_stage', {f['criterion'] for f in caught.exception.details['findings']})
+
+    def test_active_contract_ladder_takes_precedence_over_historical_choices(self):
+        book = ladder_book()
+        choices = creation.selected(book['creation'])
+        # A previously authorized amendment has replaced the old opening ladder.
+        book['contract']['world_ladder'] = [{'stage': '新秩序'}]
+        rows = volume_rows(book, ['v1', 'v2'])
+        report = drift_validation.validate_volume_outline(
+            {'volumes': rows}, book['contract'], book['world'], choices,
+            {}, ['v1', 'v2'], book['state'])
+        self.assertEqual([v['stage'] for v in report.values()], ['新秩序', '新秩序'])
+        rows[1]['stage'] = choices['ladder']['ladder'][0]['stage']
+        with self.assertRaises(Error):
+            drift_validation.validate_volume_outline(
+                {'volumes': rows}, book['contract'], book['world'], choices,
+                {}, ['v1', 'v2'], book['state'])
 
 
 class ChapterOutlineTests(unittest.TestCase):
@@ -451,6 +485,34 @@ class ChapterOutlineTests(unittest.TestCase):
         self.assertEqual(plans[0]['role'], '转折章：落地卷纲第一条转折（at 卷中）。')
         self.assertNotIn('beats', plans[1])
         self.assertNotIn('role', plans[1])
+
+    def test_reading_order_and_shared_roles_do_not_rewrite_the_state_chain(self):
+        baseline = drift.plan_rows(self.submit(copy.deepcopy(self.rows)))
+        rows = copy.deepcopy(self.rows)
+        rows[0]['beats'] = ['先呈现当下核对时的紧张。', '回顾此前的交接约定。', '回到当下继续核对。']
+        for row in rows:
+            row['role'] = '共同推进一次退件调查'
+        plans = drift.plan_rows(self.submit(rows))
+        for before, after in zip(baseline, plans):
+            self.assertEqual(drift_reconcile._planned(before), drift_reconcile._planned(after))
+            self.assertEqual(before['enter'], after['enter'])
+            self.assertEqual(before['exit'], after['exit'])
+        self.assertEqual(plans[0]['beats'], rows[0]['beats'])
+        self.assertEqual(plans[0]['role'], plans[1]['role'])
+
+    def test_layered_reveals_keep_distinct_topics_and_only_settle_the_declared_layer(self):
+        rows = copy.deepcopy(self.rows)
+        rows[0]['disclosures'] = [
+            {'topic': '货箱经手人的身份', 'after': 'confirmed', 'note': '本章确认经手人身份。'},
+            {'topic': '经手人的动机', 'after': 'hinted', 'note': '仅呈现动机线索，不确认原因。'}]
+        rows[1]['disclosures'] = []
+        rows[1]['pacing'] = {'note': '暂不解释动机，继续观察双方怎样核对责任。'}
+        plans = drift.plan_rows(self.submit(rows))
+        declared = {item['key']: item['planned']['after']
+                    for item in drift_reconcile._planned(plans[0]) if item['kind'] == 'disclosure'}
+        self.assertEqual(declared, {'货箱经手人的身份': 'confirmed', '经手人的动机': 'hinted'})
+        self.assertFalse(any(item['kind'] == 'disclosure' for item in drift_reconcile._planned(plans[1])))
+        self.assertEqual(plans[1]['pacing'], rows[1]['pacing'])
 
     def test_scope_all_builds_every_volume_up_front(self):
         book = copy.deepcopy(self.book)

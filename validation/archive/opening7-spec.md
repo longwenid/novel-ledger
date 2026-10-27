@@ -1,9 +1,11 @@
 # opening/7 规格：门序重排与逐门规格前移
 
-当轮状态：**现行**。本文件记录 opening/7（`contracts.OPENING_VERSION = 7`）的门序理由、逐门 value 规格变化、
+> 历史实施规格：opening/7 门序修订的理由与当轮验收口径。当前门序仍可使用 opening/7，但执行权威始终为 [任务协议](../../references/protocol.md) 与 [逐门开书](../../references/opening.md)，本文件不维护另一套现行规范。
+
+当轮状态：**已归档**。本文件记录 opening/7（`contracts.OPENING_VERSION = 7`）的门序理由、逐门 value 规格变化、
 平台指引验收口径与字面版本号清理清单。字段归属（`CONTRACT_FIELDS.opening`）、`validate_value` 的接受集、
-`DERIVATION_INPUTS` 与档位表数字全部不变——本轮只改门序与作者/写手读到的规格文本；归档后以
-[任务协议](../references/protocol.md) 与 [逐门开书](../references/opening.md) 为准。
+`DERIVATION_INPUTS` 与档位表数字全部不变——本轮只改门序与作者/写手读到的规格文本；现行执行以
+[任务协议](../../references/protocol.md) 与 [逐门开书](../../references/opening.md) 为准。
 
 ## 1. 版本与门序
 

@@ -19,9 +19,24 @@
 
 ### 人物档案
 
-新人物不再有独立档案派工：首次登场时在章纲 `new_entities` 内联给出 `id`/`kind`/`name`/`role`/`desire`/`limit`/`knowledge_boundary`，落地后按 id 引用。已有角色的事实变化由章纲 `characters` 和正文自比提交；人物解释与样本按作品理解协议维护。
+首次登场时在章纲 `new_entities` 内联给出档案，落地后按 id 引用，不另派人物档案任务。人物 `kind=person|character`，须有 `id`/`name`/`role`/`desire`/`limit`/`knowledge_boundary`；地点与物品只需各自的实体字段，不套人物字段。
+
+人物可用 `importance=core|supporting|minor` 声明层级。新建世界时，主角、双主角及群像中的核心行动者标为 core，并给出结构化 `biography`；普通配角与临时人物不强求长小传。未标层级的旧档案继续按原形状读取，不补造往事。小传写四项非空文字：
+
+| biography 字段 | 写作依据 |
+|---|---|
+| past | 哪段过往形成今天的欲望、底线或习惯 |
+| contradiction | 想得到什么，又被什么牵制，何种压力会迫使其选择 |
+| relationships | 与谁相互依赖、亏欠或对立，这怎样限制行动 |
+| behavior | 面对压力怎样行动、说话或回避，落到可用于场景的方式 |
+
+四项齐全只证明档案可用，不证明人物成立。不按字数、形容词或经历数量验收；创作方法见 [人物与场景](craft.md#人物与场景)。显式 core 缺少小传会被拒绝，其他人物若提供小传，也须使用同一形状。
+
+世界已定义的人物首次登记时，id、正式姓名和身份 role 须与冻结世界一致；称谓用 `aliases`，姓名与别名不能跨人物重复，也不能将同名人物换到另一 id。世界已有核心小传时可直接作为来源，不重复抄入 `new_entities`，也不能降级为普通配角来绕过校验。动机可以随处境变化，不能据此改换身份。
 
 `new_entities` 只用于首次登记实体，不重复登记已有角色。既有人物的动机与成长经 `characters` 增量、正文证据与漂移核算确立，解释和表达样本通过 `understanding` 维护，声线另取当前约定与 style_anchor；这些材料不能自行补造经历、资源或知情。
+
+首次登记须有正文中真实出现的名称或已登记别名；程序可定位字面出现，也可交 `drift_check.introductions` 的准确引文，见 [执笔自比](narrative.md#执笔自比与引擎核算)。未出现的实体不能用任意首字或同章无关句子入账。小传是作者设计；人物当前状态与成长取已经结算的正文，解释、设计与事实分别保留。
 
 ### 场景计划
 
@@ -29,7 +44,7 @@
 
 场景还可携带稳定 id、reads 和 depends_on，章纲以 dependency_coverage 声明依赖是否完整；字段和保守扩大规则见 [叙事推进](narrative.md#场景依赖与任务材料)。执笔以 `scene_context` 读取本章章纲与场景，`scene_sources` 冻结前置场景版本。除当前协议元数据及会按卷纲重新生成的 `hook_contracts` 外，章纲行外的多余字段（包括 `expansion_units`）按结构校验拒绝。
 
-短稿补实这些作用，避免同义扩写。静章不强加危机，持续高潮不强插休息。
+场景的创作判断与短稿展开见 [创作与自比](craft.md#人物与场景)，不由场景字段另设节拍要求。
 
 ### 声线锚点
 
@@ -85,8 +100,4 @@ prose/patches/reuse_original 三选一。start 是完整基稿的 Python 字符�
 
 ## 用量与文学评测
 
-本节仅供评测任务取用，实验条件与验收依据统一见 [验证](validation.md)。
-
-`usage` 观察任务信封、已接受回执和 CLI read 实际交付字符；未记录的尝试或宿主计费为 null，字符不换算费用。`scripts/observe.py summary 宿主观测.jsonl` 对 provider/session_id/request_id 去重，同调用冲突拒绝累加；输入非缓存 token、缓存读取和输出分别记录，任一缺失则总量未知。观察工具不推进故事。
-
-离线盲测工具用 `scripts/quality_eval.py prepare --manifest 清单.json --out 独立目录` 随机化完整样本，保留私有植入位置与预期；评审只获得自己的 input.json。先用 `first-read --input 样本/input.json --file 首读.json` 冻结首读，review.json 的 first_read 必须与冻结 data 一致，再 `score --directory 评测目录` 统计定位命中、漏检和已裁决误报。原稿不是金标准，没有独立裁决时误报率留未知；预期的文件/工具隔离由宿主落实，工具不证明模型真的盲读。所有评测数据存小说项目或独立临时目录，不写进 skill。
+仅在评测任务中读取 [用量与离线盲测工具](validation.md#用量与离线盲测工具)；本页只维护人物、场景、补丁及完本接口。

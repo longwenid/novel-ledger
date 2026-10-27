@@ -184,6 +184,36 @@ class WatchIntegrationTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_watch_renews_short_initial_lease_and_bounds_long_poll(self):
+        # Exercise the real lease guard on a virtual clock, including more than one default lease
+        # term. Neither a short initial run nor a long poll may abandon the waiting controller.
+        for seconds, poll in ((10, 20), (300, 300)):
+            with self.subTest(initial_lease=seconds, poll=poll):
+                repo = SQLiteRepository.initialize(self.project / str(seconds),
+                                                   workflow.new_book(contract()))
+                try:
+                    app = Application(repo)
+                    start = app.clock()
+                    elapsed = [0.0]
+                    app.clock = lambda: start + elapsed[0]
+                    owner = app.run(through=1, source='工程夹具授权。', seconds=seconds)['owner']
+                    task = drive(app, owner, until='write')['task']
+                    sleeps = []
+
+                    def wait(duration):
+                        sleeps.append(duration)
+                        elapsed[0] += duration
+
+                    result = unattended.watch(app, owner, poll=poll, idle_limit=650,
+                                              sleep=wait, now=lambda: elapsed[0])
+                    self.assertEqual(result['action'], 'idle')
+                    self.assertEqual(result['task_id'], task['task_id'])
+                    self.assertEqual(elapsed[0], 650)
+                    self.assertTrue(all(0 < duration <= 30 for duration in sleeps))
+                    self.assertGreater(app.renew(owner)['until'], app.clock())
+                finally:
+                    repo.close()
+
     def test_waiting_preserves_an_active_receipt_with_or_without_a_claim(self):
         for claimed in (False, True):
             with self.subTest(claimed=claimed):

@@ -12,12 +12,15 @@ from . import craft, story_memory
 def resolve_policy(policy):
     """The book-level lexical policy is the only authority; this is the one resolver."""
     value = policy if isinstance(policy, dict) else {}
-    resolved = {'forbidden_terms': list(DEFAULT_TERMS), 'forbidden_name_chars': list(DEFAULT_NAME_CHARS)}
+    resolved = {'forbidden_terms': list(DEFAULT_TERMS), 'forbidden_name_chars': list(DEFAULT_NAME_CHARS),
+                'allowed_latin': []}
     for key in POLICY_FIELDS:
         if key in value:
             resolved[key] = copy.deepcopy(value[key])
     require(all(isinstance(resolved[k], list) and all(text(s) for s in resolved[k]) for k in POLICY_FIELDS),
             'lexical_policy', '字面规则须为字符串数组。')
+    require(all(len(term) >= 2 and term.isascii() and term.isalpha() for term in resolved['allowed_latin']),
+            'lexical_policy', 'allowed_latin 须逐项填写至少两个英文字母组成的完整词，区分大小写。')
     return resolved
 
 
@@ -115,6 +118,7 @@ def policy_material(versions, stage):
     return {'version': latest.get('version', 1), 'source': latest.get('source', ''),
             'forbidden_terms': resolved['forbidden_terms'],
             'forbidden_name_chars': resolved['forbidden_name_chars'],
+            'allowed_latin': resolved['allowed_latin'],
             'scope': enforcement_scope(stages),
             'editable': '作者改规则：novel.py lexical --file 规则.json --source 原话（逐版留档，开书阶段即生效）。'}
 

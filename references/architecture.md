@@ -12,6 +12,10 @@
 
 字段与校验以源码声明和任务模板为准，接口摘要见 [协议](protocol.md)；命令及恢复步骤见 [运行](runtime.md)；测试、度量和真实长篇验收口径见 [验证](validation.md)。本文的 Mermaid 块是架构图真源，docs 为派生产物，生成及核对方法见 [图表维护](../docs/README.md)。
 
+卷纲设计资料遵循同一职责边界：[设计蓝图](volume-blueprint.md) 保存证据、建议档位与适用范围，[对接文档](volume-blueprint-bridge.md) 只映射现有字段与作者自查，[叙事推进](narrative.md#卷纲) 与领域代码定义执行协议。建议层不直接生成字段枚举、数值阈值、自动返工或阻断；默认偏离与参考选型交创作者及作者判断。未来若接入蓝图来源，统一由冻结材料编译层解析并绑定准确内容，领域校验不读取 Markdown。条目级设计蓝图尚未接入；已实现的 `BLUEPRINT_CATALOG/blueprint` 只提供结构骨架，二者区别见 [蓝图职责](volume-blueprint-bridge.md#21-选定与来源解析)。文档修订不代行作者确认或改变已冻结任务。
+
+十三门到卷纲的来源链复用现有分层：creation 按字段声明对齐作者约定，world 绑定已选世界声明，context 冻结完整选择／版本、当前约定和世界；滚动后续卷只额外携带相邻已批准的 previous_volume_outline，不逐次复制全部历史卷纲。briefs 提醒先推演人物因果，方法与各门用途由 craft.md 解释；drift_validation 从当前约定读取阶梯，直接导入亦适用，历史选择只为缺该声明的旧输入回退。材料可追溯与字段可核验不等于文学因果成立，后者留在原设计任务和作者认可门判断。
+
 | 工程问题 | 读取位置 |
 |---|---|
 | 模块依赖、端口替换与装配 | [依赖方向](#依赖方向) |
@@ -27,7 +31,7 @@ understanding 是 intent 内独立的版本对象，不把解释与未来方案�
 
 ## 主干循环与子 agent
 
-宿主主干管理作者目标、任务身份、治理命令与简短进度；子 agent（Worker）读取完整冻结材料，完成当前世界、卷纲、章纲、执笔或返修并提交。开书门任务（opening_options）例外：无正文、无派工必要性，由主干在同一会话自执（`contracts.CONTROLLER_STAGES`），选择板由引擎物化为 work/board.md。workflow 决定下一任务，主干只接收身份及状态摘要，正文与完整回执保留在项目中；无人值守的等待由 `watch` 在引擎进程内承担。主干生命周期和模型会话隔离由宿主提供，host 是可选的外部进程适配器。execution为advance/watch提供controller.must_continue，submit的continuation区分组内与跨组角色；identity_registered、activity_observed和未知的worker_running分别表达登记、观察及存活边界。
+宿主主干管理作者目标、任务身份与治理；Worker 完成冻结的创作任务，workflow 决定下一任务，SQLite 保存实际状态。opening_options 允许主干自执，其他创作阶段由宿主创建真实独立会话。host 是可选进程适配器，watch 监督已派出的执行者；模型创建与历史隔离由宿主负责。具体调度和恢复只在 [运行指南](runtime.md#主干循环默认执行路径) 维护。
 
 `Application.diagnose` 只投影运行元数据；本地组合根通过只读仓库补充真实入口、文件位置和 argv。诊断不调用任务物化，不修改租约、计数或候选，不读取正文与全部设计，也不证明账本完整性。其小摘要用于宿主安全接续；模型历史压缩仍由宿主负责。
 
@@ -129,7 +133,7 @@ flowchart TD
 | drift_reconcile | 执笔漂移核算（`reconcile`，产出 hook 事件）与 `state_mismatch` 章行比对；依赖 drift 与 drift_simulation |
 | style | 文风代理指标的纯核心：`metrics`（句长/段长/对白占比/本章重复度/视角标记）、`baseline`（首章锚点）与 `examine`（按 `style_guard/style_window` 分开观察与 findings，`compare` 只取 findings）；零派工，只依赖 contracts |
 | narrative | 线路、节点、知情、人物当前状态与动态篇幅的纯规则 |
-| entities / evidence / design_queries | 实体注册、原文证据与设计节点查询的纯共享规则，领域模块直接复用 |
+| entities / evidence / design_queries | 实体注册、人物档案与首次身份校验、名称绑定的原文登记证据、设计节点查询的纯共享规则；world 与章纲共用人物校验，领域层不读取存储 |
 | craft | 场景与对白意图校验、出场人物选择、版本补丁定位与合成；只依赖 contracts |
 | spatial | 稳定锚点、路径与视听连接、持有链和到达下限；只依赖 contracts |
 | editorial | 编辑能力开关、有效约定、创作上下文哈希及自动回改策略与越界判定；只依赖 contracts |
@@ -204,6 +208,7 @@ CLI 的 Python worker 入口只执行 Worker 公开命令，先验证会话与�
 - 每章内容与篇幅消耗同一个有限预算；预检、非法字段、暂停、换 Worker、修订或改约不能增加额度。
 - 返修作者问题绑定候选正文、约定、章号、项目版本、问题与额度快照；准确 id 才可答复。改约不清空未回答的问题和额度，追加机会作用于该问题的章节，不能借当前 draft 的不同章号改变授权对象。
 - 未来设计、人物小传和章纲不直接产生事实。过去断言不重结算当前资源与时间。
+- 独立首读冻结后，continuity_service 从任务来源哈希读取相关人物档案、章前状态与成长，供比较阶段使用；不取实时世界覆盖冻结材料，不将小传当作正文事实证据。
 - 候选修订保留旧正式稿；事实与阅读依赖先共同确定完整连续修改区间，区间内按重排后的章纲重写并重新过全部机械判据，窄范围修订（--through）终点外的后缀按动作先重放或原样携带并对新状态重结算（事实受影响即拒绝）。显式扩大终点时更新实际动作及传播；discard 恢复父版本及原目标。
 - 历史修订由作者明确请求发起，在创建分支前分析实际影响；超界方案原子保存到 execution.revision_directive，保持原稿与章节额度，主干只获得摘要和完整方案路径。扩大执行须绑定当前 plan_hash、作者原话、准确范围及未变化的章节与创作来源；恢复和换会话不放宽边界。
 - 完本必须覆盖末章、每章篇幅区间、准确版本的作者首章决定和全部关闭条件（required 节点与线路），不自动降低目标。completed 重复调用仍复验冻结来源；publication 在任何正式导出写盘前重新验收完整快照，不用原有 audit.ok 代替判定。快照中的章节行是交付重试真源，可恢复被改坏的可变视图，但这些行的事件、正文、链、状态及闭合条件必须重新通过当前规则。

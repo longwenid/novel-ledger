@@ -84,6 +84,53 @@ def _shared_span(prose, prior_text, size):
     return left, right
 
 
+def _shared_numeric_span(prose, prior_text):
+    """Find any qualifying normalized common span, not merely the first shared window.
+
+    A suffix automaton tracks the longest prior substring ending at each candidate character.
+    This permits overlapping matches while keeping time and memory linear in chapter length.
+    """
+    states = [{'next': {}, 'link': -1, 'length': 0}]
+    last = 0
+    for char in prior_text:
+        current = len(states)
+        states.append({'next': {}, 'link': 0, 'length': states[last]['length'] + 1})
+        parent = last
+        while parent >= 0 and char not in states[parent]['next']:
+            states[parent]['next'][char] = current
+            parent = states[parent]['link']
+        if parent >= 0:
+            target = states[parent]['next'][char]
+            if states[parent]['length'] + 1 == states[target]['length']:
+                states[current]['link'] = target
+            else:
+                clone = len(states)
+                states.append({'next': dict(states[target]['next']), 'link': states[target]['link'],
+                               'length': states[parent]['length'] + 1})
+                while parent >= 0 and states[parent]['next'].get(char) == target:
+                    states[parent]['next'][char] = clone
+                    parent = states[parent]['link']
+                states[target]['link'] = states[current]['link'] = clone
+        last = current
+
+    state = length = 0
+    prefix = [0]
+    for index, char in enumerate(prose):
+        prefix.append(prefix[-1] + (char == '#'))
+        while state and char not in states[state]['next']:
+            state = states[state]['link']
+            length = min(length, states[state]['length'])
+        if char in states[state]['next']:
+            state = states[state]['next'][char]
+            length += 1
+        else:
+            state = length = 0
+        end = index + 1
+        if length >= NUMERIC_TEMPLATE_SPAN and prefix[end] - prefix[end - length] >= NUMERIC_TEMPLATE_RUNS:
+            return end - length, end
+    return None
+
+
 def cross_chapter_duplicates(prose, priors, chapter, size=DUPLICATE_GRAM, limit=DUPLICATE_LIMIT):
     """Verbatim spans this draft shares with already committed chapters.
 
@@ -101,8 +148,8 @@ def cross_chapter_duplicates(prose, priors, chapter, size=DUPLICATE_GRAM, limit=
                 numeric = _numeric_view(prose)
             normalized, starts, ends = numeric
             prior_normalized, _, _ = _numeric_view(prior_text)
-            repeated = _shared_span(normalized, prior_normalized, NUMERIC_TEMPLATE_SPAN)
-            if repeated is None or normalized[repeated[0]:repeated[1]].count('#') < NUMERIC_TEMPLATE_RUNS:
+            repeated = _shared_numeric_span(normalized, prior_normalized)
+            if repeated is None:
                 continue
             left, right = starts[repeated[0]], ends[repeated[1] - 1]
             findings.append(_finding(
@@ -151,7 +198,7 @@ def _quote_counts(prose):
             if opening in _CORNER:
                 counts['corner'] += 1
             elif opening in _WESTERN:
-                counts['western'] += 2
+                counts['western'] += 1
             start = end
     return counts
 

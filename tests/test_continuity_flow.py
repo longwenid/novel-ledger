@@ -125,7 +125,9 @@ class ContinuityFlowTests(unittest.TestCase):
         result = watch(self.app, owner, poll=20, idle_limit=600, sleep=finish_reader, now=lambda: elapsed[0])
         self.assertEqual(result['action'], 'review_complete')
         self.assertEqual(result['review']['observer'], actor[0])
-        self.assertEqual(elapsed[0], 340)
+        # Renewal deadlines can split a poll, so completion is observed by the next bounded poll.
+        self.assertGreaterEqual(elapsed[0], 340)
+        self.assertLessEqual(elapsed[0], 360)
         self.assertGreater(self.app.renew(owner)['until'], self.app.clock())
         self.assertEqual(self.app.submit(self.receipt)['outcome'], 'chapter_committed')
 

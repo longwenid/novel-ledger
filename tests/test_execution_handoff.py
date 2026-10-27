@@ -73,7 +73,7 @@ class ExecutionHandoffTests(unittest.TestCase):
         draft = Path(view['result_path'])
         draft.write_text('作者候选草稿保留', encoding='utf-8')
         book = copy.deepcopy(self.repo.load())
-        denied = self.cli(view['commands']['ready'], code=2)
+        denied = self.cli(view['commands']['read'], code=2)
         self.assertEqual(denied['details']['recovery']['actor'], 'controller')
         self.assertFalse(denied['details']['recovery']['retry_allowed'])
         self.assertEqual(self.repo.load(), book)
@@ -118,6 +118,33 @@ class ExecutionHandoffTests(unittest.TestCase):
         self.assertEqual(accepted['committed_chapter'], 1)
         self.assertEqual(path.read_bytes(), frozen)
         self.assertEqual(self.repo.task(self.task_id)['result']['session'], 'host-real-worker')
+
+    def test_saved_utf8_prose_roundtrips_through_generated_worker_commands(self):
+        prepared = self.prepare()
+        view = self.full_view()
+        materials = self.cli(shell_roundtrip(view['commands']['read']), prepared['worker_env'])
+        self.assertEqual(set(materials['records']), set(view['required']))
+        receipt = response(self.app, session='host-real-worker')
+        prose = receipt['data']['prose'].replace('签字。', '"签字"。\n\n').replace('责任栏', "'责任栏'")
+        prose_path = Path(view['result_path']).with_name("正文's 草稿.md")
+        prose_path.write_text(prose, encoding='utf-8')
+        draft = json.loads(Path(view['template_path']).read_text(encoding='utf-8'))
+        draft['data'] = {**receipt['data'], 'prose': prose_path.read_text(encoding='utf-8')}
+        draft['session'] = ''
+        result_path = Path(view['result_path'])
+        delivery.json_write(result_path, draft)
+        saved = result_path.read_bytes()
+
+        checked = self.cli(shell_roundtrip(view['commands']['preflight']), prepared['worker_env'])
+        self.assertTrue(checked['checked'])
+        self.assertFalse(self.repo.headers('main'))
+        submitted = self.cli(shell_roundtrip(view['commands']['submit']), prepared['worker_env'])
+        self.assertEqual(submitted['committed_chapter'], 1)
+        committed = self.repo.chapter('main', 1)
+        self.assertEqual(self.repo.read_document(committed['prose']), prose)
+        self.assertEqual(prose_path.read_text(encoding='utf-8'), prose)
+        self.assertEqual(result_path.read_bytes(), saved)
+        self.assertNotIn(prepared['worker_env']['NOVEL_EXECUTION_CLAIM'], saved.decode('utf-8'))
 
     def test_two_file_errors_are_syntax_not_technical(self):
         """File-level errors are syntax mistakes; they don't consume the retry budget."""
@@ -186,13 +213,15 @@ class ExecutionHandoffTests(unittest.TestCase):
 
     def test_business_failure_returns_all_findings_in_preview_and_submit(self):
         receipt = response(self.app)
-        receipt['data']['prose'] += '他等了许久，窗外的雨沿着破损的玻璃往下流。值班室另一头有人收起了钥匙，走廊的灯熄了一盏，门后的脚步声渐渐远去。'
+        receipt['data']['prose'] += '他等了许久，窗外的雨沿着破损的玻璃往下流。值班室另一头有人收起了钥匙，走廊的灯熄了一盏，门后的脚步声渐渐远去。TODO'
         before = self.repo.load()
         preview = self.app.submit(receipt, preview=True)
         self.assertEqual(self.repo.load(), before)
         self.assertEqual(preview['outcome'], 'repair_required')
         failure = next(f for f in preview['findings'] if f['criterion'] == 'substance')
         self.assertGreater(failure['actual_han'], failure['allowed'][1])
+        residue = next(f for f in preview['findings'] if 'matches' in f)
+        self.assertIn('TODO', residue['matches'])
         submitted = self.app.submit(receipt)
         self.assertEqual(preview['findings'], submitted['findings'])
         self.assertIsNone(submitted['committed_chapter'])

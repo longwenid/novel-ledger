@@ -16,7 +16,7 @@ from .contracts import (DEFAULTS, OPENING_VERSION, SCALE_DEFAULT_WINDOW, SCALE_T
 GATES = (
     ('genre', '题材与阅读承诺'), ('premise', '核心设想与世界命题'),
     ('scale', '体量与分卷'), ('world', '世界架构：空间、历史与文明'),
-    ('ladder', '格局路径与终局视野'), ('voice', '叙述视角与阅读质地'),
+    ('ladder', '格局路径与终局视野'), ('voice', '写作视角'),
     ('origin', '主角来历与世界联系'), ('edge', '核心优势与成长线'),
     ('protagonist', '主角处境与底线'), ('opposition', '多方对抗与持续冲突'),
     ('relationships', '人物关系与立场'), ('payoff', '阶段兑现与终局回应'), ('title', '书名'),
@@ -174,11 +174,11 @@ VALUE_RULES = {
         '待补/暂定/同上/略 出现在任一键即拒；stance/dark_side 与世界模型共享词表、选后世界机制只能承接不能推翻——这是世界级承诺，按此慎重',
     ],
     'voice': [
-        'pov：非空文本',
-        'voice：非空文本',
-        'style_traits：非空文本数组，例 ["冷叙事","重器物细节","少用成语"]——写成单个字符串或逗号分隔一句会被拒',
-        '此时世界 cosmology 与格局终局已选：若舞台跨位面/星海，pov 策略要撑得住跨尺度移动——本门落约后逐字对齐不可漂移，章纲 pov 必须与契约一致',
-        '写作纪律（句长/口癖/文风档案）由 style_profile 参数承担、可随时 recontract --patch 切换；本门只定结构性叙述事实',
+        'pov：非空文本；写清主角中心、双主角、群像等人物组织方式，以及人称、知情范围和换人方式；未定人名用角色称呼，不替后门锁定人物',
+        'voice：非空文本；用一句白话概括，例如“群像：多位核心人物各自推进，分场跟随不同人物”，不额外选择语感或句长',
+        'style_traits：非空文本数组；补充与本案相符的知情和切换约定。分场限知说明当前人物能知道什么；全知叙述说明叙述者可揭示范围，不能一律套成只知主角所知，不填幽默、抒情、短句等文风偏好',
+        '作者只选一次写作视角；常见的主角视角、双主角视角、群像视角、旁观者视角与全知视角按 hatch.md 选用，不是封闭枚举，也不要求一轮全给。已有群像要求时不再推回主角中心',
+        '选定的叙述约定逐字进入契约；句长、口癖与声线另按 style_profile 处理，不在本门比较文风档案。已有作者要求原样保留，不借简化改写旧选择',
     ],
     'scale': [
         '本门由引擎按档位表即时给定，不接受方案回执',
@@ -393,7 +393,7 @@ def validate_value(gate, value, version=OPENING_VERSION, choices=None):
     elif gate == 'voice':
         require(text(value.get('pov')) and text(value.get('voice')) and isinstance(value.get('style_traits'), list)
                 and value['style_traits'] and all(text(s) for s in value['style_traits']),
-                'opening_option', '叙述方案需要人称与视角、语感和表达要点。')
+                'opening_option', '讲述方案需要说明跟谁看、怎样讲，以及知情或换人的补充约定。')
     elif gate == 'scale':
         tier = next((row for row in SCALE_TIERS if row['id'] == value.get('tier')), None)
         require(tier is not None, 'opening_option', '体量方案须来自档位表。',

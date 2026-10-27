@@ -578,6 +578,11 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn(str(ROOT), material['brief'])
         entry = envelope['commands']['submit'][1]
         self.assertTrue(Path(entry).is_file(), entry)
+        environment = {key: value for key, value in os.environ.items() if not key.startswith('NOVEL_')}
+        result = subprocess.run(envelope['commands']['read'], cwd=self.temp.name, env=environment,
+                                capture_output=True, text=True, encoding='utf-8', timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)['task_id'], handle['task_id'])
 
     def test_check_command_reports_the_offending_field_without_committing(self):
         """A worker must be able to learn the format from `check`, not from reading the engine source."""

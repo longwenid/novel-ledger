@@ -195,7 +195,7 @@ def template(stage, chapter, extra=(), payload=None, tracking=False):
         # checked against the projection anyway, so guessing it is pure waste.
         row = payload.get('chapter_outline') or {}
         return {'title': '', 'prose': '', 'summary': '',
-                'drift_check': {'items': drift_items(row), 'unplanned': [], 'verdict': ''},
+                'drift_check': {'items': drift_items(row), 'introductions': [], 'unplanned': [], 'verdict': ''},
                 'self_check': ''}
     require(False, 'stage_template', '阶段已登记但没有结果骨架，属引擎缺陷。',
             {'stage': stage, 'known': sorted(stages.STAGES)})

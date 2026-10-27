@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import copy
 
-from .contracts import require, text
+from .contracts import Error, require, text
 
 from .drift import HOOK_ACTIONS, ITEM_KINDS, ITEM_STATUSES, NODE_STATES, REVEALS, THREAD_STATES, VERDICTS, _declared, _deltas, _finding, _item, _kind_of, _number, _place_registry, _project, _reduce, _resource_coordinate, _safe, _same, _split_dump
 from .drift_simulation import _event_for, _registrations
+from .evidence import registration as registration_evidence
 from . import evidence, world
 
 
@@ -132,7 +133,7 @@ def _coverage_key(kind, key, planned):
     return (kind, key, action) if kind == 'hook' else (kind, key)
 
 
-def reconcile(drift_check, row, state, world):
+def reconcile(drift_check, row, state, world, *, prose=None):
     """Reconcile a writer's `drift_check` against the chapter outline and the projected state.
 
     Returns `{'events', 'findings', 'deviations'}`. `events` is exactly what `facts.settle` has
@@ -195,7 +196,28 @@ def reconcile(drift_check, row, state, world):
                                      'drift_coverage', 'blocker'))
     # 2. Per-item reconciliation against the projected state.
     shadow = copy.deepcopy(state) if isinstance(state, dict) else {}
-    registrations = _registrations(row, shadow, chapter, findings)
+    registrations = _registrations(row, shadow, chapter, findings, world)
+    introductions = drift_check.get('introductions', [])
+    require(isinstance(introductions, list), 'drift_check', 'introductions 须为 {entity,evidence} 数组。')
+    fresh = {event['entity']['id'] for event in registrations if event['op'] == 'entity'}
+    refs = {}
+    for introduction in introductions:
+        require(isinstance(introduction, dict) and text(introduction.get('entity'))
+                and introduction['entity'] in fresh and introduction['entity'] not in refs,
+                'drift_check', '出场证据只能逐实体引用本章首次登记，不能重复或为既有人物重登记。')
+        require(isinstance(introduction.get('evidence'), dict), 'drift_check', '出场证据缺少 evidence。')
+        refs[introduction['entity']] = introduction['evidence']
+    for event in registrations:
+        source = event['entity'] if event['op'] == 'entity' else event['place']
+        if source['id'] in refs:
+            event['evidence'] = refs[source['id']]
+        if prose is not None:
+            try:
+                aliases = shadow['entities'].get(source['id'], {}).get('aliases', []) if event['op'] == 'place' else []
+                event['evidence'] = registration_evidence(event, prose, chapter, aliases=aliases)
+            except Error as error:
+                findings.append(_finding(chapter, 'entity', source['id'], '实际出场证据',
+                                         event.get('evidence'), error.message, 'drift_evidence', 'blocker'))
     ordered = [entry for entry in planned
                if _coverage_key(entry['kind'], entry['key'], entry.get('planned')) in seen_items]
     for entry in ordered:

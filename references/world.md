@@ -27,6 +27,8 @@
 | powers | **力量与位阶阶梯**：记录字段 `name`/`condition`/`gain`/`cost`/`limit`，与 `world` 门声明的 `tiers` 逐字对应 |
 | cosmology | **空间与位面**：记录字段 `name`/`inhabitant`/`law`/`entry`——层名、谁在、什么法则、怎么进 |
 
+`characters` 的基础字段与新人物登记共用同一规则。新建世界时，将主角、双主角及群像核心行动者标为 `importance=core`，用 `biography` 连接过往、矛盾、关系和行为；配角按需要展开。字段与层级规则统一见 [人物档案](editorial.md#人物档案)。旧世界未标层级时不追填小传；世界中的人物设计也不自动成为已发生经历或角色知情。
+
 ### 可选深字段
 
 `world.OPTIONAL_FIELDS` 声明可选深字段（**写了就必须非空文本，不要求写**）：
@@ -58,7 +60,7 @@
 | `mechanisms` | 有特殊机制时：代价、上限与**供料链**（升级材料从哪来、谁在抢、世界怎么持续产出） | 与 `edge` 门声明的优势供料链一致 |
 | `geography` / `cosmology` | 说明**空间边界与联系**：各方居所、通行条件、以及到 `一界`/`星海`/`诸天` 尺度时的位面（层名、谁在、什么法则、怎么进） | `ladder` 的每级 `stage` 在这里有同名记录（逐字） |
 
-这几件是**给后续设计用的**，不是氛围描写：位阶的当前级别进 `characters`/`knowledge` 的状态（章纲的 `characters`/`knowledge` 增量按它写）；硬通货进资源增量账（章纲 `resources` 的 key 必须能在世界或既有状态里找到）；地图进 `places`——章纲的 `places` 增量会进位置漂移校验，跳到未登记地点直接拒绝。开篇用具体危机与行动展示必要规则，背景随卷纲的揭示安排展开。
+这几件是**给后续设计用的**，不是氛围描写：位阶的当前级别进 `characters`/`knowledge` 的状态（章纲的 `characters`/`knowledge` 增量按它写）；硬通货进资源增量账（章纲 `resources` 的 key 必须解析到约定 initial_resources 或既有状态已登记的 holder/asset/unit 坐标；世界资源条目只定义设定，不能代替资源起点）；地图进 `places`——章纲的 `places` 增量会进位置漂移校验，跳到未登记地点直接拒绝。开篇用具体危机与行动展示必要规则，背景随卷纲的揭示安排展开。
 
 ## 三条逐字绑定
 
@@ -98,7 +100,7 @@ world_model 候选不更新正文事实。提交时由引擎机械校验字段�
 
 ## 约定与交付
 
-默认 world_model 在同一任务中起草世界和完整约定；检查 task.stages、payload.also 与模板，按要求把约定放入 data.contract。世界与候选约定由引擎按同一套机械校验在提交时判定（约定字段、与各门选择逐字一致、world_rules 与候选世界逐字一致、所有已声明的绑定成立），通过后原子激活。单独的 opening_contract 任务沿自己的冻结材料执行，开书交接见 [系统执行](opening.md#系统执行)。
+默认 world_model 在同一任务中起草世界和完整约定；检查 task.stages、payload.also 与模板，按要求把约定放入 data.contract。世界与候选约定由引擎按同一套机械校验在提交时判定（约定字段、与各门选择逐字一致、world_rules 与候选世界逐字一致、所有已声明的绑定成立），通过后同事务采纳世界并保存 pending_contract；下一次 advance 在自己的事务内激活约定，此后才可 run。单独的 opening_contract 任务沿自己的冻结材料执行；激活时机和交接统一见 [系统执行](opening.md#系统执行)。
 
 | 交付对象 | 来源与时机 |
 |---|---|
@@ -110,15 +112,17 @@ world_model 候选不更新正文事实。提交时由引擎机械校验字段�
 
 ## 卷纲与章纲从这里取什么
 
-书级规划读完整世界；世界模型是后续所有漂移字段的引用底账，**引用不存在的 key/entity 会在章纲提交时被拒绝**。
+卷纲的设计顺序见 [卷纲因果设计](craft.md#卷纲因果设计)，十三门的用途映射见 [承接表](craft.md#十三门世界与卷纲的承接)。世界不是卷纲前的一份独立百科：规则限制行动，经济分配产生争夺，历史后果使制度承压，组织利益推动对手行动，人物与关系提供选择代价。设计者从相关记录及 links 推演本卷“谁为了什么采取行动→谁如何回应→局面怎样改变”，再投影到字段；不要求把全部世界条目每卷用一遍。真相和设定仍只是作者材料，不能直接充当人物已知或已发生事件。
+
+书级规划读完整世界。世界模型定义设定与引用来源，约定和已提交状态定义事实坐标；**世界里有同名记录不等于已登记资源、实体或站位**。坐标、初始化和增量合法性以 [状态链坐标速查](narrative.md#回执形状-1) 为准。
 
 | 下游字段 | 取自世界模型的哪里 |
 |---|---|
 | `volume_outline.stage` | 已选格局阶梯里的一级，逐字等于 `geography`/`cosmology`/`factions`/`powers` 里某条记录的 `name`；按卷序只升不降 |
-| `volume_outline.resources[].key` | 世界的 economy/everyday 资源条目 id |
-| `volume_outline.places[].from/to`、`chapter_outline.places[]` | geography 的地点 id（位置跳变到未登记地点即拒绝） |
-| `volume_outline.characters[].entity`、`chapter_outline.characters[].entity` | characters 记录 id，以及既有状态里的人物 |
-| `volume_outline.knowledge[].who/topic`、`chapter_outline.knowledge[]` | characters 的人物 id 与 mysteries/factions 等提供的话题 |
+| `volume_outline.resources[].key` | economy/everyday 提供资源设定；key 用约定 initial_resources 或既有状态的资源名／holder/asset/unit 坐标，不用世界记录 id 代替 |
+| `volume_outline.places[].from/to`、`chapter_outline.places[]` | geography 地点 id／可归一化地名；移动实体先有 placements 起点，新地点按章纲 new_entities 登记，详见状态链坐标 |
+| `volume_outline.characters[].entity`、`chapter_outline.characters[].entity` | 世界 characters 提供人物设定；增量实体须先由约定 entities 或章纲 new_entities 登记，不能只引用世界人物 |
+| `volume_outline.knowledge[].who/topic`、`chapter_outline.knowledge[]` | who 是已登记实体；mysteries/factions 等提供 topic 的设定来源，隐秘设定不自动成为人物已知 |
 | `chapter_outline.world_refs` | `[领域:id]`，领域名取本页表头（含 `powers`/`cosmology`），id 必须在模型中存在 |
 | `chapter_outline.new_entities` | 首次登场的新人物/地点/物品内联档案；落地后成为新的既有状态，后续按 id 引用 |
 

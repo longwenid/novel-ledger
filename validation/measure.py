@@ -124,11 +124,11 @@ def dispatch_ledger(continuity='required'):
              'dispatched_opening_options': len(gate_ids) - len(system),
              'note': '开书门由主干自执，不计子 agent 派工（spec §1/§7）；门数与系统门由 '
                      'creation.gate_ids / SYSTEM_GATES 派生。'}
+    group_size = policy_default('fast_batch_chapters')
     for tier in SCALE_TIERS:
         shape = PIPELINE_SHAPES.get(tier['id'], {})
         merged = bool(shape.get('merge_chapter_outline'))
         chapters, volumes = tier['chapters'], tier['volume_count']
-        group_size = policy_default('fast_batch_chapters')
         fast_prose_workers = 1  # The pilot remains its own worker.
         first = 1
         for index in range(volumes):
@@ -156,7 +156,7 @@ def dispatch_ledger(continuity='required'):
                          'story_tasks': story_tasks, 'total': story_tasks})
     return {'gates': gates, 'continuity': continuity, 'by_tier': rows,
             'boundary': '依 PIPELINE_SHAPES 与 volume_outline.scope 的机械计数，chapter_outline.scope=volume；'
-                        'before_prose 只计首章前派工，planning_total 计全程规划；fast 按首章独立、卷界与五章组计 Worker，'
+                        f'before_prose 只计首章前派工，planning_total 计全程规划；fast 按首章独立、卷界与最多 {group_size} 章一组计 Worker，'
                         'continuity=required 为每章另计一次独立读者交付，off 为零，total_workers 均包含读者；'
                         'story_tasks（旧字段 total 的同义值）仅计故事任务，不含读者，也不是模型调用数。'
                         '这是首次候选均通过时的静态下界；不含返修、重设计、重新派读和上下文恢复，不能推算 token 或速度。'}

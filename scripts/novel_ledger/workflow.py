@@ -134,6 +134,19 @@ def _pending_design(book):
     return pending
 
 
+def design_hash(pending):
+    """Bind the entire staged installation, including merged chapter and settlement rows."""
+    return digest({'volumes': pending['volumes'], 'chapters': pending.get('chapters') or {},
+                   'plans': pending.get('plans') or {}})
+
+
+def verify_design_hash(pending):
+    # Projects staged before the full-design binding used the volume-only digest. Preserve their
+    # existing confirmation token; their cards explicitly identify its narrower scope.
+    current = pending['volumes_hash']
+    return current == design_hash(pending) or current == digest(pending['volumes'])
+
+
 def activate_design(book):
     """Install the staged design in one piece: volume outlines, merged chapter half, settlement rows.
 
@@ -195,7 +208,7 @@ def revise_design(book, adjustments):
         {'volumes': copy.deepcopy(ordered)}, contract, book.get('world'), selections(book),
         book.get('volumes_outline') or {}, list(pending['volume_ids']))
     pending['volumes'] = revalidated
-    pending['volumes_hash'] = digest(revalidated)
+    pending['volumes_hash'] = design_hash(pending)
     return book
 
 
@@ -246,7 +259,7 @@ def _volume_board_row(volume, outline, policy):
             'style_trend': (outline.get('style') or {}).get('trend', '')}
 
 
-def structure_warnings(pending):
+def structure_warnings(pending, previous=None):
     """Two advisory notes the board carries, each mechanically countable and neither a threshold.
 
     Advisory only, everywhere: the author who insists on the flagged shape wins (the same
@@ -255,15 +268,15 @@ def structure_warnings(pending):
     design refuses to re-introduce.
     """
     warnings = []
-    volumes = list((pending.get('volumes') or {}).values())
-    if len(pending.get('volume_ids') or []) >= 2:
+    volumes = ([previous] if previous else []) + list((pending.get('volumes') or {}).values())
+    if len(volumes) >= 2:
         entangled = any(row.get('continues') for volume in volumes
                         for row in list(volume.get('threads') or []) + list(volume.get('hooks') or []))
         if not entangled:
             warnings.append({'code': 'volume_entanglement_missing',
-                             'message': '各卷的线路与伏笔都没有跨卷延续（continues）：卷与卷之间只剩换幕，'
-                                        '没有留下纠缠。只警不拦，作者坚持以作者为准。'})
-    if volumes:
+                             'message': '本次比较的卷中，线路与伏笔均未标记跨卷延续（continues）；'
+                                        '可检查卷间承接。只警不拦，作者坚持以作者为准。'})
+    if len(volumes) >= 2:
         templated = all(
             len(volume.get('turns') or []) == 2
             and all(isinstance(turn, dict) and turn.get('at') in ('卷中', '卷尾')
@@ -271,7 +284,7 @@ def structure_warnings(pending):
             for volume in volumes)
         if templated:
             warnings.append({'code': 'volume_turn_template',
-                             'message': '每一卷的转折都恰是两条、位置都标在卷中/卷尾：各卷节奏呈同一模板。'
+                             'message': '本次比较的各卷转折都恰是两条、位置都标在卷中/卷尾：转折位置呈同一模板。'
                                         '只警不拦，作者坚持以作者为准。'})
     return warnings
 
@@ -287,10 +300,17 @@ def volume_board(book):
     policy = volume_policy(book)
     rows = [_volume_board_row(volume, pending['volumes'][volume['id']], policy)
             for volume in contract['volumes'] if volume['id'] in pending['volumes']]
+    ordered = contract['volumes']
+    first = next((i for i, row in enumerate(ordered) if row['id'] in pending['volumes']), 0)
+    previous = (book.get('volumes_outline') or {}).get(ordered[first - 1]['id']) if first else None
     return {'schema': 'novel-ledger.volume-board/1', 'hash': pending['volumes_hash'],
             'round': pending['round'], 'scope': pending['scope'],
             'volume_ids': list(pending['volume_ids']), 'volumes': rows,
-            'warnings': structure_warnings(pending)}
+            'design': {'volumes': copy.deepcopy(pending['volumes']),
+                       'chapters': copy.deepcopy(pending.get('chapters') or {}),
+                       'plans': copy.deepcopy(pending.get('plans') or {})},
+            'hash_scope': 'full_design' if pending['volumes_hash'] == design_hash(pending) else 'legacy_volumes',
+            'warnings': structure_warnings(pending, previous)}
 
 
 def next_volume_outline(book, contract, needed=None):
@@ -811,8 +831,9 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None,
         book['pending_design'] = {'scope': volume_policy(book).get('scope'),
                                   'volume_ids': wanted, 'volumes': outlines,
                                   'chapters': chapters_half, 'plans': plans_half,
-                                  'volumes_hash': digest(outlines), 'round': gate.get('round', 0),
+                                  'round': gate.get('round', 0),
                                   'producer': actor}
+        book['pending_design']['volumes_hash'] = design_hash(book['pending_design'])
     elif stage == 'chapter_outline':
         # Step four: the volume's chapter outlines, each declaring what it changes and what state
         # it enters and leaves. The engine simulates the whole chain here, before a word is written.
@@ -910,7 +931,7 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None,
         presence = drift_reconcile.presence_notes(plan, book.get('world'), data['prose'])
         if presence:
             draft['presence'] = presence
-        settlement = drift_reconcile.reconcile(data.get('drift_check'), plan, book['state'], book.get('world'))
+        settlement = drift_reconcile.reconcile(data.get('drift_check'), plan, book['state'], book.get('world'), prose=prose)
         findings = list(settlement['findings'])
         count = han_count(prose)
         band = narrative.budget_for(book, chapter) if tracking else {'minimum': book['contract']['chapter_min'],
@@ -924,7 +945,8 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None,
                              'actual_han': count, 'allowed': [band['minimum'], band['maximum']]})
         # Mechanical prose defects are judged here, at submission, against the nearest committed
         # chapters: the same code preflight runs, so the producer sees the finding for free.
-        findings.extend(lint.draft_findings(prose, priors or [], chapter))
+        findings.extend(lint.draft_findings(prose, priors or [], chapter,
+                                            allowed_latin=planning.policy_of(book)['allowed_latin']))
         # And the style proxies: the checkable half of "did this chapter keep the voice the author
         # anchored". Consistency, not quality — a chapter can match every number and still be dull.
         # The volume's own `style.window` overrides the contract's tolerances for this stretch.

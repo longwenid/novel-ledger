@@ -64,23 +64,24 @@ BOARD_WARNINGS = (
 
 def render_board_card(board):
     gate = board.get('gate') or {}
+    perspective = gate.get('id') == 'voice'
     letters = 'ABCDEF'
     lines = ['# 开书选择：第 %s/%s 门 · %s' % (gate.get('number', '?'), gate.get('total', '?'), gate.get('title', '')),
-             '',
-             'board `%s`（choose/regroup 时原样使用）' % board.get('hash', ''),
              '']
     for index, option in enumerate(board.get('options') or []):
         tag = letters[index] if index < len(letters) else str(index + 1)
         lines.append('## %s. %s' % (tag, option.get('title', '')))
-        lines.append('- id：`%s`（choose --option 用它）' % option.get('id', ''))
-        for field, label in (('pitch', '一句话'), ('premise', '这一版'), ('driver', '推进'),
-                             ('tradeoff', '代价与风险'), ('fit_reason', '承接')):
+        fields = (('pitch', '一句话'), ('premise', '怎么看'), ('driver', '读起来怎样'),
+                  ('tradeoff', '取舍'), ('fit_reason', '为什么适合本书')) if perspective else (
+                  ('pitch', '一句话'), ('premise', '这一版'), ('driver', '推进'),
+                  ('tradeoff', '代价与风险'), ('fit_reason', '承接'))
+        for field, label in fields:
             value = option.get(field)
             if text(value):
                 lines.append('- **%s**：%s' % (label, value))
         scenes = option.get('scene') or []
         if scenes:
-            lines.append('- **画面**：')
+            lines.append('- **试读**：' if perspective else '- **画面**：')
             lines.extend('  - %s' % row for row in scenes)
         lines.append('')
     for key, title in BOARD_WARNINGS:
@@ -88,12 +89,15 @@ def render_board_card(board):
         if not rows:
             continue
         lines.append('## ' + title)
-        lines.extend('- %s%s' % (('方案%s：' % row['option']) if row.get('option') else '',
+        option_tags = {option.get('id'): letters[index] if index < len(letters) else str(index + 1)
+                       for index, option in enumerate(board.get('options') or [])}
+        lines.extend('- %s%s' % (('方案%s：' % option_tags[row['option']])
+                                 if row.get('option') in option_tags else '',
                                  row.get('message') or row.get('code') or '')
                      for row in rows)
         lines.append('')
     lines.append('---')
-    lines.append('回复 **A / B / C** 选择；**换一组**（附原因更好）；**D** 自定义一句方向；**返回某门**改已选项。')
+    lines.append('回复方案字母选择；也可以 **换一组**、自定义方向或 **返回某门**改已选项。')
     return chr(10).join(lines) + chr(10)
 
 
@@ -117,19 +121,21 @@ def render_question(board):
     folding loses nothing; the full board stays in board.md for the chat text.
     """
     gate = board.get('gate') or {}
+    perspective = gate.get('id') == 'voice'
     letters = 'ABCDEF'
     options = []
     for index, option in enumerate(board.get('options') or []):
         tag = letters[index] if index < len(letters) else str(index + 1)
         summary = option.get('pitch') if text(option.get('pitch')) else option.get('premise')
         options.append({'label': '%s %s' % (tag, option.get('title', '')), 'description': summary or ''})
+    examples = '“想写群像”“不想总换人”' if perspective else '“格局太小”“不够爽”'
     options.append({'label': '换一组 / 自定义',
-                    'description': '这一组都不合适：说明理由（如“格局太小”“不够爽”）我按理由重出一组；'
-                                   '想自己定就直接在自定义/Other 里写方向或内容。'})
+                    'description': '这一组都不合适：说明理由（如%s）我按理由重出一组；'
+                                   '想自己定就直接在自定义/Other 里写方向或内容。' % examples})
     options = options[:4]
     number, total, title = gate.get('number', '?'), gate.get('total', '?'), gate.get('title', '')
     return {'questions': [{'header': '第 %s/%s 门%s' % (number, total, '（新一组）' if board.get('round') else ''),
-                           'question': '第 %s 门（%s）：选哪个？' % (number, title),
+                           'question': '写作视角：这本书怎样安排人物视角？' if perspective else '第 %s 门（%s）：选哪个？' % (number, title),
                            'multiSelect': False, 'options': options}]}
 
 
@@ -156,7 +162,7 @@ def write_question_card(workspace: LocalWorkspace, board):
     return str(path)
 
 
-def render_volume_board(board):
+def render_volume_board(board, detail_path=None):
     """The author-facing card for a staged volume outline awaiting confirmation.
 
     Same treatment as the opening board card: the controller pastes this file instead of
@@ -166,10 +172,8 @@ def render_volume_board(board):
     rows = board.get('volumes') or []
     lines = ['# 卷纲待认可（第 %s 轮 · %s）' % (board.get('round', '?'), board.get('scope', '')),
              '',
-             'volumes_hash `%s`（confirm-volume / revise-volume / regroup-volume 时原样使用）'
-             % board.get('hash', ''),
              '待认可卷：' + '、'.join(row.get('id', '') for row in rows),
-             '认可前不安装：章纲与执笔都在这道门后。', '']
+             '认可后将安装以下完整卷纲；如本次合并生成章纲及结算行，也会一并安装。认可前均不安装。', '']
     for row in rows:
         lines.append('## 卷 %s（第 %s～%s 章）' % (row.get('id', ''), row.get('first', '?'), row.get('last', '?')))
         lines.append('- **卷职责**：%s' % row.get('purpose', ''))
@@ -207,22 +211,44 @@ def render_volume_board(board):
             lines.append('- **读者认知终值**：%s → %s（%s）'
                          % (known.get('topic', ''), known.get('to', ''), known.get('reason', '')))
         lines.append('')
+    design = board.get('design')
+    if isinstance(design, dict):
+        lines.append('完整内容包含全部卷纲字段及本次合并生成的章纲与结算行，请在认可前查看。')
+        if detail_path:
+            lines.append('[打开完整待认可内容](<%s>)' % detail_path)
+        lines.append('')
+        if board.get('hash_scope') == 'legacy_volumes':
+            lines.extend(['此待认可设计来自旧版：确认版本仅绑定卷纲，合并章纲和结算行未纳入该版本摘要；'
+                          '请在认可前核对完整内容。', ''])
     warnings = [row for row in board.get('warnings') or [] if isinstance(row, dict)]
     if warnings:
         lines.append('## 结构提示（advisory，只警不拦，作者坚持以作者为准）')
         lines.extend('- %s' % row.get('message', '') for row in warnings)
         lines.append('')
     lines.append('---')
-    lines.append('回复 **认可这一版**（confirm-volume --hash 上面的 volumes_hash --source 原话）；'
-                 '**轻调叙述面**（purpose/arc/turns/climax/exit_state/style.trend，另存 JSON 后 revise-volume）；'
-                 '**带理由重出**（regroup-volume --hash --reason 原话，可加 --blueprint 换结构蓝图）。')
+    lines.append('回复 **认可这一版**、**轻调叙述面**，或 **带理由重出**。')
     return chr(10).join(lines) + chr(10)
 
 
 def write_volume_board_card(workspace: LocalWorkspace, board):
     """Materialize the staged design's confirmation card as work/volume-board.md."""
     path = workspace.artifact_path(workspace.project / 'work' / 'volume-board.md')
-    atomic_write(path, render_volume_board(board))
+    detail = workspace.artifact_path(workspace.project / 'work' / 'volume-design.md')
+    design = board.get('design')
+    if isinstance(design, dict):
+        sections = ['# 完整待认可内容', '',
+                    '认可将安装以下完整卷纲和本次合并生成的章纲、结算行。', '']
+        for key, label in (('volumes', '卷纲'), ('chapters', '合并章纲'), ('plans', '结算行')):
+            sections.extend(['## ' + label, ''])
+            items = design.get(key) or {}
+            if not items:
+                sections.extend(['本次没有。', ''])
+            for ident, value in items.items():
+                sections.extend(['### %s %s' % (label, ident), '', '```json',
+                                 json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False),
+                                 '```', ''])
+        atomic_write(detail, '\n'.join(sections))
+    atomic_write(path, render_volume_board(board, str(detail) if isinstance(design, dict) else None))
     return str(path)
 
 
@@ -238,13 +264,13 @@ def render_volume_question(board):
         board.get('round', '?'), len(rows), '、'.join(row.get('id', '') for row in rows),
         '；有结构提示' if warnings else '')
     return {'questions': [{'header': '卷纲待认可',
-                           'question': '这一版卷纲（%s）认可吗？认可后才开始章纲与执笔。' % summary,
+                           'question': '这一版卷纲（%s）认可吗？认可后安装本次设计，继续后续工作。' % summary,
                            'multiSelect': False, 'options': [
-                               {'label': '认可这一版', 'description': '按当前 volumes_hash 安装卷纲'
+                               {'label': '认可这一版', 'description': '安装当前卷纲'
                                   '（合并档连同章纲与结算行），进入下一步设计。'},
                                {'label': '轻调叙述面', 'description': '只改卷职责/弧线/转折/高潮/卷末状态/文风走向'
-                                  '（revise-volume，结构字段会被拒）；改完仍需认可。'},
-                               {'label': '带理由重出', 'description': '退回这一版并附理由（regroup-volume），'
+                                  '；结构内容需带理由重出，改完仍需认可。'},
+                               {'label': '带理由重出', 'description': '退回这一版并附理由，'
                                   '理由会交给下一版卷纲回应；可同时换结构蓝图。'},
                            ]}]}
 

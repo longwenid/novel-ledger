@@ -50,6 +50,7 @@ SUB_LABELS = {'space': '世界全貌', 'history': '历史断层', 'civilizations
               'desire': '欲望', 'limit': '底线', 'purpose': '卷职责', 'end': '卷末章', 'holder': '持有者',
               'asset': '资产', 'unit': '单位', 'quantity': '数量', 'entity': '实体', 'key': '键', 'value': '值'}
 SUB_LABELS.update(tier='人物层次', biography='小传与矛盾', speech='表达方式', public_role='公开身份', contradiction='内在矛盾',
+                  importance='人物层级', past='过往与当下', behavior='行为方式',
                   values='价值优先顺序', register='语域', tactics='交涉策略', rhythm='句式节奏', stress_shift='压力下的变化',
                   relationship_modes='关系中的表达', mode='表达方式', change_reason='重核原因', fear='顾虑', voice='声线',
                   knowledge_boundary='知情边界', intent='场景意图', conflict='冲突', turn='转折', label='场所', present='在场者',
@@ -316,12 +317,14 @@ def _world(book):
         version = creation.opening_version(opening)
         for row in opening['selections']:
             option = row['option']
+            labels = {**FIELD_LABELS, 'pov': '跟着谁看', 'voice': '讲述说明',
+                      'style_traits': '补充约定'} if row['gate'] == 'voice' else FIELD_LABELS
             notes = [label + _esc(option[key]) for label, key in (('推进：', 'driver'), ('代价：', 'tradeoff'))
                      if option.get(key)]
             pieces.append('<div class="card"><b>' + _esc(gate_title(row['gate'], version)) + ' · ' + _esc(option.get('title', '')) + '</b>'
                           + (('<p>' + _esc(option['premise']) + '</p>') if option.get('premise') else '')
                           + (('<p class="note">' + '　'.join(notes) + '</p>') if notes else '')
-                          + '<table class="t">' + ''.join('<tr><th>' + _esc(FIELD_LABELS.get(k, SUB_LABELS.get(k, k))) + '</th><td>' + _display(v) + '</td></tr>'
+                          + '<table class="t">' + ''.join('<tr><th>' + _esc(labels.get(k, SUB_LABELS.get(k, k))) + '</th><td>' + _display(v) + '</td></tr>'
                                                           for k, v in option.get('value', {}).items() if k not in OPENING_VALUE_HIDDEN)
                           + '</table>'
                           + (('<p class="note">作者原话：' + _esc(row.get('source', '')) + '</p>') if row.get('source') else '')

@@ -5,7 +5,7 @@ import copy
 from decimal import Decimal, InvalidOperation, localcontext
 from .contracts import Error, TIME_MARKERS, digest, dump, require, text
 from . import narrative, spatial
-from .evidence import evidence
+from .evidence import evidence, registration as registration_evidence
 from .entities import register as register_entity
 
 
@@ -244,18 +244,9 @@ def settle(before, events, prose, chapter):
         require(isinstance(raw, dict), 'event', '事件须为对象。')
         event = copy.deepcopy(raw)
         if event.get('op') in ('entity', 'alias', 'place'):
-            # Registration events are generated from the frozen chapter outline, not claimed by
-            # the prose; anchor them to the chapter itself when the writer filed no evidence.
-            ref = event.get('evidence')
-            valid = isinstance(ref, dict) and type(ref.get('chapter')) is int and text(ref.get('quote'))
-            if not valid:
-                source = event.get('entity') or event.get('place') or event.get('alias') or {}
-                name = source.get('name') if isinstance(source, dict) else None
-                anchor = prose.find(name) if text(name) else -1
-                if anchor >= 0:
-                    event['evidence'] = {'chapter': chapter, 'quote': name, 'start': anchor}
-                else:
-                    event['evidence'] = {'chapter': chapter, 'quote': prose[:1], 'start': 0}
+            place = event.get('place') or {}
+            aliases = state['entities'].get(place.get('id'), {}).get('aliases', []) if isinstance(place, dict) else []
+            event['evidence'] = registration_evidence(event, prose, chapter, aliases=aliases)
         event['evidence'] = evidence(event.get('evidence'), {chapter: prose})
         if event.get('op') == 'clock':
             require(any(t in event['evidence']['quote'] for t in TIME_MARKERS),

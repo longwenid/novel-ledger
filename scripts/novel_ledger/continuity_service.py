@@ -5,7 +5,7 @@ Host authenticity is delegated to Governance; advisory mode stays visibly unveri
 """
 from __future__ import annotations
 
-from .contracts import digest, dump, policy_default, require, text
+from .contracts import CHARACTER_KINDS, digest, dump, policy_default, require, text
 from .ports import Repository
 from . import continuity, store_keys
 
@@ -64,7 +64,8 @@ class ContinuityService:
                      'prose': chapter['prose'], 'prose_hash': digest(chapter['prose']),
                      'producer': receipt['session'], 'history': history,
                      'comparison': {'plan': chapter['plan'], 'self_check': receipt['data']['self_check'],
-                                    'drift_check': receipt['data'].get('drift_check')}}
+                                    'drift_check': receipt['data'].get('drift_check'),
+                                    'characters': self._character_material(task, chapter['plan'])}}
         row = {'schema': SCHEMA, 'request_id': ident, 'task_id': task['id'], 'candidate_hash': ident,
                'candidate': self.repo.document(candidate), 'phase': 'await_observer', 'observer': None}
         self.repo.put(key, row)
@@ -72,6 +73,32 @@ class ContinuityService:
         self.repo.put(store_keys.pending_review(task['id']), ident)
         self.repo.record('continuity_requested', {'request': ident, 'task': task['id']})
         return row
+
+    def _character_material(self, task, plan):
+        """Read only relevant, input-bound profiles; never the live book or future state."""
+        records = task['input'].get('records') or {}
+        hashes = {name: records[name] for name in ('state', 'world_records') if records.get(name)}
+        sources = {name: self.repo.read_document(reference) for name, reference in hashes.items()}
+        state = sources.get('state') or {}
+        definitions = sources.get('world_records') or {}
+        introductions = {item['id']: item for item in plan.get('new_entities') or []}
+        ids = set(plan.get('participants') or []) | set(introductions)
+        ids.update(item['entity'] for item in plan.get('characters') or [])
+        profiles = {}
+        for ident in sorted(ids):
+            definition = definitions.get('characters:' + ident)
+            registered = state.get('entities', {}).get(ident)
+            introduction = introductions.get(ident)
+            if not definition and (introduction or registered or {}).get('kind') not in CHARACTER_KINDS:
+                continue
+            profiles[ident] = {'world': definition, 'registered': registered,
+                               'introduction': introduction,
+                               'current': state.get('character_current', {}).get(ident),
+                               'developments': state.get('developments', {}).get(ident, [])}
+        return {'source_hashes': hashes, 'profiles': profiles,
+                'boundary': '这些是冻结世界／档案设计和本章开始前状态；小传不证明正文事实。'
+                            '比较动机桥梁、身份和知情连续性；成长优先看有正文依据的 current 与 developments。'
+                            '明确矛盾仍须成对原文引证；小传建议不足记 editorial，无法确认记 uncertain，不按偏好拒稿。'}
 
     def _active(self, ident):
         row = self.repo.get(store_keys.continuity_review(ident))

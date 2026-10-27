@@ -65,7 +65,7 @@ class QuoteFamilyLintTests(unittest.TestCase):
         self.assertEqual(lint.style_findings(current, [(1, prior)], 2), [])
 
     def test_distinct_top_level_quote_families_remain_a_format_finding(self):
-        mixed = '「甲。」「乙。」「丙。」“丁。”“戊。”'
+        mixed = '「甲。」「乙。」「丙。」“丁。”“戊。”“己。”'
         findings = lint.style_findings(mixed, [], 2)
         self.assertEqual([row['criterion'] for row in findings], ['language'])
 

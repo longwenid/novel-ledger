@@ -559,6 +559,41 @@ class CurrentOpeningTests(unittest.TestCase):
         payoff['plan']['ways'] = []
         self.assertCode('opening_option', creation.validate_value, 'payoff', payoff, OPENING_VERSION, {})
 
+    def test_plain_perspective_choices_reach_the_contract_without_a_style_change(self):
+        choices = (
+            ('用“我”讲，只写主角亲历的事，不换人。',
+             '主角视角，跟随当前人物经历事情。', ['只写主角能知道的事。']),
+            ('用“他／她”讲，主要跟主角，必要时另起场景跟配角。',
+             '主角为主，少量配角场面分开写。', ['换人时交代当前人物。']),
+            ('第三人称双主角，按场景轮流跟随两位核心人物。',
+             '两人各有行动线，彼此的选择改变对方处境。', ['每场只进入当前人物的内心。']),
+            ('第三人称群像，多位核心人物分场限知。',
+             '多方各有目标和行动，共同推动局面，不固定围绕一位主角。',
+             ['切换时交代当前人物。', '各方信息不得因视角轮转自动互通。']),
+            ('第一人称旁观者，通过见证者的经历了解核心事件。',
+             '观察核心人物，以亲历或有来源的讲述形成认识。', ['不替被观察的人直接知道心事。']),
+            ('第三人称全知，叙述者可跨人物与地点交代内心和行动。',
+             '从全局展示相互影响的选择，真相按章纲逐步揭示。',
+             ['叙述者揭示不等于人物已知。', '暂不披露的真相仍按章纲保留。']),
+        )
+        for pov, voice, traits in choices:
+            with self.subTest(pov=pov):
+                state = walk_to(creation.begin(), 'voice')
+                rows = rows_for('voice')
+                value = {'pov': pov, 'voice': voice, 'style_traits': traits}
+                rows[0]['value'] = copy.deepcopy(value)
+                offered = creation.offer(state, {'gate': 'voice', 'options': rows})
+                state = creation.pick(offered, rows[0]['id'], offered['board']['hash'], '就按这个讲。')
+                state = walk(state)
+                candidate = planning.validate_contract(contract_from(state))
+                world = {'rules': [{'principle': '夜班退件必须登记负责人。'}]}
+                creation.validate_contract(candidate, state, world)
+                for key, expected in value.items():
+                    self.assertEqual(candidate[key], expected)
+                # A later stage still cannot replace the author's selected scope.
+                candidate['pov'] = '随时知道所有人物的心事。'
+                self.assertCode('opening_alignment', creation.validate_contract, candidate, state, world)
+
     def test_walking_every_gate_forms_a_contract_that_keeps_each_decision(self):
         state = walk(creation.begin('工程夹具：走完全程。'))
         self.assertEqual(state['phase'], 'world')

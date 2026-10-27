@@ -10,6 +10,7 @@ from .contracts import Error, text
 
 from .drift import HOOK_ACTIONS, NODE_STATES, REVEALS, REVEAL_RANK, STANCES, THREAD_STATES, _canonical_reveal, _declared, _deltas, _enter_rows, _finding, _item, _kind_of, _number, _place_id, _project, _reduce, _resource_coordinate, _resource_parts, _safe, _same, _split_dump, _window
 from . import evidence, facts, world
+from .entities import validate_introduction
 
 
 # ------------------------------------------------------------- simulation
@@ -171,10 +172,16 @@ def _closure(state, volume_outline, chapter_no, model, findings, clock_start=Non
     return findings
 
 
-def _registrations(row, state, chapter, findings):
+def _registrations(row, state, chapter, findings, model=None):
     events = []
     for entity in row.get('new_entities') or []:
         if not isinstance(entity, dict) or not text(entity.get('id')) or entity['id'] in state.get('entities', {}):
+            continue
+        try:
+            validate_introduction(entity, (model or {}).get('characters') or [])
+        except Error as error:
+            findings.append(_finding(chapter, 'entity', entity['id'], '完整且身份一致的档案',
+                                     _safe(entity), error.message, 'chapter_entity', 'blocker'))
             continue
         event = {'op': 'entity', 'entity': copy.deepcopy(entity)}
         if _reduce(state, event, chapter, 'entity', entity['id'], findings):
@@ -203,7 +210,7 @@ def simulate(chapters, state0, world, volume_row=None, volume_outline=None):
     hooks = _hook_registry(volume_outline)
     for chapter in rows:
         chapter_no = chapter.get('chapter')
-        _registrations(chapter, state, chapter_no, findings)
+        _registrations(chapter, state, chapter_no, findings, world)
         coords = _deltas(chapter, findings)
         declared = _enter_rows(chapter, findings)
         # The declared entry condition must be the projection the previous chapter left behind.

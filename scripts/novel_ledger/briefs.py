@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from .creation import gate_title, value_rules
-from .contracts import (OPENING_VERSION, OPTION_CONTRACT, WORLD_ARCHITECTURE)
+from .contracts import (BIOGRAPHY_FIELDS, OPENING_VERSION, OPTION_CONTRACT, WORLD_ARCHITECTURE)
 from . import stages, world
 BRIEFS = {
     'opening_options': '开书任务卡',
@@ -88,7 +88,10 @@ WORLD_LAYERS = (
         ('factions', '不同组织或文明的生存方案、资源依赖与不能退让的利益；'
                      '跨卷仍在场的势力写清它靠什么延续（可选深字段 survives_scale_up），'
                      '避免上一卷势力到下一卷作废。'),
-        ('characters', '主角及关键人物的欲望、底线、所属秩序与知识边界；成长改变行动范围，也改变关系与责任。'),
+        ('characters', '人物基础档案须完整；主角、双主角与群像核心标 importance=core，并写 biography={'
+                       + ','.join(BIOGRAPHY_FIELDS) + '} 四项非空文本：过往如何形成当下欲望、内在矛盾、'
+                       '关系牵制、行为方式。配角可标 supporting，路人标 minor，不强写长传。'
+                       '小传属于设计，不自动成为事实或角色知情；成长以正文证据和当前状态为准。'),
     )),
     ('资源与经济（底层）', (
         ('economy', '硬通货：**门里 world 门选的 resource（name/source/allocator）必须进这里**——'
@@ -235,11 +238,11 @@ DELTA_HINTS = {
 
 
 def self_check_block():
-    """The chapter outline's declared deltas, turned into a line-by-line comparison the writer answers.
+    """Mechanical comparisons and a separate creative reflection in the same writing task.
 
     Read from the same delta-kind tables the engine reconciles against, so the brief cannot ask for a
-    comparison the program does not perform. The old rubric here quoted a reviewer's checks; with the
-    review stages removed, the thing a producer is judged by is exactly this list.
+    comparison the program does not perform. Reading effect stays explicitly outside that list:
+    it uses the existing self_check, without a new score, settlement item or review task.
     """
     from .drift import DELTA_KINDS, ITEM_KINDS
     kinds = list(DELTA_KINDS) + [kind for kind in ('node', 'thread', 'hook', 'disclosure') if kind in ITEM_KINDS]
@@ -249,7 +252,11 @@ def self_check_block():
     return ['## 提交前自检（逐项与章纲比对）',
             '本章纲声明了哪些计划增量，drift_check.items 就必须一行不多、一行不少地覆盖它们；'
             '逐项核账写入 drift_check；self_check 补充本章文风落实与实际修订依据，无需重抄核账：',
-            *['- %s：%s' % (kind, hint) for kind, hint in rows], '']
+            *['- %s：%s' % (kind, hint) for kind, hint in rows], '',
+            '## 本章阅读效果（创作判断）',
+            '在原有 self_check 中结合具体正文说明：读者本章得到了什么，哪种期待得到回应、加深或改变；'
+            '可以是情节、情绪、关系、人物理解或生活体验，不要求每章高潮、反转或揭密。'
+            '连读相邻章判断是否重复或空转，只有具体问题才局部修正；不另交报告、不设评分或新增核账项。', '']
 
 
 VOLUME_CHECK_HINTS = (
@@ -308,6 +315,23 @@ VOLUME_STRUCTURE_GUIDE = (
 )
 
 
+# A design method, not another receipt or validator. Detailed guidance lives in craft.md.
+VOLUME_DESIGN_GUIDE = (
+    '\n\n## 卷纲因果推演（先故事，后字段）\n'
+    '先读冻结 contract、world_model、opening_choices/opening_basis（若有）、前卷设计与未结承诺；'
+    '已生效约定是当前决定，原始选择保留来源，不从摘要重造设定。直接导入项目以约定和实际世界为准。\n'
+    '①核心问题：主角本卷想得到什么，什么处境逼他现在行动；从阅读承诺、核心设想、来历与欲望底线取依据。\n'
+    '②双方行动：主角怎么做，对手为何主动阻止；把世界规则、资源分配、历史遗留与关系依赖变成具体阻力，'
+    '优势必须受已选代价和上限约束，无机制设定不补外挂。\n'
+    '③选择与代价：哪里无法两全，主角选什么、失去什么，对手怎样回应；转折从这些行动产生，不按数量配额填。\n'
+    '④不可逆后果：选择怎样改变处境、利益、关系或规则理解，后续为何无法原样继续；静卷也可积累关系与认知后果。\n'
+    '⑤兑现与收束：回应阶段兑现、期限承诺与终局主题；非终卷留下后果可接，终卷／单卷检查结局，不强造新威胁。\n'
+    '再把同一条因果链投影到 purpose/arc/turns/climax、nodes/threads/hooks 与状态终值，'
+    '最后核算资源、位置、知情和累计时钟；视角、基调、书名承诺贯穿呈现。'
+    '答案写入已有叙述字段，不交额外推演报告或新 JSON 字段；详细方法见 guides 的 craft.md。'
+)
+
+
 def stage(name, payload=None):
     """Cold workers receive the rules of their stage without inheriting controller history."""
     payload = payload or {}
@@ -317,13 +341,14 @@ def stage(name, payload=None):
         'opening_contract': '把已选方向与已核验世界整理为完整约定，严格保留对齐字段，按模板逐字段填写，不增加正文事实。',
         'volume_outline': '交付 volumes：恰好覆盖本批次的每一卷（payload.volume_ids），顺序与 contract.volumes 一致。'
                           '每卷是约 words 汉字的极简卷纲，把这一卷的因果骨架说完（words±tolerance 按性质是每卷总量，不是每段）。'
-                          'stage 必填（opening/5 及之后的逐门项目）：从已选格局阶梯里取一级，逐字写那一级的 stage 名；'
+                          '约定声明 world_ladder 时 stage 从其中取一级，逐字写那一级的 stage 名（直接导入同样适用）；'
                           '按合同卷序只升不降（后一卷的层级序号不得低于前一卷），不写「第一卷」这类编号——'
                           '阶梯每一级在世界模型里都有同名记录，卷纲的 stage 必须对得上。'
                           '已声明 world_architecture 时，arc/turns 承接其长期矛盾、历史后果与文明立场；'
                           '远期真相先以 hooks/window 登记可见线索和揭示窗口，章纲逐步披露，不把作者全知当角色知情。'
-                          'purpose ≤60 汉字说这一卷的职责；arc 约 250 汉字写开局处境→关键转折→卷末局面；'
-                          'turns 至少两条转折（at 取「卷中」「卷尾」或「第N章附近」）；climax 写卷末高潮与兑现物；'
+                          'purpose 简洁说明这一卷的职责；arc 按因果充分展开开局处境→关键选择→卷末局面，计入整卷字数；'
+                          'turns 按实际需要列改变走向的转折，不设次数配额；at 用「开卷」「卷中」「第N章附近」等位置文字；'
+                          'climax 写卷末高潮与兑现物；'
                           'nodes 给 {id,kind:main|side|hidden,purpose,ending_condition,required,window:[本卷最早章,本卷最晚章]}；'
                           'threads 给 {id,kind,purpose,ending_condition,required}，跨卷延续的线路加 continues=true；'
                           'resources 给本卷资源大势 {key,from,to,reason}（key 必须已存在于世界模型或既有状态）；'
@@ -337,12 +362,13 @@ def stage(name, payload=None):
                           'to 取披露档位 hinted|suspected|misled|confirmed|retracted；'
                           'hooks 是必填数组（本卷没有伏笔就给空数组，缺字段会被拒）：每条 '
                           '{id,text,plant:[最早章,最迟章],payoff:[最早章,最迟章],required:true|false,continues:true|false}——'
-                          'id 全书唯一（与 node/thread 同一命名空间，跨卷续用必须 continues=true 且 required=false）；'
+                          'id 全书唯一（与 node/thread 同一命名空间）；'
                           'text 是对读者的具体承诺（哪件物、哪句话、哪桩没交代的事），不写「待补」；'
                           'plant 窗口必须落在本卷章号区间内，两章之间必须有一次 plant；payoff[0] >= plant[1]，'
                           '允许越过卷末，但越过时必须 continues=true 且 required=false；'
                           'required=true 的必须在卷末兑现，引擎在卷内状态链收尾处校验。'
-                          '续写前卷留下的伏笔时沿用同一 id 并标 continues=true，id 清单见材料 hooks.open。'
+                          '前卷未结伏笔保留首次声明，后卷在 arc 排承接、章纲用原 id 的 hook_refs/payoff，'
+                          '不复制 hooks 声明、不重复 plant；清单见材料 hooks。终卷／单卷无需新增跨卷项或新威胁。'
                           'style.trend 必填：用具体文字说清本卷的叙述意图与人物说话方式如何随处境变化；'
                           '作者要求量化时再定对白或句段目标，'
                           '不写「同上」「保持」；可选 style.window 逐项覆盖契约 style_window'
@@ -363,11 +389,13 @@ def stage(name, payload=None):
                            'threads 同时是本章交织申报——本章推进哪条线、以什么方式触碰哪条线'
                            '（轻触不改状态可重申 active，reason 写触碰方式与该线同本章主推进的相互影响）、'
                            '搁置哪条线（dormant+return_by）；不要求每章动所有线，写进本章的线要有申报；'
-                           'beats 可选（非空短句数组）：本章从什么处境推进到什么处境的顺序骨架，'
+                           'beats 可选（短句数组）：按读者阅读顺序写叙述推进意图，可含倒叙、插叙或双线交替；'
+                           '事件发生时间由 timeline 的显式声明与 clock 核算，场景依赖沿 scenes 的既有协议，不能由拍序改写；'
                            '形状自定——可只写一拍或停在余波，不定数量与事件、不设每拍字数、不套平台爽文公式；'
                            'role 可选（一句话）：写明本章在卷内的结构职责'
-                           '（如「转折章：落地卷纲第二条转折（at 第14章附近）」），与相邻章比结构职责差异；'
-                           '卷纲 turns 的每个转折与 climax 应能在章序列里指认落地章，承担章用 role 写明，'
+                           '（如「调查推进：逼近同一条证据链」）；相邻多章可共同承担调查、战斗、谈判或余波，'
+                           '检查各章实际带来的压力、认识、情绪或后果，不要求逐章换职责名；'
+                           '卷纲 turns 与 climax 可跨多章展开，role 可说明各章承担的部分，'
                            '不以均质推进凑章；蓝图（材料 blueprint 记录，若在）的骨架与推进维度是分派语言；'
                            'resources=[{key,from,to,reason}]、places=[{entity,from,to,reason}]、'
                            'knowledge=[{who,topic,from,to,reason}]、characters=[{entity,from,to,choice,cost}] 上述四类数组按模板逐项核对，缺省或 null 与空数组同义——'
@@ -376,7 +404,7 @@ def stage(name, payload=None):
                            'relations=[{source,target,key,from,to,reason}] 是第五类可选数组（缺省/null/空数组=本章无关系变化）：'
                            'source/target 用已登记实体且不相等，key 是关系名（不含 : 与 >），'
                            'to 用稳定短词，from 首次确立为 null、之后逐字承接上一章的 to；'
-                           '人物间的压力变化优先申报 relations；'
+                           '关系压力写进场景意图与行动；形成实际关系状态变化时才申报 relations，不为临时情绪造稳定关系增量；'
                            '五类数组的 from/to 填准确前后值对象，不用状态描述字符串代替。'
                            'clock.advance_days 是本章经过的天数，不倒退；'
                            'enter/exit 是状态链的全部依据：enter 列本章开始时每个受动坐标的期望值（承接上一章 exit），'
@@ -384,14 +412,18 @@ def stage(name, payload=None):
                            '（人物用实体 id，节点/线路用其 id，clock 用 clock）；'
                            'exit 必须等于 enter 施加本章全部增量后的结果——引擎自己算一遍比对，任一侧缺项即漂移、整份被拒，'
                            '先核实真实前态并列全实际变化，不能用少列坐标来避开核算；'
-                           'disclosures 写读者认知的推进：分派面向卷纲 reader_knowledge 终值与揭示结构，'
-                           '压而不揭、递进兑现的意图写进可选 note（双层揭秘按外层/内层分层排；'
-                           '允许一章连进、允许间隔多章、允许外层 confirmed 而内层仍 hinted）；'
+                           'disclosures 只登记本章实际呈现的线索、误导或确认，按 topic/after 进入认知核账；'
+                           '可选 note 说明这次实际披露的节奏意图。仅暂不揭示、没有相关信息呈现时，不为写 note 补一条披露，'
+                           '意图放在现有 pacing（如 pacing.note）或 scenes.intent；'
+                           '外层谜底与内层真相分别使用稳定 topic，允许间隔多章、外层 confirmed 而内层尚未披露或仍 hinted；'
                            'world_refs 引用真实世界记录：写日常呼吸、关系场面或生活器物的章，'
-                           '把要用的 everyday/society/characters 域记录点名——写手材料只带点名的记录与出场人物档案，'
-                           '未点名的域到不了写手；'
+                           '把要用的 everyday/society/characters 域记录点名；必读材料还含出场人物与直接关联，'
+                           '其他设定按冻结世界补读；'
                            'new_entities 内联新人物/地点/物品档案 {id,kind,name,role,desire,limit,knowledge_boundary}，'
-                           '第一次出现就给全，不用另派档案阶段；'
+                           '人物（kind=person或character）第一次登记就给全；地点和物品不强填人物欲望。'
+                           '同一世界人物须沿用正式姓名和身份；称谓放 aliases，不能换 ID 重建同名人物。'
+                           '核心人物 importance=core，小传 biography 四字段见世界简报及 editorial.md；'
+                           '已有冻结世界小传可直接沿该来源，不重复抄写，不另派档案阶段；'
                            'hooks 是必填数组（本章不埋也不兑就给空数组）：每条 {hook,action:plant|payoff,note}。'
                            '只有 plant 和 payoff 两个动作——plant 创建承诺（引擎按卷纲声明的 payoff[1] 设到期章），'
                            'payoff 兑现承诺；「中途再提一次」不算动作，用 hook_refs 承接已经埋下的承诺。'
@@ -410,7 +442,8 @@ def stage(name, payload=None):
                  '本章纲（chapter_outline）与卷纲材料（volume_outline）都是必读；卷纲节点已按本章及前置依赖筛选，完整卷纲可从 complete_volume_outline 补读：按章纲的拍序、场景与增量落笔，'
                  '不添章纲没有的重大变化，也不漏掉章纲声明要发生的。'
                  '章纲的 beats/role/threads 交织申报/scenes/world_refs 点名是结构意图不是文字模板：'
-                 '按拍序与场景依赖落笔，不逐拍均匀着墨、不把拍当小标题，表达在这些边界内自由展开。'
+                 'beats 表达读者阅读顺序，可含倒叙、插叙和双线交替，视角仍沿作者约定；事件时间与场景依赖分别核对，'
+                 '不逐拍均匀着墨、不把拍当小标题，表达在事实与知情边界内自由展开。'
                  'drift_check.items 已按章纲的计划增量预填，逐条把 actual 填成正文实际发生的值'
                  '（actual.from 由引擎投影，不是你自报的前态）、status 取 kept|deviated|skipped，'
                  'deviated/skipped 必须写 reason，但只作为待返修诊断，不能入库；evidence.quote 必须是正文原文片段。'
@@ -423,6 +456,9 @@ def stage(name, payload=None):
                  'style_anchor 样本的字数只用于文风可比性，不是本章字数目标）；字数不足靠增加事件补足——新的行动、阻力、转折或后果，'
                  '不以描写、重复或对话注水；作者真相、角色知情与读者已见严格区分，披露不越过 disclosure_boundary。'
                  'self_check 用具体表达说明实际视角、人物说话方式与节奏；'
+                 'new_entities 必须在本章正文实际提及；名称或已登记 aliases 可自动定位，'
+                 '也可交 drift_check.introductions=[{entity:实体ID,evidence:{chapter:本章,quote:原文,start:字符偏移}}]。'
+                 '引文须含该实体名称或已登记别名；不能拿无关文字登记人物。'
                  'dialogue_ratio 未声明时不用补比例，已声明时如实核对，不按段落分配对白。'
                  '材料 style.profile 是生效文风档案档名（声线与口癖对照它的档案文件，guides 里带该文件）；'
                  'style.anchor 是首章的实测指标、style.window 是本卷生效的容差：'
@@ -457,7 +493,7 @@ def stage(name, payload=None):
         # Directional structure discipline rides with every volume dispatch; the author's blueprint
         # and the previous round's reasoned refusal are named only when they exist, so a plain
         # first round reads no phantom requirements.
-        rule += ' ' + VOLUME_STRUCTURE_GUIDE
+        rule += ' ' + VOLUME_DESIGN_GUIDE + '\n\n' + VOLUME_STRUCTURE_GUIDE
         blueprint = payload.get('structure_blueprint')
         if isinstance(blueprint, dict) and blueprint.get('name'):
             rule += ('\n\n## 结构蓝图（作者选定：%s）\n'
@@ -506,7 +542,7 @@ def stage(name, payload=None):
         enhanced = {'repair': ' 可用 base_hash/patches/repair_note 或 reuse_original 替代 prose；程序合成后按章纲核算。基稿与前态仍必读。',
                     'redesign': ' 可提交版本补丁；仍消耗本章共享重设计额度。'}.get(name, '')
         if name in ('write', 'repair', 'redesign'):
-            enhanced += ' 章纲的 beats/scenes/pacing 若已给出，按拍与场展开并保持次序与依赖。'
+            enhanced += ' 章纲的 beats/pacing 是叙述安排；scenes 的依赖与显式 timeline 分别遵守，不从阅读顺序推算事件先后。'
     memory = ''
     if payload.get('understanding'):
         memory = (' creative_memory 是可修订的理解及原文表达样本，结合反证和适用范围使用；'

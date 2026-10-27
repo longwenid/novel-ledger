@@ -9,12 +9,13 @@ another agent wrote, because no other agent writes one.
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import context
+from novel_ledger import context, creation, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import (chapter_rows, check_dispatch, contract, drive, response, seeded_book,
@@ -161,6 +162,27 @@ class DispatchMaterialTests(unittest.TestCase):
         self.assertEqual(record['source'], '工程夹具在章纲前绑定结构蓝图。')
         self.assertTrue(record['boundary'])
 
+    def test_hold_intent_reaches_the_writer_without_creating_a_disclosure(self):
+        drive(self.app, until='chapter_outline')
+        receipt = response(self.app)
+        rows = receipt['data']['chapters']
+        rows[0]['beats'] = ['先看到核对时的反应。', '回顾交接约定。', '回到当下继续核对。']
+        for row in rows:
+            row['role'] = '共同推进一次退件调查'
+            row['disclosures'] = []
+        rows[0]['pacing'] = {'note': '本章只写核对时的压力，暂不提供关于幕后动机的新信息。'}
+        self.app.submit(receipt)
+        drive(self.app, until='write')
+        work = self.pending()
+        plan = self.repo.read_document(work['records']['chapter_outline'])
+        boundary = self.repo.read_document(work['records']['disclosure_boundary'])
+        self.assertEqual(plan['beats'], rows[0]['beats'])
+        self.assertEqual(plan['role'], rows[0]['role'])
+        self.assertEqual(plan['pacing'], rows[0]['pacing'])
+        self.assertEqual(boundary['allowed_changes'], [])
+        checks = response(self.app)['data']['drift_check']['items']
+        self.assertFalse(any(item['kind'] == 'disclosure' for item in checks))
+
     def test_a_named_everyday_record_reaches_the_writer_and_an_unnamed_one_does_not(self):
         """The life-material channel: `world_records` carries exactly the records the plan names
         (plus the cast's own files and their links), so naming an everyday record in the chapter
@@ -216,6 +238,66 @@ class OutlineMaterialTests(unittest.TestCase):
         self.assertEqual([row['chapter'] for row in chapters], [1, 2])
         self.assertTrue(all(row['synopsis'] for row in chapters))
         self.assertTrue(all(row['world_refs'] for row in chapters))
+
+
+class PlanningLineageTests(unittest.TestCase):
+    def test_all_thirteen_choices_and_accepted_world_reach_the_frozen_volume_task(self):
+        from test_opening import walk
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder) / 'book'
+            book = workflow.preparing_book(guided=True)
+            book['creation'] = walk(book['creation'])
+            book['status'] = 'running'  # the final author choice also advances the lifecycle
+            expected_choices = creation.selected(book['creation'])
+            self.assertEqual(set(expected_choices), set(creation.gate_ids()))
+            with closing(SQLiteRepository.initialize(project, book)) as repo:
+                app = Application(repo)
+                drive(app, until='world_model')
+                world_input = repo.pending()['input']
+                basis = repo.read_document(world_input['records']['opening_basis'])
+                self.assertEqual(repo.read_document(world_input['records']['opening_choices']), expected_choices)
+                candidate = response(app)
+                # The generic office and this opening's first stage otherwise share a fixture name.
+                office = next(r for r in candidate['data']['geography'] if r['id'] == 'office')
+                office['name'] = '夜班办公室'
+                app.submit(candidate)
+                drive(app, until='volume_outline')
+                accepted = repo.load()
+                task = repo.pending()['input']
+                check_dispatch(task)
+                for name in ('contract', 'world_model', 'opening_choices', 'opening_basis'):
+                    self.assertIn(name, task['required'])
+                self.assertEqual(repo.read_document(task['records']['opening_basis']), basis)
+                self.assertEqual(repo.read_document(task['records']['opening_choices']), expected_choices)
+                self.assertEqual(repo.read_document(task['records']['world_model']), accepted['world'])
+                self.assertEqual(repo.read_document(task['records']['contract']), accepted['contract'])
+                self.assertEqual(accepted['world']['selection_hash'], basis['selection_hash'])
+                expected_hashes = dict(task['records'])
+            with closing(SQLiteRepository(project)) as reopened:
+                task = reopened.pending()['input']
+                self.assertEqual(task['records'], expected_hashes)
+                self.assertEqual(reopened.read_document(task['records']['opening_choices']), expected_choices)
+
+    def test_rolling_volume_reads_the_adjacent_approved_outcome_without_all_history(self):
+        with tempfile.TemporaryDirectory() as folder:
+            book = seeded_book(contract(chapters=6, volumes=3))
+            book['contract']['volume_outline']['scope'] = 'rolling'
+            book['structure_blueprint'] = {'name': '多线交错', 'source': '作者选定交织结构。'}
+            prior = volume_rows(book, ['v1', 'v2'])
+            book['volumes_outline'] = {v['id']: v for v in prior}
+            with closing(SQLiteRepository.initialize(Path(folder) / 'book', book)) as repo:
+                task = context.build(repo, book, workflow.next_volume_outline(book, book['contract']))
+                check_dispatch(task)
+                self.assertIn('previous_volume_outline', task['required'])
+                self.assertEqual(repo.read_document(task['records']['previous_volume_outline']), prior[-1])
+                self.assertIn('blueprint', task['required'])
+                self.assertEqual(repo.read_document(task['records']['blueprint'])['source'], '作者选定交织结构。')
+                self.assertEqual(task['payload']['structure_blueprint']['name'], '多线交错')
+                # A task's source remains immutable even if a caller mutates its in-memory book.
+                book['volumes_outline']['v2']['exit_state'] = '后来改过的局面'
+                self.assertNotEqual(repo.read_document(task['records']['previous_volume_outline'])['exit_state'],
+                                    book['volumes_outline']['v2']['exit_state'])
+                self.assertEqual(task['payload']['volume_ids'], ['v3'])
 
 
 if __name__ == '__main__':

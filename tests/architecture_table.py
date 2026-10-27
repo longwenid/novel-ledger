@@ -55,7 +55,7 @@ ALLOWED = {
     # sections, nodes, spatial rules), which is what lets a whole volume be checked before
     # a word is written.
     'drift': {'contracts', 'facts', 'narrative', 'spatial', 'world'},
-    'drift_simulation': {'contracts', 'drift', 'evidence', 'facts', 'world'},
+    'drift_simulation': {'contracts', 'drift', 'evidence', 'facts', 'world', 'entities'},
     'drift_validation': {'contracts', 'drift', 'drift_simulation', 'entities', 'world', 'continuity'},
     'drift_reconcile': {'contracts', 'drift', 'drift_simulation', 'evidence', 'world'},
     'result_templates': {'contracts', 'world', 'editorial', 'narrative', 'stages', 'drift'},
@@ -63,7 +63,7 @@ ALLOWED = {
     'spatial': {'contracts'},
     'story_memory': {'contracts'},
     'understanding': {'contracts'},
-    'world': {'contracts'},
+    'world': {'contracts', 'entities'},
     # briefs renders what a stage must produce, so it reads the same declarations the checks do:
     # the stage registry, the world section table and the drift field table. Keeping the
     # requirement and its check on one declaration is the point — a brief asking for a small world

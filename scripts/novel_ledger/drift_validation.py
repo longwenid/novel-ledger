@@ -30,16 +30,18 @@ def _length_policy(policy):
     return words, tolerance
 
 
-def _ladder_stages(selected):
-    """The 格局 rungs a v5 opening chose, in order; empty for an opening that never chose one.
+def _ladder_stages(contract, selected):
+    """Read the active contract's rungs; old inputs may fall back to opening choices.
 
-    A volume names the rung it plays on, and the rungs only climb: the contract's volume order is the
-    story's order, so the same index sequence has to be non-decreasing across the whole book.
-    A selection that is not the declared shape yields no rungs rather than raising: the gate already
-    owns that shape, and a half-written project must still be able to read its own outline.
+    Direct imports have no opening state. Once a contract declares world_ladder (including an
+    explicit empty list), historical choices cannot silently replace that active declaration.
+    Contract/gate validation owns the row shape; this reader only selects the source.
     """
-    choice = selected.get('ladder') if isinstance(selected, dict) else None
-    rows = choice.get('ladder') if isinstance(choice, dict) else None
+    if 'world_ladder' in contract:
+        rows = contract['world_ladder']
+    else:
+        choice = selected.get('ladder') if isinstance(selected, dict) else None
+        rows = choice.get('ladder') if isinstance(choice, dict) else None
     return [row for row in (rows or []) if isinstance(row, dict) and text(row.get('stage'))]
 
 
@@ -79,7 +81,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
                 seen_hooks[row['id']] = old_id
     world_ids = _world_ids(world)
     entities = _entity_ids(world, selected) | set(((state or {}).get('entities') or {}))
-    ladder = _ladder_stages(selected)
+    ladder = _ladder_stages(contract, selected)
     rungs = [row['stage'] for row in ladder]
     report = {}
     for volume in volumes:
@@ -98,8 +100,7 @@ def validate_volume_outline(data, contract, world, selected=None, existing=None,
             findings.append(_finding(chapter_no, 'style', ident, '{trend:非空文本}',
                                      _safe(volume_style), '新卷纲须声明具体的 style.trend。',
                                      'volume_style', 'blocker', 'volume'))
-        # A v5 opening that chose a 格局 ladder names one rung per volume, verbatim; an opening that
-        # never chose one leaves `stage` empty and nothing here changes for it.
+        # Guided and directly imported contracts share the same ladder and ordering check.
         if ladder and volume.get('stage') not in rungs:
             findings.append(_finding(chapter_no, 'stage', ident, rungs, _safe(volume.get('stage')),
                                      '本卷的格局层级必须逐字取自已选阶梯里的一级。',
@@ -449,6 +450,7 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
                                          'chapter_thread', 'blocker', 'outline'))
         for entity in row.get('new_entities') or []:
             try:
+                entities.validate_introduction(entity, (world or {}).get('characters') or [])
                 register_entity(scratch, entity)
             except Exception as error:                       # structured Error from entities
                 findings.append(_finding(chapter_no, 'entity',

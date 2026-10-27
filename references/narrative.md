@@ -21,6 +21,8 @@
 
 ### 参数与范围
 
+设计顺序采用 [卷纲因果设计](craft.md#卷纲因果设计)：先用开书决定、当前约定、世界和前卷后果建立人物行动链，再映射回执字段。卷纲任务冻结完整上游材料；滚动后续卷额外必读 `previous_volume_outline`（相邻已批准卷纲），不只凭开书摘要重建前卷结局。这些来源不新增回执字段或文学阻断。
+
 新建/明确改约默认 `volume_outline={scope:'all', words:2500, tolerance:500}`：即**每卷 2000–3000 汉字**（目标 2500，可由作者改约调整）；`words` 是**每卷**汉字数，`tolerance` 是允许偏差，`scope` 为 all（一次交全部卷）或 rolling（进入该卷前交该卷）。卷纲与章纲都是必选阶段；缺省使用默认策略，显式 `{}` 或 `null` 会被拒绝并提示填写完整策略。字数用工程统一的汉字计数，标点和拉丁字符不计。字数合格不证明因果、人物选择或阅读作用成立。
 
 多卷策略组合为 all/volume、all/all 或 rolling/volume（依次为卷纲/章纲 scope）；rolling/all 会在约定校验时拒绝，避免提前派发尚无卷纲的全书章纲任务。
@@ -55,9 +57,11 @@
 ```
 
 - `id` 与 `contract.volumes` 一一对应且顺序一致；`purpose` 是卷职责。
+- `turns[].at` 与 `turn` 使用非空文字；「卷中／卷尾／第N章附近」是位置示例，不是封闭枚举。「开卷」等清楚描述同样可用，设计蓝图的样本位置不新增词表或比例阈值校验。
 - 已声明 `world_ladder` 时，`stage` 必须逐字取其中一级，并按卷序只升不降；直接导入约定未声明阶梯时可留空。
 - `nodes`/`threads` **按卷登记**，id 全书唯一、不覆盖已批准 id；跨卷线路用 `continues: true` 标记。
 - `hooks` **必填数组，可为空**：本卷伏笔账，规则见 [伏笔账](#伏笔账卷纲声明章纲执行)。
+- 终卷与单卷作品不要求新增跨卷伏笔、新威胁或后续卷依赖；新埋设为空仍须按章纲承接并结清前卷真实待结义务。自然语言结局与余韵由作者判断，完本机械闭合沿现有规则执行。
 - `style.trend` **必填**（具体文字，说明本卷文风怎么走、相对首章定调有何变化）；`style.window` 可选，逐项覆盖契约 `style_window`。见 [文风](#文风)。
 - `resources`/`places`/`characters`/`knowledge`/`relations`/`reader_knowledge` 引用的 key/entity 必须存在于世界模型或既有状态；`window` 落在本卷章号区间。
 - `relations`/`reader_knowledge` 是**可选终值，声明才核对**：留空数组就是不声明本卷这项终值，卷末闭合免检。`relations` 每条 `{source,target,key,to,reason}`，source/target 须已登记且不相等，key 不含 `:` 与 `>`，`to` 用稳定短词（章纲增量的 to 与它逐字同源）；`reader_knowledge` 每条 `{topic,to,reason}`，`to` 取披露档位，核对对象是本卷章纲 `disclosures` 声明的最后档位（本卷不再推进的 topic 取已结算投影）。
@@ -68,7 +72,7 @@
 
 提交时引擎机械校验：卷 id 与 `contract.volumes` 一一对应且顺序一致；每卷汉字数落在 `words±tolerance`；node/thread/hook id 全书唯一且不覆盖已批准 id；`resources/places/knowledge/characters/relations/reader_knowledge` 引用的 key/entity/两端实体存在（relations 的 source≠target，key 不含 `:` 与 `>`；reader_knowledge 的 `to` 取披露档位）；`window` 落在本卷章号区间；`exit_state` 非空；`hooks` 的窗口与跨卷标记自洽（见 [伏笔账](#伏笔账卷纲声明章纲执行)）；`style.trend` 非空。任一项失败时提交被拒（`design_drift`），保持原任务并按具体错误重交，不消耗正文返修额度。
 
-通过全部机械校验的回执**落库前先进入待认可暂存**：卷纲（合并档连同其章纲与结算行）保存在 `pending_design`，引擎返回 `await_volume_confirm` 并物化 `work/volume-board.md` 与 `work/volume-question.json`；作者用 `confirm-volume --hash volumes_hash --source 原话` 绑定准确版本认可后，两半才在同一事务安装，章纲与执笔随之继续。轻调叙述面用 `revise-volume --file 调整.json --hash --source`（白名单 purpose/arc/turns/climax/exit_state/style.trend，结构化字段拒绝并指向重出）；带理由退回用 `regroup-volume --hash --reason 原话 [--blueprint 档名]`，理由进入下一次卷纲派工的冻结输入（`volume_rejections` 记录）。看板附两条只警不拦的 advisory：各卷 threads/hooks 全无 continues 的「卷间纠缠缺位」，与各卷 turns 恰两条且位置全为卷中/卷尾的「节奏模板同构」；作者坚持以作者为准，二者没有也不可有升级为阻断的开关。
+通过全部机械校验的回执**落库前先进入待认可暂存**：卷纲（合并档连同其章纲与结算行）保存在 `pending_design`，引擎返回 `await_volume_confirm` 并物化 `work/volume-board.md` 与 `work/volume-question.json`；看板概览并链接 `work/volume-design.md`，详情按卷或章展示完整卷纲和本次合并章纲、结算行，作者用 `confirm-volume --hash volumes_hash --source 原话` 认可后，两半才在同一事务安装。新暂存的 hash 绑定上述三部分；旧版待认可项目保留卷纲专用 hash，卡片会提示其范围，作者应核对合并内容，章纲与执笔随之继续。轻调叙述面用 `revise-volume --file 调整.json --hash --source`（白名单 purpose/arc/turns/climax/exit_state/style.trend，结构化字段拒绝并指向重出）；带理由退回用 `regroup-volume --hash --reason 原话 [--blueprint 档名]`，理由进入下一次卷纲派工的冻结输入（`volume_rejections` 记录）。看板附两条只警不拦的 advisory：至少两卷时比较本批次与相邻已认可前卷，检查 threads/hooks 全无 continues 的「卷间纠缠缺位」，以及 turns 恰两条且位置全为卷中/卷尾的「转折位置模板同构」；单卷样本不做跨卷判断；作者坚持以作者为准，二者没有也不可有升级为阻断的开关。
 
 ### 结构纪律
 
@@ -113,13 +117,16 @@
 ```
 
 - **必需**：`chapter` `synopsis` `plot.beat` `enter` `exit` `world_refs`。模板显式列出五个增量数组（`resources` `places` `knowledge` `characters` `relations`），便于逐类核对；空数组、缺字段和 null 均表示本章没有这类变化——`relations` 与前四类同义，不写就是「本章无关系变化」。写入的变化仍须通过完整形状与状态校验。
-- `beats`（可选，非空短句数组）是本章从什么处境推进到什么处境的顺序骨架：形状自定——可只写一拍或停在余波上；不定数量、不定事件、无每拍字数、禁平台爽文公式；静章可整体一拍。`role`（可选，一句话）写明本章在卷内的结构职责（如「转折章：落地卷纲第二条转折（at 第14章附近）」），与相邻章比结构职责差异；卷纲 `turns` 的每个转折与 `climax` 应能在章序列里指认落地章，承担章用 `role` 写明，不以均质推进凑章。作者绑定结构蓝图时，章纲材料携带 `blueprint` 记录，其骨架与推进维度是分派语言（边界同卷纲：不定事件桥段、非情节模板）。两者缺省合法；形状只查「给了才查」，且**缺省不落键**——存储行的整行摘要（digest）逐字节稳定，保留后缀重排的比对不受影响。
+- `beats`（可选，元素为非空文本的数组）按**读者阅读顺序**表达叙述推进意图，可只写一拍或停在余波上，也可包含倒叙、插叙与双线交替。它不定义事件发生顺序：显式故事时间由 `timeline` 表达，累计天数由 `clock` 核算，场景引用与依赖沿 `scenes` 的既有协议；不能用拍序改写已发生事实、前态或知情边界。不定拍数与每拍字数、不把拍当正文小标题、禁平台爽文公式。
+- `role`（可选，一句话）说明本章对卷内故事的实际作用。相邻多章可共同承担一场调查、战斗、谈判或情绪余波，不要求每章换职责名；应看各章实际提供的压力、认识、情绪或后果。卷纲 `turns`／`climax` 可以跨多章展开，承担章可说明自身完成的部分。角色标签不机械证明转折已落地，连续阅读效果由创作者判断。
+- 作者绑定结构蓝图时，章纲材料携带 `blueprint`，其骨架与推进维度用于分派，不定事件桥段、非情节模板。`beats`／`role` 缺省合法，给了只查形状，且**缺省不落键**，存量章纲行摘要和保留后缀重排的比对保持稳定。
 - `plot.threads` 同时是本章交织申报：本章推进哪条线、以什么方式触碰哪条线（轻触不改状态可重申 `active`，`reason` 写触碰方式与该线同本章主推进的相互影响）、搁置哪条线（`dormant`+`return_by`）；不要求每章动所有线，写进本章的线要有申报。章内两线如何交替叙述属拍/场层，由 `beats`/`scenes` 表达。
-- `disclosures` 每行可带可选 `note`（非空文本）写节奏意图：如「双层揭秘的外层先立，内层留到第N章窗」「本章 suspected 是故意压着，铺垫第N章 confirmed」。分派面向卷纲 `reader_knowledge` 终值与揭示结构——允许一章连进、允许间隔多章、允许外层 `confirmed` 而内层仍 `hinted`；`note` 随行进入写手的披露边界材料，不参与结算与对账（引擎只读 topic/after）。
+- `disclosures` 登记本章实际向读者呈现的线索、误导或确认；每条 `topic/after` 都进入认知核账，需正文证据。其可选 `note` 只解释**这次实际披露**的节奏，如「确认了外层身份，暂不解释其动机」；note 自身不参与结算，不能覆盖 after 的披露边界。若本章仅暂不揭示、没有相关信息呈现，不为备注而新增披露条目；意图写入现有 `pacing`（如 `pacing.note`）或 `scenes.intent`，它们不新增认知核账项。
+- 分层揭秘用独立稳定 `topic` 区分可分别判断的命题（例如外层身份与内层动机），分别安排披露；没有新呈现的内层可以不声明本章变化。允许一章连进、间隔多章或外层 confirmed 而内层仍 hinted，不用同一 topic 的文字备注冒充两个认知状态。不涉及披露时 `disclosures:[]` 合法，卷末仍按已声明的读者终值闭合。
 - `hooks` **必填数组，可为空**：本卷伏笔的执行，`action` 只有 `plant` 与 `payoff` 两个值；中途“再提一次”用 `hook_refs`，不新增动作。见 [伏笔账](#伏笔账卷纲声明章纲执行)。
 - `style`：`pov` 与 `rhythm` 必填，`dialogue_ratio`（0~1）与 `notes` 可选。见 [文风](#文风)。
-- `scenes`/`pacing` 是当前章纲的可选字段：分场是场景质感的容器，对话场/动作场/日常场等类型写进 `label`/`intent`（方向自定），需要写手按场展开时给 `scenes`，不强制每章分场；`hook_refs`/`reader_refs`/`history_refs` 指出本章要承接的旧承诺、旧认知与历史断言。写日常呼吸、关系场面或生活器物的章，把要用的 `everyday`/`society`/`characters` 域记录在 `world_refs` 点名——写手材料只带点名的记录与出场人物档案，未点名的域到不了写手。
-- `new_entities` 取代原人物档案派工：新人物/地点/物品首次出现时，在本章内联给出档案字段；落地后按 id 引用，不再单独派一次档案任务。
+- `scenes`/`pacing` 是当前章纲的可选字段：分场是场景质感的容器，对话场/动作场/日常场等类型写进 `label`/`intent`（方向自定），需要写手按场展开时给 `scenes`，不强制每章分场；`hook_refs`/`reader_refs`/`history_refs` 指出本章要承接的旧承诺、旧认知与历史断言。写日常呼吸、关系场面或生活器物的章，把要用的 `everyday`/`society`/`characters` 域记录在 `world_refs` 点名——必读材料按显式引用、出场人物及直接关联筛选；其他世界记录仍可沿冻结来源补读。
+- `new_entities` 在首次登记时内联给出档案，落地后按 id 引用。人物须有完整基础字段，显式核心人物须有小传来源；与冻结世界核对身份，地点和物品不套人物字段，统一见 [人物档案](editorial.md#人物档案)。
 - 每章 synopsis 交代实际发生的事、人物处境与本章阅读作用；行动与后果可跨章承接，不强求每章齐备一套节拍。引用真实世界记录与卷纲已登记的节点/线路/伏笔。
 
 **状态链坐标速查**（enter/exit 的 `key` 写法，增量行的字段与其一致）：
@@ -139,7 +146,7 @@
 1. 章号连续，恰好覆盖本卷 `[volume.first, volume.end]`（`scope=all` 时覆盖整卷）。
 2. `synopsis` 汉字数落在 `words±tolerance`。
 3. 每行增量形状合法：`from`/`to` 类型一致，`reason` 非空；resource 有 key 且存在于世界或既有状态；place 存在于世界 geography；relations 的两端实体已登记、source≠target、key 不含 `:` 与 `>`；node/thread/hook 属于本卷卷纲已登记集合（hook 另见跨卷带入规则）。
-3a. 可选结构表达字段给了才查、缺省合法：`beats` 须为非空短句数组（空数组合法），`role` 与 `disclosures[].note` 须为非空文本；`beats`/`role` 缺省不落键，存量章纲行的整行摘要保持稳定（保留后缀重排不受影响）。
+3a. 可选结构表达字段给了才查、缺省合法：`beats` 须为数组且各元素为非空文本（空数组合法），`role` 与 `disclosures[].note` 须为非空文本；`beats`/`role` 缺省不落键，存量章纲行的整行摘要保持稳定（保留后缀重排不受影响）。
 4. **enter/exit 冗余一致性**：`exit` 必须等于 `enter ⊕ 本章增量`（引擎自己算一遍比对）。任一侧缺项即漂移，拒绝。
 5. **卷内状态链模拟**：从卷起始真实状态出发逐章应用增量，要求第 i 章 `enter` 恰好等于模拟到第 i 章开始的状态。模拟中拒绝：资源为负、`clock` 倒退、位置跳变到未登记地点、知情倒退（`retracted` 除外）、人物变化缺 `choice`/`cost`、关系坐标引用未登记实体或章间 `from`/`to` 措辞不逐字承接、同一 node 重复 `advanced` 或 resolved 后再推进、thread resolved 后重用，以及伏笔的重复埋设/重复兑现/越窗/未埋先承接（见 [伏笔账](#伏笔账卷纲声明章纲执行)）。
 6. **卷末闭合**：最后一章模拟结果必须等于卷纲声明的 `resources/places/knowledge/characters` 结构化终值、声明了的 `relations` 与 `reader_knowledge` 终值（未声明免检）与 `clock.to`（容差 0）；整卷模拟还核对 `clock.advance_days`。本卷 `required: true` 的伏笔须全部 `paid`。`exit_state` 只作文字说明。
@@ -201,7 +208,7 @@
 
 - 卷纲 `style.trend`（必填）写具体叙述意图，例如人物关系渐近时对白由试探变得直接；可带 `style.window` 逐项覆盖契约容差。作者要求量化时才选择数字目标，不为写趋势硬设配额。
 - 章纲 `style` 的 `pov`、`rhythm` 必填；`dialogue_ratio`（0~1）与 `notes` 可选。视角沿用作者约定，节奏结合当章内容；未声明对白目标就不补比例，`notes` 不是绕过事实约束的豁免。
-- 首章样本提供叙述气质和表达依据，静章、争吵、追逐与独处可以有不同的句段和对白密度。具体语言取舍见 [人物与表达的真实感](craft.md#人物与表达的真实感)。
+- 首章样本提供叙述气质和表达依据，静章、争吵、追逐与独处可以有不同的句段和对白密度。具体语言取舍见 [文风机制与生效档案](style.md)，原文诊断见 [人物与表达的真实感](craft.md#人物与表达的真实感)。
 
 ### 契约容差 `style_window`
 
@@ -223,7 +230,7 @@
 
 `metrics` 保留原稿顺序计算重复率，识别中文、直角及英文直引号，嵌套对白不重复计数；闭引号和连续省略号不产生零汉字句。短文本门槛沿 contracts.DEFAULTS：正文不足 40 汉字整章不判，锚点不足 40 汉字不作为基线，四字窗口不足 20 不判重复度。句段只在锚点与本章字量同数量级（3 倍内）且本章至少三句时比较。
 
-锚点缺失时回落到契约 `style_profile` 所选内置档案的注册锚点（`contracts.profile_anchor`；未知或缺失档名按引擎默认档，项目根 style-profile.md 自定义档案未注册形状时机械锚同样按默认档回落）：形状指标照常比较——observe 档记为观察、strict 档产生 findings——报告标注基线为声明锚（含档名）而非作者认可，首章认可后由实锚替换。显式对白目标与重复度检查不变；明确声明对白目标 0 时，非零对白仍产生偏差；未声明时，独处章没有对白可以是正常阅读需要。
+锚点缺失时回落到契约 `style_profile` 所选内置档案的注册锚点（`contracts.profile_anchor`；未知或缺失档名按引擎默认档，项目根 style-profile.md 只替换文学档案，机械锚仍取契约内置选择，不因自定义文件改为引擎默认档）：形状指标照常比较——observe 档记为观察、strict 档产生 findings——报告标注基线为声明锚（含档名）而非作者认可，首章认可后由实锚替换。显式对白目标与重复度检查不变；明确声明对白目标 0 时，非零对白仍产生偏差；未声明时，独处章没有对白可以是正常阅读需要。
 
 **人称观察的边界**：第一人称叙述可写“我进门，他抬头”，第三人称限知也可贴近人物的内心话；中文还会省略主语。`first/third/mixed/unknown` 只是代词分布标签，不能证明越界、全知或人称切换。实际视角仍须按作者约定结合所知范围、心理归属与切换标记自比。
 
@@ -250,6 +257,7 @@
       "reason": "deviated/skipped 必填",
       "evidence": {"chapter": 1, "quote": "正文原文片段"}
     }],
+    "introductions": [{"entity":"本章新实体ID","evidence":{"chapter":1,"quote":"包含名称或已登记别名的正文原文","start":123}}],
     "unplanned": [{"kind":"knowledge","key":"hero:t2","actual":{"from":null,"to":"hinted"},"reason":"本章新增线索","evidence":{"chapter":1,"quote":"正文中的完整必要引文"}}],
     "verdict": "clean|deviated"
   },
@@ -260,6 +268,8 @@
 `kind='hook'` 的行用动作而不是前后值：`planned={'action':'plant'|'payoff'}`、`actual={'action':…}`，`evidence` 仍是正文引文。
 
 `kind='relations'` 的行 key 是 `source>target:key` 坐标：`planned/actual` 的 `to` 用稳定短词，`kept` 时必须与章纲逐字相同；`actual.from` 由引擎投影，派工 baseline 的 `relations` 表就是两章之间的真实关系现状。
+
+`introductions` 可省略或为空；每行只指本章 `new_entities` 中一个不重复的 id，引文须属于本章且包含其名称或已登记别名。省略时程序从正文定位名称或别名；找不到则以 `drift_evidence` 进入本章返修，不登记实体。用称谓出场须先在档案 `aliases` 声明，不能拿无关引文代替。名称出现只证明有字面依据，实际身份、行动与人物可信度仍须结合上下文核对。
 
 上例同时列出失败诊断字段。可入库稿须所有项为 `kept`、`unplanned=[]` 且 `verdict=clean`；发现偏差先按原章纲修正文，再按最终正文重新填写，不能只改回执结论。`disclosure` 用 `planned/actual={'after':披露档位}`。
 

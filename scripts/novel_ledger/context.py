@@ -57,7 +57,7 @@ STAGE_MATERIAL = {
     'world_model': ('author_feedback', 'opening_basis', 'opening_choices', 'previous_proposal'),
     'opening_contract': ('author_feedback', 'opening_basis', 'opening_choices', 'world_model'),
     'volume_outline': ('author_feedback', 'blueprint', 'contract', 'effective_layout', 'hooks', 'opening_basis',
-                       'opening_choices', 'revision_impact', 'revision_instruction', 'state',
+                       'opening_choices', 'previous_volume_outline', 'revision_impact', 'revision_instruction', 'state',
                        'structure_blueprint', 'style', 'volume_rejections', 'world_model'),
     'chapter_outline': ('author_feedback', 'blueprint', 'contract', 'design_drift', 'effective_layout',
                         'hooks', 'previous_chapters', 'previous_chapter:', 'revision_impact',
@@ -291,7 +291,7 @@ def _brief(book, job):
     if job.stage == 'volume_outline' and previous:
         # The volume outline is the first dispatch that has to build on every closed gate at once;
         # naming the chosen directions in the brief costs one line each and saves a round trip.
-        text += ('\n\n## 已选方向（不得推翻，卷纲必须承接）\n'
+        text += ('\n\n## 已选方向（原始来源；执行以当前生效约定为准）\n'
                  + '\n'.join('- %s：%s' % (name, line) for name, line in previous))
     return text
 
@@ -823,6 +823,13 @@ def build(repo: ContextStore, book, job):
                                      'volume_ids': [v['id'] for v in chosen],
                                      'volumes': [{'id': v['id'], 'purpose': v.get('purpose', ''),
                                                   'first': v['first'], 'end': v['end']} for v in chosen]}
+        # Rolling design needs the actual preceding outcome, not just the original opening pitch.
+        # Carry one adjacent complete outline; avoid resending every historical volume per batch.
+        before = min((v['first'] for v in chosen), default=0)
+        prior = [v for v in contract['volumes']
+                 if v['end'] < before and v['id'] in (book.get('volumes_outline') or {})]
+        if prior:
+            add('previous_volume_outline', book['volumes_outline'][prior[-1]['id']])
         # The bound blueprint also names itself in the payload for the brief and the template; the
         # record both stages read was added above.
         if blueprint_entry is not None:

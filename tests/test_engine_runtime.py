@@ -52,7 +52,11 @@ class RuntimeInstallTests(unittest.TestCase):
         self.assertEqual(Path(task['commands']['submit'][1]), self.target / 'scripts/novel.py')
         self.assertEqual(runtime_install.verify(self.target)['build'], before)
         self.assertTrue(self.cli(pinned['entry'], '--project', project, 'host-check')['watch_creates_workers'] is False)
-        self.assertTrue(runtime_install.pin(self.source, self.target)['reused'])
+        reused = runtime_install.pin(self.source, self.target)
+        self.assertTrue(reused['reused'])
+        self.assertFalse(reused['source_matches_runtime'])
+        self.assertEqual(reused['source_build'], runtime_install.build_at(self.source))
+        self.assertEqual(reused['build'], before)
 
     def test_no_overwrite_source_or_unrelated_directory_and_no_partial_mismatch(self):
         for target in (self.source, self.source / 'runtime', self.base):
@@ -75,7 +79,75 @@ class RuntimeInstallTests(unittest.TestCase):
         self.assertEqual(result['error'], 'engine_changed')
         self.assertFalse((self.base / 'book/novel.sqlite3').exists())
 
+    def test_frozen_target_remains_usable_when_development_source_is_incomplete(self):
+        runtime_install.pin(self.source, self.target)
+        (self.source / 'scripts/novel_ledger/contracts.py').write_text('unfinished = (', encoding='utf-8')
+        reused = runtime_install.pin(self.source, self.target)
+        self.assertTrue(reused['reused'])
+        self.assertIsNone(reused['source_build'])
+        self.assertIsNone(reused['source_matches_runtime'])
+        self.assertEqual(reused['build'], runtime_install.verify(self.target)['build'])
+
+    def test_mismatch_reports_distinct_frozen_and_authorized_upgrade_paths(self):
+        expected = {**runtime_install.build_at(self.source), 'engine_hash': 'old-release'}
+        task = {'task_id': 'exact-pending-task', 'input_hash': 'frozen-input-hash'}
+        for existing in (False, True):
+            if existing:
+                runtime_install.pin(self.source, self.target)
+            with self.assertRaises(Error) as caught:
+                runtime_install.pin(self.source, self.target, expected=expected,
+                                    project=self.base / 'book', task=task)
+            details = caught.exception.details
+            self.assertEqual(details['expected'], expected)
+            self.assertEqual(details['selected'], runtime_install.build_at(self.source))
+            self.assertEqual({key: details[key] for key in task}, task)
+            paths = details['recovery_options']
+            self.assertFalse(paths['match_frozen_build']['changes_task'])
+            self.assertIn('--ref', paths['match_frozen_build']['command_template'])
+            upgrade = paths['upgrade_frozen_task']
+            self.assertTrue(upgrade['requires_author_upgrade'])
+            self.assertNotIn('--project', upgrade['prepare_command_template'])
+            recovery = upgrade['recover_command_template']
+            self.assertEqual(recovery[1], '<new-runtime-directory>/scripts/novel.py')
+            self.assertEqual(recovery[recovery.index('--task') + 1], task['task_id'])
+            self.assertEqual(recovery[recovery.index('--input-hash') + 1], task['input_hash'])
+            self.assertNotIn('--worker-stopped', recovery)
+            self.assertEqual(self.target.exists(), existing)
+            self.assertFalse(any(self.base.glob('.novel-runtime-*')))
+
+    def test_new_fixed_release_recovers_exact_pending_task_without_development_tree_edits(self):
+        source_entry = self.source / 'scripts/novel.py'
+        project = self.base / 'book'
+        self.cli(source_entry, '--project', project, 'init')
+        step = self.cli(source_entry, '--project', project, 'advance', '--compact')
+        task_id = step['task']['task_id']
+        frozen = json.loads((project / 'work' / task_id / 'task.json').read_text())
+        before = (project / 'novel.sqlite3').read_bytes()
+        rules = self.source / 'references/runtime.md'
+        changed_rules = rules.read_text() + '\n选定的新发布规则。\n'
+        rules.write_text(changed_rules, encoding='utf-8')
+        mismatch = self.cli(source_entry, '--project', project, 'pin-engine', '--output', self.target, code=2)
+        self.assertEqual(mismatch['error'], 'engine_changed')
+        details = mismatch['details']
+        self.assertEqual(details['task_id'], task_id)
+        self.assertEqual(details['input_hash'], frozen['input_hash'])
+        self.assertEqual((project / 'novel.sqlite3').read_bytes(), before)
+        self.assertFalse(self.target.exists())
+        pinned = self.cli(source_entry, 'pin-engine', '--output', self.target)
+        self.assertEqual((project / 'novel.sqlite3').read_bytes(), before)
+        self.assertEqual(rules.read_text(), changed_rules)
+        result = self.cli(pinned['entry'], '--project', project, 'recover-engine', '--task', task_id,
+                          '--input-hash', frozen['input_hash'], '--source', '作者授权将准确待办切换到选定新发布。')
+        self.assertEqual(result['retired_task'], task_id)
+        self.assertNotEqual(result['task']['task_id'], task_id)
+        self.assertEqual(rules.read_text(), changed_rules)
+        new_task = json.loads(Path(result['task']['task_path']).read_text())
+        self.assertEqual(Path(new_task['commands']['submit'][1]), self.target / 'scripts/novel.py')
+
     def test_release_pin_matches_pending_build_without_checkout_or_project_mutation(self):
+        # Releases may omit optional directories; passing absent pathspecs to git
+        # archive would reject an otherwise complete, matching installation.
+        shutil.rmtree(self.source / 'docs', ignore_errors=True)
         self.assertEqual(subprocess.run(['git', 'init', '-q', str(self.source)]).returncode, 0)
         for args in (['add', '.'], ['-c', 'user.name=Runtime Test', '-c', 'user.email=runtime@example.invalid',
                                   'commit', '-qm', 'release']):
@@ -95,7 +167,10 @@ class RuntimeInstallTests(unittest.TestCase):
         self.assertEqual(result['build'], frozen['build'])
         self.assertEqual(result['build'], runtime_install.build_at(self.target))
         self.cli(result['entry'], '--project', project, 'advance', '--compact')
-        self.assertTrue(runtime_install.pin(self.source, self.target, ref='HEAD')['reused'])
+        reused = runtime_install.pin(self.source, self.target, ref='HEAD')
+        self.assertTrue(reused['reused'])
+        self.assertTrue(reused['source_matches_runtime'])
+        self.assertEqual(reused['source_build'], result['build'])
         with self.assertRaises(Error):
             runtime_install.pin(self.source, self.target, ref='missing-release')
 

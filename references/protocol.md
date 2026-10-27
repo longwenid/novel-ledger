@@ -1,8 +1,6 @@
-2.1.2选择性合并远端租约心跳、内容错误分类和完整材料包；保留2.1.0的独立核验、执行世代与构建约束。
-
 # 任务与结果协议
 
-2.1.0增加独立连续性辅助协议 `novel-ledger.continuity/1`，不改SQLite /5格式，不给旧任务追填报告。新CLI项目默认要求此核验；命令、双阶段模板与宿主证明契约见[质量与宿主](quality.md)。冻结input可含build（version/engine_hash/rules_hash），构建变化拒绝继续该任务。
+独立连续性辅助协议为 `novel-ledger.continuity/1`，不改 SQLite /5 格式，不给旧任务追填报告。新CLI项目默认要求此核验；命令、双阶段模板与宿主证明契约见[质量与宿主](quality.md)。冻结input可含build（version/engine_hash/rules_hash），构建变化拒绝继续该任务。
 
 提交统一返回outcome、当前总findings、transaction、next_action与effects_if_submitted；旧valid/accepted/committed保留兼容含义。outcome包括design_accepted、candidate_ready、chapter_committed、repair_required、author_decision_required、continuity_review_required；旧完成任务没有新结果快照时，重放返回receipt_replayed并标legacy_outcome_unknown，不猜是否当时入章。成功回执重试返回原确认，不重耗轮次。
 
@@ -12,7 +10,7 @@
 
 本页说明字段与机械核验，创作判断见 [创作与自比](craft.md)。填写时以当前任务的 capabilities、brief 和 result.template.json 为准，不自行增删字段或预填结论；格式不确定用 `check`，处理入口见 [运行](runtime.md)。
 
-约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威，模板与结构校验均由它派生。未知字段按 contract 拒绝，标为 optional 的数组/映射缺省时补空值；有 default 的字段采用表中默认值，其余按表检查必填。当前存储为 novel-ledger/5，通过不可变结构分块共享累计快照；文档哈希仍对应完整逻辑值，任务和回执不感知分块。仅支持当前库，v4 及更早数据库拒绝打开并保留原文件，不自动转换。CLI 版本为 `2.0.0`，只运行当前阶段与任务能力；旧门序、旧字段及独立审查阶段的任务直接拒绝，须以当前模板重新派工。开书协议版本为 `opening/7`（`novel-ledger.creation/7`，13 门，体量先于世界、世界与格局先于视角、对手先于关系、来历在世界定形后接入），是唯一支持的协议：声明更早 creation 版本的项目在读取时被明确拒绝，以当前协议重开；自备约定不经门序核验，缺省的结构化开书字段不追溯补选。
+约定字段表以 contracts.py 的 CONTRACT_FIELDS 为唯一权威，模板与结构校验均由它派生。未知字段按 contract 拒绝，标为 optional 的数组/映射缺省时补空值；有 default 的字段采用表中默认值，其余按表检查必填。当前存储为 novel-ledger/5，通过不可变结构分块共享累计快照；文档哈希仍对应完整逻辑值，任务和回执不感知分块。仅支持当前库，v4 及更早数据库拒绝打开并保留原文件，不自动转换。发布版本由 `novel.py --version` 查询；只运行当前阶段与任务能力，旧门序、旧字段及独立审查阶段的任务直接拒绝，须以当前模板重新派工。开书协议版本为 `opening/7`（`novel-ledger.creation/7`，13 门，体量先于世界、世界与格局先于视角、对手先于关系、来历在世界定形后接入），是唯一支持的协议：声明更早 creation 版本的项目在读取时被明确拒绝，以当前协议重开；自备约定不经门序核验，缺省的结构化开书字段不追溯补选。
 
 ## 作者约定
 
@@ -31,7 +29,7 @@
 | volume_outline | `volumes[]`，字段、长度与卷末终值见 [卷纲](narrative.md#卷纲)；选择绑定见 [世界规则](world.md#三条逐字绑定) |
 | chapter_outline | `volume` + `chapters[]`，字段与状态链见 [章纲](narrative.md#章纲)；重排范围以冻结 payload 为准 |
 | style_guard | `observe`（默认）/`strict`：前者只观察相对首章的句段和未声明对白比例变化，后者按窗口执行数值约束。显式对白目标、高重复在两档都核，代词只观察；作者选择经正常约定或改约留档 |
-| style_profile | 枚举＝`contracts.STYLE_CATALOG` 档名（默认 `DEFAULTS['style_profile_default']`＝市井修仙；档目以注册表与 [内置文风目录](style.md) 为准，不在本表复述）：生效的内置文风档案，写作派工 guides 自动带档案文件，无认可锚点时代理指标回落该档注册锚点。参数字段：`recontract --patch` 直接换档不触发重写；项目根 style-profile.md 自定义档案存在时覆盖它（见 [文风](style.md)） |
+| style_profile | 枚举＝`contracts.STYLE_CATALOG` 档名（默认 `DEFAULTS['style_profile_default']`＝市井修仙；档目以注册表与 [内置文风目录](style.md) 为准，不在本表复述）：生效的内置文风档案，写作派工 guides 自动带档案文件，无认可锚点时代理指标回落该档注册锚点。参数字段：`recontract --patch` 直接换档不触发重写；项目根 style-profile.md 存在时替换文学档案，机械锚仍按契约内置选择解析（见 [文风](style.md)） |
 | style_window | `{sentence:0.35, paragraph:0.35, dialogue:0.40, repetition:0.12, person:1}`（optional、不参与对齐）：文风代理指标容差；句段与对白使用相对变化，repetition 是本章绝对重复度上限，person 保留为代词观察参数，不能据此断言叙事视角；卷纲 `style.window` 与契约**逐项合并**（先用契约补默认，再按合法键与合法数值逐个覆盖），作者可改约调整。见 [文风](narrative.md#文风) |
 | narrative_tracking | true；关闭时章纲的 `plot.nodes`/`plot.threads` 可空，但事实增量仍按同一规则核算，五类增量数组（含可选的 relations）缺省或 null 按空数组处理 |
 | editorial_features | true；编辑能力要求叙事跟踪，关闭跟踪时也须关闭编辑能力；人物、场景与补丁字段见 [编辑能力](editorial.md) |
@@ -39,15 +37,15 @@
 
 **开书枚举**（取值单点声明在 `contracts.py`，文档只列可用值）：`WORLD_SCOPES` 局部/一城/一域/一界/星海/诸天；`WORLD_GROWTHS` 地盘/势力/规则/认知/文明；`WORLD_TERMINALS` 局部/势力/体系/文明；`STANCES` 顺从/利用/对抗；`DARK_SIDES` 外神/天灾/系统/上层剥削/制度/人心；`COSMOLOGY_SCOPES` 一界/星海/诸天（格局到这些尺度时世界模型的 `cosmology` 必填）；`SETTING_CLICHES` 序列/途径/克苏鲁/克系/系统/幕后黑手/第四天灾/诸天/无限流/模拟器/签到/存档重开（脑洞门板面提示，**只提示不拦**）。这些枚举与 `DEFAULTS['world_ladder']`（`tier_min`/`stage_min`/`anchor_max_chapter`）一样，改一处即可。
 
-**跨层共享的数值默认单点声明在 `contracts.DEFAULTS`**，由 `contracts.policy_default(key)` 取用（取回的是副本，调用方改不动那唯一一份声明）：卷纲/章纲策略、`style_window` 与文风门槛（`style_floor_han`/`style_min_sentences`/`style_min_ngrams`/`style_ngram`/`style_short_sentence`/`style_same_order`）、开书位阶/阶梯条数下限与主题锚点上限（`world_ladder` 的 `tier_min`/`stage_min`/`anchor_max_chapter`）、返修额度（`repairs`/`redesigns`/`stall_after_rounds`）都在那里。契约字段默认值、`drift`/`style`/`world` 的校验、`context`/`workflow` 的兜底以及测试夹具全部读它——改一个默认值只需改一处；`tests/test_architecture.py::test_shared_numeric_defaults_are_declared_once` 会挡住重新硬编码。**这不改变分层纪律**：层边界仍由 `tests/architecture_table.py` 管，`DEFAULTS` 只管“同一个值只能有一个来源”。
+数值默认的权威为 `contracts.DEFAULTS`，工程维护与依赖守卫见 [架构不变量](architecture.md#不变量)。本表与叙事指南保留便于填写的数值投影，由 test_doc_single_source 核对其与声明一致，不构成独立默认来源。
 
 t0/t1 的 `PIPELINE_SHAPES` 只保留 `merge_chapter_outline=True`：本卷卷纲与章纲由一次派工、一份回执交付，两个契约各自校验同一份回执；其余档位分两次派工。
 
 跟踪项目按每章 word_budget 动态约束剩余总预算，允许长短章共同收口；关闭叙事跟踪时的静态规则如下。作者只定两件事：**章数**（落在档位窗口内）与**每章字数区间**（来自档位表）。总字数区间由二者派生（`章数 × [chapter_min, chapter_max]`）。完本核对的也是这两件事：章数写到位，且每一章都在区间内（后者在章节提交时逐章检查）。
 
-entities=[{id,name,kind,aliases?}]、initial_facts=[{entity,key,value}]、initial_resources=[{holder,asset,unit,quantity}]、places=[{id,name,parent?}]、placements={entity:place} 只放已成立事实。quantity 为十进制字符串。world_rules/red_lines/arcs 是字符串数组，voice 保存文风。字面规则不属于约定：它是项目级 book.lexical_policy 的版本记录，用 `lexical --file 规则.json --source 原话` 修改，约定里出现 lexical_policy 会被结构校验拒绝。新人物不再有独立的档案派工，改由章纲 `new_entities` 内联声明。
+entities=[{id,name,kind,aliases?}]、initial_facts=[{entity,key,value}]、initial_resources=[{holder,asset,unit,quantity}]、places=[{id,name,parent?}]、placements={entity:place} 只放已成立事实。quantity 为十进制字符串。world_rules/red_lines/arcs 是字符串数组，voice 保存讲述说明或已有的文风约定。字面规则不属于约定：它是项目级 book.lexical_policy 的版本记录，用 `lexical --file 规则.json --source 原话` 修改，约定里出现 lexical_policy 会被结构校验拒绝。新人物不再有独立的档案派工，改由章纲 `new_entities` 内联声明。
 
-protagonist_setup={id,name,identity,desire,limit} 保存主角身份、欲望和底线；relationships 为关系约定数组，style_traits 为文风特征数组。tone 保存给读者的基调，theme 保存母题，pov 保存叙述视角与人称（谁在讲、能看多远，换视角时如何交代）。完整约定可参考 [示例约定](../assets/contract.example.json)，按作者真实要求替换，不沿用示例题材和篇幅。
+protagonist_setup={id,name,identity,desire,limit} 保存主角身份、欲望和底线；relationships 为关系约定数组，style_traits 为表达约定数组。tone 保存给读者的基调，theme 保存母题，pov 保存叙述视角与人称（谁在讲、能看多远，换视角时如何交代）。新逐门方案中 voice 用白话概括讲述方式，style_traits 补充知情和换人边界，不另选语感、句长或幽默；直接导入及已有选择的文风特征仍按原约定保留。作者可见的选法见 [写作视角](hatch.md#写作视角)。完整约定可参考 [示例约定](../assets/contract.example.json)，按作者真实要求替换，不沿用示例题材和篇幅。
 
 ## 冻结任务与资料读取
 
@@ -59,7 +57,7 @@ task.json 给身份、路径和 commands，其中 records 提供冻结哈希，r
 
 场景任务携带 capabilities.scene_memory=scene-memory/1；scene_context/scene_sources 为冻结的场景输入和已提交来源，字段及 dependency_coverage 见 [叙事推进](narrative.md#场景依赖与任务材料)。revision-impact 的输入、采用范围与保守扩展规则见 [运行](runtime.md)。
 
-每个任务材料的 `policy` 块是当前生效的项目字面约定：`version`/`source` 说明版本与来源（作者原话或内置默认），`forbidden_terms`/`forbidden_name_chars` 给出规则，`scope` 说明**本阶段实际检查哪些字段**。该块与执行检查共用 `contracts.ENFORCEMENT` 一张表，所以声明与校验不会脱节；越出 scope 的字段不检查，违反 scope 内字段以 `literal_policy` 拒绝并在 details 里列出命中字段与命中词。改规则用 `lexical` 命令。
+每个任务材料的 `policy` 块是当前生效的项目字面约定：`version`/`source` 说明版本与来源（作者原话或内置默认），`forbidden_terms`/`forbidden_name_chars` 给出禁用规则，`scope` 说明**本阶段实际检查哪些字段**。该块与执行检查共用 `contracts.ENFORCEMENT` 一张表，所以声明与校验不会脱节；越出 scope 的字段不检查，违反 scope 内字段以 `literal_policy` 拒绝并在 details 里列出命中字段与命中词。`allowed_latin` 是作者允许正文保留的西文专名数组，缺省为空；每项为至少两个英文字母组成的完整词，区分大小写，只豁免完全相同的连续字母段，不豁免其他禁词规则。预检、提交与最终复验读取同一生效规则；完本快照使用其冻结规则。改规则用 `lexical` 命令并保存作者原话，例如文件内容 `{"allowed_latin":["NASA"]}`；文件代表完整新规则，未列出的字段恢复默认。先查看当前规则，提交时带上要保留的字段；清空用空数组。
 
 `read --task ID` 只返回本任务**尚未拿到过**的必读记录（跳过的名字列在 already_read，需要原文用 `--record 名称` 或 `--all` 取回）；返回里的 `records_hash` 是本任务 required 对应名称及哈希的摘要；仅主干连续自执 opening_options 时，与前一次相同且必读名单未变可跳过本次 read；其他任务由各自 Worker 完整读取必读记录；`--record 名称` 读单个完整记录。`recall --task ID --chapter N` 读冻结目录中的完整历史章，`--state` 读完整前态。可选 history_source 以哈希冻结逐章目录；分页检索与承诺关联见 [叙事推进](narrative.md#历史补读)。必读 state 按参与人和相关开放承诺选择，派工 baseline 也取该冻结视图，complete_state 永远可补读。结构选择不证明其他事实语义无关；执笔材料包含本章章纲和相关卷纲，完整卷纲保留补读入口，见 [材料范围](narrative.md#有界材料与局部重排)。当前 state 是视图，不冒充全部资料。
 

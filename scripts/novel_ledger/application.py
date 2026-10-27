@@ -581,6 +581,10 @@ class Application:
                                              if volume_board else self.presentation.question(boundary['board']))
             except OSError as exc:
                 boundary['question_card_error'] = str(exc)
+            if volume_board and isinstance(boundary.get('board_card'), str):
+                # The local card links to the separately materialized complete design. Do not echo
+                # it into both the response and snapshot; on a delivery error retain it for recovery.
+                boundary['board'] = {key: value for key, value in boundary['board'].items() if key != 'design'}
             try:
                 boundary['advance_snapshot'] = self.presentation.snapshot(boundary)
             except OSError as exc:
@@ -1027,6 +1031,8 @@ class Application:
             book = self._load()
             pending = book.get('pending_design')
             require(isinstance(pending, dict), 'volume_confirm', '当前没有待认可的卷纲。')
+            require(workflow.verify_design_hash(pending), 'volume_confirm',
+                    '待认可内容与保存的版本不一致，请保留现场并核对暂存设计。')
             require(pending['volumes_hash'] == volumes_hash, 'volume_confirm',
                     '认可版本与当前暂存卷纲不一致，不能串版认可。',
                     {'expected': pending['volumes_hash'], 'got': volumes_hash,
@@ -1059,6 +1065,8 @@ class Application:
             book = self._load()
             pending = book.get('pending_design')
             require(isinstance(pending, dict), 'volume_confirm', '当前没有待认可的卷纲。')
+            require(workflow.verify_design_hash(pending), 'volume_confirm',
+                    '待认可内容与保存的版本不一致，请保留现场并核对暂存设计。')
             require(pending['volumes_hash'] == volumes_hash, 'volume_confirm',
                     '调整版本与当前暂存卷纲不一致，先核对当前哈希。',
                     {'expected': pending['volumes_hash'], 'got': volumes_hash})
@@ -1357,7 +1365,7 @@ class Application:
     def set_lexical(self, override, source, owner=None):
         """The author's lexical rules live on the book, not inside a contract; each change is a version."""
         require(isinstance(override, dict) and set(override) <= set(POLICY_FIELDS), 'lexical_policy',
-                '字面规则只接受 forbidden_terms/forbidden_name_chars。')
+                '字面规则只接受 forbidden_terms/forbidden_name_chars/allowed_latin。')
         require(text(source), 'author_source', '保存作者改字面规则的原话。')
         policy = planning.resolve_policy(override)
         with self.repo.transaction():

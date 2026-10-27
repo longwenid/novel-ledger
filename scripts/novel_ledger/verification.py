@@ -77,7 +77,7 @@ class VerificationService:
             review = self.sources.read_document(row['review'])
             require(isinstance(review, dict), 'outline_alignment', '章节缺少有效的章纲自比记录。',
                     {'chapter': row['n']})
-            settlement = drift_reconcile.reconcile(review.get('drift_check'), plan, chapter_state, book.get('world'))
+            settlement = drift_reconcile.reconcile(review.get('drift_check'), plan, chapter_state, book.get('world'), prose=prose)
             require(not settlement['findings'], 'outline_alignment', '正式正文未通过固定章纲核验。',
                     {'chapter': row['n'], 'findings': settlement['findings']})
             chapter_state, events = facts.settle(chapter_state, facts.prepare_hook_links(settlement['events']),
@@ -89,7 +89,8 @@ class VerificationService:
             planning.check_text(prose, planning.policy_of(book))
             priors = reversed(rows[max(0, index - lint.DUPLICATE_WINDOW):index])
             findings = lint.draft_findings(prose, [(prior['n'], self.sources.read_document(prior['prose']))
-                                                   for prior in priors], row['n'])
+                                                   for prior in priors], row['n'],
+                                           allowed_latin=planning.policy_of(book)['allowed_latin'])
             require(not findings, 'prose_integrity', '正式正文未通过机械复验。',
                     {'chapter': row['n'], 'findings': findings})
         if 'understanding' in book:

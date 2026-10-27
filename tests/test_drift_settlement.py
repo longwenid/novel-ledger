@@ -77,23 +77,25 @@ class UnplannedSettlementTests(unittest.TestCase):
         state, _ = facts.settle(self.state, settled['events'], QUOTE, 1)
         self.assertEqual(state['resources'][key], '2')
 
-    def test_registration_events_without_writer_evidence_anchor_to_the_chapter(self):
-        """Registration rows come from the frozen chapter outline, not from the prose.
-
-        The live 2026-10-21 run lost its first chapter here: settlement demanded a prose quote for
-        every event, and the outline-generated registrations had none. They now anchor to the
-        chapter itself — to the registered name when the prose happens to carry it."""
+    def test_registration_evidence_is_inferred_only_from_real_names_or_aliases(self):
+        """Outline-generated rows can infer quotes, but cannot invent evidence of a mention."""
         events = [
             {'op': 'entity', 'entity': {'id': 'porter', 'name': '挑夫', 'kind': 'person'}},
             {'op': 'place', 'place': {'id': 'dock', 'name': '货栈渡口', 'parent': None}},
             {'op': 'alias', 'entity': 'shen', 'alias': '沈师叔'},
         ]
-        state, settled = facts.settle(self.state, events, '挑夫把沈砚领到货栈渡口。', 1)
+        before = copy.deepcopy(self.state)
+        with self.assertRaises(Error) as caught:
+            facts.settle(self.state, events, '挑夫把沈砚领到货栈渡口。', 1)
+        self.assertEqual(caught.exception.code, 'evidence')
+        self.assertEqual(self.state, before)
+        prose = '挑夫把沈砚领到货栈渡口，唤他沈师叔。'
+        state, settled = facts.settle(self.state, events, prose, 1)
         self.assertEqual([event['evidence']['chapter'] for event in settled], [1, 1, 1])
         self.assertEqual(settled[0]['evidence']['quote'], '挑夫')
         self.assertEqual(settled[1]['evidence']['quote'], '货栈渡口')
-        # The alias never appears in the prose; its anchor is the chapter, not a refusal.
-        self.assertEqual(settled[2]['evidence'], {'chapter': 1, 'quote': '挑', 'start': 0})
+        self.assertEqual(settled[2]['evidence'],
+                         {'chapter': 1, 'quote': '沈师叔', 'start': prose.index('沈师叔')})
         self.assertIn('沈师叔', state['entities']['shen']['aliases'])
         self.assertIn('porter', state['entities'])
         self.assertIn('dock', state['places'])

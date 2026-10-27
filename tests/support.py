@@ -410,7 +410,8 @@ def volume_stage(book, volume):
     from novel_ledger import creation
     opening = book.get('creation') or {}
     choices = creation.selected(opening) if opening else {}
-    levels = _ladder_levels(choices)
+    levels = (book['contract']['world_ladder'] if 'world_ladder' in book['contract']
+              else _ladder_levels(choices))
     if not levels:
         return ''
     volumes = book['contract']['volumes']

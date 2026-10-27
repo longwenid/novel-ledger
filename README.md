@@ -155,7 +155,7 @@ init ──► 逐门选择（13 门，一门一件事，主干自执）──�
    └─ 或 --contract 直接导入完整约定
         │
         ▼
-   卷纲（每卷 2000–3000 汉字，默认一次交全部卷）──► 章纲（每卷进入前交，含漂移字段与 enter/exit）
+   卷纲提交暂存 ──► 作者 confirm-volume 认可后生效 ──► 章纲（每卷进入前交）
         │                                              │
         │                                     引擎逐章模拟卷内状态链，漂移即拒
         ▼
@@ -165,10 +165,12 @@ init ──► 逐门选择（13 门，一门一件事，主干自执）──�
    卷末按结构化终值与 clock.to 机械闭合 ──► complete 验收（篇幅、required 节点与线路、首章认可）──► deliver
 ```
 
+t0/t1 的卷纲与章纲可合并交付，但合并结果仍待作者认可；机械通过不能跳过认可门。设计篇幅与范围见 [叙事推进](references/narrative.md#卷纲)。
+
 运行所需路径与常用命令：
 
 ```bash
-python scripts/novel.py --version          # 2.0.0
+python scripts/novel.py --version          # 以当前输出为准
 python scripts/novel.py --help             # 全部子命令
 ```
 
@@ -194,15 +196,9 @@ python scripts/novel.py --project "$P" run --through 3 --source '作者授权先
 
 `run` 返回 `owner` 租约令牌，之后每个主控命令都要带 `--owner <令牌>`，否则返回 `controller_lease`。
 
-连续写作先固定运行安装，开发目录更新不影响在途任务：`pin-engine --output 独立目录`；已有待办可加 `--project PROJECT --ref 准确提交`，不匹配冻结构建时拒绝，不还原开发目录。将返回runtime_root作为ROOT运行后续命令。需要经作者授权升级时，用新固定入口执行`recover-engine --task ID --input-hash HASH --source 原话 --worker-stopped`，仅重新冻结该待办，保留章纲、候选与额度；有登记执行者时先核实其已停止。详见[固定运行版本与受控切换](references/runtime.md#固定运行版本与受控切换)。
+连续写作先按 [固定运行版本](references/runtime.md#固定运行版本与受控切换) 建立独立副本；开书自执、世界及后续 Worker 派工、watch 等待与原会话恢复统一见 [主干循环](references/runtime.md#主干循环默认执行路径)。目标尚未交付时继续调度；组完成只结束该 Worker，作者认可和其他决定仍按准确版本登记。
 
-`host-check`只报告引擎侧能力，实际模型会话由宿主创建；`prepare-worker.ready`表示身份登记，不能证明Worker已启动。status和派工视图通过worker_presence区分登记、读取/心跳活动及租约失效，worker_running保留未知并交宿主核实。
-
-默认主干循环：开书门任务（opening_options）由主干在同一会话自执；世界模型及之后按 `advance --compact` → 创建真实空历史子 agent，取得宿主会话 ID → `prepare-worker` 并注入 worker_env → 转发 `dispatch.md`，Worker 执行自动验证身份的 Python commands → `watch --owner ID`（引擎进程内等待提交并续租）→ 取下一派工执行。中文长内容一律走引擎物化的文件工件：任务目录的 `brief.md`（简报全文）与 `dispatch.md`，`await_choice` 时的 `work/board.md`（作者卡片）、`work/question.json`（提问载荷）与 `work/last-advance.json`（完整视图快照，`--compact` 的板面回显压缩为哈希与 option_ids）。主干只处理目标、任务身份、简短状态和治理命令，子 agent 读取完整任务并直接提交；主干生命周期由宿主提供。
-
-advance/watch的controller.must_continue=true时继续调度；submit的worker_boundary=finished只结束当前Worker，主控跨组续派，不要求作者每十章重复授权。章节、卷纲边界与卷末都继续循环；修订就绪按授权 `promote` 后接续，完本依次 `complete`、`deliver`。首章认可和开书选择仍按准确版本保存作者决定。`--compact` 只精简返回主干的派工信息，磁盘 `task.json` 与冻结材料保持完整；`status --tasks` 列出全部派工任务的生命周期视图。完整动作分支见 [运行与恢复](references/runtime.md)；`host-step/host-loop` 保留为可选子进程适配器。
-
-历史修订由作者明确要求发起：先分析实际影响，局部修改后携带无影响原文，语义变化沿依赖传播，受影响的章由章纲重排后重写。自动允许范围之外的请求保存完整方案并返回 `revision_blocked`，等待作者对准确 `plan_hash` 的明确认可。边界由 `editorial.revision_policy` 决定：自动回改限于最近 `limit` 章（`limit = contract.revision_limit`，缺省 `DEFAULTS['revision_limit']`），单次重写章数超过 limit 记 `rewrite_limit`，与已写满的整卷相交记 `closed_volume`。详见运行指南。
+历史正文修订先分析实际影响，再执行候选分支；超界方案绑定准确 plan_hash 等待作者决定。操作与代价见 [修订影响分析](references/runtime.md#修订影响分析)，不在本页维护另一套命令流程。
 
 ---
 
@@ -225,6 +221,11 @@ novel-ledger/
 │   ├── workbench.md      作品理解、稳定场景身份与分级修订
 │   ├── editorial.md      人物、场景、补丁、偏离登记与完本
 │   ├── runtime.md        主干循环、目标、交接与任务恢复
+│   ├── style.md          文风来源、选择、生效与迁移边界
+│   ├── styles/           各档特征、例句与集中迁移清单
+│   ├── corpus-facts.md   共享语料计数、来源与待复算项
+│   ├── quality.md        独立连续性核验与可信宿主
+│   ├── rework.md         返工和材料成本原则
 │   ├── protocol.md       公共字段、冻结材料、回执与核算
 │   ├── architecture.md   模块职责、数据所有权与不变量
 │   └── validation.md     工程检查、文学评测及结论依据

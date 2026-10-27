@@ -12,7 +12,7 @@
 |---|---|
 | architecture.mmd | 从 architecture.md 提取的 Mermaid 源码快照（含 `drift` 节点与 `WF --> DRIFT`、`DRIFT --> DOMAIN` 两条连线） |
 
-**为什么不存渲染件**：这里曾同时提交 `architecture.svg` 与 mermaid-cli 的 `puppeteer.json`，而 v2 加上 `drift`/`style` 节点后 SVG 就过期了——没有任何流程会重新生成它，于是一个派生文件长期在说假话（守卫只能靠"待重新生成"标记放行）。渲染件是**按需产物**：需要图片时现场导出，仓库里只留可核对的源码。
+渲染件按需导出，仓库只保存可与真源逐字核对的 Mermaid 源码快照。
 
 ## 更新流程
 
@@ -34,7 +34,7 @@
    ```
 
 3. 同步更新 README.md 里的同一块 Mermaid（`tests/test_runtime.py` 会断言三者一致）。
-4. 需要图片时现场渲染，不把结果提交回来（本机曾长时间挂起，勿无限等待；没有 Chrome 时 mermaid-cli 会启动失败，此时改用任意在线/本地 Mermaid 渲染器）：
+4. 需要图片时现场渲染，不把结果提交回来；缺少 Chrome 或渲染失败时使用可用的 Mermaid 渲染器：
 
    ```bash
    npx -y @mermaid-js/mermaid-cli -i docs/architecture.mmd -o /tmp/architecture.svg

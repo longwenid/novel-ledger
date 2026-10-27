@@ -12,8 +12,7 @@ import time
 from .contracts import policy_default, require, text
 from .execution import controller_handoff, review_handoff
 
-# The controller lease defaults to 300 seconds; renewing well inside that keeps a long wait from
-# looking like an abandoned run to the next advance.
+# Renew a fresh controller lease well inside its term while supervising an external task.
 RENEW_EVERY = 30.0
 
 
@@ -57,7 +56,14 @@ def _watch(app, owner, steps=1, poll=None, idle_limit=None, sleep=time.sleep, no
             waited.append(row)
             if on_dispatch:
                 on_dispatch(row)
-        idle_at, renew_at = now() + idle_limit, now() + RENEW_EVERY
+        # The caller may have started `run` with a short lease, or may have spent most of a
+        # longer lease preparing the worker. Refresh it before waiting; renew() checks ownership
+        # and refuses an expired lease, then grants the default term. Schedule from that known
+        # term rather than assuming the original lease has 30 seconds left.
+        app.renew(owner)
+        moment = now()
+        renew_interval = min(RENEW_EVERY, policy_default('controller_lease_seconds') / 2)
+        idle_at, renew_at = moment + idle_limit, moment + renew_interval
         cursor = task['task_id']
         while True:
             current = app.task_status(task['task_id'])
@@ -82,8 +88,10 @@ def _watch(app, owner, steps=1, poll=None, idle_limit=None, sleep=time.sleep, no
                                     'Worker 长时间未提交：确认执行者仍在，或按当前状态重新派工。'}
             if moment >= renew_at:
                 app.renew(owner)
-                renew_at = moment + RENEW_EVERY
-            sleep(poll)
+                renew_at = now() + renew_interval
+                moment = now()
+            # Do not let a large polling interval skip either the lease or idle deadline.
+            sleep(max(0, min(poll, renew_at - moment, idle_at - moment)))
         rounds += 1
 
 

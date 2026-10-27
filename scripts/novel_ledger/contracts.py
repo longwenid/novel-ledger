@@ -598,9 +598,11 @@ def alignment_for(version=OPENING_VERSION):
 
 
 CHARACTERS = ('name', 'role', 'desire', 'limit', 'knowledge_boundary')
+CHARACTER_KINDS = ('person', 'character')
+BIOGRAPHY_FIELDS = ('past', 'contradiction', 'relationships', 'behavior')
 
 
-POLICY_FIELDS = ('forbidden_terms', 'forbidden_name_chars')
+POLICY_FIELDS = ('forbidden_terms', 'forbidden_name_chars', 'allowed_latin')
 
 
 # Where the author's lexical rules are enforced, declared per task stage. One table, used both to

@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import lint, workflow
+from novel_ledger import lint, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import contract, drive, response
@@ -40,6 +40,21 @@ class LintUnitTests(unittest.TestCase):
         self.assertEqual(lint.cross_chapter_duplicates(
             '到了2026年10月21日，他收到第13封信，里面只有300元。',
             [(1, '到了2025年9月20日，他收到第12封信，里面只有200元。')], 2), [])
+
+    def test_later_numeric_template_is_found_after_first_sparse_match(self):
+        def paragraph(start, count, width, number):
+            return ''.join(''.join(chr(0x4e00 + start + i * width + j) for j in range(width))
+                           + str(number) for i in range(count))
+        sparse_old = paragraph(0, 6, 21, 10)
+        sparse_new = paragraph(0, 6, 21, 20)
+        dense_old = paragraph(500, 12, 12, 10)
+        dense_new = paragraph(500, 12, 12, 20)
+        old = sparse_old + '甲甲甲' + dense_old
+        new = sparse_new + '乙乙乙' + dense_new
+        findings = lint.cross_chapter_duplicates(new, [(1, old)], 2)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]['normalization'], 'numeric')
+        self.assertIn(findings[0]['quote'], dense_new)
 
     def test_verbatim_reuse_of_a_prior_chapter_is_found_with_the_shared_span(self):
         reused = '沈桐把退回的箱子放在桌上，指给主管看封条上的签字。'
@@ -68,8 +83,13 @@ class LintUnitTests(unittest.TestCase):
         self.assertIn('统一', findings[0]['reason'])
 
     def test_mixing_both_quote_families_inside_one_chapter_is_flagged(self):
-        mixed = '「昨夜的话算数。」他说完便走，回头又补了「不留字据。」和「不认口头。」随后另起一句"不欠账"，再说"两清了"。'
+        mixed = '「昨夜的话算数。」他说完便走，回头又补了「不留字据。」和「不认口头。」随后另起一句"不欠账"，再说"两清了"，最后说"走吧"。'
         self.assertEqual([row['criterion'] for row in lint.style_findings(mixed, [], 2)], ['language'])
+
+    def test_quote_families_count_the_same_closed_dialogues(self):
+        self.assertEqual(lint._quote_counts('「甲」「乙」“丙”“丁”'), {'corner': 2, 'western': 2})
+        self.assertEqual(lint.style_findings('“甲”“乙”', [(1, '「甲」「乙」「丙」')], 2), [])
+        self.assertEqual(lint.style_findings('「甲」「乙」', [(1, '“甲”“乙”“丙”')], 2), [])
 
     def test_few_quotes_never_establish_a_family(self):
         self.assertEqual(lint.style_findings('他只说了一句"好"。', [(1, '「昨夜的话算数。」他走了。')], 2), [])
@@ -98,6 +118,41 @@ class LintFlowTests(unittest.TestCase):
 
     def committed(self):
         return {row['n']: self.repo.read_document(row['prose']) for row in self.repo.headers('main')}
+
+    def test_author_allowed_latin_survives_submit_and_full_audit(self):
+        self.app.set_lexical({'forbidden_name_chars': ['砚']}, '作者不使用该人名。')
+        self.app.set_lexical({'forbidden_name_chars': ['砚'], 'allowed_latin': ['NASA']}, '作者允许 NASA 作为专名。')
+        policy = planning.policy_of(self.repo.load())
+        self.assertEqual(policy['forbidden_name_chars'], ['砚'])
+        self.assertEqual(policy['allowed_latin'], ['NASA'])
+        drive(self.app, until='write')
+        receipt = response(self.app)
+        receipt['data']['prose'] += ' NASA 的名字写在远处的旗帜上。'
+        preview = self.app.submit(receipt, preview=True)
+        self.assertEqual(preview['outcome'], 'candidate_ready')
+        self.assertEqual(preview['findings'], [])
+        self.assertEqual(self.app.submit(receipt)['committed_chapter'], 1)
+        self.assertTrue(self.app.audit()['ok'])
+        self.app.set_lexical({'allowed_latin': []}, '作者撤销专名许可。')
+        from novel_ledger.contracts import Error
+        with self.assertRaises(Error) as caught:
+            self.app.audit()
+        self.assertEqual(caught.exception.code, 'prose_integrity')
+
+    def test_allowed_latin_rejects_invalid_rules_and_matches_complete_runs(self):
+        from novel_ledger.contracts import Error
+        for term in ('', 'A', 'NASA-1', ' 火星 ', 3):
+            with self.subTest(term=term), self.assertRaises(Error):
+                self.app.set_lexical({'allowed_latin': [term]}, '作者指定专名。')
+        self.app.set_lexical({'allowed_latin': ['NASA']}, '作者允许 NASA。')
+        findings = lint.latin_findings('NASA 和 NASAwork 是两项不同记号。', 1,
+                                       planning.policy_of(self.repo.load())['allowed_latin'])
+        self.assertEqual(findings[0]['matches'], ['NASAwork'])
+
+    def test_legacy_policy_without_allowed_latin_defaults_to_no_exemptions(self):
+        old = [{'version': 1, 'source': '旧规则', 'policy': {
+            'forbidden_terms': ['账本'], 'forbidden_name_chars': []}}]
+        self.assertEqual(planning.active_policy(old)['allowed_latin'], [])
 
     def first_chapter_is_committed(self):
         """Commit chapter one, let the author approve the pilot, and authorize chapter two.
