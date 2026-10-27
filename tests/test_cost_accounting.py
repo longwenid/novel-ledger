@@ -116,20 +116,37 @@ class DeliveryObservationTests(unittest.TestCase):
 
 
 class DispatchAccountingTests(unittest.TestCase):
+    def t2_row(self, report):
+        return next(row for row in report['by_tier']
+                    if row['tier'] == 't2' and row['volume_scope'] == 'all')
+
     def test_hundred_chapters_include_independent_readers_only_when_required(self):
         rows = {}
         for mode in ('required', 'off'):
             report = measure.dispatch_ledger(mode)
-            rows[mode] = next(row for row in report['by_tier']
-                              if row['tier'] == 't2' and row['volume_scope'] == 'all')
+            rows[mode] = self.t2_row(report)
         self.assertEqual(rows['required']['continuity_observers'], 100)
-        self.assertEqual(rows['required']['fast_total_workers'], 119)
+        self.assertEqual(rows['required']['fast_total_workers'], 127)
         self.assertEqual(rows['off']['continuity_observers'], 0)
-        self.assertEqual(rows['off']['fast_total_workers'], 19)
+        self.assertEqual(rows['off']['fast_total_workers'], 27)
         self.assertEqual(rows['required']['story_tasks'], 106)
         self.assertEqual(rows['off']['story_tasks'], 106)
         self.assertEqual(rows['required']['standard_total_workers'], 206)
         self.assertEqual(rows['off']['standard_total_workers'], 106)
+
+    def test_batch_size_is_configuration_and_drives_worker_counts(self):
+        for batch in (None, 10):
+            rows = {mode: self.t2_row(measure.dispatch_ledger(mode, batch))
+                    for mode in ('required', 'off')}
+            suffix = 'default' if batch is None else str(batch)
+            with self.subTest(batch=suffix):
+                # The default group is five chapters; a ten-chapter group needs 8 fewer workers
+                # over 100 chapters (21 -> 13 prose workers) and does not change story tasks.
+                self.assertEqual(rows['off']['fast_prose_workers'], 21 if batch is None else 13)
+                self.assertEqual(rows['required']['fast_total_workers'], 127 if batch is None else 119)
+                self.assertEqual(rows['off']['fast_total_workers'], 27 if batch is None else 19)
+                self.assertEqual(rows['required']['story_tasks'], 106)
+                self.assertEqual(rows['off']['standard_total_workers'], 106)
 
     def test_cli_exposes_policy_without_changing_story_task_count(self):
         for options, expected in (([], 'required'), (['--continuity', 'off'], 'off')):
@@ -140,6 +157,11 @@ class DispatchAccountingTests(unittest.TestCase):
             report = json.loads(run.stdout)['dispatch']['value']
             self.assertEqual(report['continuity'], expected)
             self.assertTrue(all(row['continuity'] == expected for row in report['by_tier']))
+        grouped = subprocess.run([sys.executable, str(ROOT / 'validation/measure.py'),
+                                  '--only', 'dispatch', '--fast-batch', '10'], capture_output=True,
+                                 text=True, encoding='utf-8')
+        self.assertEqual(grouped.returncode, 0, grouped.stderr)
+        self.assertEqual(self.t2_row(json.loads(grouped.stdout)['dispatch']['value'])['fast_total_workers'], 119)
 
 
 if __name__ == '__main__':

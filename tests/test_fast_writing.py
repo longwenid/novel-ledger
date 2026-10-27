@@ -1,4 +1,8 @@
-"""Fast writing reuses one real execution identity in a bounded ten-chapter group."""
+"""Fast writing reuses one real execution identity in a bounded same-session group.
+
+The group size is run configuration (`run --batch N`, engine default five chapters) and freezes
+per group: changing it affects only groups formed afterwards.
+"""
 import copy
 import hashlib
 import hmac
@@ -51,11 +55,11 @@ class FastWritingTests(unittest.TestCase):
         step = self.app.continue_writing(task['task_id'], session, lease['token'])
         return step['task'], {'token': step['execution_claim']}
 
-    def test_same_worker_commits_ten_chapters_then_a_new_group_requires_a_fresh_worker(self):
+    def test_same_worker_commits_the_group_then_a_new_group_requires_a_fresh_worker(self):
         task, lease = self.start_group()
         group_id = task['worker_batch']['id']
         plans = copy.deepcopy(self.repo.load()['plans'])
-        for chapter in range(2, 12):
+        for chapter in range(2, 7):
             self.assertEqual(self.repo.pending()['input']['chapter'], chapter)
             receipt, result = self.submit('fast-worker', lease)
             self.assertEqual(result['committed_chapter'], chapter)
@@ -64,20 +68,36 @@ class FastWritingTests(unittest.TestCase):
             self.assertEqual(page.count('<section class="chapter"'), 0)
             self.assertIn('id="read-' + str(chapter) + '"',
                           bookpage.preview_fragment(self.repo, 'chapter', chapter)['html'])
-            self.assertEqual(result['worker_boundary'], 'finished' if chapter == 11 else 'continue')
-            if chapter < 11:
+            self.assertEqual(result['worker_boundary'], 'finished' if chapter == 6 else 'continue')
+            if chapter < 6:
                 self.assertEqual(self.app.advance(owner=self.owner)['action'], 'wait_for_batch')
                 task, lease = self.next(task, lease)
                 self.assertEqual(task['worker_batch']['id'], group_id)
                 self.assertFalse(task['requires_new_worker'])
-        self.assertEqual(len(self.repo.headers('main')), 11)
+        self.assertEqual(len(self.repo.headers('main')), 6)
         self.assertEqual(self.repo.load()['plans'], plans)
         new = self.app.advance(owner=self.owner)['task']
-        self.assertEqual((new['worker_batch']['first'], new['worker_batch']['last']), (12, 12))
+        self.assertEqual((new['worker_batch']['first'], new['worker_batch']['last']), (7, 11))
         with self.assertRaises(Error) as caught:
             self.app.claim(new['task_id'], 'fast-worker')
         self.assertEqual(caught.exception.code, 'session_reuse')
         self.app.claim(new['task_id'], 'next-worker')
+
+    def test_batch_size_is_run_configuration_frozen_per_group(self):
+        self.app.run(finish=True, owner=self.owner, mode='fast', batch=2, source='工程授权小批量连写。')
+        self.assertEqual(self.app.status()['writing_batch_chapters'], 2)
+        task, lease = self.start_group()
+        self.assertEqual((task['worker_batch']['first'], task['worker_batch']['last']), (2, 3))
+        for chapter in (2, 3):
+            self.submit('fast-worker', lease)
+            if chapter < 3:
+                task, lease = self.next(task, lease)
+        self.app.run(finish=True, owner=self.owner, mode='fast', batch=3, source='工程授权改大下一组。')
+        following = self.app.advance(owner=self.owner)['task']
+        self.assertEqual((following['worker_batch']['first'], following['worker_batch']['last']), (4, 6))
+        with self.assertRaises(Error) as caught:
+            self.app.run(finish=True, owner=self.owner, mode='fast', batch=0, source='无效组大小。')
+        self.assertEqual(caught.exception.code, 'writing_batch')
 
     def test_supervision_of_submitted_group_head_observes_later_task_block(self):
         first, lease = self.start_group()
@@ -361,7 +381,7 @@ class FastWritingTests(unittest.TestCase):
             session_number += 1
             session = 'fast-worker-' + str(session_number)
             lease = self.app.claim(task['task_id'], session)
-        self.assertEqual(len(groups), 2)
+        self.assertEqual(len(groups), 3)
         self.assertEqual(len(self.repo.headers('main')), 12)
         self.assertTrue(self.app.complete(self.owner)['completed'])
         self.assertTrue(self.runtime.deliver()['delivered'])
@@ -376,10 +396,10 @@ class FastWritingTests(unittest.TestCase):
                 state['task'], state['lease'] = self.next(current, state['lease'])
         result = unattended.watch(self.app, self.owner, poll=0.01, idle_limit=100, sleep=work)
         self.assertEqual(result['action'], 'task_ready')
-        self.assertEqual(result['task']['chapter'], 12)
+        self.assertEqual(result['task']['chapter'], 7)
         self.assertTrue(result['controller']['must_continue'])
         self.assertTrue(result['task']['requires_new_worker'])
-        self.assertEqual(len(self.repo.headers('main')), 11)
+        self.assertEqual(len(self.repo.headers('main')), 6)
 
     def test_changed_future_outline_cannot_be_silently_adopted_by_continuation(self):
         task, lease = self.start_group()
@@ -415,7 +435,7 @@ class FastWritingTests(unittest.TestCase):
         self.assertEqual(reopened.app.status()['writing_mode'], 'fast')
         step = reopened.app.continue_writing(task['task_id'], 'fast-worker', lease['token'])
         self.assertEqual(step['task']['chapter'], 3)
-        self.assertEqual(step['task']['worker_batch']['last'], 11)
+        self.assertEqual(step['task']['worker_batch']['last'], 6)
 
     def test_group_stops_at_volume_boundary(self):
         temporary = tempfile.TemporaryDirectory()
@@ -439,9 +459,9 @@ class FastWritingTests(unittest.TestCase):
         self.assertEqual(result['action'], 'worker_finished')
         self.assertFalse(result['batch_active'])
         log = json.loads(Path(result['log']).read_text(encoding='utf-8'))
-        self.assertEqual(log['chapters'], list(range(2, 12)))
+        self.assertEqual(log['chapters'], list(range(2, 7)))
         self.assertTrue(log['synthetic'])
-        self.assertEqual(len(self.repo.headers('main')), 11)
+        self.assertEqual(len(self.repo.headers('main')), 6)
 
 
 if __name__ == '__main__':

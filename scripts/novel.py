@@ -182,9 +182,11 @@ def parser():
             group.add_argument('--through', type=int)
             group.add_argument('--complete', action='store_true')
             sub.add_argument('--source', default='')
+            sub.add_argument('--batch', type=int,
+                             help='快速模式每组章数（正整数，缺省沿用项目配置，新项目默认 5）；只影响之后新建的组。')
             mode = sub.add_mutually_exclusive_group()
             mode.add_argument('--fast', dest='mode', action='store_const', const='fast',
-                              help='快速无人值守：同一 Worker 最多连写五章，逐章验收。')
+                              help='快速无人值守：同一 Worker 按组连写，逐章验收。')
             mode.add_argument('--standard', dest='mode', action='store_const', const='standard')
         if command == 'answer':
             sub.add_argument('--decision-id', required=True, help='待作者裁决的问题 id，与 status 的 author_decision.id 一致。')
@@ -454,7 +456,8 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'claim':
             return app.claim(args.task, args.session, args.seconds)
         if command == 'run':
-            return app.run(args.through, args.complete, owner, args.seconds, args.source, mode=args.mode)
+            return app.run(args.through, args.complete, owner, args.seconds, args.source,
+                           mode=args.mode, batch=args.batch)
         if command == 'worker-next':
             return app.continue_writing(args.task, identity.get('NOVEL_SESSION'),
                                         identity.get('NOVEL_EXECUTION_CLAIM'))

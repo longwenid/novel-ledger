@@ -82,7 +82,9 @@ class WritingService:
             require(run and run['owner'] == owner and run['until'] > self.clock(),
                     'controller_lease', '快速连写须由有效主控派工，先沿原授权 run 认领。')
             volume = planning.volume_for(editorial.effective_contract(book), choice.chapter)
-            last = min(choice.chapter + policy_default('fast_batch_chapters') - 1, volume['end'], book['target'])
+            batch = book.get('writing_batch_chapters') or policy_default('fast_batch_chapters')
+            require(type(batch) is int and batch > 0, 'writing_batch', '连写组章数须为正整数（run --batch N）。')
+            last = min(choice.chapter + batch - 1, volume['end'], book['target'])
             # A group never invents or modifies a missing future outline.
             while last > choice.chapter and any(str(n) not in book['plans'] for n in range(choice.chapter, last + 1)):
                 last -= 1

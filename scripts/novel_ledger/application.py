@@ -102,6 +102,7 @@ class Application:
                 'candidate_chapter': book['draft']['chapter'] if book['draft'] else None,
                 'target': book['target'], 'written_han': book['written_han'], 'finish': book['finish'],
                 'writing_mode': book.get('writing_mode', 'standard'), 'worker_batch': self._writing.describe(),
+                'writing_batch_chapters': book.get('writing_batch_chapters') or policy_default('fast_batch_chapters'),
                 # The confirmation gate's own state: which round the staged design is on, how many
                 # reasoned refusals fed it, and — when a design is staged — the exact hash the
                 # author's confirmation must bind to.
@@ -940,7 +941,7 @@ class Application:
             self.repo.put(store_keys.claim(task_id), None)
             self.repo.record('worker_release', {'task': task_id})
 
-    def run(self, through=None, finish=False, owner=None, seconds=None, source='', mode=None):
+    def run(self, through=None, finish=False, owner=None, seconds=None, source='', mode=None, batch=None):
         seconds = policy_default('controller_lease_seconds') if seconds is None else seconds
         require(type(seconds) is int and seconds > 0, 'lease', '租期须为正整数。')
         require(mode in (None, 'standard', 'fast'), 'writing_mode', '写作模式须为 standard 或 fast。')
@@ -948,6 +949,12 @@ class Application:
             self.controller_guard(owner)
             book = self._load()
             selected_mode = mode or book.get('writing_mode', 'standard')
+            if batch is not None:
+                selected_batch = batch
+            else:
+                selected_batch = book.get('writing_batch_chapters') or policy_default('fast_batch_chapters')
+            require(type(selected_batch) is int and selected_batch > 0, 'writing_batch',
+                    '连写组章数须为正整数（run --batch N）。')
             group = self._writing.active()
             require(not group or selected_mode == book.get('writing_mode') and owner == group['owner'],
                     'writing_batch', '连写组仍在执行，先等本组结束；停止执行后可 pause --cancel 保留进度再切换模式。')
@@ -955,7 +962,8 @@ class Application:
             end = editorial.effective_contract(book)['volumes'][-1]['end']
             target = end if finish else through
             require(type(target) is int and 1 <= target <= end, 'target', '运行目标须为约定范围内的章号。')
-            self._governance.authorize('run', {'target': target, 'finish': finish, 'mode': selected_mode}, source)
+            self._governance.authorize('run', {'target': target, 'finish': finish, 'mode': selected_mode,
+                                               'batch': selected_batch}, source)
             pending = self.repo.pending()
             require(not pending or pending['input']['chapter'] <= target, 'target', '目标不能低于已冻结任务，先 pause --cancel。')
             # A narrow revision carries its suffix automatically once its end chapter commits, so a
@@ -965,11 +973,15 @@ class Application:
             self.repo.put(store_keys.CONTROLLER, {'owner': owner, 'until': self.clock() + seconds})
             require(not group or target == book['target'] and finish == book['finish'],
                     'writing_batch', '连写期间不能改变授权终点，先停止当前组。')
-            book.update(target=target, finish=finish, run_authorized=True, writing_mode=selected_mode)
-            book['decisions'].append({'kind': 'run', 'target': target, 'finish': finish, 'source': source, 'mode': selected_mode})
+            book.update(target=target, finish=finish, run_authorized=True, writing_mode=selected_mode,
+                        writing_batch_chapters=selected_batch)
+            book['decisions'].append({'kind': 'run', 'target': target, 'finish': finish, 'source': source,
+                                      'mode': selected_mode, 'batch': selected_batch})
             self._save(book)
-            self.repo.record('run', {'target': target, 'finish': finish, 'mode': selected_mode, 'source': source})
-            return {'owner': owner, 'target': target, 'finish': finish, 'lease_seconds': seconds, 'writing_mode': selected_mode}
+            self.repo.record('run', {'target': target, 'finish': finish, 'mode': selected_mode,
+                                     'batch': selected_batch, 'source': source})
+            return {'owner': owner, 'target': target, 'finish': finish, 'lease_seconds': seconds,
+                    'writing_mode': selected_mode, 'writing_batch_chapters': selected_batch}
 
     def continue_writing(self, task_id, session, claim=None):
         """A worker's bounded continuation capability, never a general advance or author command."""

@@ -107,7 +107,7 @@ def graph_metrics(root, package):
             'cycles_including_deferred_imports': groups, 'dependency_edges': sum(len(v) for v in graph.values())}
 
 
-def dispatch_ledger(continuity='required'):
+def dispatch_ledger(continuity='required', batch=None):
     """Separate story tasks, worker deliveries and the first continuity read per chapter.
 
     Counts assume each chapter passes on its first candidate. Repairs, new candidates, context
@@ -115,6 +115,7 @@ def dispatch_ledger(continuity='required'):
     """
     if continuity not in ('required', 'off'):
         raise ValueError('continuity must be required or off')
+    group_size = batch or policy_default('fast_batch_chapters')
     rows = []
     # The gate count is derived, not hard-coded: opening/4 inserted `origin` (11 gates, `scale` is a
     # system gate and spends no dispatch), so a literal "ten" here would silently misreport the cost.
@@ -124,7 +125,6 @@ def dispatch_ledger(continuity='required'):
              'dispatched_opening_options': len(gate_ids) - len(system),
              'note': '开书门由主干自执，不计子 agent 派工（spec §1/§7）；门数与系统门由 '
                      'creation.gate_ids / SYSTEM_GATES 派生。'}
-    group_size = policy_default('fast_batch_chapters')
     for tier in SCALE_TIERS:
         shape = PIPELINE_SHAPES.get(tier['id'], {})
         merged = bool(shape.get('merge_chapter_outline'))
@@ -406,7 +406,9 @@ def main(argv=None):
     parser.add_argument('--out', type=Path)
     parser.add_argument('--only', help='逗号分隔的节名：' + ','.join(SECTIONS))
     parser.add_argument('--continuity', choices=('required', 'off'), default='required',
-                        help='派工数量度量的独立核验策略；默认与新项目 CLI 一致为 required，不更改项目。')
+                        help='派工数量度量的独立核验策略；required 为逐章读者口径，不更改项目。')
+    parser.add_argument('--fast-batch', type=int,
+                        help='派工数量度量的快速组章数；缺省取引擎默认（与新项目 run 缺省一致），不更改项目。')
     args = parser.parse_args(argv)
     wanted = [name.strip() for name in args.only.split(',')] if args.only else list(SECTIONS)
     unknown = [name for name in wanted if name not in SECTIONS]
@@ -418,7 +420,7 @@ def main(argv=None):
     failed = []
     for name in wanted:
         try:
-            value = dispatch_ledger(args.continuity) if name == 'dispatch' else SECTIONS[name]()
+            value = dispatch_ledger(args.continuity, args.fast_batch) if name == 'dispatch' else SECTIONS[name]()
             report[name] = {'status': 'ok', 'value': value}
         except BaseException as exc:                    # noqa: BLE001 - a section report, not a handler
             failed.append(name)

@@ -80,7 +80,7 @@ DEFAULTS = {
     'redesigns': 1,
     'stall_after_rounds': 2,
     'revision_limit': 3,
-    'fast_batch_chapters': 10,
+    'fast_batch_chapters': 5,
     'technical_retries': 2,
     'worker_lease_seconds': 300,
     'single_delivery_lease_seconds': 3600,
@@ -98,7 +98,7 @@ DEFAULTS = {
     # chapter's marginal cost at one new chapter.
     'adjacent_window_chapters': 2,
     # The reviewer's periodic deep re-read: every `cadence` chapters it reads `wide_window`
-    # preceding chapters in full instead of the adjacent two, auditing a whole fast group at once.
+    # preceding chapters in full instead of the adjacent two, covering whole recent fast groups.
     'continuity_wide_cadence': 10,
     'continuity_wide_window': 9,
     'design_stall_rounds': 3,
