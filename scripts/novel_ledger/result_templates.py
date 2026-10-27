@@ -110,6 +110,12 @@ def chapter_row(number, volume=None):
     declaration: an empty hooks array says this chapter plants and pays off nothing.
     """
     row = {'chapter': number, 'synopsis': '', 'story_events': [], 'reader_effect': None, 'timeline': None,
+           # Optional structural expression. `beats: []` stays an empty-but-present declaration
+           # (an empty list is not None, so the conditional landing keeps the key — a row that
+           # never fills it digests the same as any other row that submitted the empty array),
+           # while `role: None` is dropped by that same conditional and reads exactly like "no
+           # claim". Both remain legal to submit untouched.
+           'beats': [], 'role': None,
            'plot': {'beat': '', 'nodes': [], 'threads': []},
            'resources': [], 'places': [], 'knowledge': [], 'characters': [],
            'relations': [],

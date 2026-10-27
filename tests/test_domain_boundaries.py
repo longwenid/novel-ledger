@@ -239,6 +239,9 @@ class DomainBoundaryTests(unittest.TestCase):
                 self.assertTrue(all(isinstance(name, str) and name for name in names))
         self.assertEqual(context.undeclared_material('write', ['contract', 'world_model']), ['world_model'])
         self.assertEqual(context.undeclared_material('write', ['contract', 'chapter_outline']), [])
+        # The blueprint record on the chapter stage is a visible decision, not one more add(): the
+        # chapter outline reads the same structural skeleton the volume outline designed by.
+        self.assertIn('blueprint', context.STAGE_MATERIAL['chapter_outline'])
 
     def test_causal_frontier_is_iterative_and_bounded(self):
         from novel_ledger import design_queries as queries
@@ -526,6 +529,25 @@ class RelationDeltaDeclarationTests(unittest.TestCase):
         self.assertEqual(prefiled[0]['planned'], {'from': None, 'to': '戒备'})
         self.assertIn('relations', briefs.stage('write'))
         self.assertIn('reader_knowledge', briefs.stage('volume_outline'))
+
+
+class ExpressionFieldDeclarationTests(unittest.TestCase):
+    """The structural-expression fields are one declaration on their own conditional channel.
+
+    They must stay out of `CHAPTER_FIELDS`: that table's keys land unconditionally in the
+    normalized row, which would re-key every stored row — including books installed before the
+    fields existed — and break the retained-suffix digest comparison `workflow.py` makes. The
+    conditional channel is the digest-safe one `PROTOCOL_FIELDS` already rides; mixing the two
+    tables would also misname workbench protocol as design-side expression.
+    """
+
+    def test_beats_and_role_are_declared_outside_the_unconditional_tables(self):
+        from novel_ledger import drift
+        self.assertEqual(drift.EXPRESSION_FIELDS, ('beats', 'role'))
+        for field in drift.EXPRESSION_FIELDS:
+            with self.subTest(field=field):
+                self.assertNotIn(field, drift.CHAPTER_FIELDS)
+                self.assertNotIn(field, drift.PROTOCOL_FIELDS)
 
 
 class WebnovelSettingMethodTests(unittest.TestCase):

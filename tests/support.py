@@ -663,7 +663,13 @@ def _chapter_row(state, book, volume, number, words, resources=True, places=True
 
 
 def _world_refs(book):
-    """Refs the row can cite: the seeded records the chapter actually walks through."""
+    """Refs the row can cite: the seeded records the chapter actually walks through.
+
+    `everyday` joins the filter so a fixture chapter can name life material — with the written
+    `nightshift` record the opening path's stored world now cites it, and a world without
+    everyday records keeps exactly the refs it always had. Tests that need a specific set of
+    refs set `world_refs` explicitly rather than leaning on this cap's ordering.
+    """
     model = book.get('world') or {}
     refs = []
     for section, rows in model.items():
@@ -671,7 +677,7 @@ def _world_refs(book):
             for row in rows:
                 if isinstance(row, dict) and row.get('id'):
                     refs.append(section + ':' + row['id'])
-    wanted = [ref for ref in refs if ref.split(':', 1)[0] in ('geography', 'rules', 'characters')]
+    wanted = [ref for ref in refs if ref.split(':', 1)[0] in ('geography', 'rules', 'characters', 'everyday')]
     return wanted[:3]
 
 
@@ -855,7 +861,14 @@ def _opening_model(book):
              'story_capacity': '仓库、夜班与签字制度足以承载一次来源核对和一场责任追查。',
              'geography': [_place('office', '值班室'), _place('yard', '仓库后院')],
              'history': [], 'rules': [], 'factions': [], 'economy': [], 'society': [],
-             'everyday': [],
+             # One written-by-hand everyday record instead of the placeholder the required-section
+             # loop would mint: a non-empty section makes that loop skip it, so the fixture world
+             # carries real life material a chapter outline can name in `world_refs`.
+             'everyday': [{'id': 'nightshift',
+                           'practice': '夜班交接时按册核对退件，签字后才放行。',
+                           'constraint': '人手不够时交接只能口头顶替，出事由签字人担。',
+                           'story_use': '登记册、旧凭据与夜班规矩给日常章质感。',
+                           'links': []}],
              'characters': [{'id': ident, 'name': name, 'role': '夜班工人',
                              'desire': protagonist.get('desire') or '查清责任。',
                              'limit': protagonist.get('limit') or '不牵连无关同事。',

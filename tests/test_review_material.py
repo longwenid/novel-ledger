@@ -144,6 +144,54 @@ class DispatchMaterialTests(unittest.TestCase):
         self.assertTrue(on_demand)                     # nothing forces every record into required
         self.assertTrue(set(work['required']) <= set(context.STAGE_MATERIAL['write']))
 
+    def test_a_chapter_outline_dispatch_carries_the_bound_blueprint_record(self):
+        """The chapter stage reads the same structural skeleton the volume stage designs by:
+        unbound it sees no record at all — the engine does not pick a structure for the author —
+        while a bound one carries the catalog entry with the author's source line and boundary."""
+        drive(self.app, until='chapter_outline')
+        self.assertNotIn('blueprint', self.pending()['records'])
+        self.app.blueprint('多线交错', '工程夹具在章纲前绑定结构蓝图。')
+        handoff = self.app.advance()
+        self.assertEqual(handoff['action'], 'task_ready')
+        work = self.pending()
+        self.assertEqual(work['stage'], 'chapter_outline')
+        self.assertIn('blueprint', work['required'])
+        record = self.repo.read_document(work['records']['blueprint'])
+        self.assertEqual(record['name'], '多线交错')
+        self.assertEqual(record['source'], '工程夹具在章纲前绑定结构蓝图。')
+        self.assertTrue(record['boundary'])
+
+    def test_a_named_everyday_record_reaches_the_writer_and_an_unnamed_one_does_not(self):
+        """The life-material channel: `world_records` carries exactly the records the plan names
+        (plus the cast's own files and their links), so naming an everyday record in the chapter
+        outline delivers it to the writer and leaving it unnamed keeps the domain out of the
+        scene material. The two chapters of one book cover both sides."""
+        book = seeded_book(contract(chapters=2, volumes=1))
+        book['world']['everyday'].append(
+            {'id': 'nightshift', 'practice': '夜班交接时按册核对退件，签字后才放行。',
+             'constraint': '人手不够时交接只能口头顶替，出事由签字人担。',
+             'story_use': '登记册、旧凭据与夜班规矩给日常章质感。', 'links': []})
+        repo = SQLiteRepository.initialize(Path(self.temp.name) / 'everyday-book', book)
+        app = Application(repo)
+        try:
+            owner = app.run(through=2, source='工程夹具授权两章。')['owner']
+            drive(app, owner, until='chapter_outline')
+            receipt = response(app)
+            # Explicit refs on both chapters, so the sides do not depend on the fixture's section
+            # order: chapter 1 names the everyday record, chapter 2 does not.
+            receipt['data']['chapters'][0]['world_refs'] = ['geography:office', 'everyday:nightshift']
+            receipt['data']['chapters'][1]['world_refs'] = ['geography:office', 'rules:r1']
+            app.submit(receipt)
+            drive(app, owner, until='write')
+            named = repo.read_document(repo.pending()['input']['records']['world_records'])
+            self.assertIn('everyday:nightshift', named)
+            app.submit(response(app))
+            drive(app, owner, until='write')
+            unnamed = repo.read_document(repo.pending()['input']['records']['world_records'])
+            self.assertNotIn('everyday:nightshift', unnamed)
+        finally:
+            repo.close()
+
 
 class OutlineMaterialTests(unittest.TestCase):
     """The two outline dispatches read only what their own decision needs."""

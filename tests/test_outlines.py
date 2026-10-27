@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 
 from novel_ledger import briefs, creation, drift, drift_simulation, drift_validation, planning, workflow
 from novel_ledger.bootstrap import local_application as Application
-from novel_ledger.contracts import DEFAULTS, Error
+from novel_ledger.contracts import DEFAULTS, Error, digest
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import (chapter_rows, contract, drive, response, seeded_book,
                      volume_rows, world_fixture)
@@ -346,6 +346,111 @@ class ChapterOutlineTests(unittest.TestCase):
         self.assertEqual([row['chapter'] for row in tail], [2])
         _, findings = drift_simulation.simulate(tail, live, self.world, self.volume, self.volume_row)
         self.assertEqual(findings, [])
+
+    def test_beats_and_role_are_optional_shape_checks(self):
+        """The two structural-expression fields are checked only when given — the mirror of
+        story_events/reader_effect; absent, empty array and null all stay legal claims."""
+        for label, value in (('not a list', '开场钩→尾钩'), ('an empty sentence', ['开场核对。', '  '])):
+            broken = copy.deepcopy(self.rows)
+            broken[0]['beats'] = value
+            with self.subTest(beats=label):
+                with self.assertRaises(Error) as caught:
+                    self.submit(broken)
+                self.assertEqual(caught.exception.code, 'chapter_outline')
+        for label, value in (('not text', 14), ('blank', '')):
+            broken = copy.deepcopy(self.rows)
+            broken[0]['role'] = value
+            with self.subTest(role=label):
+                with self.assertRaises(Error) as caught:
+                    self.submit(broken)
+                self.assertEqual(caught.exception.code, 'chapter_outline')
+        # A row that declares neither field normalizes to a row that carries neither key.
+        plain = self.submit(copy.deepcopy(self.rows))
+        self.assertNotIn('beats', plain[0])
+        self.assertNotIn('role', plain[0])
+        # Given keys travel; an empty beats array is a legal "declared, one beat short of none".
+        given = copy.deepcopy(self.rows)
+        given[0]['beats'] = ['开场核对封条。', '推进到对峙。']
+        given[0]['role'] = '转折章：落地卷纲第一条转折（at 卷中）。'
+        given[1]['beats'] = []
+        rows = self.submit(given)
+        self.assertEqual(rows[0]['beats'], ['开场核对封条。', '推进到对峙。'])
+        self.assertEqual(rows[0]['role'], '转折章：落地卷纲第一条转折（at 卷中）。')
+        self.assertEqual(rows[1]['beats'], [])
+        self.assertNotIn('role', rows[1])
+
+    def test_a_disclosure_note_must_say_something_when_given(self):
+        """The optional pacing intent is shape-only: blank is refused, omitted and written pass."""
+        broken = copy.deepcopy(self.rows)
+        broken[0]['disclosures'] = [{'topic': '货箱来源', 'after': 'hinted', 'note': ''}]
+        self.assertRejected('drift_shape', broken)
+        paced = copy.deepcopy(self.rows)
+        paced[0]['disclosures'] = [{'topic': '货箱来源', 'after': 'hinted',
+                                    'note': '本章 hinted 是故意压着，铺垫第2章 confirmed。'}]
+        rows = self.submit(paced)
+        self.assertEqual(rows[0]['disclosures'][0]['note'],
+                         '本章 hinted 是故意压着，铺垫第2章 confirmed。')
+
+    def test_a_thread_touch_may_reassert_active(self):
+        """active→active is the legal "touched but unchanged" interleave claim; the reason rides
+        the settlement row so the touch is auditable where the state chain reads it."""
+        book = seeded_book(self.raw)
+        book['contract']['narrative_tracking'] = True
+        book = seeded_book(book['contract'])
+        volume = book['contract']['volumes'][0]
+        volume_row = drift_validation.validate_volume_outline(
+            {'volumes': volume_rows(book, ['v1'])}, book['contract'], book['world'],
+            {}, {}, ['v1'], book['state'])['v1']
+        rows = chapter_rows(book, volume, book['state'])
+        thread = 'line-' + volume['id']
+        rows[0]['plot']['threads'] = [{'thread': thread, 'after': 'active',
+                                       'reason': '开场激活主线：核对退件来源。'}]
+        rows[1]['plot']['threads'] = [{'thread': thread, 'after': 'active',
+                                       'reason': '轻触主线：登记册的新痕迹改变核对方向，线路目标未变。'}]
+        # The fixture handshake was built for a resolving second chapter; the reassert keeps the
+        # projection on `active`, so both chapters' thread coordinates follow it (a coordinate the
+        # deltas touch must be listed on both sides of the handshake).
+        rows[0]['enter'].append({'kind': 'thread', 'key': thread, 'expected': None})
+        rows[0]['exit'].append({'kind': 'thread', 'key': thread, 'expected': 'active'})
+        for handshake in rows[1]['enter'] + rows[1]['exit']:
+            if handshake.get('kind') == 'thread':
+                handshake['expected'] = 'active'
+        settled = drift_validation.validate_chapter_outline(
+            {'volume': 'v1', 'chapters': rows}, book['contract']['chapter_outline'], volume,
+            volume_row, book['world'], book['state'])
+        state, findings = drift_simulation.simulate(settled, book['state'], book['world'],
+                                                    volume, volume_row)
+        self.assertEqual(findings, [])
+        self.assertEqual(state['thread_progress'][thread]['status'], 'active')
+        touch = next(coord for coord in drift._deltas(settled[1], []) if coord['kind'] == 'thread')
+        self.assertEqual((touch['key'], touch['to']), (thread, 'active'))
+        self.assertIn('轻触主线', touch['reason'])
+
+    def test_expression_fields_keep_stored_row_digests_stable(self):
+        """A retained-suffix repair revalidates stored rows and compares digests byte for byte
+        (`workflow.py`); landing `beats`/`role` only when submitted keeps both a row stored before
+        the fields existed and a row that carries them stable across that second pass."""
+        legacy = self.submit(copy.deepcopy(self.rows))
+        self.assertEqual([digest(row) for row in self.submit(copy.deepcopy(legacy))],
+                         [digest(row) for row in legacy])
+        fresh_rows = copy.deepcopy(self.rows)
+        fresh_rows[0]['beats'] = ['开场核对封条。']
+        fresh_rows[0]['role'] = '转折章：落地卷纲第一条转折（at 卷中）。'
+        fresh = self.submit(fresh_rows)
+        self.assertEqual([digest(row) for row in self.submit(copy.deepcopy(fresh))],
+                         [digest(row) for row in fresh])
+
+    def test_plan_rows_carry_the_expression_fields_when_given(self):
+        """The writer's plan row travels through the same conditional channel: a chapter that
+        declared a skeleton and a role keeps them, one that declared neither gains no keys."""
+        rows = copy.deepcopy(self.rows)
+        rows[0]['beats'] = ['开场核对封条。']
+        rows[0]['role'] = '转折章：落地卷纲第一条转折（at 卷中）。'
+        plans = drift.plan_rows(self.submit(rows))
+        self.assertEqual(plans[0]['beats'], ['开场核对封条。'])
+        self.assertEqual(plans[0]['role'], '转折章：落地卷纲第一条转折（at 卷中）。')
+        self.assertNotIn('beats', plans[1])
+        self.assertNotIn('role', plans[1])
 
     def test_scope_all_builds_every_volume_up_front(self):
         book = copy.deepcopy(self.book)

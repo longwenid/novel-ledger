@@ -9,7 +9,7 @@ import copy
 from .contracts import han_count, require, text
 from .entities import register as register_entity
 
-from .drift import CHAPTER_FIELDS, HOOK_ACTIONS, PROTOCOL_FIELDS, REVEALS, VOLUME_FIELDS, _coord_key, _declared, _deltas, _enter_rows, _entity_ids, _finding, _kind_of, _number, _place_id, _project, _reject, _resource_known, _safe, _same, _window, _world_ids, _world_index
+from .drift import CHAPTER_FIELDS, EXPRESSION_FIELDS, HOOK_ACTIONS, PROTOCOL_FIELDS, REVEALS, VOLUME_FIELDS, _coord_key, _declared, _deltas, _enter_rows, _entity_ids, _finding, _kind_of, _number, _place_id, _project, _reject, _resource_known, _safe, _same, _window, _world_ids, _world_index
 from .drift_simulation import _hook_registry, _node_registry, _thread_registry, simulate
 from . import drift, entities, world
 
@@ -360,7 +360,8 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
     for row in chapters:
         # Retained current rows include derived hook contracts; they are rebuilt from the
         # volume registry below, never trusted as author input.
-        unknown = sorted(set(row) - set(CHAPTER_FIELDS) - set(PROTOCOL_FIELDS) - {'hook_contracts'})
+        unknown = sorted(set(row) - set(CHAPTER_FIELDS) - set(PROTOCOL_FIELDS)
+                         - set(EXPRESSION_FIELDS) - {'hook_contracts'})
         require(not unknown, 'chapter_outline', '章纲含当前协议之外的字段，请按当前模板重交。',
                 {'chapter': row['chapter'], 'unknown_fields': unknown})
     first, end = volume_row['first'], volume_row['end']
@@ -387,6 +388,13 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
                     'chapter_outline', 'story_events只列故事内发生的事件。')
         require(row.get('reader_effect') is None or text(row['reader_effect']), 'chapter_outline',
                 'reader_effect只作读者效果注释，不参与事实结算。')
+        # The two structural-expression fields are shape-only and optional: a row that gives no
+        # beats/role is making no structural claim, exactly like an absent story_events.
+        if row.get('beats') is not None:
+            require(isinstance(row['beats'], list) and all(text(item) for item in row['beats']),
+                    'chapter_outline', 'beats只列本章推进顺序的非空短句，缺省与空数组合法。')
+        require(row.get('role') is None or text(row['role']), 'chapter_outline',
+                'role只写本章在卷内的结构职责一句话。')
         findings.extend(timeline_findings(row, previous_timeline))
         if (row.get('timeline') or {}).get('relation') not in ('parallel', 'flashback'):
             previous_timeline = row
@@ -621,7 +629,11 @@ def _normalize_chapter(chapter, state, world, registry=None, hooks=None):
         item['hook']: copy.deepcopy((hooks or {}).get(item['hook']) or {})
         for item in normalized['hooks']
         if isinstance(item, dict) and text(item.get('hook'))}
-    for field in PROTOCOL_FIELDS:
+    # The optional workbench protocols and the structural-expression fields land only when the
+    # author (or the workbench) actually submitted them: a key that lands unconditionally here
+    # would change every stored row's digest and break the retained-suffix repair's byte-for-byte
+    # comparison in `workflow.py`.
+    for field in PROTOCOL_FIELDS + EXPRESSION_FIELDS:
         if chapter.get(field) is not None:
             normalized[field] = copy.deepcopy(chapter[field])
     return normalized

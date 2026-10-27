@@ -59,9 +59,9 @@ STAGE_MATERIAL = {
     'volume_outline': ('author_feedback', 'blueprint', 'contract', 'effective_layout', 'hooks', 'opening_basis',
                        'opening_choices', 'revision_impact', 'revision_instruction', 'state',
                        'structure_blueprint', 'style', 'volume_rejections', 'world_model'),
-    'chapter_outline': ('author_feedback', 'contract', 'design_drift', 'effective_layout', 'hooks',
-                        'previous_chapters', 'previous_chapter:', 'revision_impact', 'revision_instruction', 'state',
-                        'style', 'volume_outline', 'world_model'),
+    'chapter_outline': ('author_feedback', 'blueprint', 'contract', 'design_drift', 'effective_layout',
+                        'hooks', 'previous_chapters', 'previous_chapter:', 'revision_impact',
+                        'revision_instruction', 'state', 'style', 'volume_outline', 'world_model'),
     'write': ('author_feedback', 'chapter_outline', 'contract', 'continuity_feedback', 'creative_memory', 'design_drift',
               'disclosure_boundary', 'hooks', 'previous_chapters', 'previous_chapter:', 'scene_context', 'scene_sources',
               'state', 'style', 'style_anchor', 'volume_outline', 'word_budget', 'world_core',
@@ -800,6 +800,18 @@ def build(repo: ContextStore, book, job):
     payload = copy.deepcopy(job.payload or {})
     if 'understanding' in book and not opening_stage:
         payload['understanding'] = True
+    # The author's structural choice, when one is bound. The volume outline designs the arc by it;
+    # the chapter outline reads the same skeleton to give each chapter a structural role. The
+    # record carries it with the author's own source line and the catalog's boundary; absent by
+    # default — the engine does not pick a structure for the author, and an unbound book never
+    # sees the record.
+    bound = book.get('structure_blueprint') or {}
+    blueprint_entry = (BLUEPRINT_CATALOG[bound['name']]
+                       if bound.get('name') in BLUEPRINT_CATALOG
+                       and stage in ('volume_outline', 'chapter_outline') else None)
+    if blueprint_entry is not None:
+        add('blueprint', {**{key: blueprint_entry[key] for key in ('name', 'skeleton', 'drivers', 'echo')},
+                          'source': bound.get('source', ''), 'boundary': BLUEPRINT_BOUNDARY})
     if stage == 'volume_outline':
         # The batch policy: which volumes answer, where each one starts and ends, and the per-volume
         # word target. `volume_outline` is the policy map here; on a draft dispatch the same key
@@ -811,15 +823,11 @@ def build(repo: ContextStore, book, job):
                                      'volume_ids': [v['id'] for v in chosen],
                                      'volumes': [{'id': v['id'], 'purpose': v.get('purpose', ''),
                                                   'first': v['first'], 'end': v['end']} for v in chosen]}
-        # The author's structural choice, when one is bound: the payload names it for the brief and
-        # the template, the record carries it with the author's own source line. Absent by default
-        # — the engine does not pick a structure for the author.
-        bound = book.get('structure_blueprint') or {}
-        if bound.get('name') in BLUEPRINT_CATALOG:
-            entry = BLUEPRINT_CATALOG[bound['name']]
-            payload['structure_blueprint'] = {key: entry[key] for key in ('name', 'skeleton', 'drivers', 'echo')}
-            add('blueprint', {**payload['structure_blueprint'], 'source': bound.get('source', ''),
-                              'boundary': BLUEPRINT_BOUNDARY})
+        # The bound blueprint also names itself in the payload for the brief and the template; the
+        # record both stages read was added above.
+        if blueprint_entry is not None:
+            payload['structure_blueprint'] = {key: blueprint_entry[key]
+                                              for key in ('name', 'skeleton', 'drivers', 'echo')}
         # The author's reasoned refusals from earlier rounds at the gate: frozen input for the
         # re-run (the brief names them), never just audit. Same shape as the opening's
         # `opening_rejections` — present only while there is something to answer.

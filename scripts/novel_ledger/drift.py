@@ -72,6 +72,16 @@ PROTOCOL_FIELDS = ('scene_schema', 'reading_schema', 'reading_coverage', 'depend
                    'reading_refs', 'understanding_refs')
 
 
+# Optional structural-expression fields a chapter outline may carry: the beat skeleton (`beats`)
+# and the in-volume structural role (`role`). They are not part of the drift contract, and they
+# must never join `CHAPTER_FIELDS`: that table's keys land unconditionally in `_normalize_chapter`,
+# which would hand every revalidated row — including books installed before these fields existed —
+# the two new keys and change the row digest the retained-suffix repair compares byte for byte
+# (`workflow.py`: `digest(item) == digest(retained[...])`). Landing a key only when the author
+# submitted one keeps stored rows stable either way, the same discipline `PROTOCOL_FIELDS` follows.
+EXPRESSION_FIELDS = ('beats', 'role')
+
+
 # What an `enter`/`exit` row may name. A delta array is plural (`characters`), a coordinate is the
 # projection field it reads (`character`), so both spellings are accepted and normalized.
 ENTER_KINDS = ('resources', 'places', 'knowledge', 'character', 'characters', 'relations',
@@ -520,6 +530,14 @@ def _deltas(chapter, findings):
         if not text(topic) or after not in REVEALS:
             findings.append(_finding(chapter_no, 'disclosures', topic, 'topic 与 ' + '|'.join(REVEALS), _safe(row),
                                      '章纲的披露需要 topic 与档位。', 'drift_shape', 'blocker', 'outline'))
+        # The optional pacing intent ("hold this tier on purpose", "outer layer first"). It rides
+        # the row into the writer's disclosure boundary but reconciliation only reads topic/after,
+        # so the shape check is all the engine has to say about it.
+        if row.get('note') is not None and not text(row['note']):
+            findings.append(_finding(chapter_no, 'disclosures', topic, 'note:null|非空文本',
+                                     _safe(row.get('note')),
+                                     '披露 note 若给须为非空文本：写节奏意图，不参与结算。',
+                                     'drift_shape', 'blocker', 'outline'))
     clock = chapter.get('clock')
     if clock is None or not isinstance(clock, dict) or type(clock.get('advance_days')) is not int \
             or clock['advance_days'] < 0:
@@ -714,7 +732,10 @@ def plan_rows(chapters):
         # `story_memory.bind` froze on the chapter outline, and the reading coverage a reading-mode
         # revision reads. Dropping them here would silently disable the workbench's scene chain and
         # turn every reading revision conservative, because this row is what both are read from.
-        for field in PROTOCOL_FIELDS:
+        # The structural-expression fields ride the same conditional channel so the writer reads
+        # the beat skeleton and the structural role it is asked to honour — without re-keying the
+        # stored rows that never declared them.
+        for field in PROTOCOL_FIELDS + EXPRESSION_FIELDS:
             if chapter.get(field) is not None:
                 row[field] = copy.deepcopy(chapter[field])
         row['dependency_coverage'] = chapter.get('dependency_coverage') or 'partial'

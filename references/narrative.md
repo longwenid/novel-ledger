@@ -86,6 +86,8 @@
 {"volume": "v1", "chapters": [{
   "chapter": 1,
   "synopsis": "行动、阻力、选择、代价、结果、对下一章的推动（words±tolerance 汉字）",
+  "beats": ["开场处境一句话", "推进到什么处境", "停在余波上的一句"],
+  "role": "转折章：落地卷纲第二条转折（at 第14章附近）",
   "plot": {
     "beat": "本章情节变化一句话",
     "nodes": [{"node":"n1","after":"seeded|advanced|resolved","outcome":"…"}],
@@ -102,7 +104,7 @@
   "clock": {"advance_days": 1},
   "enter": [{"kind":"resources|places|knowledge|relations|clock|character|node|thread","key":"…","expected":0}],
   "exit":  [{"kind":"resources|places|knowledge|relations|clock|character|node|thread","key":"…","expected":3}],
-  "disclosures": [{"topic":"…","after":"hinted"}],
+  "disclosures": [{"topic":"…","after":"hinted","note":"双层揭秘的外层先立，内层留到第N章窗"}],
   "world_refs": ["geography:luoxia"],
   "new_entities": [{"id":"…","kind":"character|place|item","name":"…","role":"…","desire":"…","limit":"…","knowledge_boundary":"…"}],
   "hook_refs": [], "reader_refs": [], "history_refs": [],
@@ -111,9 +113,12 @@
 ```
 
 - **必需**：`chapter` `synopsis` `plot.beat` `enter` `exit` `world_refs`。模板显式列出五个增量数组（`resources` `places` `knowledge` `characters` `relations`），便于逐类核对；空数组、缺字段和 null 均表示本章没有这类变化——`relations` 与前四类同义，不写就是「本章无关系变化」。写入的变化仍须通过完整形状与状态校验。
+- `beats`（可选，非空短句数组）是本章从什么处境推进到什么处境的顺序骨架：形状自定——可只写一拍或停在余波上；不定数量、不定事件、无每拍字数、禁平台爽文公式；静章可整体一拍。`role`（可选，一句话）写明本章在卷内的结构职责（如「转折章：落地卷纲第二条转折（at 第14章附近）」），与相邻章比结构职责差异；卷纲 `turns` 的每个转折与 `climax` 应能在章序列里指认落地章，承担章用 `role` 写明，不以均质推进凑章。作者绑定结构蓝图时，章纲材料携带 `blueprint` 记录，其骨架与推进维度是分派语言（边界同卷纲：不定事件桥段、非情节模板）。两者缺省合法；形状只查「给了才查」，且**缺省不落键**——存储行的整行摘要（digest）逐字节稳定，保留后缀重排的比对不受影响。
+- `plot.threads` 同时是本章交织申报：本章推进哪条线、以什么方式触碰哪条线（轻触不改状态可重申 `active`，`reason` 写触碰方式与该线同本章主推进的相互影响）、搁置哪条线（`dormant`+`return_by`）；不要求每章动所有线，写进本章的线要有申报。章内两线如何交替叙述属拍/场层，由 `beats`/`scenes` 表达。
+- `disclosures` 每行可带可选 `note`（非空文本）写节奏意图：如「双层揭秘的外层先立，内层留到第N章窗」「本章 suspected 是故意压着，铺垫第N章 confirmed」。分派面向卷纲 `reader_knowledge` 终值与揭示结构——允许一章连进、允许间隔多章、允许外层 `confirmed` 而内层仍 `hinted`；`note` 随行进入写手的披露边界材料，不参与结算与对账（引擎只读 topic/after）。
 - `hooks` **必填数组，可为空**：本卷伏笔的执行，`action` 只有 `plant` 与 `payoff` 两个值；中途“再提一次”用 `hook_refs`，不新增动作。见 [伏笔账](#伏笔账卷纲声明章纲执行)。
 - `style`：`pov` 与 `rhythm` 必填，`dialogue_ratio`（0~1）与 `notes` 可选。见 [文风](#文风)。
-- `scenes`/`pacing` 是当前章纲的可选字段；`hook_refs`/`reader_refs`/`history_refs` 指出本章要承接的旧承诺、旧认知与历史断言。
+- `scenes`/`pacing` 是当前章纲的可选字段：分场是场景质感的容器，对话场/动作场/日常场等类型写进 `label`/`intent`（方向自定），需要写手按场展开时给 `scenes`，不强制每章分场；`hook_refs`/`reader_refs`/`history_refs` 指出本章要承接的旧承诺、旧认知与历史断言。写日常呼吸、关系场面或生活器物的章，把要用的 `everyday`/`society`/`characters` 域记录在 `world_refs` 点名——写手材料只带点名的记录与出场人物档案，未点名的域到不了写手。
 - `new_entities` 取代原人物档案派工：新人物/地点/物品首次出现时，在本章内联给出档案字段；落地后按 id 引用，不再单独派一次档案任务。
 - 每章 synopsis 交代实际发生的事、人物处境与本章阅读作用；行动与后果可跨章承接，不强求每章齐备一套节拍。引用真实世界记录与卷纲已登记的节点/线路/伏笔。
 
@@ -134,6 +139,7 @@
 1. 章号连续，恰好覆盖本卷 `[volume.first, volume.end]`（`scope=all` 时覆盖整卷）。
 2. `synopsis` 汉字数落在 `words±tolerance`。
 3. 每行增量形状合法：`from`/`to` 类型一致，`reason` 非空；resource 有 key 且存在于世界或既有状态；place 存在于世界 geography；relations 的两端实体已登记、source≠target、key 不含 `:` 与 `>`；node/thread/hook 属于本卷卷纲已登记集合（hook 另见跨卷带入规则）。
+3a. 可选结构表达字段给了才查、缺省合法：`beats` 须为非空短句数组（空数组合法），`role` 与 `disclosures[].note` 须为非空文本；`beats`/`role` 缺省不落键，存量章纲行的整行摘要保持稳定（保留后缀重排不受影响）。
 4. **enter/exit 冗余一致性**：`exit` 必须等于 `enter ⊕ 本章增量`（引擎自己算一遍比对）。任一侧缺项即漂移，拒绝。
 5. **卷内状态链模拟**：从卷起始真实状态出发逐章应用增量，要求第 i 章 `enter` 恰好等于模拟到第 i 章开始的状态。模拟中拒绝：资源为负、`clock` 倒退、位置跳变到未登记地点、知情倒退（`retracted` 除外）、人物变化缺 `choice`/`cost`、关系坐标引用未登记实体或章间 `from`/`to` 措辞不逐字承接、同一 node 重复 `advanced` 或 resolved 后再推进、thread resolved 后重用，以及伏笔的重复埋设/重复兑现/越窗/未埋先承接（见 [伏笔账](#伏笔账卷纲声明章纲执行)）。
 6. **卷末闭合**：最后一章模拟结果必须等于卷纲声明的 `resources/places/knowledge/characters` 结构化终值、声明了的 `relations` 与 `reader_knowledge` 终值（未声明免检）与 `clock.to`（容差 0）；整卷模拟还核对 `clock.advance_days`。本卷 `required: true` 的伏笔须全部 `paid`。`exit_state` 只作文字说明。
