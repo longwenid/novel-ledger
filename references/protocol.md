@@ -1,6 +1,6 @@
 # 任务与结果协议
 
-独立连续性辅助协议为 `novel-ledger.continuity/1`，不改 SQLite /5 格式，不给旧任务追填报告。新CLI项目默认要求此核验；命令、双阶段模板与宿主证明契约见[质量与宿主](quality.md)。冻结input可含build（version/engine_hash/rules_hash），构建变化拒绝继续该任务。
+独立连续性辅助协议为 `novel-ledger.continuity/1`，不改 SQLite /5 格式，不给旧任务追填报告。此核验默认不执行，新CLI项目须以 `--continuity required` 显式开启；命令、双阶段模板与宿主证明契约见[质量与宿主](quality.md)。冻结input可含build（version/engine_hash/rules_hash），构建变化拒绝继续该任务。
 
 提交统一返回outcome、当前总findings、transaction、next_action与effects_if_submitted；旧valid/accepted/committed保留兼容含义。outcome包括design_accepted、candidate_ready、chapter_committed、repair_required、author_decision_required、continuity_review_required；旧完成任务没有新结果快照时，重放返回receipt_replayed并标legacy_outcome_unknown，不猜是否当时入章。成功回执重试返回原确认，不重耗轮次。
 

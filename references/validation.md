@@ -89,7 +89,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_revisio
 
 记录模块、完整依赖图和必读完整记录字节。增加未引用未来节点时，必读材料不应无故增长，全设计仍可按哈希补读；连续依赖链与 20/100/500 章历史另测，保留完整来源。
 
-派工数量用 `python3 validation/measure.py --only dispatch --continuity required`；`off` 可作另一策略的对照，不会更改项目策略。默认 required 与新项目 CLI 一致，按每章首次候选通过计算独立读者数量。`story_tasks`（旧字段 `total` 的同义值）只计故事任务，`fast_total_workers` 和 `standard_total_workers` 另加独立读者；这些是无返修、重设计或上下文恢复时的交付数量下界，不是模型调用数。快速组减少写手冷启动，不省去逐章独立核验。
+派工数量用 `python3 validation/measure.py --only dispatch --continuity required`；`off` 可作另一策略的对照，不会更改项目策略。measure 的缺省 `required` 是测算口径，按每章首次候选通过计算独立读者数量，不代表新项目默认策略（新项目默认 `continuity=off`）。`story_tasks`（旧字段 `total` 的同义值）只计故事任务，`fast_total_workers` 和 `standard_total_workers` 另加独立读者；这些是无返修、重设计或上下文恢复时的交付数量下界，不是模型调用数。快速组减少写手冷启动，不省去逐章独立核验。
 
 已运行项目用 `python3 validation/cost_report.py --project PROJECT` 只读查看：`input_chars` 为冻结任务信封，`required_material_chars` 经存储适配器展开各任务完整必读记录后累计，`continuity_reads` 单列独立核验的实际交付字符。必读材料按每个任务计数，重复引用不会因底层共享存储而省略；它与实际读取日志是不同口径，不能相加作为模型输入。宿主反复读取落盘文件、失败候选及模型历史不在这些量里，仍须对照真实 token 日志。
 

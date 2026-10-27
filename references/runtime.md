@@ -18,7 +18,7 @@
 
 ## 运行前提与初始化
 
-新 CLI 项目默认启用独立连续性核验，旧项目不自动切换。`status.assurance`分别显示连续性模式与宿主可信性，完整协议见[质量与宿主](quality.md)。required核验会增加真实读者调用，不能从工程派工数量推算真实费用。
+独立连续性核验默认不执行：新 CLI 项目默认 `continuity=off`，作者明确要求逐章独立核验时以 `init --continuity required`（或事后 `assurance --continuity required`）显式开启；旧项目不自动切换。`status.assurance`分别显示连续性模式与宿主可信性，完整协议见[质量与宿主](quality.md)。required核验会增加真实读者调用，不能从工程派工数量推算真实费用。
 
 ROOT/PROJECT 替换为绝对路径，项目产物不放技能目录。默认执行路径为主干循环调度子 agent；主干推进已授权目标，子 agent（Worker）只处理当前冻结任务。状态变化以真实命令返回和数据库提交为准。主干生命周期由宿主提供，本协议只约定业务推进与任务交接。
 

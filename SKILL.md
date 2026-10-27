@@ -39,7 +39,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 
 - **事实与来源**：SQLite 是唯一持久真源；正文与事实由 submit 原子提交，不手改库。设计、人物档案、作品理解不自行成为事实；完整正文与证据保留，按冻结来源补读。
 - **固定章纲与有限返修**：先核验章纲状态链，再执笔与核账。偏差附原因、正文引文与范围，不能自动改纲迁就正文；核账说明留在回执，正文呈现人物实际经历。预检、恢复或换 Worker 不重置额度，耗尽或超范围交作者决定。
-- **独立连续性核验**：新 CLI 项目默认逐章核验，旧项目保持原模式。`review_required` 实际派独立读者；`review_in_progress` 用 watch 等待；`review_author_required` 交作者裁决；`review_complete` 由原执笔者重交准确候选。主干与执笔者不代签，具体见 [核验交接](references/quality.md#主控与执笔交接)。
+- **独立连续性核验**：默认不执行；新 CLI 项目与旧项目均不自动开启，作者明确要求时以 `init/assurance --continuity required` 显式开启。开启后 `review_required` 实际派独立读者；`review_in_progress` 用 watch 等待；`review_author_required` 交作者裁决；`review_complete` 由原执笔者重交准确候选。主干与执笔者不代签，具体见 [核验交接](references/quality.md#主控与执笔交接)。
 - **结果判定**：submit/preflight 看 outcome 与总 findings，正式章节看 committed_chapter，不用 accepted 或口头完成推断正文通过。不自动填 kept/clean/pass。身份与技术错误按 recovery 返回处理，完整性失败保留现场。
 - **作者与文风**：只推进已有授权，已有准确选择和首章认可直接登记。写作纪律唯一源是 [文风](references/style.md)：档案来源、选择及切换按该页执行；数值形状默认只观察，不增加逐章“去 AI 味”评分或整章润色任务。机械通过不证明文学质量。
 

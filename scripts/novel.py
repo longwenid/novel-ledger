@@ -77,7 +77,7 @@ def parser():
             sub.add_argument('--source', default='')
         if command in ('init', 'assurance'):
             sub.add_argument('--trust', choices=('advisory', 'required'), default='advisory')
-            sub.add_argument('--continuity', choices=('off', 'required'), default='required')
+            sub.add_argument('--continuity', choices=('off', 'required'), default='off')
         if command == 'assurance':
             sub.add_argument('--source', required=True)
         if command == 'resume':

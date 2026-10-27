@@ -4,7 +4,7 @@
 
 ## 模式与边界
 
-2.1.0的新CLI项目默认 `continuity=required, trust=advisory`。旧项目恢复保持原模式，不追填旧报告；每次正式状态写入建立治理检查点，之后直接清返修记录会报 `governance_integrity`。同系统账户仍能同时篡改数据和检查点，因此它是来源异常检测，不是OS安全隔离。
+新CLI项目默认 `continuity=off, trust=advisory`，独立核验默认不执行；作者明确要求逐章独立核验时以 `init --continuity required`（或事后 `assurance --continuity required`）显式开启（2.1.0至2.1.2期间新项目曾默认 required）。旧项目恢复保持原模式，不追填旧报告；每次正式状态写入建立治理检查点，之后直接清返修记录会报 `governance_integrity`。同系统账户仍能同时篡改数据和检查点，因此它是来源异常检测，不是OS安全隔离。
 
 - `continuity=required`：通过机械判据的正文先成为候选，独立观察和比较完成后才正式提交。每章重新绑定准确候选；每十章一轮的默认首读包含此前九章，其余包含此前两章，均为全文。远距相关原文按冻结历史补读。首读返回附 observation_template 信封与 observation_example 行级示例：观察的 entity/predicate/value/certainty/time_frame 与 evidence 逐字引文按示例填写，不需要读引擎源码猜格式。
 - `continuity=off`：保留机械路径，验收列出未经独立核验的章节；不据此宣称全文连续或人物可信。需要切换时使用 `assurance --trust advisory --continuity off|required --source 作者原话`，先确认原Worker已停止，保留候选并取消在途任务；不自动降低保障模式来恢复。
