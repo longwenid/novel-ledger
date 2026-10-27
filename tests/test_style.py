@@ -16,8 +16,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from novel_ledger import style
+from novel_ledger import facts, store_keys, style
 from novel_ledger.bootstrap import local_application as Application
+from novel_ledger.contracts import Error, digest
 from novel_ledger.sqlite_store import SQLiteRepository
 from novel_ledger.result_templates import chapter_row
 from support import contract, drive, response, seeded_book
@@ -54,8 +55,26 @@ def paragraphs(length, count, start=0x4e00, per_paragraph=1, marker='他'):
     return '\n\n'.join(blocks)
 
 
+def shaped(quoted, length=4, start=0x4e00, marker='他'):
+    """One single-paragraph sample of `len(quoted)` equal-length sentences; `quoted` flags each.
+
+    Dialogue share becomes sum(quoted)/len(quoted) exactly, and every other shape metric is
+    identical across calls that share `length` — the rolling-norm cases vary only the share."""
+    rows, cursor = [], start
+    for is_quoted in quoted:
+        body = marker + ''.join(chr(cursor + offset) for offset in range(length - 1))
+        cursor += length
+        rows.append(('「%s」' % body) if is_quoted else body)
+    return '。'.join(rows) + '。'
+
+
 def metrics_of(text):
     return style.metrics(text)
+
+
+def prose_of(repo, number):
+    """The committed prose of one chapter, read back the way the engine rereads it."""
+    return repo.read_document(repo.chapter('main', number)['prose'])
 
 
 def repeated_sentences(copies, count=20, length=10):
@@ -193,7 +212,7 @@ class BaselineTests(unittest.TestCase):
     def test_an_approved_pilot_is_the_anchor(self):
         sample = sentences(12, 6)                       # long enough to be a baseline
         book = {'style_anchor': {'prose_hash': 'h', 'sample': sample, 'source': '作者认可。'}}
-        self.assertEqual(style.baseline(book), style.metrics(sample))
+        self.assertEqual(style.baseline(book), {**style.metrics(sample), 'origin': 'pilot'})
 
     def test_a_missing_or_short_anchor_falls_back_to_the_default_profile(self):
         """A project never runs voiceless: no anchor means the declared default floor."""
@@ -207,6 +226,106 @@ class BaselineTests(unittest.TestCase):
             for key in ('han', 'sentences', 'sentence_mean', 'sentence_short_share',
                         'paragraph_mean', 'paragraph_max', 'dialogue_share'):
                 self.assertGreater(baseline[key], 0, key)
+
+
+def sample_metrics(overrides=None):
+    """A complete metrics row for hand-built rolling samples; `overrides` replace whole keys."""
+    row = {'han': 80, 'sentences': 20, 'sentence_mean': 4.0, 'sentence_short_share': 1.0,
+           'paragraph_mean': 80.0, 'paragraph_max': 80, 'dialogue_share': 0.3}
+    row.update(overrides or {})
+    return row
+
+
+class RollingAnchorTests(unittest.TestCase):
+    """The expect side rolls forward: per-metric medians over the nearest approved chapters."""
+
+    def test_odd_windows_take_the_middle_and_even_windows_the_mean_of_the_middle_pair(self):
+        odd = [(1, sample_metrics({'dialogue_share': 0.2})),
+               (2, sample_metrics({'dialogue_share': 0.4})),
+               (3, sample_metrics({'dialogue_share': 0.6}))]
+        anchor = style.rolling_anchor(odd)
+        self.assertEqual(anchor['dialogue_share'], 0.4)
+        self.assertEqual(anchor['sentence_mean'], 4.0)
+        self.assertEqual(anchor['han'], 80)            # counts stay whole numbers
+        even = odd + [(4, sample_metrics({'dialogue_share': 0.8}))]
+        self.assertEqual(style.rolling_anchor(even)['dialogue_share'], 0.5)   # (0.4+0.6)/2
+
+    def test_the_window_is_cut_to_the_declared_size_in_proximity_order(self):
+        self.assertEqual(style.STYLE_BASELINE_WINDOW, 5)
+        # Proximity order for chapter 6: 5,7,4,8,3,9,2 — the last two stay outside the window.
+        chapters = [5, 7, 4, 8, 3, 9, 2]
+        anchor = style.rolling_anchor([(n, sample_metrics({'han': n * 10})) for n in chapters])
+        self.assertEqual(anchor['basis'], [3, 4, 5, 7, 8])
+        self.assertEqual(anchor['han'], 5 * 10)        # median of 30,40,50,70,80
+
+    def test_a_window_that_is_still_only_the_pilot_keeps_the_pilot_label(self):
+        anchor = style.rolling_anchor([(1, sample_metrics())])
+        self.assertEqual(anchor['origin'], 'pilot')
+        self.assertEqual(anchor['basis'], [1])
+        grown = style.rolling_anchor([(2, sample_metrics()), (1, sample_metrics())])
+        self.assertEqual(grown['origin'], 'rolling')
+        self.assertEqual(grown['basis'], [1, 2])
+
+    def test_a_lone_approved_chapter_is_pilot_whichever_chapter_it_is(self):
+        # A revision branch's single approved chapter is an opening reference, not a norm:
+        # the label follows the window's size, not the chapter number.
+        anchor = style.rolling_anchor([(2, sample_metrics())])
+        self.assertEqual(anchor['origin'], 'pilot')
+        self.assertEqual(anchor['basis'], [2])
+
+    def test_an_empty_window_is_refused_with_a_clear_error(self):
+        with self.assertRaises(Error) as caught:
+            style.rolling_anchor([])
+        self.assertEqual(caught.exception.code, 'style_anchor')
+
+    def test_current_anchor_falls_back_to_the_opening_reference_without_recent_chapters(self):
+        sample = sentences(12, 6)
+        approved = {'style_anchor': {'prose_hash': 'h', 'sample': sample, 'source': '作者认可。'}}
+        unapproved = {}
+        self.assertEqual(style.current_anchor(unapproved, []), style.baseline(unapproved))
+        self.assertEqual(style.current_anchor(unapproved, [])['origin'], 'default')
+        self.assertEqual(style.current_anchor(approved, []), style.baseline(approved))
+        self.assertEqual(style.current_anchor(approved, [])['origin'], 'pilot')
+        recent = [(2, sample_metrics()), (1, sample_metrics({'dialogue_share': 0.5}))]
+        self.assertEqual(style.current_anchor(approved, recent), style.rolling_anchor(recent))
+
+
+class AnchorPhraseTests(unittest.TestCase):
+    """A deviation names the baseline it was measured against; the phrase follows `origin`."""
+
+    def _sentence_observation(self, anchor):
+        report = style.examine(sentences(6, 20, start=0x6000), {}, anchor, WINDOW, chapter=3)
+        return by_metric(report['observations'], 'sentence')
+
+    def test_reasons_name_rolling_pilot_and_default_baselines(self):
+        measured = metrics_of(sentences(30, 8))
+        rolling = {**measured, 'origin': 'rolling', 'basis': [1, 2]}
+        self.assertTrue(self._sentence_observation(rolling))
+        self.assertIn('全书常态基线', self._sentence_observation(rolling)[0]['reason'])
+        pilot = {**measured, 'origin': 'pilot'}
+        self.assertIn('开卷参照', self._sentence_observation(pilot)[0]['reason'])
+        from novel_ledger.contracts import profile_anchor
+        default = profile_anchor()
+        default['han'] = measured['han']            # same order, so the shape rows do fire
+        default['sentences'] = measured['sentences']
+        row = self._sentence_observation(default)[0]
+        self.assertIn('档案注册锚点', row['reason'])
+        # A declared floor is not an approved chapter: the old copy must not call it one.
+        self.assertNotIn('首章样本', row['reason'])
+        unlabeled = dict(measured)
+        self.assertIn('相对基线', self._sentence_observation(unlabeled)[0]['reason'])
+
+    def test_the_dialogue_fallback_reason_follows_the_same_origins(self):
+        silent = {**metrics_of(sentences(12, 8)), 'origin': 'pilot', 'dialogue_share': 0.2}
+        talky = sentences(12, 8, start=0x6000, quoted=True)
+        report = style.examine(talky, {}, silent, WINDOW, chapter=2)
+        rows = by_metric(report['observations'], 'dialogue_share')
+        self.assertTrue(rows)
+        self.assertIn('开卷参照', rows[0]['reason'])
+        rolling = {**silent, 'origin': 'rolling', 'basis': [1, 2]}
+        rolling_report = style.examine(talky, {}, rolling, WINDOW, chapter=2)
+        self.assertIn('全书常态基线',
+                      by_metric(rolling_report['observations'], 'dialogue_share')[0]['reason'])
 
 
 class CompareTests(unittest.TestCase):
@@ -461,10 +580,113 @@ class StyleIntegrationTests(unittest.TestCase):
     def test_the_approved_pilot_becomes_the_baseline_the_next_chapter_is_measured_against(self):
         anchor = self.pilot()
         baseline = style.baseline(self.repo.load())
-        self.assertEqual(baseline, style.metrics(anchor['sample']))
+        self.assertEqual(baseline, {**style.metrics(anchor['sample']), 'origin': 'pilot'})
         drive(self.app, self.owner, until='write')
         task = self.repo.pending()['input']
         self.assertIn('style_anchor', task['required'])
+
+    def test_later_chapters_are_measured_against_the_rolling_norm(self):
+        """The case this mechanism exists for, under the strict guard.
+
+        Chapters 1–3 share every shape metric except dialogue share (≈0.30 / ≈0.40 / ≈0.45):
+        chapter 3 sits inside the window around the two-chapter median (≈0.35) and commits, while
+        the old caliber — the approved pilot as a permanent whole-book expect — refuses it. Each
+        chapter keeps the stub's 14-character head: the drift receipts quote it as evidence."""
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary) / 'rolling'
+            raw = contract(3)
+            raw.update(narrative_tracking=True, editorial_features=True, style_guard='strict')
+            repo = SQLiteRepository.initialize(project, seeded_book(raw))
+            try:
+                app = Application(repo)
+                owner = app.run(through=3, source='工程夹具：三章。')['owner']
+                shares = {}
+
+                def chapter_prose(candidate, number, quoted):
+                    # Distinct code-point ranges per chapter keep the cross-chapter lint quiet.
+                    return candidate['data']['prose'][:14] + shaped(
+                        quoted, start=0x4e00 + number * 0x400)
+
+                drive(app, owner, until='write')
+                first = response(app)
+                first['data']['prose'] = chapter_prose(first, 1, [False] + [True] * 6 + [False] * 10)
+                shares[1] = metrics_of(first['data']['prose'])['dialogue_share']
+                self.assertAlmostEqual(shares[1], 24 / 81, places=3)
+                self.assertEqual(app.submit(first)['committed_chapter'], 1)
+                handoff = app.advance(owner=owner)
+                self.assertEqual(handoff['action'], 'await_author')
+                app.approve(handoff['prose_hash'], '工程作者认可首章文风。', owner)
+                for number, quoted in ((2, [False] + [True] * 8 + [False] * 8),
+                                       (3, [False] + [True] * 9 + [False] * 7)):
+                    drive(app, owner, until='write')
+                    candidate = response(app)
+                    candidate['data']['prose'] = chapter_prose(candidate, number, quoted)
+                    shares[number] = metrics_of(candidate['data']['prose'])['dialogue_share']
+                    self.assertEqual(app.submit(candidate)['committed_chapter'], number)
+                self.assertEqual([row['n'] for row in repo.headers('main')], [1, 2, 3])
+                self.assertLess(abs(shares[2] - shares[1]) / shares[1], WINDOW['dialogue'])
+                sample = repo.load()['style_anchor']['sample']
+                self.assertEqual(sample, prose_of(repo, 1))
+                old_caliber = style.compare(prose_of(repo, 3), {}, style.metrics(sample),
+                                            WINDOW, chapter=3, contract=STRICT)
+                self.assertTrue(by_metric(old_caliber, 'dialogue'), old_caliber)
+                self.assertGreater(abs(shares[3] - shares[1]) / shares[1], WINDOW['dialogue'])
+            finally:
+                repo.close()
+
+    def test_chapters_without_a_stored_style_report_still_roll_the_baseline(self):
+        """A library whose chapter reviews predate `style_report` rolls identically.
+
+        The expect side is measured from the committed prose, never read back from review
+        records, so an old novel-ledger/5 book needs no migration: the next chapter compares
+        against the median the prose itself defines."""
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary) / 'legacy'
+            repo = SQLiteRepository.initialize(project, seeded_book(contract(3)))
+            try:
+                app = Application(repo)
+                owner = app.run(through=3, source='工程夹具：三章。')['owner']
+                prose = {}
+                for number, quoted in ((1, [False] + [True] * 4 + [False] * 12),
+                                       (2, [False] + [True] * 8 + [False] * 8)):
+                    drive(app, owner, until='write')
+                    candidate = response(app)
+                    prose[number] = candidate['data']['prose'][:14] + shaped(
+                        quoted, start=0x4e00 + number * 0x400)
+                    candidate['data']['prose'] = prose[number]
+                    self.assertEqual(app.submit(candidate)['committed_chapter'], number)
+                    if number == 1:
+                        handoff = app.advance(owner=owner)
+                        self.assertEqual(handoff['action'], 'await_author')
+                        app.approve(handoff['prose_hash'], '工程作者认可首章文风。', owner)
+                # Old-library shape: the committed chapters' reviews carry no style_report, with
+                # the chain and the history cache rebuilt the way that older build would have
+                # left them — the point is that nothing on the rolling path reads review records.
+                legacy = repo.document({'legacy': '旧库章节：回执先于 style_report。'})
+                contract_hash = digest(repo.load()['contract'])
+                previous = 'genesis'
+                for row in repo.headers('main'):
+                    chain = facts.chain(previous, {**row, 'review': legacy}, contract_hash)
+                    repo.db.execute("UPDATE chapters SET review=?, chain=? WHERE branch='main' AND n=?",
+                                    (legacy, chain, row['n']))
+                    previous = chain
+                repo.db.execute("DELETE FROM kv WHERE key=?", (store_keys.history_head('main'),))
+                self.assertNotIn('style_report', repo.read_document(repo.chapter('main', 1)['review']))
+                drive(app, owner, until='write')
+                third = response(app)
+                third['data']['prose'] = third['data']['prose'][:14] + shaped(
+                    [True] * 17, start=0x4e00 + 3 * 0x400)
+                outcome = app.submit(third)
+                self.assertEqual(outcome['committed_chapter'], 3)
+                observed = by_metric(outcome['style_report']['observations'], 'dialogue_share')
+                self.assertTrue(observed, outcome['style_report']['observations'])
+                first_share = metrics_of(prose[1])['dialogue_share']
+                second_share = metrics_of(prose[2])['dialogue_share']
+                self.assertEqual(observed[0]['expect'],
+                                 round((first_share + second_share) / 2, 3))
+                self.assertNotEqual(observed[0]['expect'], first_share)
+            finally:
+                repo.close()
 
 
 if __name__ == '__main__':

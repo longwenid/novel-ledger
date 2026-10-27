@@ -78,7 +78,7 @@ SUB_LABELS.update(arc='卷内弧线', turns='卷内转折', climax='卷末高潮
 SUB_LABELS.update(hooks='伏笔账', hook='伏笔', text='对读者的承诺', plant='埋设窗口', payoff='兑现窗口',
                   action='动作', note='说明', style='文风', trend='本卷文风走向', pov='叙述人称与视角',
                   rhythm='句法与节奏', dialogue_ratio='对白占比目标', notes='本章例外',
-                  anchor='首章实测指标', voice='文风', tone='基调', style_traits='文风要点',
+                  anchor='文风基线', voice='文风', tone='基调', style_traits='文风要点',
                   sentence='句长', paragraph='段长', dialogue='对白', repetition='重复度', person='人称')
 # opening/5: the brainstorm gate's four answers, the ladder and tier tables, the hard currency, the
 # promise anchor, the world's optional deep fields, and the two grand domains' own fields.

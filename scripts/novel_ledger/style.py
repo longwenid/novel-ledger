@@ -1,8 +1,10 @@
 """Measure style without treating every change in chapter rhythm as a literary defect.
 
 The default guard observes sentence, paragraph and unplanned dialogue-share differences from the
-approved sample. An author may explicitly select strict checking of those numeric shape limits.
-Chapter dialogue targets and high in-chapter repetition remain checkable in either mode.
+current baseline — the rolling median of the nearest approved chapters, or the approved sample as
+the opening reference before any accumulate. An author may explicitly select strict checking of
+those numeric shape limits. Chapter dialogue targets and high in-chapter repetition remain
+checkable in either mode.
 
 Pronoun counts are observations in both modes: a first-person narrator can mention other people,
 and third-person prose can render a character's interior words. These proxies cannot determine
@@ -13,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from .contracts import DEFAULTS, han_count, policy_default, profile_anchor, text
+from .contracts import DEFAULTS, han_count, policy_default, profile_anchor, require, text
 
 # Sentence terminators, and the quote families a Chinese manuscript actually uses. A quote family
 # is a pair, so an unclosed quote simply yields no dialogue rather than half a chapter of it.
@@ -28,6 +30,10 @@ MIN_NGRAMS = DEFAULTS['style_min_ngrams']
 NGRAM = DEFAULTS['style_ngram']
 SHORT_SENTENCE = DEFAULTS['style_short_sentence']
 SAME_ORDER = DEFAULTS['style_same_order']
+STYLE_BASELINE_WINDOW = DEFAULTS['style_baseline_window']
+# The metrics the rolling baseline keeps medians of; counts stay whole numbers, the rest round to 3.
+ROLLING_METRICS = ('han', 'sentences', 'sentence_mean', 'sentence_short_share',
+                   'paragraph_mean', 'paragraph_max', 'dialogue_share')
 FIRST_PERSON = ('我', '咱', '俺')
 THIRD_PERSON = ('他', '她', '它')
 HAN = re.compile(r'[\u3400-\u4dbf\u4e00-\u9fff\U00020000-\U0003134f]+')
@@ -162,13 +168,52 @@ def baseline(book):
     measure) the shape comparison falls back to the anchor registered for the contract's
     style_profile (unknown or absent names mean the default profile), labeled `origin=default`
     so reports can tell a declared floor from an author-approved baseline. `approve` replaces
-    it with the real measured sample."""
+    it with the real measured sample, labeled `origin=pilot`: the opening reference the rolling
+    baseline grows out of, not a whole-book quota."""
     anchor = (book or {}).get('style_anchor') or {}
     sample = anchor.get('sample')
     measured = metrics(sample) if text(sample) else None
     if measured and measured['han'] >= MIN_HAN:
-        return measured
+        return {**measured, 'origin': 'pilot'}
     return profile_anchor(((book or {}).get('contract') or {}).get('style_profile'))
+
+
+def _median(values):
+    """The middle of a sorted odd count, the mean of the middle pair of an even one."""
+    middle = len(values) // 2
+    return values[middle] if len(values) % 2 else (values[middle - 1] + values[middle]) / 2
+
+
+def rolling_anchor(samples):
+    """Per-metric medians over the nearest approved chapters: the book's current shape norm.
+
+    `samples` is [(chapter, metrics), ...] in proximity order and is cut to STYLE_BASELINE_WINDOW
+    here, so callers may hand over a wider window (the submit side reuses the duplication lint's
+    priors). A median absorbs one chapter's situation without importing it as the next chapter's
+    target. `basis` names the chapters used; a window of a single chapter — whichever chapter it
+    is, a revision branch's lone approved chapter included — keeps `origin=pilot`, because one
+    approved chapter is an opening reference, not a norm. An empty window is refused: with no
+    approved chapters the caller falls back to the opening reference (`current_anchor`), so a
+    median over nothing names its own mistake instead of dying in `_median`."""
+    window = samples[:STYLE_BASELINE_WINDOW]
+    require(window, 'style_anchor', '滚动基线至少需要一个已认可章节；没有认可章节时回落开卷参照（baseline），不传空窗口。')
+    basis = sorted(number for number, _ in window)
+    anchor = {'origin': 'pilot' if len(basis) == 1 else 'rolling', 'basis': basis}
+    for key in ROLLING_METRICS:
+        middle = _median(sorted(float(row[1].get(key) or 0) for row in window))
+        anchor[key] = int(round(middle)) if key in ('han', 'sentences') else round(middle, 3)
+    return anchor
+
+
+def current_anchor(book, recent):
+    """The expect side one chapter's shape is compared against, by the two-stage rule.
+
+    Approved chapters exist (`recent`, [(chapter, metrics), ...] in proximity order, measured by
+    the caller from committed prose — metrics stay derived, never stored): the rolling median.
+    None at all: the opening reference of `baseline`, i.e. the approved pilot or the profile's
+    registered anchor. The pilot's numbers therefore stop being the whole book's expect as soon
+    as the book has chapters of its own."""
+    return rolling_anchor(recent) if recent else baseline(book)
 
 
 def _finding(chapter, metric, expect, got, reason):
@@ -207,6 +252,16 @@ def _same_order(left, right):
     return 1 / SAME_ORDER <= ratio <= SAME_ORDER
 
 
+def _anchor_phrase(anchor):
+    """How a deviation names the baseline it was measured against, by the anchor's own origin.
+
+    An unlabeled anchor (a hand-built one) gets the generic phrase rather than a borrowed story."""
+    origin = (anchor or {}).get('origin')
+    return {'rolling': '相对全书常态基线（最近已认可章节中位）',
+            'pilot': '相对开卷参照（认可首章实测）',
+            'default': '相对档案注册锚点（尚无认可首章）'}.get(origin, '相对基线')
+
+
 def examine(prose, declared, anchor, window, chapter=0, contract=None):
     """Return measured metrics, nonbinding observations and actionable numeric findings.
 
@@ -241,7 +296,7 @@ def examine(prose, declared, anchor, window, chapter=0, contract=None):
                 continue
             if _relative(measured[metric], base) > limits.get(family, DEFAULT_WINDOW[family]):
                 shape_change(metric, base, measured[metric],
-                             label + '相对首章样本的变化超过已设容差。')
+                             label + _anchor_phrase(anchor) + '的变化超过已设容差。')
     target = declared.get('dialogue_ratio')
     if type(target) in (int, float) and 0 <= float(target) <= 1:
         # A zero target must not lose a small amount of dialogue to the display metric's rounding.
@@ -254,7 +309,7 @@ def examine(prose, declared, anchor, window, chapter=0, contract=None):
         base = anchor['dialogue_share']
         if _relative(measured['dialogue_share'], base) > limits.get('dialogue', DEFAULT_WINDOW['dialogue']):
             shape_change('dialogue_share', base, measured['dialogue_share'],
-                         '对白占比相对首章样本的变化超过已设容差。')
+                         '对白占比' + _anchor_phrase(anchor) + '的变化超过已设容差。')
     if measured.get('repetition_grams', 0) >= MIN_NGRAMS:
         repetition = measured['repetition_share']
         if repetition > limits.get('repetition', DEFAULT_WINDOW['repetition']):

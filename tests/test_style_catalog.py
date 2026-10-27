@@ -83,6 +83,15 @@ class StyleProfileContractTests(unittest.TestCase):
         self.assertEqual(material['anchor']['profile'], '账房掌门')
         self.assertEqual(context.style_material({}, None)['profile'],
                          DEFAULTS['style_profile_default'])
+        # No recent chapters: the anchor stays the profile's registered floor.
+        self.assertEqual(context.style_material({}, None)['anchor']['origin'], 'default')
+        recent = [(1, style.metrics('他走进值班室。他翻开登记册。他核对了名字。')),
+                  (2, style.metrics('他走进值班室。他翻开登记册。他核对了名字。他记得那天的雪。'))]
+        rolled = context.style_material({}, None, recent=recent)
+        self.assertEqual(rolled['anchor']['origin'], 'rolling')
+        self.assertEqual(rolled['anchor']['basis'], [1, 2])
+        self.assertEqual(rolled['anchor'],
+                         style.current_anchor({}, recent))
 
 
 class StyleProfileDispatchTests(unittest.TestCase):

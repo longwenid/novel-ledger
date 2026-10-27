@@ -57,8 +57,9 @@ DEFAULTS = {
     'volume_outline': {'scope': 'all', 'words': 2500, 'tolerance': 500},
     # Step four: one synopsis per chapter, with that chapter's drift declarations.
     'chapter_outline': {'scope': 'volume', 'words': 150, 'tolerance': 60},
-    # Style proxies: relative tolerances against the approved first chapter, an absolute in-chapter
-    # repetition ceiling, and a retained person observation parameter. The
+    # Style proxies: relative tolerances against the current baseline (the nearest approved
+    # chapters' rolling median, or the approved first chapter as the opening reference), an
+    # absolute in-chapter repetition ceiling, and a retained person observation parameter. The
     # repetition ceiling is calibrated: ordinary Chinese prose measures 0.043~0.086 here, a chapter
     # that repeats one clause measures 0.79~0.99.
     'style_window': {'sentence': 0.35, 'paragraph': 0.35, 'dialogue': 0.40, 'repetition': 0.12, 'person': 1},
@@ -75,6 +76,10 @@ DEFAULTS = {
     'style_ngram': 4,
     'style_short_sentence': 10,
     'style_same_order': 3,
+    # How many nearest approved chapters the rolling style baseline takes its per-metric medians
+    # from: the window covers one default fast group, a median absorbs a single chapter's situation
+    # (a quiet or a shouting chapter), and it still follows the book's own drift.
+    'style_baseline_window': 5,
     # Bounded repair: how many rounds one chapter may spend before the author is asked.
     'repairs': 2,
     'redesigns': 1,
@@ -551,7 +556,8 @@ CONTRACT_FIELDS = (
     # qualitative (contract voice/tone, a volume's trend, a chapter's execution points); these are
     # the tolerances the engine applies to the proxies it can compute for free — see style.py.
     # `repetition` is an absolute in-chapter share, the others are relative deviations from the
-    # approved first chapter. Pronoun observations cannot determine actual narrative viewpoint.
+    # current baseline (the nearest approved chapters' median; the pilot only opens it). Pronoun
+    # observations cannot determine actual narrative viewpoint.
     {'key': 'style_window', 'kind': 'map', 'default': policy_default('style_window'),
      'alignment': False, 'optional': True},
     {'key': 'style_guard', 'kind': 'text', 'default': DEFAULTS['style_guard'],
@@ -774,7 +780,7 @@ TECHNICAL_ERRORS = frozenset((
     'review', 'revision', 'revision_bounds', 'revision_carry', 'revision_impact',
     'revision_proposal', 'revision_scope', 'revision_target', 'schema', 'severity', 'source',
     'stage', 'stage_brief', 'stage_template', 'stale_case', 'stdin_encoding', 'stdin_json',
-    'target', 'task', 'task_integrity', 'transaction', 'understanding_source', 'verdict',
+    'style_anchor', 'target', 'task', 'task_integrity', 'transaction', 'understanding_source', 'verdict',
     'volume', 'volume_confirm', 'volume_revise', 'blueprint', 'watch', 'worker_io', 'world_view', 'writing_mode',
 ))
 

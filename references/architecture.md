@@ -131,7 +131,7 @@ flowchart TD
 | drift_simulation | 卷内状态链模拟（`simulate`，含伏笔 `plant`/`payoff` 状态机）、卷末闭合与设计/执笔两相位共用的事件构造；依赖 drift |
 | drift_validation | 卷纲/章纲机械校验：字段形状、v5 卷 `stage` 逐字取阶梯一级且只升不降、篇幅策略、enter/exit 与规范化章形状；依赖 drift 与 drift_simulation |
 | drift_reconcile | 执笔漂移核算（`reconcile`，产出 hook 事件）与 `state_mismatch` 章行比对；依赖 drift 与 drift_simulation |
-| style | 文风代理指标的纯核心：`metrics`（句长/段长/对白占比/本章重复度/视角标记）、`baseline`（首章锚点）与 `examine`（按 `style_guard/style_window` 分开观察与 findings，`compare` 只取 findings）；零派工，只依赖 contracts |
+| style | 文风代理指标的纯核心：`metrics`（句长/段长/对白占比/本章重复度/视角标记）、`baseline`（开卷参照）、`rolling_anchor`/`current_anchor`（最近已认可章节逐指标中位）与 `examine`（按 `style_guard/style_window` 分开观察与 findings，`compare` 只取 findings）；零派工，只依赖 contracts |
 | narrative | 线路、节点、知情、人物当前状态与动态篇幅的纯规则 |
 | entities / evidence / design_queries | 实体注册、人物档案与首次身份校验、名称绑定的原文登记证据、设计节点查询的纯共享规则；world 与章纲共用人物校验，领域层不读取存储 |
 | craft | 场景与对白意图校验、出场人物选择、版本补丁定位与合成；只依赖 contracts |
@@ -201,7 +201,7 @@ CLI 的 Python worker 入口只执行 Worker 公开命令，先验证会话与�
 - 应用进入状态变更前及保存前通过 verification 校验当前投影属于已提交链头（零章时属于约定初态）、累计字数和链头与约定绑定。冻结材料的只读补读仍可用于诊断损坏，不借此放行新派工或提交。
 - 任务输入与来源按哈希冻结；预检运行同一提交逻辑并回滚。同一任务已提交的相同结果幂等，不同结果拒绝。
 - 领域判断、章节证据、事件结算、任务完成和状态转换全部成功才 commit；一个阶段只由一个事务入口提交。取消只更新持久状态并返回任务 ID，文件回收通过 after_commit 在提交后执行；预检与异常回滚丢弃回调。回调失败会报告交付失败，已提交的数据仍然保留。
-- 章节只能在章纲存在且固定、漂移核算通过（items 覆盖完整、`actual.from` 等于引擎投影）、字数区间、`lint`、字面规则与机械事件核验通过后入库；文风 findings 与 `lint` 命中按名进入有界返修，默认首章形状与代词 observations 不消耗返修额度。章纲本身必须先通过卷内状态链模拟（含 enter/exit 一致性、伏笔 `plant`/`payoff` 状态机与卷末闭合）。
+- 章节只能在章纲存在且固定、漂移核算通过（items 覆盖完整、`actual.from` 等于引擎投影）、字数区间、`lint`、字面规则与机械事件核验通过后入库；文风 findings 与 `lint` 命中按名进入有界返修，默认形状（当前基线：开卷参照→最近已认可章节中位）与代词 observations 不消耗返修额度。章纲本身必须先通过卷内状态链模拟（含 enter/exit 一致性、伏笔 `plant`/`payoff` 状态机与卷末闭合）。
 - 作品理解不直接结算事件、替代作者约定或强制修稿；理解记录按其冻结版本读取，作品理解仍由执笔回执提交增量（`understanding.update`）；独立连续性报告不直接变成事实或理解。
 - 除主干自执 opening_options 的 read/recall 外，材料读取只对携带派工身份的进程开放，主控不得代读正文；未派工的任务不生成正式材料。
 - 程序核对宿主声明的会话身份，不证明宿主实际提供了空模型历史。身份卡只沿用宿主注入或认领中已有的执行标识，不生成“自命名”身份；子进程适配器明确返回 context_isolation=unverified。
@@ -264,7 +264,7 @@ verification 是程序能力边界，不是操作系统安全沙箱。所有正�
 | 分卷与逐章设计 | 世界与约定生效后派发各卷卷纲（每卷 2000–3000 汉字，目标 2500，默认一次交全部卷；v5 项目每卷 `stage` 逐字取格局阶梯一级且只升不降；含伏笔账 `hooks` 与文风走向 `style.trend`）；进入每卷前交该卷章纲（每章约 150 汉字 + 漂移字段 + enter/exit + 伏笔 `plant`/`payoff` + 文风 `style`） |
 | 事实连续性 | 章纲状态链在设计期逐章模拟资源前值与守恒、时钟、知情、位置、人物变化与伏笔埋收，卷末核对结构化终值和 clock.to（容差 0）且 required 伏笔全 paid；自然语言 exit_state 只作说明 |
 | 执笔核账 | `drift_check` 逐项自比（覆盖、前态、去向、偏差理由与引文），引擎仅在所有项符合固定章纲时按既有事实判据入账；偏差留作本章返修，不自动改纲；伏笔事件由 `drift_reconcile.reconcile` 产出 |
-| 文学质量 | 新CLI项目默认不执行独立连读（`continuity=off, trust=advisory`），作者显式开启后才有独立连读与候选比较；旧项目按原模式恢复。报告覆盖、宿主证明与文学判断分开显示，协议见[质量与宿主](quality.md)。文风代理仍是：文风由作者约定、卷纲 `style.trend` 与章纲 `style` 提供依据；默认观察首章形状，作者选 strict 才执行锚点数值约束。显式对白目标与高重复继续检查；章纲声明出场的人物由 `drift_reconcile.presence_notes` 以世界模型名做机械落实观察（severity=note，记入 draft.presence，不耗返修额度、不拒稿）；代词标签不能判实际视角。**不证明"好看、人物可信"**——文学判断靠作者抽读或离线评测工具（`scripts/quality_eval.py`） |
+| 文学质量 | 新CLI项目默认不执行独立连读（`continuity=off, trust=advisory`），作者显式开启后才有独立连读与候选比较；旧项目按原模式恢复。报告覆盖、宿主证明与文学判断分开显示，协议见[质量与宿主](quality.md)。文风代理仍是：文风由作者约定、卷纲 `style.trend` 与章纲 `style` 提供依据；默认观察形状（当前基线：开卷参照→最近已认可章节中位），作者选 strict 才执行锚点数值约束。显式对白目标与高重复继续检查；章纲声明出场的人物由 `drift_reconcile.presence_notes` 以世界模型名做机械落实观察（severity=note，记入 draft.presence，不耗返修额度、不拒稿）；代词标签不能判实际视角。**不证明"好看、人物可信"**——文学判断靠作者抽读或离线评测工具（`scripts/quality_eval.py`） |
 | 修改恢复 | 冻结任务、候选稿、版本化改约、历史分支、合并撤销 |
 | 局部修复 | 冻结能力支持完整稿、版本补丁和原文复用；合成后重新过机械核算与 lint，不自动免检入库 |
 | 作品理解 | 按人物、话题与显式引用选取版本解释、原文表达样本与反证；候选稿隔离、依据失效和恢复 |

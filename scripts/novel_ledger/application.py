@@ -1019,8 +1019,10 @@ class Application:
             self._governance.authorize('approve', {'prose_hash': prose_hash}, source)
             book['pilot'] = {'prose': prose_hash, 'contract': digest(book['contract']), 'source': source}
             # The approved first chapter is the voice anchor, for every project: v2.1 carries
-            # literary consistency with style, so the sample the writer is measured against must not
-            # depend on the editorial flag (that flag gates patch/scene capabilities, not the voice).
+            # literary consistency with style, so the sample must not depend on the editorial flag
+            # (that flag gates patch/scene capabilities, not the voice). The registration is the
+            # voice/气质 sample plus the opening reference; each later chapter's numeric expect is
+            # rolled forward by style.current_anchor over the nearest approved chapters.
             book['style_anchor'] = {'prose_hash': prose_hash, 'sample': self.repo.read_document(row['prose']),
                                     'voice': book['contract']['voice'], 'traits': book['contract']['style_traits'],
                                     'source': source}

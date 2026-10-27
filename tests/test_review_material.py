@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
-from novel_ledger import context, creation, workflow
+from novel_ledger import context, creation, style, workflow
 from novel_ledger.bootstrap import local_application as Application
 from novel_ledger.sqlite_store import SQLiteRepository
 from support import (chapter_rows, check_dispatch, contract, drive, response, seeded_book,
@@ -298,6 +298,43 @@ class PlanningLineageTests(unittest.TestCase):
                 self.assertNotEqual(repo.read_document(task['records']['previous_volume_outline'])['exit_state'],
                                     book['volumes_outline']['v2']['exit_state'])
                 self.assertEqual(task['payload']['volume_ids'], ['v3'])
+
+
+class RollingAnchorMaterialTests(unittest.TestCase):
+    """The writer's `style.anchor` rolls with the approved chapters: the dispatch material and
+    the engine's submit-side check name the same chapters and the same medians."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.repo = SQLiteRepository.initialize(Path(self.temp.name) / 'book',
+                                                seeded_book(contract(chapters=3, volumes=1)))
+        self.app = Application(self.repo)
+        self.owner = self.app.run(through=3, source='工程夹具：三章。')['owner']
+        drive(self.app, self.owner, until='write')
+        first = response(self.app)
+        self.assertEqual(self.app.submit(first)['committed_chapter'], 1)
+        handoff = self.app.advance(owner=self.owner)
+        self.assertEqual(handoff['action'], 'await_author')
+        self.app.approve(handoff['prose_hash'], '工程夹具认可首章。', self.owner)
+        drive(self.app, self.owner, until='write')
+        second = response(self.app)
+        self.assertEqual(self.app.submit(second)['committed_chapter'], 2)
+
+    def tearDown(self):
+        self.repo.close()
+        self.temp.cleanup()
+
+    def test_the_write_dispatch_anchor_rolls_with_the_approved_chapters(self):
+        drive(self.app, self.owner, until='write')
+        work = self.repo.pending()['input']
+        self.assertEqual((work['stage'], work['chapter']), ('write', 3))
+        book = self.repo.load()
+        material = self.repo.read_document(work['records']['style'])
+        self.assertEqual(material['anchor']['origin'], 'rolling')
+        self.assertEqual(material['anchor']['basis'], [1, 2])
+        self.assertEqual(material['anchor'], style.current_anchor(
+            book, context._recent_style_metrics(self.repo, book['branch'], 3,
+                                                style.STYLE_BASELINE_WINDOW)))
 
 
 if __name__ == '__main__':

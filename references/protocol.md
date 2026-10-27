@@ -28,7 +28,7 @@
 | promise_anchor | `{deliverable, deadline_chapter}`（**optional、参与对齐**）：主题锚点——`deliverable` ≥12 字符，`deadline_chapter` 为纯数字字符串且 `1 ≤ N ≤ min(DEFAULTS['world_ladder']['anchor_max_chapter'], 该档 chapter_window 上限)`（默认 30 章）。兑现门的 `anchor` 投影（`opening: ('payoff', 'anchor')`） |
 | volume_outline | `volumes[]`，字段、长度与卷末终值见 [卷纲](narrative.md#卷纲)；选择绑定见 [世界规则](world.md#三条逐字绑定) |
 | chapter_outline | `volume` + `chapters[]`，字段与状态链见 [章纲](narrative.md#章纲)；重排范围以冻结 payload 为准 |
-| style_guard | `observe`（默认）/`strict`：前者只观察相对首章的句段和未声明对白比例变化，后者按窗口执行数值约束。显式对白目标、高重复在两档都核，代词只观察；作者选择经正常约定或改约留档 |
+| style_guard | `observe`（默认）/`strict`：前者只观察相对当前基线（开卷参照→最近已认可章节中位，`DEFAULTS['style_baseline_window']`＝5 章，origin/basis 标来源）的句段和未声明对白比例变化，后者按窗口执行数值约束。显式对白目标、高重复在两档都核，代词只观察；作者选择经正常约定或改约留档。旧库升级后下一章起 expect 平滑切到滚动中位，无存量迁移 |
 | style_profile | 枚举＝`contracts.STYLE_CATALOG` 档名（默认 `DEFAULTS['style_profile_default']`＝市井修仙；档目以注册表与 [内置文风目录](style.md) 为准，不在本表复述）：生效的内置文风档案，写作派工 guides 自动带档案文件，无认可锚点时代理指标回落该档注册锚点。参数字段：`recontract --patch` 直接换档不触发重写；项目根 style-profile.md 存在时替换文学档案，机械锚仍按契约内置选择解析（见 [文风](style.md)） |
 | style_window | `{sentence:0.35, paragraph:0.35, dialogue:0.40, repetition:0.12, person:1}`（optional、不参与对齐）：文风代理指标容差；句段与对白使用相对变化，repetition 是本章绝对重复度上限，person 保留为代词观察参数，不能据此断言叙事视角；卷纲 `style.window` 与契约**逐项合并**（先用契约补默认，再按合法键与合法数值逐个覆盖），作者可改约调整。见 [文风](narrative.md#文风) |
 | narrative_tracking | true；关闭时章纲的 `plot.nodes`/`plot.threads` 可空，但事实增量仍按同一规则核算，五类增量数组（含可选的 relations）缺省或 null 按空数组处理 |

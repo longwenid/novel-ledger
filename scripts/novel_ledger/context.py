@@ -524,14 +524,30 @@ def hook_ledger(book, volume=None, refs=None):
                       + ('完整历史声明见 complete_hooks，未选择不代表不存在。' if selected is not None else '')}
 
 
-def style_material(book, volume, chapter_row=None):
+def _recent_style_metrics(repo, branch, anchor, window):
+    """Per-chapter style metrics for the rolling baseline, measured from the committed prose.
+
+    A chapter anchor selects the nearest `window` chapters around it, the anchored chapter itself
+    excluded — the same proximity the submit-side priors use, so the writer's material and the
+    engine's check name the same chapters. A design dispatch without one (anchor 0) takes the
+    highest-numbered chapters: the writing front. Metrics are pure functions of the stored prose
+    (`style.metrics`), never read back from review records, so chapters whose reviews predate
+    `style_report` compare identically and a metrics recalibration heals old books for free."""
+    rows = [row for row in repo.headers(branch) if not anchor or row['n'] != anchor]
+    rows.sort(key=(lambda row: abs(row['n'] - anchor)) if anchor else (lambda row: -row['n']))
+    return [(row['n'], style.metrics(repo.read_document(row['prose']))) for row in rows[:window]]
+
+
+def style_material(book, volume, chapter_row=None, recent=()):
     """The style specification one dispatch writes against: contract, anchor, volume, chapter.
 
-    The contract's `voice`/`tone`/`pov`/`style_traits` are the author's decision, the anchor is the
-    chapter the author approved (its measured metrics, not the prose — that record already exists),
-    the volume row states how the style moves, and the chapter row states the execution points for
-    this chapter. The effective tolerances are merged here so the writer compares against the same
-    numbers the engine will use.
+    The contract's `voice`/`tone`/`pov`/`style_traits` are the author's decision; the anchor is
+    the current shape baseline — the opening reference (the approved first chapter's measured
+    metrics, or the profile's registered anchor before any approval) until approved chapters
+    accumulate, then the per-metric median of the nearest ones (`recent`, [(chapter, metrics), …]
+    in proximity order, frozen at dispatch time). The volume row states how the style moves, and
+    the chapter row states the execution points for this chapter. The effective tolerances are
+    merged here so the writer compares against the same numbers the engine will use.
     """
     contract = book.get('contract') or {}
     volume_style = (volume or {}).get('style') if isinstance((volume or {}).get('style'), dict) else {}
@@ -540,13 +556,14 @@ def style_material(book, volume, chapter_row=None):
             'pov': contract.get('pov', ''), 'style_traits': list(contract.get('style_traits') or []),
             'profile': resolve_style_profile(contract.get('style_profile')),
             'guard': contract.get('style_guard', DEFAULTS['style_guard']),
-            'anchor': style.baseline(book),
+            'anchor': style.current_anchor(book, recent),
             'window': style.merged_window(contract, volume_style),
             'volume': dict(volume_style), 'chapter': dict(chapter_style),
             'source': '文风规格：契约 voice/tone/pov/style_traits 是底线，profile 是生效的内置文风档案（guides 里带它的档案文件；'
-                      '项目根 style-profile.md 存在时以那份作者确认档案为生效档案），anchor 是作者认可首章的实测指标'
-                      '（无认可锚点时为该档案的注册锚点），volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。'
-                      'guard=observe 默认只观察首章形状变化，strict 才执行锚点容差；'
+                      '项目根 style-profile.md 存在时以那份作者确认档案为生效档案），anchor 是当前形状基线'
+                      '（开卷参照——首章实测或档案注册锚；认可章积累后为最近已认可章节中位；origin/basis 标来源，以派工时点为准），'
+                      'volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。'
+                      'guard=observe 默认只观察形状变化，strict 才执行锚点容差；'
                       '显式对白目标和高重复检查仍生效，实际视角须结合正文自比。'}
 
 
@@ -681,7 +698,11 @@ def build(repo: ContextStore, book, job):
             hook_refs.update(row['id'] for ident, outline in (book.get('volumes_outline') or {}).items()
                              if ident in volume_ids for row in (outline or {}).get('hooks') or [])
         add('hooks', hook_ledger(book, design_volume, hook_refs))
-        add('style', style_material(book, design_volume, design_chapter))
+        # The anchor rolls with the book: metrics recomputed from the committed prose nearest this
+        # dispatch, so what the writer reads as `anchor` is the same expect the engine will check.
+        add('style', style_material(book, design_volume, design_chapter,
+                                    recent=_recent_style_metrics(repo, book['branch'], anchor,
+                                                                 style.STYLE_BASELINE_WINDOW)))
     if book.get('author_block'):
         add('author_block', book['author_block'])
     if book.get('creation'):

@@ -1061,11 +1061,16 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None,
                                             allowed_latin=planning.policy_of(book)['allowed_latin']))
         # And the style proxies: the checkable half of "did this chapter keep the voice the author
         # anchored". Consistency, not quality — a chapter can match every number and still be dull.
-        # The volume's own `style.window` overrides the contract's tolerances for this stretch.
+        # The volume's own `style.window` overrides the contract's tolerances for this stretch,
+        # and the expect side rolls forward: medians over the nearest approved chapters (the same
+        # priors the duplication lint reads), so the pilot's opening situation is not a whole-book
+        # quota.
         write_volume = planning.volume_for(editorial.effective_contract(book), chapter)
         volume_style = ((book.get('volumes_outline') or {}).get(write_volume['id']) or {}).get('style') \
             if write_volume else None
-        style_report = style.examine(prose, plan.get('style'), style.baseline(book),
+        style_report = style.examine(prose, plan.get('style'),
+                                     style.current_anchor(book, [(number, style.metrics(sample))
+                                                                 for number, sample in (priors or [])]),
                                      style.merged_window(book.get('contract'), volume_style), chapter,
                                      contract=book.get('contract'))
         findings.extend(style_report['findings'])
