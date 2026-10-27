@@ -408,7 +408,18 @@ def dispatch(args, open_runtime=open_local_runtime):
         if command == 'review-resolve':
             return app.resolve_review(args.request, args.disposition, args.source, owner)
         if command == 'status':
-            return app.task_list() if args.tasks else app.status()
+            result = app.task_list() if args.tasks else app.status()
+            # A pure-status recovery must also reach the preview entry: without this, the
+            # controller has to run advance (or hand-assemble the path) just to hand the author
+            # book.html. Same derived-view rule as init — failure is reported, never fatal — and
+            # a runtime without the view (a minimal composition) is no persistence requirement.
+            viewer = getattr(runtime, 'book_view', None)
+            if callable(viewer):
+                try:
+                    result['book_view'] = viewer()
+                except OSError as exc:
+                    result['book_view_error'] = str(exc)
+            return result
         if command == 'advance':
             return app.advance(args.after, owner, compact=args.compact)
         if command == 'intake':

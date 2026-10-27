@@ -51,6 +51,14 @@ class CommandBoundaryTests(unittest.TestCase):
         self.assertFalse(options['initialize'])
         self.assertIsNone(options['contract'])
 
+    def test_status_attaches_the_book_view_when_the_runtime_offers_it(self):
+        class ViewingRuntime(AlternateRuntime):
+            def book_view(self):
+                return {'path': str(Path('book') / 'book.html')}
+
+        result, _ = self.dispatch(['status'], ViewingRuntime())
+        self.assertEqual(result['book_view']['path'], str(Path('book') / 'book.html'))
+
     def test_stdin_is_parsed_at_the_command_boundary(self):
         payload = {'schema': 'receipt', 'session': 'explicit-reader', 'data': {'intent': '测试'}}
         with patch.object(sys, 'stdin', io.StringIO(json.dumps(payload))):

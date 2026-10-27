@@ -258,10 +258,22 @@ VOLUME_EXIT = '卷末：车费结余；沈桐在后院；对来源仅到怀疑�
 
 
 def _fit_text(seed, target):
-    """Pad or trim `seed` until its 汉字 count is exactly `target`."""
+    """Pad or trim `seed` until its 汉字 count is exactly `target`.
+
+    Padding appends numbered beats (第一拍、第二拍…) instead of repeating the seed: the
+    chapter-outline validator rejects verbatim-repeated clauses as filler, and fixtures
+    stand for valid receipts.
+    """
+    digits = '零一二三四五六七八九'
+
+    def _cn(number):
+        return ''.join(digits[int(d)] for d in str(number))
+
     value = seed if isinstance(seed, str) and seed else '核对'
+    beat = 0
     while han_count(value) < target:
-        value += seed if isinstance(seed, str) and seed else '核对'
+        beat += 1
+        value += '；第%s拍补叙核对与让步' % _cn(beat)
     while han_count(value) > target:
         value = value[:-1]
     return value

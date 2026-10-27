@@ -30,6 +30,32 @@ def _length_policy(policy):
     return words, tolerance
 
 
+def _repeated_clauses(synopsis, least=6):
+    """Clauses repeated verbatim inside one synopsis: filler written to clear the length floor.
+
+    The length band's lower edge invites padding; a clause of six or more han characters
+    appearing twice, character for character, is padding, not a refrain — the finding says so
+    and points at reorganisation instead of deletion-only.
+    """
+    units, current = [], []
+    for ch in synopsis if isinstance(synopsis, str) else '':
+        if ch in '。！？；，、\n':
+            units.append(''.join(current))
+            current = []
+        else:
+            current.append(ch)
+    units.append(''.join(current))
+    seen, hits = set(), []
+    for unit in units:
+        unit = unit.strip()
+        if han_count(unit) < least:
+            continue
+        if unit in seen and unit not in hits:
+            hits.append(unit)
+        seen.add(unit)
+    return hits
+
+
 def _ladder_stages(contract, selected):
     """Read the active contract's rungs; old inputs may fall back to opening choices.
 
@@ -396,6 +422,14 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
                     'chapter_outline', 'beats只列本章推进顺序的非空短句，缺省与空数组合法。')
         require(row.get('role') is None or text(row['role']), 'chapter_outline',
                 'role只写本章在卷内的结构职责一句话。')
+        # pacing is the same kind of optional expression: two named keys, non-empty text, absent
+        # keys legal — the discipline for what to put in them lives in the narrative guide.
+        if row.get('pacing') is not None:
+            require(isinstance(row['pacing'], dict)
+                    and all(key in ('end_push', 'note') for key in row['pacing'])
+                    and all(text(value) for value in row['pacing'].values()),
+                    'chapter_outline',
+                    'pacing只接受 end_push（章尾推力）与 note（节奏意图说明）两个非空文本键，键缺省合法。')
         findings.extend(timeline_findings(row, previous_timeline))
         if (row.get('timeline') or {}).get('relation') not in ('parallel', 'flashback'):
             previous_timeline = row
@@ -409,6 +443,13 @@ def validate_chapter_outline(data, policy, volume_row, volume_row_outline, world
                 findings.append(_finding(chapter_no, 'synopsis', 'synopsis', [words - tolerance, words + tolerance],
                                          length, '章纲篇幅不在每章目标汉字数区间内。',
                                          'chapter_length', 'blocker', 'outline'))
+            repeated = _repeated_clauses(synopsis)
+            if repeated:
+                findings.append(_finding(chapter_no, 'synopsis', repeated[0], '不重复的叙述单元', repeated,
+                                         'synopsis 里同一分句逐字重复：这是凑字不是内容。篇幅不足时压缩事件或'
+                                         '把事件并章后按区间重写；若属有意复沓，改写成非逐字表达。'
+                                         '下限宁缺毋凑：删去重复后仍短于下限时，按区间重新组织本章内容。',
+                                         'chapter_filler', 'blocker', 'outline'))
         refs = row.get('world_refs')
         unknown = [ref for ref in (refs if isinstance(refs, list) else [])
                    if not text(ref) or ref not in world_ids]

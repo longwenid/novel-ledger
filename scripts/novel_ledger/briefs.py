@@ -197,8 +197,9 @@ def world_model(previous=(), repair=False, scale=None, sections=None):
                   '后续卷纲/章纲的资源增量只能作用于这里（或既有状态）登记过的坐标——'
                   '本书若要写资源变化（钱、材料、配额），现在就登记起点，不要留空。',
                   '- contract.placements（实体id→地点id）声明开局站位：要写位置移动的实体，'
-                  '先在这里登记初始站位且地点存在于世界 geography——否则设计链不能建立位置坐标，'
-                  '章纲只能不写该实体的位置变化。',
+                  '先在这里登记初始站位；实体须已在 contract.entities 登记，'
+                  '地点 id 须先在 contract.places（{id,name}）登记并对应世界 geography 中的地点'
+                  '——否则设计链不能建立位置坐标，章纲只能不写该实体的位置变化。',
                   '- 模板里的空字符串占位（如 payoff_plan.ways）代表「待填的数组/结构」：'
                   '按门内已选值原样落入，保持数组是数组，不改成一句话。',
                   ''])
@@ -437,7 +438,9 @@ def stage(name, payload=None):
                            'hook_refs/reader_refs/history_refs 声明要承接的旧资料；'
                            'scenes/pacing 为当前章纲的可选字段：分场是场景质感的容器，'
                            '对话场/动作场/日常场等类型写进 label/intent（方向自定），'
-                           '需要写手按场展开时给 scenes，不强制每章分场。不写正文。',
+                           '需要写手按场展开时给 scenes，不强制每章分场；'
+                           'pacing 只接受 end_push（章尾推力：本章结尾以什么把读者推向下一章）'
+                           '与 note（其他节奏意图）两个非空文本键，开卷前五章与卷末章建议填 end_push。不写正文。',
         'write': '交 title/完整 prose/summary/具体 self_check 与逐条 drift_check。'
                  '本章纲（chapter_outline）与卷纲材料（volume_outline）都是必读；卷纲节点已按本章及前置依赖筛选，完整卷纲可从 complete_volume_outline 补读：按章纲的拍序、场景与增量落笔，'
                  '不添章纲没有的重大变化，也不漏掉章纲声明要发生的。'

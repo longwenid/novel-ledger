@@ -206,7 +206,7 @@ def revise_design(book, adjustments):
     ordered = [volumes[v['id']] for v in contract['volumes'] if v['id'] in volumes]
     revalidated = planning.validate_volume_outline(
         {'volumes': copy.deepcopy(ordered)}, contract, book.get('world'), selections(book),
-        book.get('volumes_outline') or {}, list(pending['volume_ids']))
+        book.get('volumes_outline') or {}, list(pending['volume_ids']), book.get('state'))
     pending['volumes'] = revalidated
     pending['volumes_hash'] = design_hash(pending)
     return book
@@ -259,12 +259,68 @@ def _volume_board_row(volume, outline, policy):
             'style_trend': (outline.get('style') or {}).get('trend', '')}
 
 
-def structure_warnings(pending, previous=None):
-    """Two advisory notes the board carries, each mechanically countable and neither a threshold.
+def _han_text(parts):
+    """Han-only text of the given strings, non-han runs collapsed into separators."""
+    kept = []
+    for part in parts:
+        if isinstance(part, str):
+            kept.append(''.join(ch if '\u4e00' <= ch <= '\u9fff' else '。' for ch in part))
+    return '。'.join(kept)
+
+
+def _shared_han_fragments(a, b, least=5, most=12):
+    """Maximal shared han fragments of length >= least between two boundary texts.
+
+    Continuity vocabulary legitimately repeats across volumes (carried-over names, threads), so
+    the result is evidence for the author's eye, not a verdict: a five-character exact match on
+    boundary texts is usually one event narrated twice, but can be a shared noun of a continued
+    thread. Only called on short board texts, so the quadratic scan is irrelevant.
+    """
+    grams = {a[i:i + least] for i in range(max(0, len(a) - least + 1))}
+    hits, i = [], 0
+    while i + least <= len(b):
+        if b[i:i + least] in grams:
+            start = i
+            while i + least <= len(b) and b[i:i + least] in grams:
+                i += 1
+            hits.append(b[start:i + least - 1][:most])
+        else:
+            i += 1
+    return hits
+
+
+def _turn_position(at, first, last):
+    """One turn's free-text spot as a chapter number; None when the wording carries no position."""
+    if not isinstance(at, str):
+        return None
+    marker = at.find('第')
+    while marker != -1:
+        cursor = marker + 1
+        while cursor < len(at) and at[cursor].isdigit():
+            cursor += 1
+        if cursor > marker + 1 and cursor < len(at) and at[cursor] == '章':
+            return int(at[marker + 1:cursor])
+        marker = at.find('第', marker + 1)
+    if any(word in at for word in ('卷首', '开卷', '开局', '开场')):
+        return first
+    if '卷中' in at:
+        return (first + last) // 2
+    if any(word in at for word in ('卷尾', '卷末', '结尾')):
+        return last
+    return None
+
+
+def _edge_synopsis(rows, last=True):
+    row = rows[-1] if last and rows else (rows[0] if rows else None)
+    return (row or {}).get('synopsis') or '' if isinstance(row, dict) else ''
+
+
+def structure_warnings(pending, previous=None, spans=None, previous_chapters=None):
+    """The advisory notes the confirmation board carries: each mechanically countable, none a gate.
 
     Advisory only, everywhere: the author who insists on the flagged shape wins (the same
     semantics as the opening boards' name/setting warnings). There is deliberately no switch that
-    promotes either of these to a refusal — a numeric gate on story shape is the failure this
+    promotes any of these to a refusal — a numeric gate on story shape is the failure this
     design refuses to re-introduce.
     """
     warnings = []
@@ -286,6 +342,59 @@ def structure_warnings(pending, previous=None):
             warnings.append({'code': 'volume_turn_template',
                              'message': '本次比较的各卷转折都恰是两条、位置都标在卷中/卷尾：转折位置呈同一模板。'
                                         '只警不拦，作者坚持以作者为准。'})
+    # Per-volume middle-shape notes: turns clustered at both ends with none in the middle third,
+    # and hook windows all at the ends leaving the middle with no declared plant or payoff.
+    for volume in volumes:
+        ident, span = volume.get('id'), (spans or {}).get(volume.get('id'))
+        if not isinstance(span, list) or len(span) != 2:
+            continue
+        first, last = span
+        width = last - first + 1
+        if width < 9:
+            continue
+        mid_lo, mid_hi = first + width // 3, last - width // 3
+        turns = [turn for turn in (volume.get('turns') or [])
+                 if isinstance(turn, dict) and text(turn.get('at'))]
+        positions = [spot for spot in (_turn_position(turn.get('at'), first, last) for turn in turns)
+                     if spot is not None]
+        if len(positions) >= 2 and not any(mid_lo <= spot <= mid_hi for spot in positions) \
+                and any(spot < mid_lo for spot in positions) and any(spot > mid_hi for spot in positions):
+            warnings.append({'code': 'volume_mid_hollow', 'volume': ident,
+                             'message': '卷 %s 的转折都落在卷首与卷尾、卷中三分之一没有任何转折：中段缺压力换挡，'
+                                        '连载容易空腰。可把某条转折移入中段或在中段补一条。只警不拦，作者坚持以作者为准。' % ident})
+        hooks = [hook for hook in (volume.get('hooks') or [])
+                 if isinstance(hook, dict) and isinstance(hook.get('plant'), list)
+                 and isinstance(hook.get('payoff'), list) and len(hook.get('plant')) == 2
+                 and len(hook.get('payoff')) == 2]
+        if len(hooks) >= 2 and all(hook['plant'][1] < mid_lo and hook['payoff'][0] > mid_hi for hook in hooks):
+            warnings.append({'code': 'volume_mid_no_hook', 'volume': ident,
+                             'message': '卷 %s 的伏笔窗口全部两端聚集：埋设都结束于中段之前、兑现都开始于中段之后，'
+                                        '卷中没有任何声明的埋设或兑现窗口。可把某条短线的埋设或兑现移入中段，'
+                                        '或在章纲中段以 hook_refs 再提。只警不拦，作者坚持以作者为准。' % ident})
+    # Adjacent-volume boundary overlap: an event the previous volume's ending already narrated
+    # being re-narrated by the next volume's opening is the shape where writing to the fixed
+    # outline cannot satisfy both chapters — caught here as shared fragments on the boundary texts.
+    staged = pending.get('volumes') or {}
+    order = [ident for ident in (pending.get('volume_ids') or []) if ident in staged]
+    chapters = pending.get('chapters') or {}
+    pairs = []
+    if previous is not None and order and previous.get('id') != order[0]:
+        pairs.append((previous, previous_chapters or [], staged[order[0]]))
+    for i in range(len(order) - 1):
+        pairs.append((staged[order[i]], chapters.get(order[i]) or [], staged[order[i + 1]]))
+    for prev_row, prev_rows, next_row in pairs:
+        next_rows = chapters.get(next_row.get('id')) or []
+        fragments = _shared_han_fragments(
+            _han_text([prev_row.get('arc') or '', prev_row.get('climax') or '', _edge_synopsis(prev_rows)]),
+            _han_text([next_row.get('arc') or '', _edge_synopsis(next_rows, last=False)]))
+        if fragments:
+            shown = '、'.join(dict.fromkeys(fragments[:3]))
+            warnings.append({'code': 'volume_boundary_overlap',
+                             'volumes': [prev_row.get('id'), next_row.get('id')],
+                             'message': '相邻卷边界文本出现相同片段（%s）：前卷卷尾（弧线/高潮/末章）与后卷开场'
+                                        '（弧线/首章）可能在重复叙述同一事件，执笔到边界两章会有一章无法按纲落笔。'
+                                        '相同片段也可能只是延续中的共同名词——同一事件重复叙述才需要处理：'
+                                        '后卷开场改为承接后果而非重演当夜。只警不拦，作者坚持以作者为准。' % shown})
     return warnings
 
 
@@ -303,6 +412,9 @@ def volume_board(book):
     ordered = contract['volumes']
     first = next((i for i, row in enumerate(ordered) if row['id'] in pending['volumes']), 0)
     previous = (book.get('volumes_outline') or {}).get(ordered[first - 1]['id']) if first else None
+    previous_chapters = ((book.get('chapter_outlines') or {}).get(ordered[first - 1]['id'])
+                         if first else None) or []
+    spans = {row['id']: [row['first'], row['end']] for row in ordered}
     return {'schema': 'novel-ledger.volume-board/1', 'hash': pending['volumes_hash'],
             'round': pending['round'], 'scope': pending['scope'],
             'volume_ids': list(pending['volume_ids']), 'volumes': rows,
@@ -310,7 +422,7 @@ def volume_board(book):
                        'chapters': copy.deepcopy(pending.get('chapters') or {}),
                        'plans': copy.deepcopy(pending.get('plans') or {})},
             'hash_scope': 'full_design' if pending['volumes_hash'] == design_hash(pending) else 'legacy_volumes',
-            'warnings': structure_warnings(pending, previous)}
+            'warnings': structure_warnings(pending, previous, spans, previous_chapters)}
 
 
 def next_volume_outline(book, contract, needed=None):
@@ -791,7 +903,7 @@ def apply(book, task, data, actor, sources, priors=None, external_findings=None,
         # checks (speaker/intent shape, scene identity, reading dependencies); calling `drift`
         # directly here would leave a chapter's scenes unbound and quietly retire the workbench.
         outlines = planning.validate_volume_outline(data, contract, book.get('world'), selections(book),
-                                                    book.get('volumes_outline') or {}, wanted)
+                                                    book.get('volumes_outline') or {}, wanted, book.get('state'))
         old = book.get('volumes_outline') or {}
         if (task.get('payload') or {}).get('repair'):
             require_narrow_repair(old, outlines, (task.get('payload') or {}).get('drift') or [])

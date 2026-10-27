@@ -1261,6 +1261,31 @@ class Application:
             book = self._load()
             result = self._opening.regroup(book, board_hash, reason)
             self._save(book)
+        # A structural gate's regroup already holds the next board (the ladder slid), so the card
+        # materializes here: work/board.md must never keep showing the retired board the regroup
+        # just replaced — the controller forwards that file to the author, and its stale hash
+        # would be refused by the next choose/regroup. Creative gates leave the board empty;
+        # their next advance dispatches the options task and refreshes the card itself.
+        creation_state = book.get('creation') or {}
+        board = creation_state.get('board') if creation_state.get('phase') == 'choosing' else None
+        if isinstance(board, dict) and board.get('hash'):
+            boundary = {'action': 'await_choice', 'board': copy.deepcopy(board), 'status': self.status()}
+            result['action'] = boundary['action']
+            result['board'] = {'gate': board.get('gate'), 'round': board.get('round'),
+                               'hash': board.get('hash'), 'system': board.get('system'),
+                               'option_ids': [row.get('id') for row in board.get('options') or []]}
+            try:
+                result['board_card'] = self.presentation.board(board)
+            except OSError as exc:
+                result['board_card_error'] = str(exc)
+            try:
+                result['question_card'] = self.presentation.question(board)
+            except OSError as exc:
+                result['question_card_error'] = str(exc)
+            try:
+                result['advance_snapshot'] = self.presentation.snapshot(boundary)
+            except OSError as exc:
+                result['advance_snapshot_error'] = str(exc)
         return result
 
     def opening_back(self, gate, reason, owner=None):
