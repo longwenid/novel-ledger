@@ -94,7 +94,12 @@ class Application:
                 '在途任务冻结自另一个项目版本：先作废再派工。',
                 {'task_revision': None if task is None else task['input']['revision'],
                  'book_revision': book['revision']})
-        baseline = task or (self.repo.task(book['last_task']) if book.get('last_task') else None)
+        baseline = task
+        if baseline is None and book.get('last_task'):
+            try:
+                baseline = self.repo.task(book['last_task'])
+            except Error:
+                baseline = None
         frozen_build = ((baseline or {}).get('input') or {}).get('build')
         sealed = False
         revision = book['revision_run']
