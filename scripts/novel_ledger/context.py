@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import copy
 import json
-from .contracts import (BLUEPRINT_BOUNDARY, BLUEPRINT_CATALOG, DEFAULTS, SCALE_TIERS, TASK,
+from .contracts import (BLUEPRINT_BOUNDARY, BLUEPRINT_CATALOG, DEFAULTS, DESIGN_BLUEPRINT_BOUNDARY,
+                        DESIGN_BLUEPRINT_CATALOG, SCALE_TIERS, TASK,
                         WORLD_ARCHITECTURE, Job, policy_default,
                         profile_anchor, require, resolve_style_profile, tier_of)
 from .contracts import (EDITORIAL_CAPABILITY, HOOK_LINKS_CAPABILITY,
@@ -56,9 +57,10 @@ STAGE_MATERIAL = {
     'opening_options': ('opening_basis', 'opening_choices', 'opening_rejections'),
     'world_model': ('author_feedback', 'opening_basis', 'opening_choices', 'previous_proposal'),
     'opening_contract': ('author_feedback', 'opening_basis', 'opening_choices', 'world_model'),
-    'volume_outline': ('author_feedback', 'blueprint', 'contract', 'effective_layout', 'hooks', 'opening_basis',
-                       'opening_choices', 'previous_volume_outline', 'revision_impact', 'revision_instruction', 'state',
-                       'structure_blueprint', 'style', 'volume_rejections', 'world_model'),
+    'volume_outline': ('author_feedback', 'blueprint', 'contract', 'design_blueprint', 'effective_layout',
+                       'hooks', 'opening_basis', 'opening_choices', 'previous_volume_outline', 'revision_impact',
+                       'revision_instruction', 'state', 'structure_blueprint', 'style', 'volume_rejections',
+                       'world_model'),
     'chapter_outline': ('author_feedback', 'blueprint', 'contract', 'design_drift', 'effective_layout',
                         'hooks', 'previous_chapters', 'previous_chapter:', 'revision_impact',
                         'revision_instruction', 'state', 'style', 'volume_outline', 'world_model'),
@@ -839,6 +841,20 @@ def build(repo: ContextStore, book, job):
     if blueprint_entry is not None:
         add('blueprint', {**{key: blueprint_entry[key] for key in ('name', 'skeleton', 'drivers', 'echo')},
                           'source': bound.get('source', ''), 'boundary': BLUEPRINT_BOUNDARY})
+    # The design layer of the same one-blueprint system, when one is bound: an author-confirmed
+    # reference document, not a skeleton. Volume design is the one stage that reads it — the
+    # chapter stage receives structure only — and the record names the file instead of restating
+    # the document: the dispatch ships the document itself as a guide, and no validation ever
+    # parses it (the DESIGN_BLUEPRINT_BOUNDARY line). Absent by default, same as the structure
+    # layer; the catalog stays empty until the author confirms a document into it.
+    design_bound = book.get('design_blueprint') or {}
+    design_entry = (DESIGN_BLUEPRINT_CATALOG[design_bound['name']]
+                    if design_bound.get('name') in DESIGN_BLUEPRINT_CATALOG and stage == 'volume_outline'
+                    else None)
+    if design_entry is not None:
+        add('design_blueprint', {**{key: design_entry[key] for key in ('name', 'file', 'version', 'summary')},
+                                 'source': design_bound.get('source', ''),
+                                 'boundary': DESIGN_BLUEPRINT_BOUNDARY})
     if stage == 'volume_outline':
         # The batch policy: which volumes answer, where each one starts and ends, and the per-volume
         # word target. `volume_outline` is the policy map here; on a draft dispatch the same key
@@ -858,10 +874,13 @@ def build(repo: ContextStore, book, job):
         if prior:
             add('previous_volume_outline', book['volumes_outline'][prior[-1]['id']])
         # The bound blueprint also names itself in the payload for the brief and the template; the
-        # record both stages read was added above.
+        # record both stages read was added above. The design layer does the same, volume only.
         if blueprint_entry is not None:
             payload['structure_blueprint'] = {key: blueprint_entry[key]
                                               for key in ('name', 'skeleton', 'drivers', 'echo')}
+        if design_entry is not None:
+            payload['design_blueprint'] = {key: design_entry[key]
+                                           for key in ('name', 'file', 'version', 'summary')}
         # The author's reasoned refusals from earlier rounds at the gate: frozen input for the
         # re-run (the brief names them), never just audit. Same shape as the opening's
         # `opening_rejections` — present only while there is something to answer.

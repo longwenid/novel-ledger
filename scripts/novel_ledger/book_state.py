@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import copy
-from .contracts import BLUEPRINT_CATALOG, require
+from .contracts import BLUEPRINT_CATALOG, DESIGN_BLUEPRINT_CATALOG, require
 
 BOOK_SCHEMA = 'novel-ledger.book/1'
 # v2 removed the design-review and plan stages, so their containers are gone with them: the volume
@@ -11,14 +11,15 @@ BOOK_SCHEMA = 'novel-ledger.book/1'
 # The volume-outline confirmation gate adds three book-level fields: `pending_design` (the staged,
 # validated-but-not-installed batch, merged chapter half included), `volume_gate` (its round,
 # reasoned refusals and confirmations) and `structure_blueprint` (the author's optional book-level
-# structural choice). All three are absent-by-default legal, so an in-flight project predating the
-# gate needs no migration.
+# structural choice). `design_blueprint` is the design layer of the same one-blueprint system: the
+# author's optional confirmed design-reference binding, one per layer per book. All of them are
+# absent-by-default legal, so an in-flight project predating the gate needs no migration.
 PART_FIELDS = {
     'settings': ('contract', 'contract_source', 'lexical_policy'),
     'canon': ('state', 'written_han'),
     'intent': ('creation', 'world', 'volumes_outline', 'chapter_outlines', 'plans',
                'style_anchor', 'scope_ends', 'understanding',
-               'pending_design', 'volume_gate', 'structure_blueprint'),
+               'pending_design', 'volume_gate', 'structure_blueprint', 'design_blueprint'),
     'execution': ('branch', 'revision', 'status', 'target', 'finish', 'pilot', 'draft',
                   'rework', 'revision_run', 'feedback', 'decisions', 'last_task', 'pause_reason',
                   'pending_contract', 'controller_owner', 'opening_world_only', 'run_authorized',
@@ -123,4 +124,10 @@ def check_state(book):
                                   and blueprint['name'] in BLUEPRINT_CATALOG
                                   and isinstance(blueprint.get('source'), str) and blueprint['source']),
             'book_state', '结构蓝图须为 {name, source}，name 取自内置蓝图目录。')
+    design = book.get('design_blueprint')
+    require(design is None or (isinstance(design, dict) and set(design) <= {'name', 'source'}
+                               and isinstance(design.get('name'), str)
+                               and design['name'] in DESIGN_BLUEPRINT_CATALOG
+                               and isinstance(design.get('source'), str) and design['source']),
+            'book_state', '设计蓝图须为 {name, source}，name 取自内置设计层蓝图目录（作者确认后入库）。')
     return book

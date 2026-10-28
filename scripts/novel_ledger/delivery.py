@@ -563,8 +563,17 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
         profile = resolve_style_profile((contract or {}).get('style_profile'))
         style_paths = [str(reference_dir / 'style.md'),
                        str(reference_dir / STYLE_CATALOG[profile]['file'])]
-    if names or style_paths:
-        envelope['guides'] = [str(reference_dir / name) for name in names] + style_paths
+    design_paths = []
+    if work['stage'] == 'volume_outline':
+        # The design layer of the blueprint system: when the author has bound a confirmed design
+        # document, the volume dispatch ships the document itself as a guide — the record names it,
+        # the brief states the boundary, and nothing parses it into validation. Unbound or design-
+        # layer-empty books (the current default) see no extra file, same as the structure layer.
+        design = (work['payload'] or {}).get('design_blueprint')
+        if isinstance(design, dict) and design.get('file'):
+            design_paths.append(str(reference_dir / design['file']))
+    if names or style_paths or design_paths:
+        envelope['guides'] = [str(reference_dir / name) for name in names] + style_paths + design_paths
     envelope['stages'] = [work['stage'], *also]
     # Who this dispatch is belongs in the dispatch, not only in the host's environment: the worker
     # and the controller can then cross-check identity against the task instead of guessing. It

@@ -133,9 +133,9 @@ def parser():
         if command == 'regroup-volume':
             sub.add_argument('--hash', required=True, help='当前暂存卷纲的 volumes_hash。')
             sub.add_argument('--reason', required=True, help='作者退回理由原话，喂给下一次卷纲派工。')
-            sub.add_argument('--blueprint', help='同时改选结构蓝图档名，与重出一版一体生效。')
+            sub.add_argument('--blueprint', help='同时改选蓝图档名（结构层或设计层），与重出一版一体生效。')
         if command == 'blueprint':
-            sub.add_argument('--name', required=True, help='结构蓝图档名（见 hatch.md 结构蓝图目录）。')
+            sub.add_argument('--name', required=True, help='蓝图档名：结构层或设计层一个命名空间（见 hatch.md 蓝图目录）。')
             sub.add_argument('--regenerate', action='store_true',
                              help='删除尚无正文各卷的卷纲/章纲/结算行并按新蓝图重派；有正文或草稿的卷保留其纲。')
         if command == 'advance':

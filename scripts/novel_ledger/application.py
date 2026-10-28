@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import copy
-from .contracts import (BLUEPRINT_CATALOG, CONTENT_ERRORS, SINGLE_DELIVERY_STAGES, policy_default, CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION, Job,
-                        execution_recovery,
+from .contracts import (CONTENT_ERRORS, SINGLE_DELIVERY_STAGES, policy_default, CONTROLLER_STAGES, POLICY_FIELDS, RESULT, SCALE_TIERS, VERSION, Error, EXECUTION, Job,
+                        blueprint_valid, execution_recovery, resolve_blueprint,
                         digest, dump, require, text)
 from . import book_state, creation, facts, planning, workflow, craft, editorial, store_keys, lint
 from .ports import Presentation, Repository, TaskCompiler
@@ -113,6 +113,7 @@ class Application:
                                 'pending_volumes': list((book.get('pending_design') or {}).get('volume_ids') or []),
                                 'pending_hash': (book.get('pending_design') or {}).get('volumes_hash')},
                 'structure_blueprint': (book.get('structure_blueprint') or {}).get('name'),
+                'design_blueprint': (book.get('design_blueprint') or {}).get('name'),
                 'pending_task': task['id'] if task else None, 'stage': task['input']['stage'] if task else None,
                 'worker_presence': self.worker_presence(task['id']) if task else None,
                 'engine': {'current': self.build_info, 'frozen': task['input'].get('build') if task else None,
@@ -1103,8 +1104,8 @@ class Application:
         own ledger (round, reason, what was refused), the round advances, the staging is cleared,
         and the world and contract stay. The next volume-outline dispatch freezes the refusal as
         input, so the re-run answers it instead of re-offering the same shape. `blueprint` switches
-        the book's structural blueprint in the same breath — the re-run is the moment a new
-        structure takes effect.
+        the book's blueprint in the same breath — either layer, resolved by name — so the re-run is
+        the moment a new blueprint takes effect.
         """
         require(text(reason), 'author_source', '保存作者退回理由；可以是用户只说的"换一版"。')
         with self.repo.transaction():
@@ -1119,10 +1120,10 @@ class Application:
                        'volumes': list(pending['volume_ids'])}
             self._governance.authorize('volume_regroup', subject, reason)
             if blueprint is not None:
-                require(blueprint in BLUEPRINT_CATALOG, 'blueprint', '未知蓝图档名。',
-                        {'valid': sorted(BLUEPRINT_CATALOG)})
-                self._governance.authorize('blueprint', {'name': blueprint}, reason)
-                book['structure_blueprint'] = {'name': blueprint, 'source': reason}
+                layer, _entry = resolve_blueprint(blueprint)
+                require(layer, 'blueprint', '未知蓝图档名。', {'valid': blueprint_valid()})
+                self._governance.authorize('blueprint', {'name': blueprint, 'layer': layer}, reason)
+                book['%s_blueprint' % layer] = {'name': blueprint, 'source': reason}
             workflow.regroup_design(book, reason)
             book['decisions'].append({'kind': 'volume_regroup', 'round': subject['round'],
                                       'blueprint': blueprint, 'source': reason})
@@ -1134,21 +1135,28 @@ class Application:
                 'blueprint': blueprint}
 
     def blueprint(self, name, source, regenerate=False, owner=None):
-        """Bind (or re-bind) the book's structural blueprint; optionally retire unwritten designs.
+        """Bind (or re-bind) a blueprint on either layer; optionally retire unwritten designs.
 
-        A blueprint is a book-level author setting, absent by default — the engine never chooses a
-        structure for the author. With `regenerate`, the volumes that have no committed prose (and
-        no live draft) lose their outlines and settlement rows and are re-dispatched under the new
-        blueprint; volumes with prose keep their outlines as history, so a late switch mixes
-        skeletons by the author's own decision. Switching inside the gate goes through
-        regroup-volume --blueprint instead, so the staged design and the structure change together.
+        Blueprints are one system in two decoupled layers sharing one namespace: the name resolves
+        to the structure layer (a skeleton the volume and chapter designs follow) or the design
+        layer (an author-confirmed reference document the volume dispatch ships as a guide). Each
+        layer binds at most one per book and replaces its own slot only. A binding is a book-level
+        author setting, absent by default — the engine never chooses one for the author. With
+        `regenerate`, the volumes that have no committed prose (and no live draft) lose their
+        outlines and settlement rows and are re-dispatched under the new blueprint; volumes with
+        prose keep their outlines as history, so a late switch mixes skeletons by the author's own
+        decision. Switching inside the gate goes through regroup-volume --blueprint instead, so the
+        staged design and the blueprint change together.
         """
-        require(text(source), 'author_source', '选择结构蓝图须保存作者原话。')
-        require(name in BLUEPRINT_CATALOG, 'blueprint', '未知蓝图档名。', {'valid': sorted(BLUEPRINT_CATALOG)})
+        require(text(source), 'author_source', '选择蓝图须保存作者原话。')
+        layer, _entry = resolve_blueprint(name)
+        require(layer, 'blueprint', '未知蓝图档名。', {'valid': blueprint_valid()})
+        slot = '%s_blueprint' % layer
         with self.repo.transaction():
             self.controller_guard(owner)
             book = self._load()
-            self._governance.authorize('blueprint', {'name': name, 'regenerate': regenerate}, source)
+            self._governance.authorize('blueprint', {'name': name, 'layer': layer,
+                                                     'regenerate': regenerate}, source)
             removed = []
             if regenerate:
                 require(book.get('pending_design') is None, 'volume_confirm',
@@ -1178,15 +1186,16 @@ class Application:
                 book['volumes_outline'] = outlines
                 book['chapter_outlines'] = chapter_outlines
                 book['plans'] = plans
-            book['structure_blueprint'] = {'name': name, 'source': source}
-            book['decisions'].append({'kind': 'blueprint', 'name': name,
+            book[slot] = {'name': name, 'source': source}
+            book['decisions'].append({'kind': 'blueprint', 'name': name, 'layer': layer,
                                       'regenerate': regenerate, 'source': source})
             book['revision'] += 1
-            self._cancel_pending('结构蓝图变更：在途设计任务按新蓝图重派。')
+            self._cancel_pending('蓝图变更：在途设计任务按新蓝图重派。')
             self._save(book)
-            self.repo.record('blueprint', {'name': name, 'regenerate': regenerate,
+            self.repo.record('blueprint', {'name': name, 'layer': layer, 'regenerate': regenerate,
                                            'removed_volumes': removed, 'source': source})
-        return {'blueprint': name, 'regenerated': bool(regenerate), 'removed_volumes': removed}
+        return {'blueprint': name, 'layer': layer, 'regenerated': bool(regenerate),
+                'removed_volumes': removed}
 
     def opening_choice(self, option, board_hash, source, owner=None):
         with self.repo.transaction():

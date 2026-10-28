@@ -28,6 +28,7 @@ WORK_PAYLOAD_FIELDS = (
     'allow_retained_suffix',                                    # partial replan, validated with retained rows
     'anchor',                                                   # design-ahead chain vs the live state
     'structure_blueprint',                                      # the author's chosen structural blueprint (volume design)
+    'design_blueprint',                                         # the design layer of the same system (volume design guide)
     'volume_rejections',                                        # the author's reasoned refusals a re-run must answer
     'volume_outline', 'chapter_outline',                        # the volume row / the chapter row handed to a writer
     'design_drift',                                             # drift rows a re-plan must absorb

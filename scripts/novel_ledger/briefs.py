@@ -505,6 +505,12 @@ def stage(name, payload=None):
                      '- 边界：蓝图只约束结构角色与推进方式，不定事件桥段、非情节模板、无平台公式。'
                      % (blueprint.get('name'), blueprint.get('skeleton'),
                         blueprint.get('drivers'), blueprint.get('echo')))
+        design = payload.get('design_blueprint')
+        if isinstance(design, dict) and design.get('name'):
+            rule += ('\n\n## 设计蓝图（作者选定：%s）\n'
+                     '- 文档：%s（%s，随本任务下发；按其映射表与档位按需取条目，先按卷纲因果设计推演再查条目）\n'
+                     '- 边界：设计蓝图是设计参考与字段映射来源，不产生执行规则、不自动返工、不解析进校验。'
+                     % (design.get('name'), design.get('file'), design.get('version')))
         rejections = payload.get('volume_rejections')
         if rejections:
             lines = ['- 第 %d 轮（涉及卷：%s）：%s'

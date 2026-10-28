@@ -87,30 +87,54 @@ class StyleCatalogDocTests(unittest.TestCase):
 
 
 class BlueprintCatalogDocTests(unittest.TestCase):
-    def test_hatch_blueprint_table_matches_the_registered_catalog(self):
-        """hatch.md's 结构蓝图目录 table names exactly the registry's blueprints.
+    def test_hatch_blueprint_tables_match_both_registered_layers(self):
+        """hatch.md's 蓝图目录 tables name exactly both layers' registries.
 
-        A blueprint is one registry entry plus one table row; the doc table is how an author (and
+        A blueprint is one registry entry plus one table row; the doc tables are how an author (and
         the `blueprint --name` argument) finds the same set the engine carries, so a rename or an
-        addition in one place without the other fails here, naming both files.
+        addition in one place without the other fails here, naming both files. The design layer
+        being empty is a real state this version ships in: the section then carries the
+        vacancy sentence and no table, which parses to zero rows.
         """
         source = read('references/hatch.md')
-        section = re.search(r'## 结构蓝图目录\n(.*?)\n## ', source, re.S)
-        self.assertIsNotNone(section, 'hatch.md 不再含「结构蓝图目录」表；请更新本测试的解析位置')
-        rows = re.findall(r'^\|\s*`([^`]+)`\s*\|', section.group(1), re.M)
-        self.assertTrue(rows, '结构蓝图目录表没有档名行')
-        self.assertEqual(rows, list(contracts.BLUEPRINT_CATALOG),
-                         'hatch.md 蓝图表与 contracts.BLUEPRINT_CATALOG 不一致')
+        section = re.search(r'## 蓝图目录\n(.*?)\n## ', source, re.S)
+        self.assertIsNotNone(section, 'hatch.md 不再含「蓝图目录」节；请更新本测试的解析位置')
+        layers = {}
+        for layer in ('structure', 'design'):
+            part = re.search(r'### %s层\n(.*?)(?=### |\Z)' % ('结构' if layer == 'structure' else '设计'),
+                             section.group(1), re.S)
+            self.assertIsNotNone(part, 'hatch.md 蓝图目录缺 %s 层小节' % layer)
+            layers[layer] = re.findall(r'^\|\s*`([^`]+)`\s*\|', part.group(1), re.M)
+        self.assertTrue(layers['structure'], '结构层表没有档名行')
+        self.assertEqual(layers['structure'], list(contracts.BLUEPRINT_CATALOG),
+                         'hatch.md 结构层表与 contracts.BLUEPRINT_CATALOG 不一致')
+        self.assertEqual(layers['design'], list(contracts.DESIGN_BLUEPRINT_CATALOG),
+                         'hatch.md 设计层表与 contracts.DESIGN_BLUEPRINT_CATALOG 不一致（空目录对应无表，见小节内空置说明）')
+
+    def test_blueprint_names_stay_unique_across_the_two_layers(self):
+        """One namespace: a name on both layers would shadow, because the command resolves by name."""
+        self.assertEqual(len(set(contracts.BLUEPRINT_CATALOG) | set(contracts.DESIGN_BLUEPRINT_CATALOG)),
+                         len(contracts.BLUEPRINT_CATALOG) + len(contracts.DESIGN_BLUEPRINT_CATALOG))
+        self.assertEqual(contracts.resolve_blueprint('主线副线缠绕')[0], 'structure')
+        self.assertEqual(contracts.resolve_blueprint('不存在档'), (None, None))
 
     def test_every_blueprint_declares_the_same_boundary_line(self):
         """The catalog cannot drift into a plot library one entry at a time."""
         self.assertTrue(contracts.BLUEPRINT_BOUNDARY)
+        self.assertTrue(contracts.DESIGN_BLUEPRINT_BOUNDARY)
         for name, entry in contracts.BLUEPRINT_CATALOG.items():
             with self.subTest(blueprint=name):
-                self.assertEqual(set(entry), {'name', 'skeleton', 'drivers', 'echo'})
+                self.assertEqual(set(entry), {'name', 'layer', 'skeleton', 'drivers', 'echo'})
                 self.assertEqual(entry['name'], name)
+                self.assertEqual(entry['layer'], 'structure')
                 for key in ('skeleton', 'drivers', 'echo'):
                     self.assertTrue(entry[key].strip(), '蓝图 %s 的 %s 为空' % (name, key))
+        for name, entry in contracts.DESIGN_BLUEPRINT_CATALOG.items():
+            with self.subTest(design_blueprint=name):
+                self.assertEqual(set(entry), {'name', 'file', 'summary', 'version'})
+                self.assertEqual(entry['name'], name)
+                for key in ('file', 'summary', 'version'):
+                    self.assertTrue(entry[key].strip(), '设计蓝图 %s 的 %s 为空' % (name, key))
 
 
 if __name__ == '__main__':

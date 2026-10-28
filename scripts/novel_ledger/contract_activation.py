@@ -21,9 +21,12 @@ class ContractActivation:
         # The volume gate across a re-contract: the author's structural direction and the audit of
         # what was confirmed travel with the book (the lexical-policy treatment); the staged design
         # does not — the volume division may have changed, so it is dropped and journalled, and the
-        # round/refusal counters reset with it.
+        # round/refusal counters reset with it. The blueprint system's two slots (structure layer,
+        # design layer) each travel on their own.
         if old.get('structure_blueprint'):
             book['structure_blueprint'] = copy.deepcopy(old['structure_blueprint'])
+        if old.get('design_blueprint'):
+            book['design_blueprint'] = copy.deepcopy(old['design_blueprint'])
         confirmed = (old.get('volume_gate') or {}).get('confirmed')
         if confirmed:
             book['volume_gate']['confirmed'] = copy.deepcopy(confirmed)

@@ -242,6 +242,10 @@ class DomainBoundaryTests(unittest.TestCase):
         # The blueprint record on the chapter stage is a visible decision, not one more add(): the
         # chapter outline reads the same structural skeleton the volume outline designed by.
         self.assertIn('blueprint', context.STAGE_MATERIAL['chapter_outline'])
+        # The design layer rides the volume dispatch only — its field mapping is volume-level, and
+        # the chapter stage never sees a document it cannot use.
+        self.assertIn('design_blueprint', context.STAGE_MATERIAL['volume_outline'])
+        self.assertNotIn('design_blueprint', context.STAGE_MATERIAL['chapter_outline'])
 
     def test_causal_frontier_is_iterative_and_bounded(self):
         from novel_ledger import design_queries as queries

@@ -183,43 +183,52 @@ def profile_anchor(profile=None):
     return anchor
 
 
-# The structural blueprint catalog: five book-level skeletons an author may bind before the volume
-# outlines are designed. This is a *structure* vocabulary, not a plot generator — each entry states
-# the skeleton (how a volume's lines relate), the drivers (which推进维度 a volume must move), and the
-# echo (how volumes entangle across the boundary), and every entry carries the same boundary line:
-# no事件桥段, no情节模板, no platform formula. Selection is a book-level author setting
-# (`blueprint --name --source`), absent by default: a project without one still receives the
+# Blueprints are one system in two decoupled layers, one namespace. The structure layer
+# (`BLUEPRINT_CATALOG`) is the engine's *structure* vocabulary — five book-level skeletons, not a
+# plot generator: each entry states the skeleton (how a volume's lines relate), the drivers (which
+# 推进维度 a volume must move) and the echo (how volumes entangle across the boundary). The design
+# layer (`DESIGN_BLUEPRINT_CATALOG`) is document-shaped author-confirmed design reference distilled
+# from a benchmark corpus (plot-distill); it rides the volume dispatch as a guide, never as
+# validation. Names are unique across both layers (asserted below, bound by a doc test); each layer
+# binds at most one per book, via the same `blueprint --name --source` command. Selection is a
+# book-level author setting, absent by default: a project without one still receives the
 # directional structure discipline in the brief, because the engine does not choose a structure for
-# the author. Adding an entry is one row here plus one row in hatch.md's 结构蓝图目录 table (bound by
-# a doc test). Content is conceived from the same methods hatch.md already names (双线演进/对手换图/
-# 世界暗面/长线续航/爽点倒推/套路反打 and the ladder's growth enumeration).
+# the author. Adding an entry is one row here plus one row in hatch.md's 蓝图目录 table (bound by
+# a doc test). Structure content is conceived from the same methods hatch.md already names
+# (双线演进/对手换图/世界暗面/长线续航/爽点倒推/套路反打 and the ladder's growth enumeration);
+# design entries only enter after the author confirms the document (the style-library treatment).
 BLUEPRINT_CATALOG = {
     '主线副线缠绕': {
         'name': '主线副线缠绕',
+        'layer': 'structure',
         'skeleton': '一条主线推进本卷对抗，一条副线（另一人物或另一利益集团）独立推进自己的目标；两线在卷中转折处相互改变对方的处境，卷末合流或交换代价。',
         'drivers': '每卷写清落点：副线如何反噬主线的利益格局、两线共享人物的关系变化、主角对规则理解的补全、两线各自累积的代价。',
         'echo': '副线用 threads.continues 跨卷延续；本卷未清的承诺以 hooks.continues 带入下一卷，下一卷开局承接两线各自的后果。',
     },
     '多线交错': {
         'name': '多线交错',
+        'layer': 'structure',
         'skeleton': '多条行动线（主角线之外再分出至少两条视角线）各自有目标与节奏，按章纲 dormant/active 交替推进，交汇章改变所有在场线的处境。',
         'drivers': '每卷写清落点：各线之间的利益交换与背叛、跨线人物的关系变化、不同线对同一规则的不同理解、各线代价的相互转嫁。',
         'echo': '各线用 threads.continues 分别登记；hooks.continues 承载跨卷承诺，未收的线在下一卷以 dormant 苏醒方式回场。',
     },
     '阶段升格-同图深化': {
         'name': '阶段升格-同图深化',
+        'layer': 'structure',
         'skeleton': '舞台不换或只小幅外扩，每卷沿已选格局阶梯升一级；对抗在同一张图上因规则、认知或文明维度的升格而改变形态，旧冲突的后果保留并参与新对抗。',
         'drivers': '每卷写清落点：升格改变了谁的利益分配、旧敌友关系怎样重组、主角对新一级规则的理解代价、上一卷代价在新格局里的兑现。',
         'echo': '升格用 stage 沿阶梯只升不降表达；旧冲突的遗留以 threads.continues 与 hooks.continues 留在场，不清账。',
     },
     '复仇反推': {
         'name': '复仇反推',
+        'layer': 'structure',
         'skeleton': '从作者要的情绪回报倒推：每卷锁定一次当众兑现的复仇/清算场面，反推埋设、误判与反转，兑现本身再引出更大的对手与代价。',
         'drivers': '每卷写清落点：兑现改变了利益格局、围观者的关系立场、主角对对手规则的理解、兑现付出的新代价。',
         'echo': '每次兑现都留下新的敌人或未竟之诺，以 threads.continues 与 hooks.continues 跨卷纠缠；对手按套路反打升级，不原地复活。',
     },
     '双层揭秘': {
         'name': '双层揭秘',
+        'layer': 'structure',
         'skeleton': '明线是眼前的对抗与生计，暗线是世界真相的层层揭露；每卷明线取胜的同时推开一层暗线（miseries 的 reveal_window），揭示改变下一卷对抗的规则。',
         'drivers': '每卷写清落点：这层真相改变了谁获利谁受损、知情者与不知情者的关系、主角对世界规则的理解、知情本身的代价。',
         'echo': '暗线用 threads.continues 贯通全书，揭示窗口以 hooks.continues 排期跨卷兑现；已揭的真相成为下一卷明线的既定条件。',
@@ -229,6 +238,42 @@ BLUEPRINT_CATALOG = {
 # plot library one entry at a time.
 BLUEPRINT_BOUNDARY = ('蓝图只写结构骨架与推进维度：不定事件桥段、非情节模板、无平台公式；'
                       '具体事件、场面与兑现方式由卷纲与章纲按本书世界决定。')
+
+# The design layer: whole documents, not skeletons. An entry names the file (relative to
+# references/, the STYLE_CATALOG treatment) the volume dispatch ships as a guide when the author
+# binds it. Empty this version on purpose: the standing volume-blueprint.md is an
+# author-confirmation-pending draft and must not be registerable until confirmed — the mechanism
+# ships, the first shelf waits for the author's confirmation. One layer, at most one binding per
+# book, no second source inside a project (the style-library rule of 389e26b).
+DESIGN_BLUEPRINT_CATALOG = {}
+
+DESIGN_BLUEPRINT_BOUNDARY = ('设计蓝图是设计参考与字段映射来源：不产生执行规则、不自动返工、不解析进校验；'
+                             '条目按需采用、默认建议可说明偏离，执行形状与校验统一由叙事推进与协议承担。')
+
+# The one-namespace rule: a name may not exist on both layers — the command resolves by name, so a
+# duplicate would silently shadow. Stated at import so the catalog cannot drift into ambiguity one
+# entry at a time; the doc test repeats it against hatch.md's 蓝图目录. (A plain assert, not
+# `require`, because this runs at import time before require is defined.)
+assert not (set(BLUEPRINT_CATALOG) & set(DESIGN_BLUEPRINT_CATALOG)), \
+    '蓝图档名在结构层与设计层不得重复：%s' % sorted(set(BLUEPRINT_CATALOG) & set(DESIGN_BLUEPRINT_CATALOG))
+
+
+def blueprint_valid():
+    """Both layers' names, labeled — the error payload and the board share this one shape."""
+    return {'structure': sorted(BLUEPRINT_CATALOG), 'design': sorted(DESIGN_BLUEPRINT_CATALOG)}
+
+
+def resolve_blueprint(name):
+    """Which layer a blueprint name lives on, with its entry; (None, None) when unknown.
+
+    The structure layer answers first only because the layers cannot share names (asserted above);
+    the lookup order never decides anything an author can observe.
+    """
+    if name in BLUEPRINT_CATALOG:
+        return 'structure', BLUEPRINT_CATALOG[name]
+    if name in DESIGN_BLUEPRINT_CATALOG:
+        return 'design', DESIGN_BLUEPRINT_CATALOG[name]
+    return None, None
 
 
 # --------------------------------------------------------------------------------------------------

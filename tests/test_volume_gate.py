@@ -9,7 +9,9 @@ tests pin, in the order the design states them:
 - the author's three commands: confirm (version-bound), revise (whitelist-narrow, re-validated,
   hash rebound) and regroup (reasoned refusal that feeds the next dispatch as frozen input);
 - the blueprint: a book-level author choice that travels with the volume dispatch, switchable in
-  the gate's regroup, and regenerable outside it without touching written volumes;
+  the gate's regroup, and regenerable outside it without touching written volumes — one system in
+  two decoupled layers (structure skeletons; author-confirmed design documents that ride the
+  volume dispatch as a guide), one namespace, one slot per layer;
 - the unattended boundary: `must_continue` is false and the advisories warn without blocking.
 """
 import sys
@@ -19,10 +21,12 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 
+from novel_ledger import contracts
 from novel_ledger.contracts import SCALE_TIERS, Error, digest
 from novel_ledger import workflow
 from novel_ledger.bootstrap import local_application as Application
@@ -323,6 +327,109 @@ class VolumeGateTests(unittest.TestCase):
         self.assertEqual(parsed.blueprint, '多线交错')
         parsed = novel.parser().parse_args(['blueprint', '--name', '复仇反推', '--source', '原话'])
         self.assertFalse(parsed.regenerate)
+
+
+class DesignBlueprintLayerTests(unittest.TestCase):
+    """The design layer of the one-blueprint system: same command, its own slot, volume-only ride.
+
+    The catalog ships empty on purpose — the standing volume-blueprint.md awaits the author's
+    confirmation, so there is nothing registerable yet. These tests add a synthetic shelf with
+    `patch.dict`: every importer holds the same dict object, which is exactly why the mechanism
+    can be exercised against the empty-catalog default without touching production state.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.project = Path(self.temp.name) / 'book'
+        entry = {'name': '五书基准', 'file': 'volume-blueprint.md',
+                 'summary': '测试档：只验证设计层机制。', 'version': 'plot-distill.blueprint.v1.2'}
+        patcher = mock.patch.dict(contracts.DESIGN_BLUEPRINT_CATALOG, {'五书基准': entry})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def tearDown(self):
+        if getattr(self, 'repo', None) is not None:
+            self.repo.close()
+        self.temp.cleanup()
+
+    def open(self, raw):
+        self.repo = SQLiteRepository.initialize(self.project, seeded_book(raw))
+        self.app = Application(self.repo)
+        return self.app
+
+    def stage(self, raw):
+        self.open(raw)
+        self.owner = self.app.run(finish=True, source='工程夹具授权跑到卷纲。')['owner']
+        drive(self.app, until='volume_outline')
+        outcome = self.app.submit(response(self.app))
+        return outcome, self.app.advance(owner=self.owner)
+
+    def test_the_design_layer_binds_its_own_slot_and_reports_both_layers(self):
+        self.open(contract(chapters=4, volumes=2))
+        result = self.app.blueprint('五书基准', '工程夹具选定设计蓝图。')
+        self.assertEqual(result['layer'], 'design')
+        book = self.repo.load()
+        self.assertEqual(book['design_blueprint'], {'name': '五书基准', 'source': '工程夹具选定设计蓝图。'})
+        self.assertIsNone(book.get('structure_blueprint'))
+        # One slot per layer: a structure binding replaces neither the design slot nor vice versa.
+        self.app.blueprint('主线副线缠绕', '工程夹具再选结构层。')
+        book = self.repo.load()
+        self.assertEqual(book['structure_blueprint']['name'], '主线副线缠绕')
+        self.assertEqual(book['design_blueprint']['name'], '五书基准')
+        with self.assertRaises(Error) as caught:
+            self.app.blueprint('不存在档', '工程夹具选错档名。')
+        self.assertEqual(caught.exception.code, 'blueprint')
+        self.assertIn('五书基准', caught.exception.details['valid']['design'])
+        self.assertIn('主线副线缠绕', caught.exception.details['valid']['structure'])
+
+    def test_a_bound_design_blueprint_rides_the_volume_dispatch_as_record_and_guide(self):
+        self.open(contract(chapters=4, volumes=2))
+        self.app.blueprint('双层揭秘', '工程夹具选定结构层。')
+        self.app.blueprint('五书基准', '工程夹具选定设计层。')
+        self.owner = self.app.run(finish=True, source='工程夹具授权跑到卷纲。')['owner']
+        handoff = drive(self.app, until='volume_outline')
+        work = self.repo.pending()['input']
+        self.assertEqual(work['payload']['design_blueprint']['name'], '五书基准')
+        self.assertEqual(work['payload']['design_blueprint']['file'], 'volume-blueprint.md')
+        self.assertIn('design_blueprint', work['required'])
+        record = self.repo.read_document(work['records']['design_blueprint'])
+        self.assertEqual(record['source'], '工程夹具选定设计层。')
+        self.assertIn('不产生执行规则', record['boundary'])
+        self.assertIn('设计蓝图（作者选定：五书基准）', work['brief'])
+        # The document itself ships as a guide, the style-file treatment.
+        task = json.loads(Path(handoff['task']['task_path']).read_text(encoding='utf-8'))
+        shipped = [Path(path).name for path in task['guides']]
+        self.assertIn('volume-blueprint.md', shipped)
+        # The chapter stage reads structure only: the design layer is volume-level field mapping.
+        drive(self.app, owner=self.owner, until='chapter_outline')
+        work = self.repo.pending()['input']
+        self.assertIn('blueprint', work['required'])
+        self.assertNotIn('design_blueprint', work['required'])
+        self.assertNotIn('design_blueprint', work['payload'])
+
+    def test_regroup_can_switch_the_design_layer_with_the_rerun(self):
+        _outcome, boundary = self.stage(contract(chapters=4, volumes=2))
+        self.app.regroup_volume(boundary['volumes_hash'], '按新设计参考重出。', blueprint='五书基准', owner=self.owner)
+        book = self.repo.load()
+        self.assertEqual(book['design_blueprint'], {'name': '五书基准', 'source': '按新设计参考重出。'})
+        self.assertIsNone(book.get('structure_blueprint'))
+        self.app.advance(owner=self.owner)
+        self.assertEqual(self.repo.pending()['input']['payload']['design_blueprint']['name'], '五书基准')
+
+    def test_a_recontract_keeps_the_design_binding_with_the_structure_one(self):
+        raw = contract(chapters=4, volumes=2)
+        raw['volume_outline'] = {'scope': 'rolling', 'words': 2500, 'tolerance': 500}
+        _outcome, boundary = self.stage(raw)
+        self.app.confirm_volume(boundary['volumes_hash'], '工程夹具认可第一卷。', self.owner)
+        self.app.blueprint('五书基准', '工程夹具选定设计层。', owner=self.owner)
+        drive(self.app, owner=self.owner, until='volume_outline')
+        self.app.submit(response(self.app))
+        second = contract(chapters=4, volumes=2)
+        second['title'] = '夜班退件（设计层改约）'
+        self.app.recontract(second, '工程夹具改约：换一版前提。', owner=self.owner)
+        self.app.advance(owner=self.owner)
+        self.assertEqual(self.repo.load()['design_blueprint'],
+                         {'name': '五书基准', 'source': '工程夹具选定设计层。'})
 
 
 if __name__ == '__main__':
