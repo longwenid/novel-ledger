@@ -268,6 +268,35 @@ def _han_text(parts):
     return '。'.join(kept)
 
 
+# The method vocabulary of the design guides — craft's causal-step labels and the blueprint
+# sheet's table words — recurs in every volume's arc because the scaffolding is shared, not
+# because one volume re-narrates another's event. The boundary-overlap advisory mutes it before
+# comparing, so the warning keeps meaning "an event told twice" (2026-10-28 validation V5).
+_METHOD_MARKERS = ('核心问题', '双方行动', '铺垫段', '选择与代价', '不可逆点', '推进维度',
+                   '中型兑现', '结构角色', '开局承接', '阶段兑现', '卷末终值')
+
+
+def _without_method_labels(parts):
+    text = _han_text(parts)
+    for marker in _METHOD_MARKERS:
+        text = text.replace(marker, '·')
+    return text
+
+
+def _mentions_id(haystack, ident):
+    """Whether `ident` appears in `haystack` as a whole token, not inside a longer id."""
+    start = 0
+    while True:
+        at = haystack.find(ident, start)
+        if at < 0:
+            return False
+        end = at + len(ident)
+        edge = lambda char: char.isalnum() or char in '-_'
+        if (at == 0 or not edge(haystack[at - 1])) and (end == len(haystack) or not edge(haystack[end])):
+            return True
+        start = at + 1
+
+
 def _shared_han_fragments(a, b, least=5, most=12):
     """Maximal shared han fragments of length >= least between two boundary texts.
 
@@ -342,6 +371,65 @@ def structure_warnings(pending, previous=None, spans=None, previous_chapters=Non
             warnings.append({'code': 'volume_turn_template',
                              'message': '本次比较的各卷转折都恰是两条、位置都标在卷中/卷尾：转折位置呈同一模板。'
                                         '只警不拦，作者坚持以作者为准。'})
+    # Every volume fielding the exact same turn count is the subtler collapse the template check
+    # cannot see (six volumes × three turns each, 2026-10-28 validation V13): the count itself
+    # became the template.
+    if len(volumes) >= 3:
+        counts = [len(volume.get('turns') or []) for volume in volumes]
+        if counts[0] > 0 and len(set(counts)) == 1:
+            warnings.append({'code': 'volume_turn_uniform_count',
+                             'message': '本次比较的各卷转折条数完全相同（各 %d 条）：条数本身成了模板，'
+                                        '可按各卷对抗强度自然取数。只警不拦，作者坚持以作者为准。' % counts[0]})
+    # A thread marked continues is continued by re-registering its id (or naming it) in a later
+    # volume; the chapter outlines can only carry registered ids, so one that never returns has
+    # nowhere to be picked up (2026-10-28 validation V10). Hooks are deliberately not checked:
+    # their cross-volume continuation lives in the later arc and in chapter hook_refs, which a
+    # volume-level id scan would misread as a drop. The last volume of the comparison has no
+    # later volumes yet — its continues lines legitimately await the next batch.
+    staged = pending.get('volumes') or {}
+    order = [ident for ident in (pending.get('volume_ids') or []) if ident in staged]
+    sequence = ([previous] if previous else []) + [staged[ident] for ident in order]
+    for index, volume in enumerate(sequence[:-1]):
+        for row in volume.get('threads') or []:
+            ident = row.get('id') if isinstance(row, dict) else None
+            if not text(ident) or row.get('continues') is not True:
+                continue
+            later = ' '.join(
+                ' '.join(str(item) for item in (later_row.get('id'), later_row.get('purpose'),
+                                                later_row.get('ending_condition'))
+                         if isinstance(item, str))
+                for later_volume in sequence[index + 1:]
+                for later_row in later_volume.get('threads') or [] if isinstance(later_row, dict))
+            if not _mentions_id(later, ident):
+                warnings.append({'code': 'volume_thread_dropped', 'volume': volume.get('id'), 'line': ident,
+                                 'message': '卷 %s 的线路 %s 标记 continues（跨卷延续），但后续卷的 threads 里'
+                                            '再未出现该 id：承接断档，后卷章纲无从申报这条线。后卷补一条引用原 id 的'
+                                            '承接登记，或本卷改为收束。只警不拦，作者坚持以作者为准。'
+                                            % (volume.get('id'), ident)})
+    # A payoff window straddling a volume boundary splits across two dispatches whose chapter
+    # outlines are frozen separately; the design text must say which side settles it, or each
+    # side assumes the other paid (2026-10-28 validation V20).
+    if spans:
+        def volume_of(chapter):
+            for ident, (first, last) in spans.items():
+                if first <= chapter <= last:
+                    return ident
+            return None
+        for volume in volumes:
+            for hook in volume.get('hooks') or []:
+                payoff = hook.get('payoff') if isinstance(hook, dict) else None
+                if not isinstance(payoff, list) or len(payoff) != 2 \
+                        or not all(isinstance(n, int) for n in payoff):
+                    continue
+                opens, closes = volume_of(payoff[0]), volume_of(payoff[1])
+                if opens and closes and opens != closes:
+                    warnings.append({'code': 'volume_payoff_straddle', 'volume': volume.get('id'),
+                                     'line': hook.get('id'),
+                                     'message': '卷 %s 的伏笔 %s 兑现窗（%d–%d 章）横跨卷界（%s→%s）：两卷章纲'
+                                                '分属派工，卷纲文字须指明兑现场落在哪一侧，防止两侧都漏付或重演'
+                                                '前场。只警不拦，作者坚持以作者为准。'
+                                                % (volume.get('id'), hook.get('id'), payoff[0], payoff[1],
+                                                   opens, closes)})
     # Per-volume middle-shape notes: turns clustered at both ends with none in the middle third,
     # and hook windows all at the ends leaving the middle with no declared plant or payoff.
     for volume in volumes:
@@ -385,8 +473,8 @@ def structure_warnings(pending, previous=None, spans=None, previous_chapters=Non
     for prev_row, prev_rows, next_row in pairs:
         next_rows = chapters.get(next_row.get('id')) or []
         fragments = _shared_han_fragments(
-            _han_text([prev_row.get('arc') or '', prev_row.get('climax') or '', _edge_synopsis(prev_rows)]),
-            _han_text([next_row.get('arc') or '', _edge_synopsis(next_rows, last=False)]))
+            _without_method_labels([prev_row.get('arc') or '', prev_row.get('climax') or '', _edge_synopsis(prev_rows)]),
+            _without_method_labels([next_row.get('arc') or '', _edge_synopsis(next_rows, last=False)]))
         if fragments:
             shown = '、'.join(dict.fromkeys(fragments[:3]))
             warnings.append({'code': 'volume_boundary_overlap',

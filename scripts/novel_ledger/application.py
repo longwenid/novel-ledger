@@ -94,6 +94,8 @@ class Application:
                 '在途任务冻结自另一个项目版本：先作废再派工。',
                 {'task_revision': None if task is None else task['input']['revision'],
                  'book_revision': book['revision']})
+        baseline = task or (self.repo.task(book['last_task']) if book.get('last_task') else None)
+        frozen_build = ((baseline or {}).get('input') or {}).get('build')
         sealed = False
         revision = book['revision_run']
         return {'version': VERSION, 'assurance': self._governance.describe(),
@@ -116,8 +118,13 @@ class Application:
                 'design_blueprint': (book.get('design_blueprint') or {}).get('name'),
                 'pending_task': task['id'] if task else None, 'stage': task['input']['stage'] if task else None,
                 'worker_presence': self.worker_presence(task['id']) if task else None,
-                'engine': {'current': self.build_info, 'frozen': task['input'].get('build') if task else None,
-                           'matches': not task or not task['input'].get('build') or task['input']['build'] == self.build_info},
+                # At a gate state no task is in flight and the frozen baseline would collapse to
+                # null with a vacuous matches:true — hiding an entrypoint drift that mattered
+                # exactly then (2026-10-28 validation V22). Fall back to the newest frozen build
+                # (the last task's) so the comparison stays meaningful; display only, no routing.
+                'engine': {'current': self.build_info, 'frozen': frozen_build,
+                           'matches': not frozen_build or not self.build_info
+                                       or frozen_build == self.build_info},
                 'execution_failure': self.repo.get(store_keys.technical_failure(task['id'])) if task else None,
                 'pause_reason': None if sealed else book.get('pause_reason'),
                 'author_decision': None if sealed else copy.deepcopy(book.get('author_block')),
@@ -1190,12 +1197,15 @@ class Application:
             book['decisions'].append({'kind': 'blueprint', 'name': name, 'layer': layer,
                                       'regenerate': regenerate, 'source': source})
             book['revision'] += 1
-            self._cancel_pending('蓝图变更：在途设计任务按新蓝图重派。')
+            cleared = self._cancel_pending('蓝图变更：在途设计任务按新蓝图重派。')
             self._save(book)
             self.repo.record('blueprint', {'name': name, 'layer': layer, 'regenerate': regenerate,
                                            'removed_volumes': removed, 'source': source})
+        # The plain bind retires an in-flight dispatch too — its brief froze the old blueprint —
+        # so the controller is told which task to re-advance instead of discovering a silent
+        # pending_task:null (2026-10-28 validation V12).
         return {'blueprint': name, 'layer': layer, 'regenerated': bool(regenerate),
-                'removed_volumes': removed}
+                'removed_volumes': removed, 'pending_task_cleared': cleared}
 
     def opening_choice(self, option, board_hash, source, owner=None):
         with self.repo.transaction():

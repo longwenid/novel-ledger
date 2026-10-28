@@ -67,6 +67,80 @@ class StructureWarningTests(unittest.TestCase):
                                                previous_chapters)
         self.assertIn('volume_boundary_overlap', codes(warnings))
 
+    def test_shared_method_labels_do_not_read_as_an_event_retold(self):
+        pending = self.staged({
+            'v1': {'id': 'v1', 'arc': '本卷核心问题是旧档到期，铺垫段写街坊观望。',
+                   'climax': '公开盯表。', 'turns': [], 'hooks': []},
+            'v2': {'id': 'v2', 'arc': '开局承接挂牌后果，本卷核心问题是配额重分。', 'turns': [], 'hooks': []}})
+        self.assertNotIn('volume_boundary_overlap',
+                         codes(workflow.structure_warnings(pending, None, {'v1': [1, 30], 'v2': [31, 60]})))
+
+    def test_uniform_turn_counts_across_volumes_warn(self):
+        def volume(ident):
+            return {'id': ident, 'arc': '卷%s的因果各不相同。' % ident, 'climax': '卷%s高潮。' % ident,
+                    'turns': [{'at': '第%d章附近' % spot, 'turn': '换条件。'}
+                              for spot in (3 + 30 * int(ident[1:]) - 30, 8 + 30 * int(ident[1:]) - 30,
+                                           13 + 30 * int(ident[1:]) - 30)],
+                    'hooks': [], 'threads': []}
+        pending = self.staged({ident: volume(ident) for ident in ('v1', 'v2', 'v3')})
+        spans = {'v1': [1, 30], 'v2': [31, 60], 'v3': [61, 90]}
+        self.assertIn('volume_turn_uniform_count',
+                      codes(workflow.structure_warnings(pending, None, spans)))
+
+    def test_varying_turn_counts_stay_quiet(self):
+        def volume(ident, count):
+            return {'id': ident, 'arc': '卷%s的因果。' % ident, 'climax': '卷%s高潮。' % ident,
+                    'turns': [{'at': '卷中', 'turn': '换条件。'}] * count, 'hooks': [], 'threads': []}
+        pending = self.staged({'v1': volume('v1', 2), 'v2': volume('v2', 3), 'v3': volume('v3', 2)})
+        self.assertNotIn('volume_turn_uniform_count',
+                         codes(workflow.structure_warnings(pending, None,
+                                                           {'v1': [1, 30], 'v2': [31, 60], 'v3': [61, 90]})))
+
+    def test_a_continuing_thread_that_never_reappears_warns(self):
+        def thread(ident, continues):
+            return {'id': ident, 'kind': 'main', 'purpose': '线路%s的用途。' % ident,
+                    'ending_condition': '收束条件。', 'required': True, 'continues': continues}
+        pending = self.staged({
+            'v1': {'id': 'v1', 'arc': '一', 'climax': '一', 'turns': [], 'hooks': [],
+                   'threads': [thread('t4', True)]},
+            'v2': {'id': 'v2', 'arc': '二', 'climax': '二', 'turns': [], 'hooks': [],
+                   'threads': [thread('t9', False)]},
+            'v3': {'id': 'v3', 'arc': '三', 'climax': '三', 'turns': [], 'hooks': [], 'threads': []}})
+        warnings = workflow.structure_warnings(pending, None, {'v1': [1, 30], 'v2': [31, 60], 'v3': [61, 90]})
+        dropped = [row for row in warnings if row['code'] == 'volume_thread_dropped']
+        self.assertEqual([(row['volume'], row['line']) for row in dropped], [('v1', 't4')])
+
+    def test_a_continuing_thread_re_registered_in_a_later_volume_stays_quiet(self):
+        def thread(ident, continues):
+            return {'id': ident, 'kind': 'main', 'purpose': '线路%s的用途。' % ident,
+                    'ending_condition': '收束条件。', 'required': True, 'continues': continues}
+        pending = self.staged({
+            'v1': {'id': 'v1', 'arc': '一', 'climax': '一', 'turns': [], 'hooks': [],
+                   'threads': [thread('t4', True)]},
+            'v2': {'id': 'v2', 'arc': '二', 'climax': '二', 'turns': [], 'hooks': [],
+                   'threads': [thread('t4', True)]}})
+        self.assertNotIn('volume_thread_dropped',
+                         codes(workflow.structure_warnings(pending, None, {'v1': [1, 30], 'v2': [31, 60]})))
+
+    def test_a_payoff_window_straddling_a_volume_boundary_warns(self):
+        pending = self.staged({
+            'v1': {'id': 'v1', 'arc': '一', 'climax': '一', 'turns': [], 'threads': [],
+                   'hooks': [{'id': 'h2', 'text': '公约半句。', 'plant': [10, 12], 'payoff': [148, 152],
+                              'required': False}]}})
+        spans = {'v1': [1, 30], 'v5': [121, 150], 'v6': [151, 180]}
+        warnings = workflow.structure_warnings(pending, None, spans)
+        straddle = next(row for row in warnings if row['code'] == 'volume_payoff_straddle')
+        self.assertEqual(straddle['line'], 'h2')
+        self.assertEqual((straddle['volume'], ), ('v1', ))
+
+    def test_an_in_volume_payoff_window_stays_quiet(self):
+        pending = self.staged({
+            'v1': {'id': 'v1', 'arc': '一', 'climax': '一', 'turns': [], 'threads': [],
+                   'hooks': [{'id': 'h1', 'text': '短线。', 'plant': [2, 4], 'payoff': [20, 25],
+                              'required': False}]}})
+        self.assertNotIn('volume_payoff_straddle',
+                         codes(workflow.structure_warnings(pending, None, {'v1': [1, 30]})))
+
     def test_turns_clustered_at_both_ends_flag_the_hollow_middle(self):
         pending = self.staged({'v1': {'id': 'v1', 'arc': '卷一弧线。',
                                       'turns': [{'at': '开卷', 'turn': '立对手。'},
