@@ -79,6 +79,12 @@ def render_board_card(board):
             value = option.get(field)
             if text(value):
                 lines.append('- **%s**：%s' % (label, value))
+        if gate.get('id') == 'premise':
+            decision = option.get('value') or {}
+            for key, label in (('novelty', '核心设想'), ('first_cause', '持续成因'),
+                               ('stance', '主角对规则的立场'), ('dark_side', '主要矛盾来源')):
+                if text(decision.get(key)):
+                    lines.append('- **%s**：%s' % (label, decision[key]))
         scenes = option.get('scene') or []
         if scenes:
             lines.append('- **试读**：' if perspective else '- **画面**：')
@@ -487,7 +493,7 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     shared = {'task_id': task['id'], 'input_hash': task['input_hash'], 'stage': work['stage'],
               'chapter': work['chapter'], 'scope': work['scope'],
               'delivery_phase': 'formal',
-              'requires_new_worker': task['reviewer'] is None and not lease,
+              'requires_new_worker': work['stage'] not in CONTROLLER_STAGES and task['reviewer'] is None and not lease,
               'review_session': task['reviewer'] or (lease or {}).get('session')}
     envelope = {'schema': work['schema'], **shared,
                 'task_path': str(artifact('task.json')), 'result_path': str(artifact('result.json')),

@@ -106,9 +106,12 @@ class InlineOpeningTests(unittest.TestCase):
 
     def test_first_gate_keeps_the_catalog_and_guide_outside_the_task_card(self):
         handoff = self.app.advance()
+        self.assertFalse(handoff['task']['requires_new_worker'])
+        self.assertEqual(handoff['controller']['action'], 'execute_controller_task')
         work = self.repo.pending()['input']
         self.assertEqual(work['payload']['gate']['id'], 'genre')
         task = json.loads(Path(handoff['task']['task_path']).read_text(encoding='utf-8'))
+        self.assertFalse(task['requires_new_worker'])
         toolbox = [Path(path) for path in task['guides'] if Path(path).name == 'hatch.md']
         self.assertEqual(len(toolbox), 1)
         self.assertTrue(toolbox[0].is_file())

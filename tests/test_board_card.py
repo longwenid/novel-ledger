@@ -71,6 +71,14 @@ class BoardCardTests(unittest.TestCase):
         self.assertIn('命名提示', card)
         self.assertIn('沈砚', card)
 
+    def test_premise_card_displays_world_decisions_that_selection_will_bind(self):
+        state = walk_to(self.app.repo.load()['creation'], 'premise')
+        board = shown(state)['board']
+        card = delivery.render_board_card(board)
+        for option in board['options']:
+            for field in ('novelty', 'first_cause', 'stance', 'dark_side'):
+                self.assertIn(option['value'][field], card)
+
     def test_perspective_views_show_the_choice_without_a_second_style_picker(self):
         state = walk_to(self.app.repo.load()['creation'], 'voice')
         offered = shown(state)

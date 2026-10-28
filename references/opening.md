@@ -27,6 +27,8 @@
 
 用户只需表示要开书。不要要求先写一句话、提供题材、起名或填设定表。无 --contract 的 init 创建逐门项目，advance 即派 opening_options。
 
+初始化时，如作者已提供题材、平台、禁区或其他要求，用 `init --source '作者完整原话'` 保存，不能只把它写进某个候选的说明；没有额外要求时可省略。选择时 `choose --source` 保存作者当次完整答复（包括随选择提出的新要求），不将尚未决定的内容当作已选字段。后续门与世界任务读取冻结的 `opening_basis` 和 `opening_choices`，同时遵守仍有效的作者要求；原始要求与后续答复冲突时以作者最新明确决定为准，必要时返回受影响的门，不把被撤销方案当事实。
+
 未指定项目路径时，主控在当前工作区选择独立小说目录，告知保存位置；不要覆盖已有项目，也不把选择目录变成必答门。技能目录只保存技能，不放正文项目。
 
 板面在 `await_choice` 时由引擎物化为 `work/board.md`（返回里的 `board_card` 路径）：门名、进度、每个方案的字母与全部作者可读字段、命名提示和固定操作。同轮还会物化 `work/question.json`（返回里的 `question_card` 路径）：可直接投给宿主提问组件的选项结构，label 用短标题、description 用 pitch（结构门用 premise）原文，**总数封顶 4 个**（常见提问组件的选项上限）——板面方案 + “换一组 / 自定义”，自定义输入由宿主的 Other/自由填答承担，不单列选项。主控把卡片内容原样交给作者——先在回复正文里贴出 board.md 的内容（或给出其文件链接），再用 question.json 的选项原样发起提问，**不自拟一句话摘要替换引擎文案**；不在 GBK 控制台读长 JSON，也不手工重排版。宿主选项数低于 question.json 时截到“换一组”为止，不许删板面方案来腾位。`advance --compact` 的返回只带门名、哈希与 option_ids，作者卡片以 board.md 为准，主控从返回的 `option_ids` 与 `hash` 或 `work/last-advance.json` 取得执行元信息。
@@ -40,7 +42,7 @@
 1. `advance --compact` 取任务与 `task_path`；
 2. 读任务目录的 `brief.md`（任务定位卡，含当前门、字段与来源入口；`input.json` 是同一内容的 JSON 原文，不必重复读）；需要必读记录时直接 `read --task 任务ID`（该阶段对主控放行 read/recall，正文与审读阶段不在此列）。同一会话连跑多门时可豁免：上一门的 `read` 返回 `records_hash` 与本门相同、且任务卡未新增必读记录，跳过本次 read；
 3. 从 `result.template.json` 复制起稿 `result.json`，只填 data（信封三字段 schema/task_id/input_hash 不手写，`input_hash` 报错会带 expected）；`check` 试算后 `submit`（回执 `session` 填主干自己的会话身份即可，门任务不绑定会话）；
-4. 展示板面等作者选择（板面与提问的转发纪律见上）；「换一组」就 `regroup` 后重复——同一会话连续换组即是复用，作者在环防止锚定。
+4. 展示板面，默认等待作者选择（板面与提问的转发纪律见上）；作者显式委托时按委托自决通道执行。「换一组」就 `regroup` 后重复——同一会话连续换组即是复用，作者在环防止锚定。
 
 全部开书选择完成、进入 `world_model` 后，按冻结任务派工：世界、卷纲、章纲和正文是实际工作量所在，主干只保留目标、任务身份与治理动作。宿主确实无法内联时才退回逐门派工，并如实说明。卷纲与首章认可同为作者边界：卷纲回执通过机械校验后不直接安装，先以 `await_volume_confirm` 停门交作者认可（命令与看板见 [运行](runtime.md#动作分支)），认可后章纲与执笔才开始。
 
@@ -104,8 +106,8 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 
 - `pitch` 一句能记住的话（≤40字），`scene` 2～3 个可落笔的具体画面（谁在哪、手上是什么、正要做什么），两者都是硬要求：作者要看到能直接开写的场面，而不是概念。
 - 透镜与方法**只用于构思，不得出现在给作者看的文本里**。`driver` 写这一版如何推进，`tradeoff` 写选它要放弃什么（与同组另外两案相比），`fit_reason` 写与已选方向的具体接口。写"某透镜落地/典型落法"会被 `opening_voice` 拒绝。
-- 同组方案的推进方式不得同构（例如三案都以"以…为刻度推进"起句），会被 `opening_diversity` 拒绝。
-- **当期参照**：候选的机制、节奏与审美锚定开书上下文带来的最新市场快照（当期在跑什么、什么已饱和），不引用执行者记忆里的旧热点；没有快照可用时如实按"无当期证据"构思并在取舍里注明，不伪装已核对当期。紧跟主流指的是当期周期的机制与审美，不是供给已饱和的旧热点换皮。
+- 同组方案须在行动、阻力或回报上有实际区别；逐字重复的 id、标题、premise 或 driver 会被 `opening_diversity` 拒绝。程序无法判断语义是否同构，由创作者按 [创意工具箱](hatch.md#先想一本让人想追的书) 自审。
+- **读者期待与当期证据**：先按 [故事卖点](hatch.md#先想一本让人想追的书) 构思可理解的期待、主角行动、首波回报和续航。若作者要求追当期趋势，优先查目标平台可核实的榜单和作品简介，区分榜单口径、时间与观察范围；榜单只能说明样本，不能证明饱和度或预测成败。没有可靠当期材料时直接说明依据有限，不冒充已做市场调查；方案取舍写故事本身的差异，不把「无当期证据」塞进每个选项。
 - **同质化自审**：premise / protagonist / opposition 候选对照 [创意路线](hatch.md#设定生成方法)。脑洞路线检查规则变化、代价与兑现是否形成实际差异；常规路线检查具体处境、利益、关系和行动能否支撑熟悉框架。不要求虚构三本对照作品或强迫机制创新；只换朝代、器物或地名而人物行动不变时，重做该候选。
 
 程序对每份方案回执按去除首尾空白后的字符数执行 pitch≤40、scene 最多 3 条、每条 scene ≥12 字；这是唯一规则，没有旧任务的宽松解释。方案文本与 value 的内容都受项目字面约定约束（默认禁词：账本、入账、回执，清单与覆盖字段随任务材料 policy 块交付），命中会以 literal_policy 拒绝并给出 found 词条。
@@ -125,7 +127,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 | 初始化 | 主干 init，随后 advance --compact。 | 自动生成轻量 book.html 入口，返回 book_view 的绝对路径与预览启动命令；无设定时不要求 source 或 contract。 |
 | 创意门 | **默认主干自执**（同一会话读 task.json、brief.md 与 required，生成方案并 submit，不派子 agent）；宿主无法内联时才派新空历史 Worker。 | 主干自执无交接等待；派工路径由主干等待结束再 --after 核实提交，委派只给任务路径和当前角色。 |
 | 结构门 | 引擎即时返回档位板，主干展示。 | await_choice，无任务或 Worker；方案回执按 opening_system 拒绝。 |
-| 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 系统不代选；换组和返回保留记录。 |
+| 作者选择 | 展示当前原组，选择后 choose 保存原话，再 advance。 | 默认不代选；显式委托时按范围自决并记录依据。换组和返回保留记录。 |
 | 世界与约定起草 | 最后一门 choose 返回 next=world_model，立即 advance 派工。 | 默认任务在同一次交付里同时覆盖 world_model 与 opening_contract（任务 `stages` 列表声明，双阶段共用一份模板与回执）；以任务 stages 和模板为准。 |
 | 机械校验与激活 | 世界与约定**不再有独立核验阶段**：提交时由引擎校验字段、links 引用、选择一致性与约定对齐（含与所选世界的 world_rules 逐字一致），以及门里声明的位阶/硬通货/格局阶梯在世界模型里的**逐字绑定**（v6 加上世界架构）（见 [世界模型](world.md#三条逐字绑定)）；校验通过先持久化候选，**约定在下一次 advance 的同一事务内激活**（此时才可 `run` 认领 owner）；失败保持当前任务，按具体错误修正后重交。 | 校验只证明字段、引用和声明一致，不证明世界承载或因果成立；判断留给卷纲与章纲的状态链，以及作者抽读。 |
 | 卷纲 | 约定生效后按 `advance` 派 `volume_outline`；提交通过只暂存，作者 confirm-volume 后才生效，未认可前不派后续设计。默认 `scope=all`，一次交全部卷、每卷 2000–3000 汉字（目标 2500）；`scope=rolling` 时进入该卷前交该卷。v5 及之后的项目每卷还要给 `stage`：**逐字取已选格局阶梯里的一级，且按卷序只升不降**（字段与校验见 [协议](protocol.md) 与 [世界模型](world.md#三条逐字绑定)）。t0/t1 由 `merge_chapter_outline` 把本卷卷纲与章纲合成一次派工，合并结果仍须过卷纲作者认可门。 | 形状、校验与覆盖见 [叙事推进](narrative.md#卷纲)。 |
@@ -141,7 +143,7 @@ data={gate,options:[{id,title,pitch,scene,premise,driver,tradeoff,fit_reason,val
 已有部分完整门要求可在 init 后、未展示当前方案且无 pending 时用 `intake --file 要求.json --source 作者原话` 保存。文件如 `{"title":{"title":"作者已定书名"},"scale":{"tier":"t0"}}`：键是**门 ID**，值是那一门的完整 value；用约定字段名当键（例如 `theme`）会被拒绝并返回 `valid_gates`。结构门只需给档位 ID（`t0`～`t5`，`t0` 为五万字级的微型档；**预填只写 tier**，不凭记忆抄数字），引擎补齐已证明的数字——作者不必从引擎里抄算术，手改过的数字也不会被静默修正。门 ID 必须属于当前 creation 协议；新项目的 `novel-ledger.creation/7` 使用上表十三门（`premise` 承担核心设想，`origin` 承担主角来历，`world` 承担世界架构、位阶与硬通货，`ladder` 承担格局尺度与阶梯，`payoff` 承担终局、母题与主题锚点，`edge` 承担核心优势）。只保存作者已定的值，不替缺字段补造决定。后续自动跳过这些门，保留原话和版本；返回会归档受影响的后续门。展示当前方案时不能 intake（含结构门板子），先选择或 back。
 
 ```bash
-python3 "$ROOT/scripts/novel.py" --project "$PROJECT" init
+python3 "$ROOT/scripts/novel.py" --project "$PROJECT" init --source '作者完整开书原话'
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" advance --compact
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" choose --option A --board 当前展示哈希 --source 'A'
 python3 "$ROOT/scripts/novel.py" --project "$PROJECT" choose --tier t1 --source '作者原话：写十万字'   # 结构门直达档位，窗口自动滑动

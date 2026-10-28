@@ -67,7 +67,8 @@ class ContinuityService:
                                     'drift_check': receipt['data'].get('drift_check'),
                                     'characters': self._character_material(task, chapter['plan'])}}
         row = {'schema': SCHEMA, 'request_id': ident, 'task_id': task['id'], 'candidate_hash': ident,
-               'candidate': self.repo.document(candidate), 'phase': 'await_observer', 'observer': None}
+               'candidate': self.repo.document(candidate), 'phase': 'await_observer', 'observer': None,
+               'read_started': False}
         self.repo.put(key, row)
         self.repo.put(index_key, {**index, prose_key: ident})
         self.repo.put(store_keys.pending_review(task['id']), ident)
@@ -115,6 +116,8 @@ class ContinuityService:
     def prepare_observer(self, ident, session):
         row, candidate = self._active(ident)
         require(text(session) and session != candidate['producer'], 'continuity_identity', '核验者必须不同于执笔者。')
+        require(session not in row.get('retired_observers', []), 'continuity_identity',
+                '已撤销的读者身份不能重新绑定此核验，须使用新的独立上下文。')
         require(row.get('observer') in (None, session), 'continuity_identity', '此核验已有其他执行者。')
         scope = self.repo.session_task(session)
         require(scope in (None, ident), 'session_reuse', '核验须使用独立的空历史上下文。')
@@ -126,6 +129,42 @@ class ContinuityService:
             self.repo.record('continuity_observer', {'request': ident, 'session': session,
                                                     'provenance': row['provenance']})
         return {'schema': SCHEMA, 'request_id': ident, 'session': session, 'token': row['token'], 'phase': row['phase']}
+
+    def recover_observer(self, ident, observer, stopped, source):
+        """Revoke a stopped observer only if this request has delivered no source.
+
+        Legacy rows lack the explicit delivery marker and cannot establish that fact. Advisory
+        mode records a host declaration, not proof of process liveness or isolation; required
+        mode stays closed until its host can attest this specific recovery operation.
+        """
+        row, _candidate = self._active(ident)
+        require(stopped is True and text(source), 'continuity_identity',
+                '先由宿主核实原读者已停止，并记录核实依据。')
+        require(self.governance.policy()['trust'] == 'advisory', 'host_authority',
+                '受控宿主尚不支持证明原读者已停止，不能通过自报恢复。')
+        if (row.get('phase') == 'await_observer' and row.get('observer') is None
+                and row.get('last_observer_recovery') == {'observer': observer, 'source': source}):
+            return {**self.summary(row['task_id']), 'stopped_verified': False, 'idempotent': True,
+                    'boundary': '原凭据已撤销；停止状态未经引擎验证，须派独立读者完整首读。'}
+        require(text(observer) and row.get('observer') == observer, 'continuity_identity',
+                '须准确指定当前请求绑定的原读者。')
+        require(row.get('phase') == 'first_read' and row.get('read_started') is False
+                and row.get('seen', []) == [] and row.get('observations') is None
+                and row.get('report') is None and row.get('resolution') is None,
+                'continuity_phase', '无法证明读者未收到首读材料，保留候选及原核验，不自动换人。')
+        proof = self.governance.authorize('observer_recovery',
+                                          {'request': ident, 'candidate_hash': row['candidate_hash'],
+                                           'observer': observer}, source)
+        retired = list(row.get('retired_observers', []))
+        retired.append(observer)
+        row.update(observer=None, token=None, provenance=None, phase='await_observer', retired_observers=retired,
+                   last_observer_recovery={'observer': observer, 'source': source})
+        self.repo.put(store_keys.continuity_review(ident), row)
+        self.repo.record('continuity_observer_recovered', {'request': ident, 'candidate_hash': row['candidate_hash'],
+                         'observer': observer, 'source': source, 'provenance': proof,
+                         'stopped_verified': False})
+        return {**self.summary(row['task_id']), 'stopped_verified': False,
+                'boundary': '已撤销原凭据；停止状态由宿主声明、未经引擎验证，须重新派出独立读者完整首读。'}
 
     def _observer(self, ident, session, token):
         row, candidate = self._active(ident)
@@ -173,6 +212,7 @@ class ContinuityService:
             sources.update({str(item['chapter']): {'prose': self.repo.read_document(item['prose_hash']),
                                                   'prose_hash': item['prose_hash']} for item in selected})
         seen = sorted(set(row.get('seen', [])) | set(sources))
+        row['read_started'] = True
         row['seen'] = seen
         self.repo.put(store_keys.continuity_review(ident), row)
         result = {'schema': SCHEMA, 'request_id': ident, 'candidate_hash': row['candidate_hash'],

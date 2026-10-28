@@ -1215,6 +1215,12 @@ class Application:
             self._load()
             return self._continuity.prepare_observer(request_id, session)
 
+    def recover_observer(self, request_id, observer, stopped, source, owner=None):
+        with self.repo.transaction():
+            self.controller_guard(owner)
+            self._load()
+            return self._continuity.recover_observer(request_id, observer, stopped, source)
+
     def read_review(self, request_id, session, token, chapter=None, compare=False):
         with self.repo.transaction():
             self._load()

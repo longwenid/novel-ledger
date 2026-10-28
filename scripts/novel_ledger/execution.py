@@ -29,9 +29,12 @@ def review_handoff(task_id, review):
 def controller_handoff(response):
     action = response.get('action')
     proceed = action in CONTINUE_ACTIONS
+    controller_task = (action == 'task_ready' and
+                       ((response.get('task') or {}).get('execution') or {}).get('state') == 'controller')
     return {**response, 'controller': {
         'must_continue': proceed,
-        'action': CONTINUE_ACTIONS.get(action, 'resolve_review' if action == 'review_author_required' else 'handle_boundary'),
+        'action': ('execute_controller_task' if controller_task else
+                   CONTINUE_ACTIONS.get(action, 'resolve_review' if action == 'review_author_required' else 'handle_boundary')),
         'stop_reason': None if proceed else action,
         'worker_finished_ends_controller': False,
     }}

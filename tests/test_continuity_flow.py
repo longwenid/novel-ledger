@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -14,6 +15,7 @@ sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'tests')]
 from novel_ledger.bootstrap import open_local_runtime
 from novel_ledger.contracts import Error, digest, dump
 from novel_ledger.continuity_service import ContinuityService, SCHEMA
+from novel_ledger import store_keys
 from novel_ledger.continuity import timeline_findings
 from novel_ledger.unattended import watch
 from support import contract, drive, response
@@ -73,6 +75,134 @@ class ContinuityFlowTests(unittest.TestCase):
         self.repo.bind_session('previous-design-context', 'other-task')
         with self.assertRaises(Error):
             self.app.prepare_observer(ident, 'previous-design-context')
+
+    def test_recover_unread_stopped_observer_preserves_candidate_and_requires_fresh_read(self):
+        ident = self.request()
+        old = self.reader(ident, 'stopped-reader')
+        before = self.repo.load()
+        response = self.app.recover_observer(ident, old[0], True, '宿主确认原读者已退出。')
+        self.assertEqual(response['candidate_hash'], ident)
+        self.assertEqual(response['phase'], 'await_observer')
+        self.assertFalse(response['stopped_verified'])
+        self.assertEqual(self.repo.load(), before)
+        saved = tuple(self.repo.db.iterdump())
+        retry = self.app.recover_observer(ident, old[0], True, '宿主确认原读者已退出。')
+        self.assertTrue(retry['idempotent'])
+        self.assertEqual(tuple(self.repo.db.iterdump()), saved)
+        self.assertEqual(self.app.advance()['action'], 'review_required')
+        with self.assertRaises(Error):
+            self.app.read_review(ident, *old)
+        with self.assertRaises(Error):
+            self.app.prepare_observer(ident, old[0])
+        new = self.reader(ident, 'replacement-reader')
+        with self.assertRaises(Error):
+            self.app.read_review(ident, old[0], old[1])
+        with self.assertRaises(Error):
+            self.app.read_review(ident, *new, compare=True)
+        frozen = self.freeze(ident, new)
+        self.app.read_review(ident, *new, compare=True)
+        self.report(ident, new, frozen)
+        self.assertEqual(self.app.submit(self.receipt)['committed_chapter'], 1)
+        entry = self.repo.db.execute("SELECT value FROM journal WHERE action='continuity_observer_recovered'").fetchone()
+        audit = json.loads(entry[0])
+        self.assertEqual(audit['request'], ident)
+        self.assertEqual(audit['observer'], old[0])
+        self.assertFalse(audit['stopped_verified'])
+        self.assertFalse(audit['provenance']['verified'])
+
+    def test_recover_rejects_wrong_identity_or_missing_stop_evidence_without_writes(self):
+        ident = self.request()
+        actor = self.reader(ident, 'stopped-reader')
+        before = tuple(self.repo.db.iterdump())
+        for observer, stopped, source in [('other-reader', True, '宿主确认。'),
+                                           (actor[0], False, '宿主确认。'),
+                                           (actor[0], True, '')]:
+            with self.subTest(observer=observer, stopped=stopped, source=source):
+                with self.assertRaises(Error):
+                    self.app.recover_observer(ident, observer, stopped, source)
+                self.assertEqual(tuple(self.repo.db.iterdump()), before)
+
+    def test_recover_observer_respects_active_controller_lease(self):
+        owner = self.app.run(through=1, source='监督当前核验。')['owner']
+        ident = self.request()
+        self.app.prepare_observer(ident, 'reader', owner)
+        before = tuple(self.repo.db.iterdump())
+        with self.assertRaises(Error) as caught:
+            self.app.recover_observer(ident, 'reader', True, '宿主确认已退出。', owner='another-owner')
+        self.assertEqual(caught.exception.code, 'controller_lease')
+        self.assertEqual(tuple(self.repo.db.iterdump()), before)
+        result = self.app.recover_observer(ident, 'reader', True, '宿主确认已退出。', owner=owner)
+        self.assertEqual(result['phase'], 'await_observer')
+
+    def test_recover_fails_closed_for_legacy_or_delivered_reader(self):
+        ident = self.request()
+        actor = self.reader(ident, 'stopped-reader')
+        key = store_keys.continuity_review(ident)
+        row = self.repo.get(key)
+        del row['read_started']  # Pre-marker requests have no proof of non-delivery.
+        with self.repo.transaction():
+            self.repo.put(key, row)
+        before = tuple(self.repo.db.iterdump())
+        with self.assertRaises(Error):
+            self.app.recover_observer(ident, actor[0], True, '宿主确认。')
+        self.assertEqual(tuple(self.repo.db.iterdump()), before)
+        # A real read of the legacy request marks delivery and also remains non-recoverable.
+        self.app.read_review(ident, *actor)
+        before = tuple(self.repo.db.iterdump())
+        with self.assertRaises(Error):
+            self.app.recover_observer(ident, actor[0], True, '宿主确认。')
+        self.assertEqual(tuple(self.repo.db.iterdump()), before)
+        self.freeze(ident, actor)
+        before = tuple(self.repo.db.iterdump())
+        with self.assertRaises(Error):
+            self.app.recover_observer(ident, actor[0], True, '宿主确认。')
+        self.assertEqual(tuple(self.repo.db.iterdump()), before)
+
+    def test_recover_required_trust_rejects_unverified_stop_declaration(self):
+        ident = self.request()
+        actor = self.reader(ident, 'stopped-reader')
+        before = tuple(self.repo.db.iterdump())
+        with patch.object(self.app._governance, 'policy', return_value={'trust': 'required'}):
+            with self.assertRaises(Error) as caught:
+                self.app.recover_observer(ident, actor[0], True, '模型声称读者已停止。')
+        self.assertEqual(caught.exception.code, 'host_authority')
+        self.assertEqual(tuple(self.repo.db.iterdump()), before)
+
+    def test_racing_read_and_recovery_cannot_deliver_to_revoked_reader(self):
+        ident = self.request()
+        actor = self.reader(ident, 'stopped-reader')
+        barrier = threading.Barrier(2)
+        outcomes = {}
+
+        def operation(name):
+            runtime = open_local_runtime(self.repo.project)
+            try:
+                barrier.wait(timeout=10)
+                try:
+                    if name == 'read':
+                        runtime.app.read_review(ident, *actor)
+                    else:
+                        runtime.app.recover_observer(ident, actor[0], True, '宿主确认已退出。')
+                    outcomes[name] = 'success'
+                except Error as exc:
+                    outcomes[name] = exc.code
+            finally:
+                runtime.close()
+
+        threads = [threading.Thread(target=operation, args=(name,)) for name in ('read', 'recover')]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=15)
+            self.assertFalse(thread.is_alive())
+        self.assertEqual(sum(value == 'success' for value in outcomes.values()), 1, outcomes)
+        row = self.repo.get(store_keys.continuity_review(ident))
+        if outcomes['read'] == 'success':
+            self.assertTrue(row['read_started'])
+            self.assertEqual(row['observer'], actor[0])
+        else:
+            self.assertFalse(row['read_started'])
+            self.assertEqual(row['phase'], 'await_observer')
 
     def test_blind_read_cannot_see_self_check_until_observations_are_frozen(self):
         ident = self.request()
@@ -347,6 +477,18 @@ class ContinuityFlowTests(unittest.TestCase):
         self.assertEqual(candidate['worker_boundary'], 'await_review')
         command = [sys.executable, str(ROOT / 'scripts/novel.py'), '--project', str(self.repo.project)]
         reader = run(command + ['prepare-observer', '--request', candidate['request_id'], '--session', 'real-reader-context'])
+        recovery = command + ['recover-observer', '--request', candidate['request_id'],
+                              '--observer', 'real-reader-context', '--observer-stopped', '--source', '宿主核实读者已退出。']
+        denied = subprocess.run(recovery, env={**base_env, **reader['observer_env']},
+                                text=True, capture_output=True, timeout=20)
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertEqual(json.loads(denied.stdout)['error'], 'role_boundary')
+        recovered = run(recovery)
+        self.assertFalse(recovered['stopped_verified'])
+        denied = subprocess.run(reader['commands']['review-read'], env={**base_env, **reader['observer_env']},
+                                text=True, capture_output=True, timeout=20)
+        self.assertNotEqual(denied.returncode, 0)
+        reader = run(command + ['prepare-observer', '--request', candidate['request_id'], '--session', 'fresh-reader-context'])
         read = run(reader['commands']['review-read'], reader['observer_env'])
         observation_file = Path(self.temp.name) / 'observations.json'
         observation_file.write_text(json.dumps(read['observation_template']), encoding='utf-8')

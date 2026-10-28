@@ -171,7 +171,7 @@ VALUE_RULES = {
         'first_cause：至少12字的非空文本',
         'stance：枚举原词 → 顺从 | 利用 | 对抗；写枚举原词不写同义词，方向细节写进 novelty/first_cause',
         'dark_side：枚举原词 → 外神 | 天灾 | 系统 | 上层剥削 | 制度 | 人心；「人性」「天灾人祸」这类直觉写法会被拒；外部不可抗力取外神/天灾/系统，人心与制度取上层剥削/制度/人心',
-        '待补/暂定/同上/略 出现在任一键即拒；stance/dark_side 与世界模型共享词表、选后世界机制只能承接不能推翻——这是世界级承诺，按此慎重',
+        '待补/暂定/同上/略 作为独立占位标记时拒绝，普通语句中的同字不拦；stance/dark_side 与世界模型共享词表、选后世界机制只能承接不能推翻——这是世界级承诺，按此慎重',
     ],
     'voice': [
         'pov：非空文本；写清主角中心、双主角、群像等人物组织方式，以及人称、知情范围和换人方式；未定人名用角色称呼，不替后门锁定人物',
@@ -271,20 +271,15 @@ def value_fields(gate, version=OPENING_VERSION):
     return tuple(fields) + DERIVATION_INPUTS.get(gate, ())
 
 
-# The delivery contract for one option: proposals, not arguments. The lens shapes how the option is
-# found; it must not appear in what the author reads. The interception list is derived from the live
-# method table plus the legacy names: a method renamed in a later protocol must not become a word a
-# worker can safely write into a pitch, and options written under the old table must keep being
-# rejected for the same reason.
+# A technique name may also be ordinary story language, so only explicit metatext is rejected.
 OPTION_CONTRACT = contracts.OPTION_CONTRACT
-LEGACY_LENS_WORDS = ('混搭', '倒置', '代价递进', '认知差', '规则推演', '绑定', '闭环', '阶梯', '商业化倒推')
-LENS_WORDS = tuple(dict.fromkeys(
-    ('透镜', '落地要求', '典型落法') + catalog.LENSES + LEGACY_LENS_WORDS))
+LENS_WORDS = ('落地要求', '典型落法', '透镜落地', '透镜构思', '使用透镜', '采用透镜', '通过透镜', '本轮透镜', '创意透镜')
 
 
 def _reject_lens_language(option):
     text = ' '.join(str(option.get(key, '')) for key in ('pitch', 'premise', 'driver', 'tradeoff', 'fit_reason'))
-    self_reference = [word for word in LENS_WORDS if word in text]
+    markers = LENS_WORDS + tuple(name + '透镜' for name in catalog.LENSES)
+    self_reference = [word for word in markers if word in text]
     require(not self_reference, 'opening_voice', '方案文本不得自述创意方法；透镜只用于构思，不写给作者看。',
             {'found': self_reference, 'recover': '把"某透镜落地"改成这一版具体怎么推进。'})
 
@@ -297,25 +292,38 @@ def _check_scenes(option):
             {'recover': '写清谁在哪、手上是什么、正要做什么，不要给概念或口号。'})
 
 
-def _check_driver_shape(options):
-    """Three lengths of the same idea are not three options: the openings must not share a shape."""
-    heads = []
-    for option in options:
-        driver = str(option.get('driver', '')).strip()
-        head = driver[:6]
-        heads.append(head)
-    require(len(set(heads)) == len(heads), 'opening_diversity',
-            '同组方案的推进方式开头雷同（例如都以"以…为刻度推进"起句），属于换个说法的同一个方案。',
-            {'heads': heads, 'recover': '让三案的推进机制在结构上不同，而不是量级不同。'})
+def _standalone_marker(content, marker):
+    """Find an independent placeholder without matching characters inside ordinary words."""
+    start = 0
+    while True:
+        index = content.find(marker, start)
+        if index < 0:
+            return False
+        end = index + len(marker)
+        word = lambda char: char.isalnum() or char == '_'
+        if (index == 0 or not word(content[index - 1])) and (end == len(content) or not word(content[end])):
+            return True
+        start = index + 1
 
 
 def _tier_option(tier, following):
     low, high = tier['word_range']
+    chapters = tier['chapters']
+    target = tier['chapter_aim']
+    # The recommended chapter count and a per-chapter aim are independent planning aids.
+    # Show their actual implications without changing previously frozen tier choices.
+    min_mean = max(tier['chapter_min'], (low + chapters - 1) // chapters)
+    max_mean = min(tier['chapter_max'], high // chapters)
+    min_target_chapters = max(tier['chapter_window'][0], (low + target - 1) // target)
+    max_target_chapters = min(tier['chapter_window'][1], high // target)
     option = {'id': 'tier:' + tier['id'],
               'title': '%s档：%d 卷・约 %s～%s 万字' % (tier['name'], tier['volume_count'], _wan(low), _wan(high)),
-              'premise': '全书约 %s～%s 万字，%d 卷约 %d 章；每章 %d～%d 字（目标 %d）。'
-                         % (_wan(low), _wan(high), tier['volume_count'], tier['chapters'],
-                            tier['chapter_min'], tier['chapter_max'], tier['chapter_aim']),
+              'premise': ('全书约 %s～%s 万字，%d 卷约 %d 章；每章 %d～%d 字（参考目标 %d）。'
+                          '按约 %d 章达到总字数，平均每章约 %d～%d 字；若每章按参考目标，'
+                          '约需 %d～%d 章，两者可按实际调整。')
+                         % (_wan(low), _wan(high), tier['volume_count'], chapters,
+                            tier['chapter_min'], tier['chapter_max'], target, chapters,
+                            min_mean, max_mean, min_target_chapters, max_target_chapters),
               'tradeoff': ('比%s档少买到：%s' % (following['name'], following['note'])) if following
                           else '已是阶梯里最大的一档：再长的篇幅只增加铺垫，不增加承载。',
               'value': {'tier': tier['id'], 'word_range': list(tier['word_range']),
@@ -376,8 +384,8 @@ def validate_value(gate, value, version=OPENING_VERSION, choices=None):
                 'dark_side 只能取已登记的世界恶意来源。',
                 {'valid': list(contracts.DARK_SIDES), 'got': value['dark_side'],
                  'recover': '外部不可抗力取外神/天灾/系统，人心与制度取上层剥削/制度/人心。'})
-        placeholders = [word for word in ('待补', '暂定', '同上', '略')
-                        if any(word in value[key] for key in keys)]
+        placeholders = [marker for marker in ('待补', '暂定', '同上', '略')
+                        if any(_standalone_marker(value[key], marker) for key in keys)]
         require(not placeholders, 'opening_option', '脑洞四问不接受占位词，必须写实际内容。',
                 {'found': placeholders})
     elif gate == 'origin':
@@ -636,7 +644,6 @@ def offer(state, data):
         _reject_lens_language(option)
         _check_scenes(option)
         validate_value(gate['id'], option.get('value'), version, selected(state))
-    _check_driver_shape(options)
     require(all(len({o[k] for o in options}) == len(options) for k in ('id', 'title', 'premise', 'driver')),
             'opening_diversity', '方案应有实质差异，不能只换标签或措辞。')
     state = copy.deepcopy(state)

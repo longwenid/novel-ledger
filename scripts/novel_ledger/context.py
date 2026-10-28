@@ -53,7 +53,7 @@ PROJECTIONS = (
 # staging while the repair loop is live. No refusal, no record — the declared set and what a worker
 # can actually read stay in step without freezing a rejection into a fresh task.
 STAGE_MATERIAL = {
-    'opening_options': ('opening_choices', 'opening_rejections'),
+    'opening_options': ('opening_basis', 'opening_choices', 'opening_rejections'),
     'world_model': ('author_feedback', 'opening_basis', 'opening_choices', 'previous_proposal'),
     'opening_contract': ('author_feedback', 'opening_basis', 'opening_choices', 'world_model'),
     'volume_outline': ('author_feedback', 'blueprint', 'contract', 'effective_layout', 'hooks', 'opening_basis',
@@ -709,8 +709,14 @@ def build(repo: ContextStore, book, job):
         # Brief summaries are bounded. New gates must read the full frozen choices so world
         # architecture and other long decisions survive without being reconstructed from snippets.
         chosen = stage in ('world_model', 'opening_contract', 'volume_outline')
-        add('opening_basis', {'selection_hash': book['creation'].get('selection_hash'), 'source': book['creation']['source']}, chosen)
         choices_required = chosen or stage == 'opening_options'
+        # Keep the initial request and source of currently effective choices in the frozen task.
+        # Archived choices after back are intentionally excluded: they are not current decisions.
+        active_sources = [{'gate': row['gate'], 'source': row.get('source', '')}
+                          for row in book['creation'].get('selections', [])]
+        add('opening_basis', {'selection_hash': book['creation'].get('selection_hash'),
+                              'source': book['creation'].get('source', ''),
+                              'selection_sources': active_sources}, choices_required)
         add('opening_choices', creation.selected(book['creation']), choices_required)
         if stage == 'opening_options':
             add('opening_rejections', [r for r in book['creation']['rejections'] if r['gate'] == job.payload['gate']['id']])

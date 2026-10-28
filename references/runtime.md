@@ -81,6 +81,10 @@ python3 "$ROOT/scripts/novel.py" --project "$PROJECT" host-check
 
 派工能力属于会话层，host-check 看不见它：**首次派工前用一次最小探针子 agent（任务只有"回复：收到"）核实本会话真能创建执行者**；探针创建工具不存在或 5 分钟未返回时按能力缺失报告，不进入 prepare-worker。主干须位于有真实派工能力的会话，不能把整条创作链交给无法再派工的子会话。`run` 认领之前没有 owner，主控对在途任务的等待用 `watch --task 任务ID`（无 owner 的单任务有界等待：提交/技术阻塞/静默超限即返回，不做治理动作），认领之后用 `watch --owner`；两条路径都不在宿主侧无限期等待子 agent 句柄。
 
+创建新写手或独立读者前，核实宿主实际的历史继承方式：Codex 的 `collaboration.spawn_agent` 默认继承主干历史，需显式指定 `fork_turns="none"` 并只交付当前任务必需的自举信息；其他宿主使用其等效的空历史能力。不要在已继承历史的会话上仅更换名字冒充独立上下文。独立读者只在取得真实会话 ID 且准备完成后，接收其专属 `observer_env` 与命令；调用前核对环境来自本次准备响应，不沿用写手凭据。
+
+宿主会话容量不足时，先核实实际会话状态和能否恢复同一写手：若宿主支持中断后唤醒原会话，可在候选已提交、写手等待审读时暂时中断该写手，派独立读者；审读结束后唤醒同一会话重交，保留候选、身份与有效凭据。不得将同名新会话冒充原写手，也不把中断本身当作任务完成；无法确保原会话可恢复时保留现场并报告宿主限制。
+
 prepare-worker.ready只表示协议身份登记成功，响应的worker_presence、status.worker_presence及派工卡execution.worker_presence另列身份登记、租约有效期、实际读取/心跳活动和身份是否经宿主证明。activity_observed不证明当前仍存活，worker_running=null须由宿主核实；phase=await_worker_start表示尚未观察到该身份活动，lease_expired表示租约过期。组active=true也不证明后台正在写。准备身份后立即向真实Worker交付任务，不结束主控回复留下空挂租约。
 
 ## 诊断与主控上下文交接

@@ -70,7 +70,7 @@
 
 作者选双主角或群像时，人物与关系设计分别交代核心人物的目标及牵制；卷纲推演各自行动如何相互改变局面，章纲在需要处落实当前跟随者、行动、选择与后果。可用既有人物／关系、arc、threads、scenes 和 style.pov 承接，不新增报告或固定出场配额，不把群像退化成“主角做事、配角轮流点评”。全知叙述也须区分叙述者揭示、人物所知与读者已见。
 
-新人物首次登场时在章纲 `new_entities` 内联给出档案字段（id/kind/name/role/desire/limit/knowledge_boundary）；人物变化行给 `choice` 与 `cost`。场景与章纲全文读取必读 `chapter_outline`；`scene_context`（冻结的场景输入，写法见 [协议](protocol.md)）通过 `plan_record` 引用它，`plan_hash` 绑定同一版本，`inputs` 给准确前态；`scene_sources` 绑定前置场景的已提交版本。疑点按本任务 `recall` 补读，同一上下文可复用版本未变的已读材料。作者可用信息不自动成为角色所知或本章披露。
+新人物首次登场时在章纲 `new_entities` 内联给出档案字段（id/kind/name/role/desire/limit/knowledge_boundary）；人物变化行给 `choice` 与 `cost`。场景与章纲全文读取必读 `chapter_outline`；`scene_context/2` 通过 `plan_record` 引用它，`plan_hash` 绑定同一版本，`inputs` 给准确前态；`scene_sources` 绑定前置场景的已提交版本。疑点按本任务 `recall` 补读，同一上下文可复用版本未变的已读材料。作者可用信息不自动成为角色所知或本章披露。
 
 任务提供 creative_memory 时，完整读取相关解释、原文表达样本、反证及适用范围。理解可并存或受质疑，不为迁就旧解释重写人物；显式引用失效时补读原文或重新提交章纲。理解保存和阅读关联按 [叙事工作台](workbench.md) 的冻结协议执行。
 

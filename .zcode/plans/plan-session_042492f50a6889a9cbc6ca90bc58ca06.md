@@ -1,5 +1,7 @@
 # 多文风架构：解耦、可配置、默认选择
 
+> 状态：历史方案，2026-10-27 冻结归档；以下“现状”“新增”“测试”等是编写时的计划，不是当前待办或逐项完成证明。实现及操作以 [运行](../../references/runtime.md)、[文风](../../references/style.md) 为准，验收入口见 [验证](../../references/validation.md)，相关历史结果见 [token 修复报告](../../validation/archive/token-efficiency-fix-2026-10-24.md)。
+
 ## 目标与总设计
 
 把"单一默认文风"改造成**注册式多文风目录 + 契约可配置选择 + 引擎逐档案感知**。用户已新增 `references/styles/账房掌门.md`、`神秘学双声部.md` 两份纯档案（各含 MUST/AVOID、语料事实表），后续还会新增。

@@ -10,7 +10,7 @@ from pathlib import Path
 from novel_ledger.contracts import CONTENT_ERRORS, CONTROLLER_STAGES, Error, VERSION, require
 from novel_ledger.bootstrap import open_local_runtime, pin_local_runtime, preview_local
 
-PUBLIC = {'diagnose', 'pin-engine', 'recover-engine', 'host-check', 'init', 'assurance', 'prepare-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
+PUBLIC = {'diagnose', 'pin-engine', 'recover-engine', 'host-check', 'init', 'assurance', 'prepare-observer', 'recover-observer', 'review-resolve', 'intake', 'status', 'usage', 'advance', 'submit', 'preflight', 'check', 'claim', 'run', 'renew', 'approve',
           'confirm-volume', 'revise-volume', 'regroup-volume', 'blueprint',
           'pause', 'resume', 'answer', 'revise', 'revision-impact', 'compact', 'promote', 'discard', 'opening', 'choose', 'regroup', 'back', 'recontract', 'replan', 'feedback', 'lexical', 'complete', 'host-step', 'host-loop', 'watch', 'worker-next', 'worker', 'worker-ready', 'worker-error', 'prepare-worker'}
 OBSERVER = {'review-read', 'review-observe', 'review-report'}
@@ -84,10 +84,14 @@ def parser():
             sub.add_argument('--source', default='')
         if command == 'discard':
             sub.add_argument('--source', default='')
-        if command in OBSERVER | {'prepare-observer', 'review-resolve'}:
+        if command in OBSERVER | {'prepare-observer', 'recover-observer', 'review-resolve'}:
             sub.add_argument('--request', required=True)
         if command == 'prepare-observer':
             sub.add_argument('--session', required=True)
+        if command == 'recover-observer':
+            sub.add_argument('--observer', required=True, help='当前请求绑定的准确原读者身份。')
+            sub.add_argument('--observer-stopped', action='store_true', help='宿主已确认原读者停止；advisory 模式仅记录声明。')
+            sub.add_argument('--source', required=True, help='宿主核实停止的依据。')
         if command == 'review-read':
             sub.add_argument('--chapter', type=int)
             sub.add_argument('--compare', action='store_true')
@@ -276,6 +280,10 @@ def normalize_worker(args):
 
 def role_guard(args):
     """A dispatched worker and the controller are different roles; prose is worker-only."""
+    if args.command == 'recover-observer':
+        require(not any(os.environ.get(key) for key in
+                        ('NOVEL_OBSERVER_SESSION', 'NOVEL_REVIEW_TOKEN', 'NOVEL_REVIEW_REQUEST')),
+                'role_boundary', '读者不能执行主控恢复；须由宿主确认原读者停止后交主控处理。')
     if args.command in OBSERVER:
         require(os.environ.get('NOVEL_OBSERVER_SESSION') and os.environ.get('NOVEL_REVIEW_TOKEN')
                 and os.environ.get('NOVEL_REVIEW_REQUEST') == args.request,
@@ -397,6 +405,8 @@ def dispatch(args, open_runtime=open_local_runtime):
             result['commands'] = {name: [sys.executable, str(Path(__file__).resolve()), '--project', args.project,
                                          name, '--request', args.request] for name in sorted(OBSERVER)}
             return result
+        if command == 'recover-observer':
+            return app.recover_observer(args.request, args.observer, args.observer_stopped, args.source, owner)
         if command in OBSERVER:
             session, token = os.environ['NOVEL_OBSERVER_SESSION'], os.environ['NOVEL_REVIEW_TOKEN']
             if command == 'review-read':
