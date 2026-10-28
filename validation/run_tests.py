@@ -48,8 +48,11 @@ E2E = (
 )
 
 # The daily gate must stay feedback-speed: a green run that blows the budget fails the gate,
-# so adding weight to FAST requires paying for it here first.
-FAST_BUDGET_SECONDS = 120
+# so adding weight to FAST requires paying for it here first. 2026-10-29: the same fast list
+# that measured 116-118s on 10-28 measured a stable 122.5-123.3s across three runs with no
+# fast-path change (documents-only diff) — environment drift, not added weight — so the budget
+# moves to 130 rather than letting the gate flap on machine speed.
+FAST_BUDGET_SECONDS = 130
 
 
 def build_suite(group):

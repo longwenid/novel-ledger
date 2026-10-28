@@ -314,6 +314,20 @@ class VolumeGateTests(unittest.TestCase):
             self.assertTrue(row['band'][0] <= row['han'] <= row['band'][1])   # the validator's own count
         self.assertTrue(self.app.confirm_volume(boundary['volumes_hash'], '工程夹具仍认可。', self.owner)['confirmed'])
 
+    def test_the_confirmed_design_shelf_binds_for_real(self):
+        """The registry's real first design entry, no synthetic patch: the confirmed shelf is
+        bindable straight from the catalog, and the dispatch ships the registered file."""
+        self.open(contract(chapters=4, volumes=2))
+        result = self.app.blueprint('五书基准', '工程夹具绑定设计层首档。')
+        self.assertEqual(result['layer'], 'design')
+        self.owner = self.app.run(finish=True, source='工程夹具授权跑到卷纲。')['owner']
+        drive(self.app, until='volume_outline')
+        work = self.repo.pending()['input']
+        self.assertEqual(work['payload']['design_blueprint']['name'], '五书基准')
+        self.assertEqual(work['payload']['design_blueprint']['file'], 'volume-blueprint.md')
+        self.assertIn('design_blueprint', work['required'])
+        self.assertIn('设计蓝图（作者选定：五书基准）', work['brief'])
+
     def test_the_cli_registers_the_four_author_commands(self):
         import novel
         parsed = novel.parser().parse_args(
@@ -406,6 +420,33 @@ class DesignBlueprintLayerTests(unittest.TestCase):
         self.assertIn('blueprint', work['required'])
         self.assertNotIn('design_blueprint', work['required'])
         self.assertNotIn('design_blueprint', work['payload'])
+
+    def test_a_plain_bind_discloses_the_cancelled_task_and_keeps_the_frozen_baseline_visible(self):
+        self.open(contract(chapters=4, volumes=2))
+        self.owner = self.app.run(finish=True, source='工程夹具授权跑到卷纲。')['owner']
+        drive(self.app, until='volume_outline')
+        pending = self.repo.pending()
+        # A plain bind retires the in-flight dispatch (its brief froze the old blueprint) — and
+        # says so instead of leaving the controller to discover a silent pending_task:null.
+        result = self.app.blueprint('五书基准', '工程夹具换设计层。', owner=self.owner)
+        self.assertEqual(result['pending_task_cleared'], pending['id'])
+        self.assertIsNone(self.repo.pending())
+        self.assertIsNone(self.app.status()['pending_task'])
+
+    def test_a_gate_state_still_shows_the_newest_frozen_build(self):
+        self.open(contract(chapters=4, volumes=2))
+        self.owner = self.app.run(finish=True, source='工程夹具授权跑到卷纲。')['owner']
+        drive(self.app, until='volume_outline')
+        frozen_build = self.repo.pending()['input']['build']
+        self.app.submit(response(self.app))
+        self.app.advance(owner=self.owner)
+        # await_volume_confirm has no task in flight; the engine block falls back to the last
+        # task's frozen build so entrypoint drift stays comparable instead of a vacuous
+        # matches:true over frozen:null.
+        status = self.app.status()
+        self.assertIsNone(status['pending_task'])
+        self.assertEqual(status['engine']['frozen'], frozen_build)
+        self.assertTrue(status['engine']['matches'])
 
     def test_regroup_can_switch_the_design_layer_with_the_rerun(self):
         _outcome, boundary = self.stage(contract(chapters=4, volumes=2))

@@ -241,11 +241,19 @@ BLUEPRINT_BOUNDARY = ('蓝图只写结构骨架与推进维度：不定事件桥
 
 # The design layer: whole documents, not skeletons. An entry names the file (relative to
 # references/, the STYLE_CATALOG treatment) the volume dispatch ships as a guide when the author
-# binds it. Empty this version on purpose: the standing volume-blueprint.md is an
-# author-confirmation-pending draft and must not be registerable until confirmed — the mechanism
-# ships, the first shelf waits for the author's confirmation. One layer, at most one binding per
-# book, no second source inside a project (the style-library rule of 389e26b).
-DESIGN_BLUEPRINT_CATALOG = {}
+# binds it. One layer, at most one binding per book, no second source inside a project (the
+# style-library rule of 389e26b). The first shelf is the author-confirmed condensed self-check
+# sheet (2026-10-29, verbatim「认可」): five one-sided discriminants plus eight anti-patterns for
+# the pre-submit pass. The full 49-entry evidence version it was distilled from stays archived in
+# the plot-distill skill root and never rides a dispatch — consult it by BP number.
+DESIGN_BLUEPRINT_CATALOG = {
+    '五书基准': {
+        'name': '五书基准',
+        'file': 'volume-blueprint.md',
+        'summary': '浓缩自查单：五条单侧判别式＋八条反模式，卷纲交稿前自查，无硬性档、不设数字阈值。',
+        'version': 'plot-distill.blueprint.v2c',
+    },
+}
 
 DESIGN_BLUEPRINT_BOUNDARY = ('设计蓝图是设计参考与字段映射来源：不产生执行规则、不自动返工、不解析进校验；'
                              '条目按需采用、默认建议可说明偏离，执行形状与校验统一由叙事推进与协议承担。')

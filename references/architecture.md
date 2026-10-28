@@ -12,7 +12,7 @@
 
 字段与校验以源码声明和任务模板为准，接口摘要见 [协议](protocol.md)；命令及恢复步骤见 [运行](runtime.md)；测试、度量和真实长篇验收口径见 [验证](validation.md)。本文的 Mermaid 块是架构图真源，docs 为派生产物，生成及核对方法见 [图表维护](../docs/README.md)。
 
-卷纲设计资料遵循同一职责边界：[设计蓝图](volume-blueprint.md) 保存证据、建议档位与适用范围，[对接文档](volume-blueprint-bridge.md) 只映射现有字段与作者自查，[叙事推进](narrative.md#卷纲) 与领域代码定义执行协议。建议层不直接生成字段枚举、数值阈值、自动返工或阻断；默认偏离与参考选型交创作者及作者判断。蓝图是一套两层、一个命名空间（`BLUEPRINT_CATALOG` 结构骨架与 `DESIGN_BLUEPRINT_CATALOG` 设计文档，同一 `blueprint` 命令按档名解析层、每层至多绑定一个）：设计层经冻结材料编译层接入——绑定后 record `design_blueprint` 进必读、整本文档随 guides 下发，领域校验不读取 Markdown；目录空置待作者确认后入库（内置单一来源，不在项目内挂第二来源）。文档修订不代行作者确认或改变已冻结任务。
+卷纲设计资料遵循同一职责边界：[浓缩自查单](volume-blueprint.md) 保存交稿自查条目（证据与其余设计参考存档于 plot-distill 全量版，不随派工下发），[对接文档](volume-blueprint-bridge.md) 只映射现有字段与作者自查，[叙事推进](narrative.md#卷纲) 与领域代码定义执行协议。建议层不直接生成字段枚举、数值阈值、自动返工或阻断；默认偏离与参考选型交创作者及作者判断。蓝图是一套两层、一个命名空间（`BLUEPRINT_CATALOG` 结构骨架与 `DESIGN_BLUEPRINT_CATALOG` 设计文档，同一 `blueprint` 命令按档名解析层、每层至多绑定一个）：设计层经冻结材料编译层接入——绑定后 record `design_blueprint` 进必读、整本文档随 guides 下发，领域校验不读取 Markdown；首档「五书基准」（浓缩自查单 v2c）已于 2026-10-29 作者确认入库（内置单一来源，不在项目内挂第二来源）。文档修订不代行作者确认或改变已冻结任务。
 
 十三门到卷纲的来源链复用现有分层：creation 按字段声明对齐作者约定，world 绑定已选世界声明，context 冻结完整选择／版本、当前约定和世界；滚动后续卷只额外携带相邻已批准的 previous_volume_outline，不逐次复制全部历史卷纲。briefs 提醒先推演人物因果，方法与各门用途由 craft.md 解释；drift_validation 从当前约定读取阶梯，直接导入亦适用，历史选择只为缺该声明的旧输入回退。材料可追溯与字段可核验不等于文学因果成立，后者留在原设计任务和作者认可门判断。
 

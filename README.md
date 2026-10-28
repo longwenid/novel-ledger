@@ -218,7 +218,7 @@ novel-ledger/
 │   ├── world.md          世界来源、创建、机械校验与下游接口
 │   ├── craft.md          规则级别、分阶段写作与执笔自比
 │   ├── narrative.md      卷纲、章纲、卷内状态链与漂移核算
-│   ├── volume-blueprint.md          卷纲设计蓝图（plot-distill 语料提炼，v1.2 待作者确认；设计层机制已接入，档位空置待确认入库）
+│   ├── volume-blueprint.md          卷纲设计蓝图·浓缩自查单（五判别式＋八反模式，v2c；设计层首档「五书基准」，2026-10-29 作者确认入库；全量 v1.2 存档 plot-distill）
 │   ├── volume-blueprint-bridge.md   卷纲设计蓝图与引擎字段的对接说明（设计层映射接口）
 │   ├── workbench.md      作品理解、稳定场景身份与分级修订
 │   ├── editorial.md      人物、场景、补丁、偏离登记与完本

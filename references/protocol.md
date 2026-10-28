@@ -98,7 +98,7 @@ hash 是规范 JSON 的 SHA256：UTF-8、ensure_ascii=False、sort_keys=True、�
 
 卷纲与章纲校验（文风必填、可计算卷末终值）对所有提交统一执行；重排使用当前任务模板，历史前缀不再按旧形状解释。
 
-卷纲派工的 payload 另有三个可选键，均由引擎按书级状态写入、Worker 只读：`structure_blueprint={name,skeleton,drivers,echo}`（作者经 `blueprint`/`regroup-volume --blueprint` 绑定的结构层蓝图，随 record `blueprint` 携带，缺省不选不出现）；`design_blueprint={name,file,version,summary}`（作者经同一命令绑定的设计层蓝图，随 record `design_blueprint` 携带、整本文档随 guides 下发，不产生执行规则、不解析进校验，仅卷纲派工出现，缺省不选或设计层目录空置时不出现）；`volume_rejections=[{round,reason,volumes:[{id,purpose,arc}]}]`（作者在确认门带理由退回的记录，随 record `volume_rejections` 冻结为必读输入，重出版必须回应理由）。三键已登记在冻结输入白名单（envelope.WORK_PAYLOAD_FIELDS）。卷纲回执通过机械校验后进入待认可暂存，安装与作者命令见 [叙事推进](narrative.md#校验与失败)。
+卷纲派工的 payload 另有三个可选键，均由引擎按书级状态写入、Worker 只读：`structure_blueprint={name,skeleton,drivers,echo}`（作者经 `blueprint`/`regroup-volume --blueprint` 绑定的结构层蓝图，随 record `blueprint` 携带，缺省不选不出现）；`design_blueprint={name,file,version,summary}`（作者经同一命令绑定的设计层蓝图，随 record `design_blueprint` 携带、整本文档随 guides 下发，不产生执行规则、不解析进校验，仅卷纲派工出现，缺省不选时不出现）；`volume_rejections=[{round,reason,volumes:[{id,purpose,arc}]}]`（作者在确认门带理由退回的记录，随 record `volume_rejections` 冻结为必读输入，重出版必须回应理由）。三键已登记在冻结输入白名单（envelope.WORK_PAYLOAD_FIELDS）。卷纲回执通过机械校验后进入待认可暂存，安装与作者命令见 [叙事推进](narrative.md#校验与失败)。
 
 ## 验收报告
 
