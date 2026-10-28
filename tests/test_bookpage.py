@@ -180,7 +180,7 @@ class BookPageTests(unittest.TestCase):
             state = creation.offer(state, {'gate': gate, 'options': rows_for(gate)})
             state = creation.pick(state, state['board']['options'][0]['id'], state['board']['hash'], '选它。')
         voice = {'pov': '第三人称限知，只跟沈桐的所见与所知。', 'voice': '具体动作与有立场的对白。',
-                 'style_traits': ['少重复解释。']}
+                 'style_traits': ['少重复解释。'], 'style_profile': '市井修仙'}
         state = creation.offer(state, offered('voice', voice, 'voice'))
         state = creation.pick(state, 'A', state['board']['hash'], 'A')
         book = workflow.preparing_book(guided=True)

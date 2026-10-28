@@ -614,12 +614,16 @@ CONTRACT_FIELDS = (
      'alignment': False, 'optional': True},
     {'key': 'style_guard', 'kind': 'text', 'default': DEFAULTS['style_guard'],
      'choices': ('observe', 'strict'), 'alignment': False, 'optional': True},
-    # Which built-in style archive the project writes in (references/styles/<名>.md). A parameter,
-    # not an opening decision: the author may switch it any time via recontract --patch without
-    # rewriting anything. The built-in catalog is the only style source. The registered anchor is
-    # what style.baseline falls back to before the first chapter is approved.
+    # Which built-in style archive the project writes in (references/styles/<名>.md). The voice
+    # gate hands the author the whole catalog since 2026-10-29 — the opening boards never showed
+    # it before, so books ran on the default shelf unseen — but it stays a parameter in nature:
+    # optional at the contract layer (a direct import may omit it), and the author may still
+    # switch it any time via recontract --patch without rewriting anything. The built-in catalog
+    # is the only style source. The registered anchor is what style.baseline falls back to before
+    # the first chapter is approved.
     {'key': 'style_profile', 'kind': 'text', 'default': DEFAULTS['style_profile_default'],
-     'choices': tuple(STYLE_CATALOG), 'alignment': False, 'optional': True},
+     'choices': tuple(STYLE_CATALOG), 'alignment': True, 'optional': True,
+     'opening': ('voice', 'style_profile')},
     {'key': 'anchors', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'links', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},
     {'key': 'initial_facts', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},

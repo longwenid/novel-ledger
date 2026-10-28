@@ -6,7 +6,7 @@
 
 ## 生效档案与选取
 
-写作派工（write/repair/redesign）的 guides 自动带本页与生效档案文件的绝对路径。**内置文风库是唯一文风源**：文学档案即契约 `style_profile` 选定的内置档（枚举＝内置目录名），由 `contracts.resolve_style_profile` 解析，材料 `style.profile` 即该档名，guides 下发的档案文件就是生效档案；作者未选择时缺省引擎默认档 `市井修仙`。项目根不支持 style-profile.md 自定义档案替换——存量项目里遗留的该文件不再生效，换档用 `style_profile` 选内置档。
+写作派工（write/repair/redesign）的 guides 自动带本页与生效档案文件的绝对路径。**内置文风库是唯一文风源**：文学档案即契约 `style_profile` 选定的内置档（枚举＝内置目录名），由 `contracts.resolve_style_profile` 解析，材料 `style.profile` 即该档名，guides 下发的档案文件就是生效档案；逐门开书在写作视角门由作者从全部内置档中选定（无偏好选默认档），直接导入约定未声明时缺省引擎默认档 `市井修仙`。项目根不支持 style-profile.md 自定义档案替换——存量项目里遗留的该文件不再生效，换档用 `style_profile` 选内置档。
 
 ## 内置文风目录
 
@@ -22,7 +22,7 @@
 
 ## 选择与切换
 
-- **逐门开书**：作者口头选定后，约定激活即由主控登记——`recontract --file 补丁.json --patch --source 作者原话`（文件如 `{"style_profile": "账房掌门"}`）。参数级变更：直接生效，不建 pending_contract、不触发重写。
+- **逐门开书**：写作视角门板面铺陈全部内置档，作者在门内选定、选定值随约定逐字生效（板面与字段规则见 [写作视角](hatch.md#写作视角)）；门内未定或事后口头改选时，由主控登记——`recontract --file 补丁.json --patch --source 作者原话`（文件如 `{"style_profile": "账房掌门"}`）。参数级变更：直接生效，不建 pending_contract、不触发重写。
 - **自备约定**：`init --contract 约定.json` 直接带 `style_profile` 字段，缺省按默认档。
 - **运行中换档**：同一 patch 命令。换档改变声线对照与未认可项目的注册锚点；机械基线认可后源自本书已认可正文本身（最近已认可章节中位，见下节），换档不动它——声线层与数值层各自跟随自己的来源。
 - 内置档选定**不需要**复制任何文件；需要库里没有的档时走 [新增内置档案](#新增内置档案)，确认后进内置目录供所有项目选用，不在项目内挂第二来源。

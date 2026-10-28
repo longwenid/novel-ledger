@@ -177,8 +177,9 @@ VALUE_RULES = {
         'pov：非空文本；写清主角中心、双主角、群像等人物组织方式，以及人称、知情范围和换人方式；未定人名用角色称呼，不替后门锁定人物',
         'voice：非空文本；用一句白话概括，例如“群像：多位核心人物各自推进，分场跟随不同人物”，不额外选择语感或句长',
         'style_traits：非空文本数组；补充与本案相符的知情和切换约定。分场限知说明当前人物能知道什么；全知叙述说明叙述者可揭示范围，不能一律套成只知主角所知，不填幽默、抒情、短句等文风偏好',
+        'style_profile：枚举原词 → %s；文风档与叙述约定同门并选——板面铺陈全部内置档的一句话定位（见 style.md 内置文风目录），每案写明所选档与本案视角为何相称；作者指定档名时从之，无偏好选默认档 %s' % ('｜'.join(contracts.STYLE_CATALOG), DEFAULTS['style_profile_default']),
         '作者只选一次写作视角；常见的主角视角、双主角视角、群像视角、旁观者视角与全知视角按 hatch.md 选用，不是封闭枚举，也不要求一轮全给。已有群像要求时不再推回主角中心',
-        '选定的叙述约定逐字进入契约；句长、口癖与声线另按 style_profile 处理，不在本门比较文风档案。已有作者要求原样保留，不借简化改写旧选择',
+        '选定的叙述约定与文风档逐字进入契约；句长、口癖与声线的执行细节按文风页与生效档案处理，运行中换档仍走 recontract --patch（参数级、不触发重写）。已有作者要求原样保留，不借简化改写旧选择',
     ],
     'scale': [
         '本门由引擎按档位表即时给定，不接受方案回执',
@@ -402,6 +403,10 @@ def validate_value(gate, value, version=OPENING_VERSION, choices=None):
         require(text(value.get('pov')) and text(value.get('voice')) and isinstance(value.get('style_traits'), list)
                 and value['style_traits'] and all(text(s) for s in value['style_traits']),
                 'opening_option', '讲述方案需要说明跟谁看、怎样讲，以及知情或换人的补充约定。')
+        require(value.get('style_profile') in contracts.STYLE_CATALOG, 'opening_option',
+                '讲述方案须从内置文风目录选定文风档。',
+                {'valid': sorted(contracts.STYLE_CATALOG),
+                 'recover': '档名原词照抄内置目录；作者未指定时选默认档 %s。' % DEFAULTS['style_profile_default']})
     elif gate == 'scale':
         tier = next((row for row in SCALE_TIERS if row['id'] == value.get('tier')), None)
         require(tier is not None, 'opening_option', '体量方案须来自档位表。',

@@ -195,7 +195,7 @@ class EditorialTests(unittest.TestCase):
     def test_partial_intake_skips_only_already_decided_gates(self):
         state = creation.begin()
         voice = {'pov': '第三人称限知，只跟沈桐的所见与所知。', 'voice': '具体动作与有立场的对白。',
-                 'style_traits': ['少重复解释。']}
+                 'style_traits': ['少重复解释。'], 'style_profile': '市井修仙'}
         state = creation.intake(state, {'voice': voice, 'title': {'title': '夜班退件'}}, '作者已给文风和书名。')
         self.assertEqual(creation.current(state)['id'], 'genre')
         self.assertEqual(creation.selected(state)['voice'], voice)

@@ -52,7 +52,7 @@ VALUES = {
                 'stance': '利用', 'dark_side': '制度'},
     'origin': {'family': '魂穿', 'arrival': '车祸后醒在这座仓库的夜班宿舍，带着上一世的核对习惯。',
                'cost': '原身的旧账跟着他，同事只当他忽然变了一个人。'},
-    'voice': {'pov': '第三人称限知，只跟沈桐的所见所知。', 'voice': '短句推进，对白带信息。', 'style_traits': ['少解释多动作。', '章末留钩。']},
+    'voice': {'pov': '第三人称限知，只跟沈桐的所见所知。', 'voice': '短句推进，对白带信息。', 'style_traits': ['少解释多动作。', '章末留钩。'], 'style_profile': '市井修仙'},
     'world': {'world_premise': '一座仓库的夜班退件纠纷。',
               'mechanism': {'mode': 'none', 'principle': '只有普通规章与人情。', 'cost': '行动承担现实责任。', 'limits': []},
               'red_lines': ['没有超自然能力。'], 'allow_special_mechanism': False,
@@ -166,7 +166,8 @@ def contract_from(state, world_rules=('夜班退件必须登记负责人。',)):
     value.update(genre=choices['genre']['genre'], reader_promise=choices['genre']['reader_promise'], tone=choices['genre']['tone'])
     value.update(core_premise=copy.deepcopy(choices['premise']))
     value.update(protagonist_origin=copy.deepcopy(choices['origin']))
-    value.update(pov=choices['voice']['pov'], voice=choices['voice']['voice'], style_traits=list(choices['voice']['style_traits']))
+    value.update(pov=choices['voice']['pov'], voice=choices['voice']['voice'], style_traits=list(choices['voice']['style_traits']),
+                 style_profile=choices['voice']['style_profile'])
     value.update(core_edge=copy.deepcopy(choices['edge']))
     value.update(protagonist_setup=copy.deepcopy(choices['protagonist']))
     value.update(relationships=list(choices['relationships']['relationships']))
@@ -580,7 +581,7 @@ class CurrentOpeningTests(unittest.TestCase):
             with self.subTest(pov=pov):
                 state = walk_to(creation.begin(), 'voice')
                 rows = rows_for('voice')
-                value = {'pov': pov, 'voice': voice, 'style_traits': traits}
+                value = {'pov': pov, 'voice': voice, 'style_traits': traits, 'style_profile': '市井修仙'}
                 rows[0]['value'] = copy.deepcopy(value)
                 offered = creation.offer(state, {'gate': 'voice', 'options': rows})
                 state = creation.pick(offered, rows[0]['id'], offered['board']['hash'], '就按这个讲。')
@@ -593,6 +594,32 @@ class CurrentOpeningTests(unittest.TestCase):
                 # A later stage still cannot replace the author's selected scope.
                 candidate['pov'] = '随时知道所有人物的心事。'
                 self.assertCode('opening_alignment', creation.validate_contract, candidate, state, world)
+
+    def test_the_voice_gate_hands_the_author_the_whole_style_catalog(self):
+        """The board used to never show the style shelves; since 2026-10-29 the voice gate picks
+        one from the built-in catalog, the choice rides the contract verbatim, and a name outside
+        the catalog is refused with the valid list — while a direct-import contract may still omit
+        the field and run on the engine default."""
+        from novel_ledger import contracts as contracts_module
+        value = copy.deepcopy(VALUES['voice'])
+        self.assertIn('style_profile', creation.value_fields('voice'))
+        self.assertIn('style_profile', contracts_module.CONTRACT_ALIGNMENT)
+        state = walk_to(creation.begin(), 'voice')
+        rows = rows_for('voice')
+        rows[0]['value'] = {**copy.deepcopy(value), 'style_profile': '宗族史传'}
+        offered = creation.offer(state, {'gate': 'voice', 'options': rows})
+        state = creation.pick(offered, rows[0]['id'], offered['board']['hash'], '就按这个讲。')
+        state = walk(state)
+        candidate = planning.validate_contract(contract_from(state))
+        world = {'rules': [{'principle': '夜班退件必须登记负责人。'}]}
+        creation.validate_contract(candidate, state, world)
+        self.assertEqual(candidate['style_profile'], '宗族史传')
+        # An unknown shelf name never reaches the board.
+        bad = copy.deepcopy(value)
+        bad['style_profile'] = '不存在的档'
+        self.assertCode('opening_option', creation.validate_value, 'voice', bad, OPENING_VERSION, {})
+        missing = {k: v for k, v in value.items() if k != 'style_profile'}
+        self.assertCode('opening_option', creation.validate_value, 'voice', missing, OPENING_VERSION, {})
 
     def test_walking_every_gate_forms_a_contract_that_keeps_each_decision(self):
         state = walk(creation.begin('工程夹具：走完全程。'))

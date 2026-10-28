@@ -53,7 +53,7 @@ ROOT 是本技能绝对路径，PROJECT 是独立小说目录。入口为 `pytho
 | 作者要认可卷纲、轻调叙述面或带理由重出；选定/更换蓝图 | [动作分支](references/runtime.md#动作分支) 的 await_volume_confirm 行与 [叙事推进](references/narrative.md#校验与失败)；蓝图一套两层（结构骨架／作者确认的设计参考），档名见 [创意工具箱](references/hatch.md#蓝图目录)，`blueprint --regenerate` 只删无正文各卷的设计。 |
 | 作者要求改写历史正文、分析影响或采纳候选 | [修订影响分析](references/runtime.md#修订影响分析)；原稿保留，超范围方案等待准确授权。 |
 | 作品理解、原文样本或场景身份需要维护 | [叙事工作台](references/workbench.md)；解释与已成立事实分开。 |
-| 执笔文风：内置文风库选定（缺省默认档，唯一文风源） | [文风](references/style.md)；按生效档案读取声线、口癖与 MUST/AVOID，选档、换档与新增内置档案见该页。 |
+| 执笔文风：内置文风库选定（缺省默认档，唯一文风源；逐门开书在写作视角门并选 `style_profile`） | [文风](references/style.md)；按生效档案读取声线、口癖与 MUST/AVOID，选档、换档与新增内置档案见该页。 |
 | 当前任务涉及人物/空间字段、版本补丁 | [编辑能力](references/editorial.md) 对应小节。 |
 | 接入可信执行宿主 | [质量与宿主](references/quality.md#受控宿主的部署契约)。 |
 | 修改引擎、核对能力或排查消耗 | [架构](references/architecture.md)、[返工与成本](references/rework.md)、[验证](references/validation.md)；按变更范围运行检查。 |

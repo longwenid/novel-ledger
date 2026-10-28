@@ -44,7 +44,13 @@ class StyleCatalogTests(unittest.TestCase):
         row = next(r for r in planning.CONTRACT_FIELDS if r['key'] == 'style_profile')
         self.assertEqual(row['choices'], tuple(STYLE_CATALOG))
         self.assertEqual(row['default'], default)
-        self.assertFalse(row['alignment'], 'style_profile 是参数字段，不参与门选择逐字对齐')
+        # Since 2026-10-29 the voice gate hands the author the whole catalog, so the pick rides
+        # the contract verbatim (aligned, owned by the voice gate) — but it stays a parameter in
+        # nature: optional at the contract layer, so a direct import omits it and runs on the
+        # default, and recontract --patch still switches it without rewriting anything.
+        self.assertTrue(row['alignment'])
+        self.assertEqual(row['opening'], ('voice', 'style_profile'))
+        self.assertTrue(row['optional'])
 
     def test_profile_anchor_names_its_archive_and_unknown_names_mean_the_default(self):
         default = profile_anchor()

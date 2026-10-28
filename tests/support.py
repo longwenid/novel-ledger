@@ -1044,7 +1044,7 @@ def opening_gate_values(book):
         'origin': {'family': '魂穿', 'arrival': '车祸后醒在这座仓库的夜班宿舍，带着上一世的核对习惯。',
                    'cost': '原身的旧账跟着他，同事只当他忽然变了一个人。'},
         'voice': {'pov': '第三人称限知，只跟沈桐的所见所知。', 'voice': '短句推进，对白带信息。',
-                  'style_traits': ['少解释多动作。', '章末留钩。']},
+                  'style_traits': ['少解释多动作。', '章末留钩。'], 'style_profile': '市井修仙'},
         'world': {'world_premise': '一座仓库的夜班退件纠纷。',
                   'mechanism': {'mode': 'none', 'principle': '只有普通规章与人情。',
                                 'cost': '行动承担现实责任。', 'limits': []},
