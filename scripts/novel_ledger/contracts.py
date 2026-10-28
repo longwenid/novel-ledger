@@ -173,8 +173,7 @@ def profile_anchor(profile=None):
     """The declared anchor of a built-in style profile, labeled for what it is.
 
     An unknown or missing name falls back to the default profile — a project predating
-    `style_profile`, or one running on a custom PROJECT/style-profile.md whose shape the engine
-    never registered, still gets a declared floor instead of running voiceless. `origin='default`
+    `style_profile` still gets a declared floor instead of running voiceless. `origin='default`
     keeps its meaning ("not author-approved"); `profile` names which archive the numbers came
     from so reports can say it. `approve` replaces the whole anchor with the measured sample.
     """
@@ -564,9 +563,8 @@ CONTRACT_FIELDS = (
      'choices': ('observe', 'strict'), 'alignment': False, 'optional': True},
     # Which built-in style archive the project writes in (references/styles/<名>.md). A parameter,
     # not an opening decision: the author may switch it any time via recontract --patch without
-    # rewriting anything, and a custom author-confirmed PROJECT/style-profile.md overrides it for
-    # the writers without touching this field. The registered anchor is what style.baseline falls
-    # back to before the first chapter is approved.
+    # rewriting anything. The built-in catalog is the only style source. The registered anchor is
+    # what style.baseline falls back to before the first chapter is approved.
     {'key': 'style_profile', 'kind': 'text', 'default': DEFAULTS['style_profile_default'],
      'choices': tuple(STYLE_CATALOG), 'alignment': False, 'optional': True},
     {'key': 'anchors', 'kind': 'rows', 'default': [], 'alignment': False, 'optional': True},

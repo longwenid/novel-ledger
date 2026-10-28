@@ -559,8 +559,8 @@ def style_material(book, volume, chapter_row=None, recent=()):
             'anchor': style.current_anchor(book, recent),
             'window': style.merged_window(contract, volume_style),
             'volume': dict(volume_style), 'chapter': dict(chapter_style),
-            'source': '文风规格：契约 voice/tone/pov/style_traits 是底线，profile 是生效的内置文风档案（guides 里带它的档案文件；'
-                      '项目根 style-profile.md 存在时以那份作者确认档案为生效档案），anchor 是当前形状基线'
+            'source': '文风规格：契约 voice/tone/pov/style_traits 是底线，profile 是生效的内置文风档案'
+                      '（guides 里带它的档案文件，内置文风库是唯一文风源），anchor 是当前形状基线'
                       '（开卷参照——首章实测或档案注册锚；认可章积累后为最近已认可章节中位；origin/basis 标来源，以派工时点为准），'
                       'volume.trend 是本卷走向，chapter 是本章执行点；window 是合并后的容差。'
                       'guard=observe 默认只观察形状变化，strict 才执行锚点容差；'

@@ -549,14 +549,14 @@ def materialize(repo: PublicationReader, task, entry, baseline=None, compact=Fal
     style_paths = []
     if work['stage'] in ('write', 'repair', 'redesign'):
         # The style hub plus the archive this project actually writes in. Voice discipline is the
-        # one guide that changes per book, so it is resolved per dispatch from the frozen contract:
-        # an author-confirmed PROJECT/style-profile.md overrides the built-in catalog choice.
+        # one guide that changes per book, so it is resolved per dispatch from the frozen contract.
+        # The built-in catalog is the only style source: the profile named there picks the file,
+        # and a leftover PROJECT/style-profile.md changes nothing.
         contract_hash = (task['input'].get('records') or {}).get('contract')
         contract = repo.read_document(contract_hash) if contract_hash else {}
         profile = resolve_style_profile((contract or {}).get('style_profile'))
-        custom = Path(workspace.project) / 'style-profile.md'
         style_paths = [str(reference_dir / 'style.md'),
-                       str(custom) if custom.exists() else str(reference_dir / STYLE_CATALOG[profile]['file'])]
+                       str(reference_dir / STYLE_CATALOG[profile]['file'])]
     if names or style_paths:
         envelope['guides'] = [str(reference_dir / name) for name in names] + style_paths
     envelope['stages'] = [work['stage'], *also]

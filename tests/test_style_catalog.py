@@ -124,11 +124,14 @@ class StyleProfileDispatchTests(unittest.TestCase):
         self.assertEqual(archive.parent.name, 'styles')
         self.assertTrue(archive.is_file())
 
-    def test_a_custom_project_archive_overrides_the_catalog_choice_in_guides(self):
+    def test_a_project_root_style_profile_file_is_ignored_for_guides(self):
+        # The built-in catalog is the only style source: a leftover custom file changes nothing.
         custom = self.project / 'style-profile.md'
         custom.write_text('# 文风档案\n\n作者确认的自定义档案。', encoding='utf-8')
         guides = self.write_task_guides()
-        self.assertIn(custom.resolve(), [guide.resolve() for guide in guides])
+        self.assertNotIn(custom.resolve(), [guide.resolve() for guide in guides])
+        archive = next(guide for guide in guides if guide.name == '账房掌门.md')
+        self.assertEqual(archive.parent.name, 'styles')
 
     def test_recontract_patch_switches_the_profile_in_place(self):
         result = self.app.recontract({'style_profile': '神秘学双声部'}, '作者要求换档。',
